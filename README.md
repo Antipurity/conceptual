@@ -2,9 +2,11 @@
 
 (Specification of a natural and expressive conceptual programming language. A bridge to implementations.)
 
-Deepest understanding, given a syntax and named a language. Base of bases.
+A simple understanding, given a syntax and named a language. Base of bases; pretty boring, especially with how incomplete it is.
 
-A re-thinking of some of programming language theory and practice; often the same, sometimes different.
+A re-thinking of some of programming language theory and practice; often the same, but sometimes puts a little spin on things.
+
+The goal here is to combine intuition, understanding, specification, and implemented functionality, in every single concept; to span eternity. These [concepts](en.wikipedia.org/wiki/Concept) (pure views of everything knowable) take over `natural` (English) words and patterns, and occasionally find expression in `conceptual` syntax; other base languages would be implementations.
 
 
 
@@ -12,7 +14,7 @@ A re-thinking of some of programming language theory and practice; often the sam
 
 # Base syntax
 
-A precise concrete syntax; a character-sequence matching rule. Does a concept need one? To define, to focus, to exist? A lot of the most basic concepts do, here.
+A precise concrete syntax; a character-sequence matching rule. Does a concept need one? To define, to focus, to exist? Some basic concepts have one, here, though a lot do not. Ways to combine the base syntax (mostly operators) are collated much farther below.
 
 ```javascript
 Hello there general
@@ -20,7 +22,8 @@ Hello there general
 15.0 NaN ∞ Infinity -12e3 -0xff -0×FF
 'string1'"string2"`multiline
 	\`string3\``
-print('Sum:', 1+2, '.') // prints 'Sum: 3.'
+print('Sum:', 1+2, '.')
+	// Sum: 3.
 //Above are 4 sequences of function calls in a sequence.
 
 (1,2,3)(1
@@ -40,333 +43,457 @@ Textual sequences like `15.0` or `NaN` or `∞`/`Infinity` or `'string1'` or `"s
 
 Line breaks act as `,`/`;` (sequence item separator) except at the beginning/end of `(…)`.
 
-`(…)` groups terms into one (also must be used to access operators as code, like `(*)` for multiplication); use(d) to alter parsing precedence when needed.
+`\ … /` or `{| … |}` or `⟨ … ⟩` (we ran out of brackets) groups terms into one. Use to alter parsing precedence when needed. Allows parsing rules to loop back to the original rule, to make every syntactical construct able to be used anywhere.
 
-(A few non-ASCII characters are used for readability and freshness (namely, `→`, `⇒`, `…`). In almost all cases, these can be substituted with ASCII versions for more writeability (namely, `->`, `=>`, `...`).)
+(A few non-ASCII characters are used for readability and freshness (for example, `→`, `⇒`, `…`). In all cases, these can be substituted with ASCII versions for more writeability (for example, `->`, `=>`, `...`).)
 
-## Operators and infix expressions (`(+)`, `(*)`, …)
+
+
+
+
+# Execution (`finish`, `watch`)
+
+Execution (passage of time) and discrete stepping (like in digital devices) are interleaved and can be seen in terms of each other.
+
+`finish Expr` finishes (synchronously executes or evaluates; it is not a computer — it is an [executioner](en.wikipedia.org/wiki/Execution_model)) the expression, returning the result (time passes, and this interpreter loop turns expressions into values, code into data, questions into answers, actions into consequences) (all that does not override this is execution's end).
+
+(To be useful, `finish` overrides acting to always finish data before the code runs. A lot of native code finishes its arguments to proceed, so calling it explicitly is almost never necessary, and in fact, it can get rid of optimization (by code pattern-matching) opportunities.)
+
+(There is no fundamental laziness, infinite data types, wrapping or unwrapping. There is only finishing (and not finishing). If assuming no prior knowledge, this is easier and faster to understand.)
+
+`watch(Expr, For)` traces/follows/intercepts/modifies the path through the execution scope. `For` is a function that accepts the current expression and returns the next expression (likely the same). Do not return an exception unless intended (in particular, do not pattern-match on function arguments beyond `x ⇒ …` outside of backtracking). With `x ⇒ x`, this is the same as finishing. (The expression is wrapped in a watcher object, that finishes as specified and forwards all overrides to the overriden version. Act expansion will move the watchers to dependencies; subsequent expansions will re-use that expansion and likely be much more efficient.)
 
 ```javascript
-print(1+2) // 3
-```
-
-Operators exist for convenience, readability, and familiarity, even though they take up a good chunk of parsing. Equivalent programs can easily be expressed in terms of other parsing rules if needed.
-
-Whitespace does not determine precedence (`1+2 * 3` is the same as `1+2*3` and `1 + (2*3)`); the used operators do.
-
-In the following list (for completeness), each group (precedence level) is either as specified or falls through to the next group in parsing (meaning that emitting a lower group from a higher one requires grouping `(…)`). To specify, in the set of operands of a group, the left-most will be the next group in RtL groups, or the right-most in others (LtR); other operands will be the current group (so RtL is `1**(2**3)` and LtR is `(1+2)+3`).
-
-- Acts/calls, 2 groups:
-
-	- No-whitespace acts `Code Data`.
-
-	- (RtL) Non-line-break whitespace acts `Code Data`.
-
-- Object decomposition, 2 groups:
-
-	- Conceptual override `#` (like `A#'str'`).
-
-	- Access `.` (like `A.'str'`; `A.B` can only read).
-
-- Object composition, 2 groups:
-
-	- Unary/nullary no-whitespace wildcard `…`.
-
-	- Key-value `→`/`->` (`(→)`).
-
-	- Function definition `⇒`/`=>` (`(⇒)`).
-
-- Broadcasted operations, 7 groups (each has an assigning version: `A += B` → `A = A + B`):
-
-	- (RtL) One-operand `~`, `+`, `-`.
-
-	- Arithmetic, 3 groups:
-
-		- (RtL) Exponentiation `**`.
-
-		- `*`, `/`, `%`.
-
-		- Two-operands `+`, `-`.
-
-	- Bitwise shifts `<<`, `>>`, `>>>`.
-
-	- Bitwise, 2 groups:
-
-		- `&`.
-
-		- `|`.
-
-- Pattern-matching, 4 groups:
-
-	- Inclusion `x:T`.
-
-	- Comparisons `<`, `>`, `<=`, `>=` (`A <= B` is `not(A > B)`, and `A >= B` is `not(A < B)`; and `x<y<z` is `x<y && y<z` (different-direction comparisons are not allowed)).
-
-	- In/equality `==`, `!=` (`A != B` is `!(A == B)`).
-
-	- (RtL) Assignment `=` and things like `+=`.
-
-- Control-flow operations, 3 groups:
-
-	- Logical, 2 groups:
-
-		- `&&`.
-
-		- `||`.
-
-	- (RtL) Conditional `?:` (`A ? B : C`).
-
-	//Either `1==2 && 2==3` or `a = 1?2:3` does not fit usual usage… Should control-flow be merged with broadcasted operations (then, `&&`===`&`, maybe?), or only conditional?
-		//Would it make sense for comparison results to accumulate in sequences (and thus to use `?:` for selecting)?
-
-- Sequences, 3 groups:
-
-	- Sequence `,` (`(,)`).
-
-	- Sequence `;`; can be used for more compact two-layer specification of nested sequences.
-
-	- Sequence line break (without `,`/`;` before or after); can be used for more compact three-layer specification of nested sequences, or for readability.
-
-- Expressions/terms (including grouping `(…)`), and everything non-operator: containers, strings, variables…
-
-All operators can also be accessed as a function (requiring grouping): `(+)(1,2)` is the same as `1+2`. Infix (between terms) syntax is merely a convenience. Define variables with those names in the local scope, and those will be used to define the operators.
-
-In addition to implementing the operation on broadcasted-onto values, operators can accept types as arguments to perform type inference: `2 + Int` → `Int`. Type inference is a tool that is usually used to know when to omit things like type checks in generated code, so easy access to it is convenient (though not technically required).
-
-
-
-
-
-# Flexibility/overriding (`(#)`)
-
-Here, anything is a concept, and a concept is anything. To maximize evolution potential, concepts can be overriden/extended (mainly used in ever-present basic acts/calls to select the execution branch).
-
-(Nothing that is said here is an absolute rule forever, it's just a suggestion (including this rule). Complete freedom, yet exactness; void of constraining definitions.)
-
-(There are no keywords, only overridable concepts — though for uniformity and readability, the base syntax cannot be overriden during the initial parse.)
-
-To be a little more precise, the `#` operator is used for conceptual overriding: acts (function calls) will use what is overriden on the input if it overrides the applied function/concept. `Input#Func` or `(#)(Input, Func)` will get the override, and `(#)(Input, Func, To)` will set the override (on the returned copy), and `(#)(Input)` will return a collection of all overriden concepts. The `#` operator can be overriden too (allowing proxies and adapting storage methods).
-
-	//Wait, if it's only intended to be used in definitions and implementations, then shouldn't it NOT be in-place modification, but a copy instead?… But then, what *would* be in-place — something has to be…
-
-	//With shapes and decomposition, there should only exist definition, defined in terms of access.
-
-(Nothing more and nothing less is overriden; clean development. Conceptual overriding avoids name collisions by referring directly to things that need different behavior, unlike duck typing, which refers to names/strings which can coincide. `(#)` also makes conceptual development natural; if a concept is accessible, it can be developed further without going into it and altering the insides.)
-
-(Try to not use or override `(#)` — it is rather low-level and ever-present. It should only be present in definitions and semantics-preserving equivalencies. Leave it to implementations.)
-
-Concepts are completely separated, yet they play off of each other to create something seemingly greater.
-
-(Complete lack of constraints on values/concepts (compositionality perfected — untypedness) is absolutely required, not only to make every possible thing representable (the only type is "literally anything whatsoever", the rest are optimizations), but also to avoid haphazardly mirroring all concepts near every artificial separation (like programming languages usually do with idea/design/compile/run-time things like intuition/theory/types/values); separate concepts properly, and the result is actually extraordinarily tiny (likely <5k LoC). Performance can be regained by compiling/simplifying for *particular* parameters/values — never all: future of "anything" cannot ever be rigidly defined, only suggested.)
-
-	//What about definition, like `override{ call → (?a) 'data'a + 2 }`, though? Convenience?
-
-
-
-
-
-# Execution (`finish`)
-
-When seeing a thing unfinished, it is finished (evaluated, executed; it is not a computer — it is an executioner). This is the interpreter loop — expressions become values, code becomes data, questions become answers, actions become consequences.
-
-Unless overriden, `finish X` returns `X`.
-
-(Parsed programs are finished. Events schedule their finishing/cancellation separately.)
-
-	//Should be `finish`, and have threads/asynchronicity/code-parallelism separate…
-
-```javascript
-print(1+2+3) // 6
-	// The execution trace is:
-	// - print(1+2+3)
-	//   - (1+2)+3
-	//     - 1+2
-	//     - 3
-	//   - 3+3
-	//   - 6
-	// - print 6 (prints that)
-	// - 6
-```
-
-An execution fiber is created to parse and execute the source code of the user, and new ones can be created like `call(stuff, after)` (if you want to, for some reason) — `after` will be called with the result of `stuff` after it is finished. It is not parallel, it is not fancily scheduled (both are separate concepts); it just does stuff.
-
-	//Maybe add something like, "In natural language, 'first A then B' or 'A then B' or 'A followed by B'."?
-		//…Is it better presented by the concept "finish X"?
-			//I mean, after all, it's not like we're gonna return to anything but the call site.
-			//(…So, should return-to references in acts be PURELY an implementation thing?…)
-				//(…Wait, isn't return-to purely an act thing, not a call thing?)
-		//So, is it really a fiber, or a sequence? Or, what?
-
-	//And, there should probably be (at least natural/basic, for interface interaction and such) actual thread do/redo with pause/unpause, right? Probably separated from `call`, right?
-
-To protect a value from execution or overriding, use `wrap X` to protect and `unwrap X` to neglect (analogous to `quote`/`unquote`); that is how first-class expressions are implemented.
-
-	//***`wrap print unwrap 1+2+3` ⇒ `wrap print 6` (can still be unwrapped; like quote/unquote).
-		//(unwrap is special-cased in wrap, and does not create a special object otherwise)
-			//(`call` (and all built-in implementations) should unwrap wrapped values. So `unwrap` has only one use (which is not unwrapping).)
-				//(…Do we really want to duplicate it everywhere, though?)
-
-```javascript
-wrap print(1+2+3) // Does not print.
-
-print wrap print(1+2+3) // wrap print(1+2+3)
-	// The execution trace is:
-	// - print(wrap print(1+2+3)) (prints that)
-	// - (reduces to nothing)
-```
-
-```javascript
-call(print 'no') // 'no'
-call(15, x => print x) // 15
-call(wrap print 'no', x => print x) // wrap print 'no'
-```
-
-	//What about being able to interrupt execution from the outside? And pause/continue?
-		//`call` returns an object with #'start'/#'stop'/#'finish', right?
-		//…Do we even need this, really?
-
-	//What about access to own fiber though? Or at least wait-until (for acts and promises) and on-idle…
-		//(And what about scheduling?…)
-
-## Tracing (`trace`)
-
-To trace execution is to follow each execution step: `trace(Touch, Expr)`. `Touch` accepts `Expr`, monitors/modifies it, and returns `Expr` (the next step), which is then executed if needed, unless a pattern-matching error occurs (these are ignored).
-
-```
-trace(print, print(1+2+3))
-	//(…Act printing format could probably be nicer.)
-		//(`act(Expr, Then, Result)`?)
-	// print(1+2+3) → [end]
-	// (1+2)+3 → print(1+2+3)
-	// 1+2 → (1+2)+3 → print(1+2+3)
-	// 3 → (1+2)+3 → print(1+2+3)
-	// 3+3 → print(1+2+3)
-	// 6 → print(1+2+3)
-	// print 6 → [end]
-	// 6 [not from tracing]
+watch(1 + 2 + print 3; first(print x ⇒ x*2, x ⇒ x)) // 9
+	// ⟨no printing⟩
+
+watch(print⟨1+2+3⟩, print) // 6
+	// print⟨1+2+3⟩
+	// ⟨1+2⟩+3
+	// 1+2
+	// 3
+	// 3+3
+	// 6
+	// print 6
+	// 6 ⟨not from tracing⟩
 	// 6
 ```
 
-Tracing should/could be used for debugging (and understanding executions more), setting time/memory limits, intercepting accesses to scoped state, sandboxing/isolating operations, execution scheduling, and optimizing on-the-fly (both before-execution and after-execution). (Being able to analyze and control execution makes all these not just black-box magic beyond the language, but explicitly specified; inspectable and transformable, like everything else.)
+## Timing (`time`)
 
-	//Naturally: trace Expr with Touch? Let Touch trace Expr? Expr traced by Touch?
+Executing code takes time. `time Expr` times the finishing of `Expr`; it returns the number of seconds elapsed (a non-negative number). Implementations should override this if the time taken is known or can be known.
 
-(Development of optimizations should also develop a way to trace them sensibly. In particular, implementations should optimize into observationally-equal code, and override `eqv Code` for pattern-matching and acting-on (which inlining should override properly too). Users do not pattern-match code directly, only implementations.)
+## Scheduling (`schedule`, `stop`, `scheduler`)
 
-(Lazy execution (where control over argument evaluation is given to functions, not the executioner) allows more pattern-matching/optimization opportunities.)
+Scheduling is the processor accessing itself to progress time.
 
-	//What about… Inlining? Judgements?
+`schedule Expr` instructs the current [scheduler](en.wikipedia.org/wiki/Scheduling_(computing\)) to finish the expression asynchronously (via write `access⟨Step→Expr⟩`); it returns the task object. (Being parallel is a separate concept, `many`, though implementations are likely to use that too here.)
+
+`stop Task` stops/pauses/cancels the task and returns its most-recently executed expression (which can be scheduled again to continue).
+
+`scheduler(Expr, Step)` uses scheduler `Step` for the execution scope to divide execution into steps; it watches `Expr` for scheduling (set) and interruption (get+set) opportunities, executing (get) along the way. It is also a namespace for concepts made to schedule (each overrides `access` to step as specified), namely:
+
+- `….step`: steps through the expression; cannot be scheduled by itself. Only used as a base for constructing schedulers.
+
+- `….timed(Step, Seconds)`: executes and returns the expression [for about `Seconds` seconds](en.wikipedia.org/wiki/Time_limit) or until the end. If `finish Seconds` is a function, the task is applied to it to get the actual seconds (a non-negative number); if it is `0`, it will execute the least amount of work possible (one time step); if it is `∞`, it will finish; about `6` or less milliseconds is invisible to humans. `timed(timed(Step, A), B)` is `timed(Step, ceil⟨B/A⟩*A)`. [Maybe we should use seconds instead of milliseconds?]
+
+- `….until(Step, Cond)`: executes and returns an expression `Expr` until `Cond Expr` returns a non-exception. This is the more general form of `….timed`, but is much less likely to be implemented natively.
+
+- `….split(Step, Ms, Proportions)` or `….split(Step, Ms)`: moves tasks between two queues; when the active one is empty, it becomes filled with inactive tasks `timed` in proportions of `Ms` at filling time (splits equally if `Proportions` is not specified; it is a function that accepts a task and returns its proportion; time of one is its proportion divided by sum of all proportions, parts of `Ms`). Much like [this](en.wikipedia.org/wiki/O(1\)_scheduler). [Can this be made an access thing? Single-threaded prioritization of first-of-many?]
+
+Examples of schedulers (`with(…, scheduler)` and `with(…, access)`): `random timed(step, 5)` repeatedly executes a random scheduled expression for a fixed time each time (important tasks like cleaning-up-and-exiting may become overly delayed); `queue timed(step, ∞)` finishes tasks one-by-one in the order they were scheduled (practically synchronous); `queue step` [cycles through touched tasks]() (beware of having a lot of tasks).en.wikipedia.org/wiki/Round-robin_scheduling
+
+---
+
+[What about inlining? To be used in/with `timed`, after or even before execution, to at least maximize CPU pipelining and minimize allocation/overhead for repeated inlinings.] [Part of acting (the time-step of acting)?]
 
 
 
 
 
-# Lazy/deferred computations (`lazy`)
+# Bindings (`bind`; `later`, `now`)
 
-	//Seems like there should be a deeper explanation for this, connecting recording, code, execution…
-		//Just `finish`, replacing `call` and inverted `wrap`/`unwrap`/`lazy`; all those should be removed…
+Binding an expression to an object (`bind(Expr, Object)`) watches `Expr` to connect labels inside (`bind.to'Label'` or just `Label` if a string) to elements of `Object`, leaving no evidence, into [graphs](en.wikipedia.org/wiki/Graph_(abstract_data_type\)). Inner bindings thus shadow outer ones. `Object` can contain labels to bind too, which will be invisibly bound too. (As programs as strings can only be parsed into trees (lacking multiple parents and cycles), binding is the only way to contain arbitrarily-connected structures in them, and must be supported; copy-on-write cyclical structures are impossible without this.)
 
-`lazy X` computes X when a concept requests it (`X` will likely cache the result, but is not forced to). If `X` is always cached, does not affect semantics (`X` is always equivalent to `lazy X`).
+All programs in this `conceptual` language are globally bound to all concepts defined here with the labels/names defined here (or to `access.none`, so using an unbound label is usually an error). (Bindings can be deleted by binding to `access.none` in an inner binding.) (Unbound variable names/labels in functions are not errors by themselves, and would be bound dynamically to the call site.)
 
-	//…Isn't it better emulated with `wrap`/`unwrap`? Or is it better to have `lazy print unwrap(1+2+3)` only doing the print lazily (to use wrap internally)?
+`bind` is also a namespace.
 
-(Currently not computed when the system is idle. If never idle, then CPU caching means that it is most efficient to compute likely-related things all at once, either eagerly or lazily.)
+Traditional program variables are usually done with references to nothing (usually-hidden reference cells that cannot be used before definition (first capture)); if not written to, they should be bound to the read values directly. `bind.where'Label'` or `@Label` makes this traditional usage more convenient: it overrides acting on the returned label to define a variable in the closest enclosing sequence only.
 
+`bind.new` is a completely new and unique binding-to each time it is acted on, which can be stored in variables/objects. Used to not have to come up with a particular label name in some scenarios.
 
+`bind.visible` is a read-only object that represents all visible bindings; `bind.visible.label` is the same as just `label`. Useful for debugging/inspecting, familiarizing with development, picking of unused names in code.
 
+`bind.not Expr` watches `Expr` to ensure that it contains no unbound labels. Useful for optimization of binding (do not have to watch for bindings if there are no bindings); implementations are encouraged to use this for all functions.
 
-
-# Concepts, acts, functions (`?`, `act`, `(⇒)`)
-
-	//Should be rewritten and reimplemented; `concepts` are now anything, and vars/bind must be used.
-
-'Concepts' is a low-level concept, allowing full control over structured execution/behavior (requesting dependencies and caching/memoizing); more familiar and convenient may be functions (`⇒`/`=>`), further down.
-
-	//What about substitute-into-code, not just an act but any value; join?
-
-	//Should we have arg-requesting… Or laziness of args?
-		//What arg-requesting are we even talking about, in code? There is only one variable.
-		//Laziness… that substituted variable contains unfinished computations, and decomposing it will access them. Is that all there is to 'laziness'?
-
-(Creation and usage of concepts/code is made in such a way so that (run-time) evaluation, constant propagation (compile-time partial evaluation), generic programming, symbolic execution, deferred computation, value tracing, and self-awareness are all one and the same. Design-time, compile-time, run-time; everything is done as soon as possible, automatically; optimizations to any are both equally valid and equal.)
-
-Concepts (code) (`(?Act)Expr`) are suspended computations (re-entrant continuations), awaiting data. Acts (`Code Data`) are pure things that, on execution, join data to code, filling the knowledge hole (created like `act(Code, Data, Then, Fiber)`; executed — how?).
-
-	//Except, during parsing, we will not have access to Then, right? Only during execution?
-	//Should we not also allow overriding `act` like `#act(this, then, fiber)`?
-		//Maybe args must be requested explicitly by concepts, with a separate function `arg(this, then, fiber)⇒then`?
-	//Names: Act→'Code', Act→'Data', Act#'out', Act#'Then', Act#'Fiber'?…
-
-	//And what about strategies for delaying/scheduling the recording?
-		//Doesn't it not make sense to intertwine record-usage-of-this and compute-lazily?
-		//Shouldn't it be a part of `lazy`, and that alone?
-			//(Maybe every single extension point should be a concept, not ever an arg…)
-
-To allow both `print double x` and `f(x)(y)` (parsed as `print(double(x))` and `(f(x))(y)`): whitespace (`C (D)`) between code and data (function and arguments) is an operator that parses right-to-left with a lower priority, and lack of whitespace (`C(D)`) parses left-to-right first.
+`bind.find Constraint` goes through all visible bindings to find the one and only that fits `Constraint` (`for(bind.visible, x ⇒ ⟨x: Constraint⟩, {})` should contain exactly one element); seen in `natural` English language as "the Constraint". Though very harmful for (startup) performance, the `natural` language usually steers clear of mentioning bindings and much prefers this. Inspection routines may well use this, along with natural language.
 
 ```javascript
-print double(yes) f(x)(y)
-	//print( (double(yes)) (f(x)(y)) )
+print bind(a, { 'a' → b, 'b' → 12 }) // 12
+print bind(a, { 'a' → { 1→b }, 'b' → { 2→a } })
+	// ⟨Prints the cyclical object represented similarly or the same to this one.⟩
+	// ⟨`a[1]` would have returned `b`; `a[1][2]` would have returned `a`.⟩
+
+print bind(a+2, { 'a' → access.reference access.none }) // error⟨access.none⟩
+print bind(bind(a+2, { 'a' → reference none }), access) // error⟨access.none⟩
+print bind(last(a=2, a=3, a+4), { 'a' → access.reference access.none }) // 7
+
+print last(@a, a=2, a=3, a+4) // 7
+print last(a=2, @a, a=3, a+4) // error⟨access.none⟩
+last(@a=1, last(@a=2, print a), print a)
+	// 2
+	// 1
+print ⟨(x,y) ⇒ x*y⟩(@a = 3, a + 2) // 15
+
+
+print bind.visible // ⟨Prints/inspects all globally-bound concepts.⟩
+
+print a // a
+print bind.not a // error⟨access.none⟩
+print bind.not bind.visible // error⟨access.none⟩
+
+print last(@a=1, bind.find Number) // 1
 ```
 
-An act has the same overrides as its `Code`, except for `Act#call`/`Act#act`/`Act#value`. It decomposes like `(Code, Data)`.
+(Variables, symbols, names, labels, identifiers, arguments, parameters — all synonyms.)
 
-To execute an act:
+(There is no lexical and dynamic scope, there is only binding of variables (which can occur in advance (compile-time lexical) or in the moment (run-time dynamic)). No need for an ad hoc mirror of this concept.)
 
-- If `Data#Code`, `Code` is replaced with the execution result of that.
+## Recording and filling (`later`, `now`)
 
-- If `Data#act`, the act is replaced with the execution result of that (in natural language, "when acted on, …").
+`later(Expr, Label)` records the usage of the binding `Label` in `Expr`, evaluating the known and remembering the unknown (binds the label to the recorder, which overrides acting), abstracting. For use with `now(Later, Data)`, which binds the record to `Data`, specializing. `now(later(Expr, Label), Data)` is `bind(Expr, { Label → Data })`. (`Label` is only a way to record, and is not present in the record.)
 
-- `Code` must be code here, which can accept data (an error is returned otherwise): `Code#call`.
+It is useful for (natively) returning completely invisible and non-invasive and non-blocking promises to return a value — when a value is not available now but will be in the future. The implementation records its results's usage as it wishes and provides the actual value later. (To do this, where `@Result = bind.new`, the native function (in its act `Self`) should do `@Recording = schedule later(now(act.then Self, Result), Result)` *and un-schedule the current expression* (impossible non-natively), and when `@Data` arrives, do `schedule now(stop Recording, Data)`.)
 
-	//What about infinite-recursion-detection?
-		//(Putting a special throw-exception value on entry, replacing it on exit.)
+It is useful for analyzing the future effects of a value in order to better pick it now — for example, generation (`…`) that is later constrained (`…: Constraint`) could easily use this to backward-propagate the constraints if it desires so.
 
-	//What about different-parent-fiber, suspension and resumption?
-		//Will there even be different ones?…
-
-- The hole of `Code` is filled with the act. (Result could still be code if there are other unfulfilled holes.) (An act stores the previous result, so this way allows memoization/caching, full or partial.) //So, does an act use `call(Data, to)`? But then, it has to be non-concurrent…
-
-	//Relying on `#` to be in-place is no good, since it will be phased out, and we will have to rely on decomposition instead…
-
-(Things like tail call optimization (not returning to caller if not needed) can be *implemented* by making fitting basic functions (like 'if'/'cond') override evaluation. Returning to continuation is just a suggestion.)
-
-## Self-awareness
+(Perfect conceptual self-recording/self-understanding/self-awareness is also useful in conceptual self-replication, like teaching/convincing or spreading knowledge, or unpredictable resolution order of dependencies.)
 
 Who are you? What are you doing here?
 
-Self-awareness (self-understanding) is easy access to relevant conceptual self-replication (self-recording); self-explaining also requires emitting. Like many concepts, self-awareness is not a part of the built-in base of humans, and must be learned and taught.
+[Neurologically, functions of the [default mode network](en.wikipedia.org/wiki/Default_mode_network) seem quite close to this.]
 
-This perfect dependency resolution is extremely useful in some scenarios (explaining things in the best way possible, convincing/teaching, spreading viewpoints, non-trivial resolution order of dependencies) and completely useless in others, like all concepts.
 
-	//Wait, but doesn't this capture-scoped-variable design not allow promises?
-		//Promises should be handled like: wait until their completion, but if system becomes idle, record usage…
-			//So we need some kind of on-idle concept?
-				//(Or can it be subsumed by scheduling 'first(main, idle)'?)
+
+
+
+# Access (`access`; `with`, `for`)
+
+Access is the bridge for processing to storage and other devices — ensures a [serializable](en.wikipedia.org/wiki/Serializability) stream of [linearizable](en.wikipedia.org/wiki/Linearizability)/[indivisible](en.wikipedia.org/wiki/Atomicity_(database_systems)) operations. Reading or writing, atomic or not, cyclic or not, or other useful access patterns are accessible for full access control. (Full abstract control is usually very tedious to do manually, so it is better to do so automatically.)
+
+(`Object.Key` or `access Object.Key` reads; `Object.Key = Value` or `Object.⟨Key → Value⟩` or `access Object.⟨Key → Value⟩` writes. Objects pass their overrides to their items.)
+
+`access At`: makes the whole `At` expression a transaction, ensuring that torn accesses are impossible (no actual (device/wire) accesses overlap); all accesses are serialized. Accesses during access are parts of that same access. Invoked directly, is either `access.journal` or `access.atomic`.
+
+(In exclusive volatile storages, `access` (and its `atomic`/`journal`) has zero overhead, and can be omitted entirely.)
+
+`access` is also a namespace for concepts spawned to define useful [access patterns](en.wikipedia.org/wiki/Memory_access_pattern) (each returns a proxy that overrides `access` to do as specified here, and for convenience, `finish` to read and `capture` to write), namely:
+
+---
+
+Sometimes-better alternative manifestations of `access`, for optimization (all semantically equivalent):
+
+- `journal At`: watches execution of `At`, remembering all accesses in a journal/log/cache (serving reads from the cache if covered), deferring all writes, and then trying to commit writes under a lock (restarting `At` if any reads have changed). If storage is persistent, a commit first writes a journal of writes at an unused location, which must be executed on storage power-up; power outages will not allow a torn write to be seen. Best if there are few reads.
+
+- `atomic At`: directs all reference writes inside [to object copies](en.wikipedia.org/wiki/Read-copy-update), journaling those (serving reads from the journal), and then commits the reference-change journal (restarting `At` if needed). Best if there are few writes.
+
+Basic types often override all these forms of access with a single atomic operation. These serve as a base which can ensure serializability.
+
+---
+
+Volatile-storage serialization (can expose torn writes in persistent storage):
+
+- `lock Object`: [Or, 'mutual exclusion'? 'Enforce exclusivity for evaluation of this expression'?] […But what about lock-inside-lock, which can be in different order in different accesses?]
+
+	//There should be two types of locks: locked-to-write and locked-to-read… Or, are these distinguished by the usage? No, these are structural properties…
+
+[It's not really attached though — a lock has to be attached to an object…] [Well, it can be attached to an expression too, right?]
+
+	//It's not really a generic scheme, is it? So, should be attached-to-object failable access modifier? [Never lock after unlocking in an access…]
+
+[Write locks are acquired at start and released at end. Read locks are acquired as they want…]
+
+	//Should `lock Expr` be here too? What will this lock be attached to though, and how will we avoid deadlocking? (Simply imposing a global order on taking locks will not be enough, since they can be reached in an arbitrary manner. Or will scope-ordering be enough? No it won't be, we have to ensure that one cannot do `access(lock A, lock B)` and another `access(lock B, lock A)`.)
+
+- `address Object`: represents the address of the object to be used in orderings only; a lot of memories and access ports/combiners can expose the direct address for these comparisons, though some cannot be ordered such and will fail. (Used to take locks in a globally-enforced order, to eliminate cyclic dependencies.)
+
+Forcing exclusivity is preferable to retrying (journal/atomic) if the same objects are accessed frequently (contention).
+
+---
+
+Viewing values (0, 1, ∞):
+
+- `none`: a value meaning only the lack of a value. When reading/getting a non-existent value, `access.none` is returned; when writing/setting a non-existent value, `access.none` is accepted to delete it (from keys too). Cannot be read from or written to.
+
+- `resource(Create, Destroy)`: finishes `Create` to get the constructed object; when it stops being relevant, it is passed to `Destroy` (whose return value is ignored). It cannot be copied, its fate cannot be averted, and it can only be entrusted to devices/objects if they guarantee responsibility for it (so will always take it with them on their destruction). (Remember it, and it will be alive forever; but forget it, and that is the only death that matters.)
+
+- `reference Object`: represents the whole object, whatever it is. Writes and `capture` will change the object pointed to, not write inside of it. For all those that do not override `access`, this is the same as just `Object`. `Object` is not finished (unless directed so with `finish`) and will only be evaluated on demand. (Particular memory allocators will define their own references that can hold only their objects (which are cheaper than generic references); to store all, they must be able to fall back to this.)
+
+---
+
+Modifying read/write:
+
+- `write(Key, Value)`: turns the read-by-default access (at `Key`) into a write (of `Value`); objects are containers of past writes. If finished not in `At` of `part` and when `Key` is not `at`, the returned proxy will return just `Value`, to ease iteration over sequences and sets. In conceptual syntax, seen as `Key → Value`; directly in `{…}`, `Key` is a concrete shorthand for `Key → Key`. All objects are technically `Keys → Values`. Reading the same value as was written will usually return that value.
+
+- `move(From, To)`: reads only from `From` and writes only to `To`. `move(From, From)` is just `From`; `move(move(From, X), To)` and `move(From, move(X, To))` are just `move(From, To)`.
+
+- `copy Object`: represents a copy of `Object`; writes to one are not visible to the other. Accesses to this new copy in an access do not have to be checked nor deferred.
+
+- `part(Of, At)`: represents a member/item/element/property in a container/object. Defines `access`/`capture` to access/write at a proper place. In conceptual syntax, `part(Obj, 'At')` is seen as `Obj.At` (at proper identifiers only), and `part(Obj, At)` as `Obj[At]` (at any locations) — same as in [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Property_Accessors). To write one, use `Obj[K→V]` or `Obj[K] = V` (the returned proxy overrides `capture` for convenience), which return the written `K→V` (can usually be used as `V`). To write many at once, use `Obj[{ K→V }]` (to read the object reference itself, use `Obj[reference{ K→V }]`).
+
+---
+
+Container shapes (that which remembers past writes (elements)):
+
+- `keys Object`: represents all keys of `Object` that were written at but not deleted (mostly for use in `for`); `keys⟨Key→Value⟩` is `Key` (while `Key→Value` is `Value` when not a part-at). Cannot be written to.
+
+- `integers⟨N:⟨Int≥0⟩⟩`: represents `N` ordered pairs `i→i` (`0→0`, `1→1`, …, `N-1 → N-1`); only `i→i` can be written to this (changing nothing). Objects that have this as `keys` are called sequences. The base for `size` and `for` (will always be iterated in ascending order), and all keys of collections must eventually devolve into this to be iterable.
+
+- `sized⟨N:⟨Int≥0⟩⟩`: represents up to `N` ordered pairs `i→Item` (`0→…`, `1→…`, …, `N-1 → …`); any existing item can be overwritten with a new value, only the last item can be deleted, and only the next item can be added (unless writing past the limit); a constant-sized array. Has the most straightforward representation in memory (current size, capacity, and `N` elements).
+
+- `sequence`: represents pairs `i→Item` (`0→…`, `1→…`, …); any existing item can be overwritten with a new value (or just deleted without writing), only the last item can be deleted, and only the next item can be added; a dynamically-sized array. Likely done by doubling the size of a `sized` array when it fills, and possibly making a mark to trim unused memory later. In conceptual syntax, represented with `(…)` and `,`/`;`/line-breaks, allowing elements to be pre-filled easily: `()`, `(A)`, `(A, B, C)`, `(A; B; C)`; `⟨A, B, C⟩` (but `⟨A⟩` is just `A`); `(A, B; C)` is `((A,B), C)`. (A basic concept, used everywhere.)
+
+- `collection`: represents likely-unordered pairs `…→…`; any item can be deleted or added, arbitrarily. In conceptual syntax, represented with `{…}`: `{}`, `{A}`, `{A, B, C}`, `{A; B; C}` — an arrow-less item like `A` directly in `{…}` is a shortcut for `A→A`; `{ A→B, C→D }`; {A, B; C} is `{{A,B}, C}`; `{1,1,1}`. Nested-without-reference containers are transparent to access, and are allowed for optimization: `{(1,2), 3→4}` is `{ 0→1, 1→2, 3→4 }`; there is no point in nesting collections, only more specific/specialized containers. (A basic concept, used everywhere.) (To overwrite, deleting before writing must always be used, else an item will just be added.)
+
+[Shouldn't it be possible to change shape of semantically-immutable but not memory-immutable objects? Ensuring its decomposition does not change.]
+
+Objects that allow arbitrary writes should be `first(…, collection)`.
+
+---
+
+Treatment of same items in objects:
+
+- `unique Item`: as key (when written in), overwrites equal items (deletes before writing); as value (when written), fails on writes of equal items.
+
+- `times(Item, N:⟨Int≥0⟩)`: represents `Item` repeated `N` times. `times(Item, 0)` is `none`, `times(Item, 1)` is `Item`. For optimization of collections.
+
+---
+
+Defined elsewhere, but can be used with accessing:
+
+- `first Sequence`: returns the first access success (or the last failure). Allows object [inheritance](en.wikipedia.org/wiki/Inheritance_(object-oriented_programming\)) and probably-faster copying of immutable objects.
+
+- `last Sequence`: returns the last access success (or the first failure). Can be used to guard some accesses by other accesses, or for pipelining accesses.
+
+- `many Collection`: combines many accesses into one, ensuring that they are unordered (none ever accesses another's write) before they can be committed. With non-interference ensured, further accesses are very likely done in parallel for much increased speed.
+
+- `concept.defines Object`: represents conceptual overrides of the object/concept. `concept.defines concept Object` is just `Object` (`concept.defines reference concept Object` represents the overrides of the `concept Object` expression itself).
+
+- `pure.in Object`: represents the set of pure objects that `Object` is in (in the form `{ In }`); each pure object is always represented in at least one its item. Only implementations can write to this (in `pure In` or forgetting pure objects).
+
+	//Shouldn't there be a readable/writable portion of purity that can be used to store mutable data, like, in acts, result or known-as or return-to? (Not in copy-on-write/immutability, but in purity.)
+		//(So, `pure(Static, Dynamic)`? Or at least `pure{…}` and `pure.with({…}, {…})`…)
+		//Named what?
+			//pure.mutable?
+			//pure.info?
+			//pure.data?
+			//pure.extra?
+			//pure.cache?
+				//…Just pick one and stick to it for now?
+			//(There appears to be no Wikipedia article for purity, at most pure functions and various philosophical/religious stuff. Strange.)
+
+---
+
+Swapping items around (useless in stored objects, but can be useful when relocating):
+
+- `reversed Sequence`: reverses the sequence values. `(1,2,3)` becomes `(3,2,1)`.
+
+- `shuffled Sequence`: [shuffles](en.wikipedia.org/wiki/Fisher–Yates_shuffle) the sequence values, into a (uniformly) random permutation.
+
+- `sorted Sequence`: sorts the sequence values.
+
+- `reorder(Object, Reorder)`: on write, scatters (moves values from old to new keys); on read, gathers (moves values from old to new keys); old is `K`, new is `⟨Reorder Object⟩[K]`. `Reorder` must return the keys reordered as it wants (the collection is only materialized as needed, just like everything else here). The most general form of [swapping items around](en.wikipedia.org/wiki/Gather-scatter_(vector_addressing\)).
+
+---
+
+Sequential splicing:
+
+	//What is the interface to such splicing? One that can splice in many places at once?
+		//And to constructing such a splice (well, it's the same as just splicing)?
+		//We can just define one-place splice, and combine them via other concepts to have many…
+
+- `start O`, `end O`, `queue O` (which is `move(start O, end O)`): push to (write) or pop from (read) its appropriate end. Basically done by reading/writing an appropriately-positioned splice of the object. Reading what was just written will always return the value without modifying the container.
+
+- `slice(From, To)`: represents a slice with ordered keys from `From` to exclusive `To` (keys for which `From <= Key < To` can be constructed). […What about the slice's value; what does it mean to write a value-less slice, can it even be done? And what about moving the From to 0 in the read result, or from 0 in the written result; `offset(Object, N)`?]
+
+	//And what about non-splicing slices and splicing (shifting other elements) slices?
+
+- `splice(???)`: 
+
+	//Or maybe it should even be slice(from, to) and replace(slice1, data)? Does not seem very consistent…
+		//And what about one-directional and bi-directional splices?
+	//(Maybe the Wikipedia article on ropes could help.)
+
+	//And what about `flatten Seq`; is this an access pattern, or merely a matching pattern?
+		//We could use `flatten` for multiple-element data to replace with…
+
+---
+
+- //`mod(Object, Value ⇒ Value)`: 
+
+	//Shouldn't read and write be symmetric, to achieve structural extraction/compression?
+		//How to ensure such a thing?
+		//`structure(Object, Struct)`, where Struct is an object that can only read or write (be, uh, `?` or `Key→?` What is `?`?)?
+			//(Any shorter name?)
+			//(…So, Struct is an object? Maybe it should devolve into `none`, to signify the hole?)
+				//(Would it be able to write unevaluated acts though? Well maybe, if they're accessible objects too…)
+				//(Should `none` forward access to act as a proper hole in `Struct` for `Object`?)
+				//Can we adapt a `graph` to be what substitutes values for labels in `Struct`?
+			//…Is this not completely covered by automatic object decomposition capabilities?
+				//Wait, is it, really? Aren't different objects fundamentally different, or are objects, uh, see-through unless a reference, or something?
+					//And besides, same constructors do not mean same objects. We *have* to watch out for it explicitly… How?
+						//Have to be able to get the constructor of an object, and de-construct it into substitutes… Sorting values by type, and stuff…
+						//So, just define `typed(Type, Object)` and let types define how objects are de/constructed when passing through? But, how to get the (likely implementation-defined) object types; is it even needed outside an implementation? …For self-awareness — natives must expose self natively?
+		//Like, decorating items that pass through with `unique Item`, for uniquely-keyed collections…
+
+---
+
+	//What about "i ⇒ k*i"? What about "i ⇒ i+k"?
+
+	//What about multi-to-one dimensional [locality-preserving (bit-interleaving) key transformation](en.wikipedia.org/wiki/Morton_order)? What about tiling, for better locality in a tile?
+
+[What about least-recently-used (deleting and re-adding items to a collection on reads)?]
+
+	//Should strings (accessed as sequences of Unicode code-points) be 'here' too?
+
+	//And what about skip-lists?
+		//Something about each node being the first of (farthest skip, closer skip, …, data), and each skip being ordered, and node creation having a set random chance to be either first(skip, node) or data…
+		//The only thing not present is the random-chance.
+
+	//What about circle/ring? Or sequential things that switch to another thing when empty or full?
+
+	//What about hash-tables?
+
+	//What about prefix and suffix trees?
+
+	//What about rebalancing of totally-ordered trees?
+
+	//(And what about caching, and considering (and picking predicted best of) costs/times?…)
+		//(Should there be a global function `time Expr`, that can be overriden to finish faster (sections that are not overriden are executed)?)
+
+	//(And what about streams, and measuring parameters of encountered values (avg, median…)?)
+
+	//(And, things like compression or encryption for accesses sound nice…)
+
+---
+
+`with(Object, At)` does a write to the object just like `at(Object, At)`, but returns `Object` instead of what was written.
+
+`for` builds on `access` to provide a way to iterate over objects (and possibly transform them) as one operation.
+
+`for(Object, Iteration)`: for each `Item` in `Object`, `Iteration Item` is executed (results are ignored); `Object` is returned.
+
+`for(Input, Iteration, Output)`: each `Item` in `Input` goes through `Iteration Item` and is written to `Output`.
+
+`for.size Object` returns the count of keys in `Object` (some objects/shapes override this to be more efficient than iterating just to count).
+
+
+
+
+
+# Order (`ordered`, `min`, `max`)
+
+Here, comparison operators (less `<`, less-or `≤`/`<=`, more `>`, more-or `≥/>=`) are not a check but a constrained construction.
+
+`order(A,B)` returns `B` if the two items are ordered (whether `A < B` (for `order(A, B)`) or `A ≤ B` (for `order(A, access.unique(B))`) is correct) or throws an exception otherwise. This is convenient to override, but not to use; prefer `order.max⟨A < B⟩`.
+
+`order` is also a namespace for things made to order, namely:
+
+- `min Sequence`, `max Sequence`: 
+
+	//(Shouldn't we have something like `closest` too, for not-necessarily-precise access?)
+
+---
+
+`ordered` imposes a limitation in order to allow quick finding of min/max and items, slicing, and sorting.
+
+`ordered Sequence` returns an object if each two consequent items of `Sequence` are ordered (like `A < B`), or an error if not. `access.unique Item` can be used to ensure that item equality is not allowed (only checked on the right/second item in an order check).
+
+	//…Or should `unique` and even `times` be here, not under `access`?
+		//What would we use `times` for in ordering, though?
+
+	//This two-item check seems much more convenient to override than the whole `ordered`; should it have an accessible function?
+		//Should it be `order`, and should the rest be in its shadow?
+
+In conceptual syntax, seen as things like `A < B < C` (`ordered(A, unique(B), unique(C))`) or `A <= B < C <= D` (`ordered(A, B, unique(C), D)`) or `A > B` (`ordered reverse(B, A)`); all ordering must be ordered in one direction.
+
+	//Should `ordered` just be an `access` thing?
+
+	//Should we have `slice` and `sort` here? What about the `sorted` access pattern, is it real?
+
+	//Also, what about `Range(A,B)`? Seems like it fits well with the order.
+
+
+
+
+
+# Matching and capturing (`match`, `capture`)
+
+//== just checks equality, = fails if not equal (but references override it to behave like write).
+//any, all, not… Are these matching/equality constructs, or acting-overriding things?
+
+
+
+
+
+# Purity (`pure`)
+
+
+
+
+
+# Acts and functions (`act`)
+
+Acts join plans to dependencies (input), returning the consequences (output).
+
+`act(Code, Data)` (usually written as `Code Data`) represent an application of data to code (a call), applying the result to the caller; it substitutes the created pure view of the act into code's record. Code is the result of `later(Expr, Label)`; acting substitutes the act object into that. Acts control execution flow, detecting infinite recursion and allowing code or data to re-define the flow.
+
+For safety, the continuation (caller) of an act is only accessible natively. Execution flow can only be controlled by returning an object that overrides acting as needed, one step at a time ("when acted on").
+
+Acts ensure that data's conceptual override of code (if any) is given a chance first, then data's override of acting, then code itself; this allows values to define what they mean for particular or all concepts. An act decomposes as `(Code, Data)`, and passes overrides through to `Code`.
+
+(Things like tail call optimization (not returning to the caller if not needed) can be *implemented* by making the  basic functions (like 'if'/'cond') override evaluation. Returning to continuation is just a suggestion.)
+
+To allow both `print double x` and `f(x)(y)` (parsed as `print⟨double⟨x⟩⟩` and `⟨f(x)⟩(y)` would): whitespace (`C ⟨D⟩`) between code and data (function and arguments) is an operator that parses right-to-left with a lower priority, and lack of whitespace (`C⟨D⟩`) parses left-to-right first. [Not exactly sure how convenient this is, compared to LtR for both.]
+
+```javascript
+print double(yes) f(x)(y)
+	//print⟨ ⟨double(yes)⟩ ⟨f(x)(y)⟩ ⟩
+```
+
+`act.mem Code` [or should it be just `mem Code` for ease of access?] modifies code to return a previously-computed result if available, only executing code if not. [What about checking for things like lacking side-effects?… Referential transparency? Is that a sufficient criterion for memoization?]
+
+[And even if we could store the result, the act object will likely get deallocated when we return. So there should be some scheme of caching those acts, able to drop some on memory pressure, able to prioritize/bias towards what is likely useful later…]
+
+[Also, what about inlining? In particular, during watching, so we could decide what to inline?]
 
 ## Functions
 
+[act.func(Args, Expr) for capturing-args… Watched-memoized-with-deoptimization-fallback…]
+
+	//This section on functions must be rewritten.
+
 Functions (`A=>B`) here are an advanced thing that combines code and pattern assignment, and forces memoization and requesting of all arguments. This allows much greater flexibility and convenience than if functions were a fundamental concept.
 
-	//Shouldn't memoization only happen if all parts are memoized? Otherwise `() => print 1` will be mostly useless.
-		//…Or is it okay, like "show only new developments please"?
+	//Memoization should only happen if all parts are memoized or referentially-transparent or such (watch out for that). To *force* memoization, `act.mem` exists.
 
 A function is something executed with some particular input; an act, a join point to the interpreter, a lazily-evaluated value. Called like `Func Input`; defined like `Input => Body` or with `⇒` (likely bound in a var to be useful).
 
 ```javascript
 print 15 // 15
-print(a => a+2) // a => a+2
-print (a => a+2) 13 // 15
+print\a => a+2/ // a => a+2
+print \a => a+2/ 13 // 15
 ```
 
-On application, `Input` gets set (with `=`) to the passed input in a new lexical scope, allowing pattern destructuring (this is not a base concept here but a combination, allowing at least double the flexibility):
+On application, `Input` gets set (with `=`) to the passed input in a new lexical scope, allowing pattern capturing (this is not a base concept here but a combination, allowing at least double the flexibility):
 
 ```javascript
 f = (a, b: Int, c) => a + b*c
 print f(1, 2, 12) // 25
 print f(1, 'str', 12) // Error: cannot match arguments, expected an Int
 
-fib = (n: Int) => n>1 ? fib(n-1) + fib(n-2) : 1
+fib = (n: Int) => \ n>1 ? fib(n-1) + fib(n-2) : 1 /
 print fib(3) // 3
 print fib(4) // 5
 print fib(5) // 8
@@ -377,112 +504,101 @@ print gcd(16, 88) // 8
 print gcd(16, 'str') // Error: cannot match arguments
 ```
 
-To disambiguate on types of arguments, use `first` of functions (defined elsewhere): `succ = first(0 => 1, (x:Int) => x+1)`.
+To disambiguate on types of arguments, use `first` of functions (defined elsewhere): `@succ = first(0 ⇒ 1, \x:Int/ ⇒ x+1)`.
 
-## Exceptions/errors (`throw`, `catch`; `finally`)
+## Errors (`error`, `catch`)
 
 Since the concept of an act includes a reference to its caller, it is only natural to have a concept that is based around that.
 
-A thrown error (`throw Error`) overrides normal acting, replacing the result with the thrown error (this unwinds computations back to callers).
+A thrown error/exception (`error Error`) overrides normal acting, replacing the result with the thrown error (this immediately starts unwinding computations back to callers). (This divides behavior into normal and exceptional, values into results and errors.)
 
-Since unwinding alone is not very useful, it is itself overriden by `catch(Try, On)`, which replaces any `throw Error` returned from `Try` with result of `On Error` (result of which could be a thrown error if needed). (`On` is never evaluated if no error occurs.) (`catch(throw Error, On)` is equivalent to `On Error`.)
-
-Thrown errors are also overriden by `finally(Try, Then)`, which, on error, catches that error, executes `Then()`, and throws the error; if no error, it executes `Then()` and returns result of `Try`. (Since `Then` does not return a value, `finally` exists mostly for managing state not represented by pure acting, and is a quite low-level concept.)
+Since unwinding alone is not very useful, `error` itself is caught by `catch(Try, On)`, which replaces any `error Error` thrown from `Try` with the result of `On Error` (the result of which could be a thrown error if needed); `On` is never evaluated if no error occurs. `catch(error Error, On)` is equivalent to `On Error`.
 
 Together, these make possible any exceptional control flow (transfer of control up to callers).
 
 ```javascript
 print catch(
-	finally(
-		() => throw 12
-		() => print 'Done.'
-	)
-	err => (print('Error:', err), 13)
+	throw 1
+	err => last(print('Error:', err), 2)
 )
-	// Done.
-	// Error: 12
-	// 13
+	// Error: 1
+	// 2
 ```
 
-	//Maybe exceptions should not give up `finally` without a fight, and we should have a recommendation to use resource-management (`deallocate`, probably) to do its thing?
-		//Where is `finally` used? Scoped stuff, like with-allocator or with-state? Is that really enough to justify leaving in `finally`?
+("Finally" is not provided, though it can easily be implemented on top of `error`/`catch`, because resource management must be done with `access.resource`, not by giving responsibility to an expression that could be stopped or watched arbitrarily; "finally" is usually not much use for anything else.)
 
-## Backtracking (`first`)
+## Composition (`first`, `last`, `many`)
 
-It is often useful to try an execution branch, and on exception, backtrack and try other branches in order, returning the first non-exceptional result. (For example, trying conditionally-optimized then the general implementation, where cost of each branch is at least double the cost of its previous branch, would make total execution time at most double the most general one, and likely much less.)
+Execution/future branches/functions and results/values can be combined with these. Each overrides `finish` and `act` (and likely other native things, like `print`) to do as specified.
 
-`first(…Expr)`, on finishing, tries to return all expressions in order; if all return errors, an any of those is returned. Any expression in there that is a `first` too might as well be flattened.
+`first Sequence`: tries all variants in order and returns the first successful result (or the last error), backtracking. Any variant that is a `first` too can be flattened. (For example, trying conditionally-optimized then the general implementation, where cost of each branch is at least double the cost of its previous branch, would make total execution time at most double the most general one, and likely much less.)
 
-This is also a pattern-matching construct: on `(==)`, returns first match if succeeded; on `(=)`, returns first capture that succeeded.
+`last Sequence`: tries all variants in order and returns the last (successful) result (or the first error). Any variant that is a `last` too can be flattened. (This allows returning a result that depends on side-effects (like setting variables) of previous statements, instead of a sequence.)
 
-(When considering trying many implementations in any order, do not use `any` — use `first shuffled(…)` ("first successful in a permutation of …"). Judgements will likely optimize the order too, then.)
+`many Collection`: tries all variants without order and returns many results (or many errors); it watches each to ensure that none ever accesses what another writes (with that guarantee, all variants can be tried independently). Any variant that is a `many` too can be flattened. (This is *the* [parallelization](en.wikipedia.org/wiki/Parallel_computing) primitive; [man can dream, but many can achieve](en.wikipedia.org/wiki/System_Shock_2).)
 
+`many.by(Collection, Cost)`: after `many`, sorts the results by `Cost Result`; prefers to not evaluate the results unless parallel hardware is actually available to evaluate them. The same as `many Collection`; can be used to optimize/bias evaluation order in `first many …`.
 
-
-
-
-# Variables and bindings (`var`, `with`)
-
-	//What about (bind/get)-any-variable though (for getting which variables of a functions are defined in its args)?
-
-(Variables, symbols, names, identifiers, parameters, arguments — all synonyms.)
-
-A variable is a value placeholder that will be bound; created either with textual sequences like `asdfg`/`print` (consisting of a letter followed by letters or numbers), or with the `var` concept like `var'asdfg'`/`var'print'`. If not bound, it throws an error on access.
-
-	//Since we do not intend to use it often, maybe `var` should be `variable`? Or `name`?…
-
-	//Also, for function-recording, want to have undefined variables (`bind({ 'Var' }, Expr)` — question mark is not needed, right? Or is it?), that will record usage and encapsulate it in the result of `bind`.
-		//How to bind result of `bind` to values, like `(a,b) = (1,2)` defining a,b in the function?…
-
-Used to access mutable values of a computation in a structured and orderly way...
-
-(There is no lexical and dynamic scope, there is only binding of variables (which can occur in advance (compile-time lexical) or in the moment (run-time dynamic)). No need for an ad hoc mirror.)
-
-- `Name`: a named variable. Alias of `var'Name'`.
-
-- `var'Name'`: …?
-
-- `bind(Scope, Expr)`: …?
-
----
-
-	//How to allow unbound variables to return partly-bound scopes? To record usage…
-		//And how would partly-bound scopes interact with each other anyway?
-		//(All basic promise-returning functions should also remember the point of their usage, and on idling, record that point. But how?)
-
-	//(Scope/closure…)
-
-	//'let Var be Value in Expr' is `with({ 'Var'→Value }, Expr)`… Is that really sufficient?
-		//Not for concept-act recording; 'let Var be ? in Expr' cannot allow runtime substitution of Var, *unless* it returns Expr, just like let should… Wait, so it *is* sufficient?
-
-
-
-
-
-# Containers ((`,`), `{}`, `→`; `broadcast`)
-
-Containers are an easy way to group other terms (whether to provide or receive arguments of a function call, structure to match/destructure, or just store them). They are usually written as certain brackets with zero or more comma-separated items inside.
-
-Ordered sequences can be created with `,` or `;` (likely in a `(…)`); they are pure and decomposable into their items by indexing with 0,1,2,3,…. (A sequence of one non-decomposable item is that item. Grouping `(…)`/`()` technically always defines a sequence.)
-
-(When executed or acted on, sequences execute in a sequence, returning the sequence of results. Other non-special sequence overrides fall through to the first override if any.)
-
-Another syntactically-distinct container type is the unordered collection/set `{…}`/`{}`, making the sequence inside into a set with duplicates removed, decomposed by indexing with the items themselves.
-
-Useful for collections is the key-value operator `→`/`->`, allowing maps/dictionaries.
-
-All create/return pure objects. They parse to an act (of requesting items and creating the object); to access the used functions, use `(,)`, `({})`, `(→)`.
-
-	//Maybe they should *not* request items so eagerly, instead acting lazily?
-		//Well, if lazy things are entered into an on-idle list, then this has some performance merits…
+For all these combinators: any variant that is the same function can be flattened (so `first(1, first(2,3), 4)` is `first(1,2,3,4)`); having just one variant is the same as just that variant (so `many(5)` is `5`).
 
 ```javascript
-print(1, 2, 2) // (1, 2, 2)
-print{1, 2, 2} // {1, 2}
-print{1, 7→2, 8→2} // {1, 7→2, 8→2}
+print first(1, 2, 3) // 1
+print last(1, 2, 3) // 3
+print many(1, 2, 3) // many(1, 2, 3)
+
+print⟨1 + first(1, 2, 3)⟩ // 2
+print⟨1 + last(1, 2, 3)⟩ // 4
+print⟨1 + many{1, 2, 3}⟩ // many{2, 3, 4}
+
+print⟨1 + first('1', 2, '3')⟩ // 3
+print⟨1 + last('1', 2, '3')⟩ // ⟨error⟨1 + '1'⟩⟩
+print⟨1 + many('1', 2, '3')⟩ // ⟨error⟨1 + '1'⟩, error⟨1 + '3'⟩⟩
 ```
 
-	//Maybe there should be syntactically-separate variants for non-pure containers? Or how else to make those, a function clone(obj)? Or do we not need them?
+Implementations are *very strongly encouraged* to implement `many` with (at least) code-parallel threads and GPU shaders whenever possible (for likely speed-up factors of dozens and hundreds of times respectively, compared to serial execution). Even if not done so, inline memory caching of modern CPUs is most friendly to `many` (a likely speed-up of at least 20 times, over no caching).
+
+
+
+
+
+# Concepts (`concept`)
+
+
+
+
+
+# Generating and constraining (`random`, `limit`)
+
+
+
+
+
+# Conceptual extensibility (`(#)`)
+
+	//…Or should only *some* things be concepts?
+		//Defined by whether it was created with (#), or by whether it overrides (#)?…
+
+	//(#) should be something like `concept`, for naturality…
+
+Here, anything is a concept, and a concept is anything. To maximize evolution potential, concepts can be overriden/[extended](en.wikipedia.org/wiki/Extensibility) by what is newly-created (mainly used in ever-present basic acts/calls to select the execution branch). Extension points and concepts are one-to-one.
+
+Concepts are completely separated (quantified), yet they play off of each other to create something seemingly greater (due to concepts that can combine all in one place, included in minds or here); union usually allows for an exponential increase in power with linear development. (Exactly as predicted for AI/singularity, but accessible to humans too.)
+
+Things (objects, values) exist, but concepts can also be overriden for code by data (all definitions have two parts then: static base (at code) and dynamic extension (at data)). Everything is accessed through a pure immutable (copy-on-write) `#` layer, with the same interface as `[]` (member access), but with a different meaning. (The associated-by-reference data (like `[]`) may be mutable, but `#` is not.) (All values (even numbers and strings) are defined solely by their overrides.)
+
+(Nothing that is said here is an absolute rule forever, it's just a suggestion (including this rule). Complete freedom, yet exactness.)
+
+(There are no keywords, only overridable concepts — though for uniformity and readability, the base syntax cannot be overriden during the initial parse. Definition through extension should be preferred over pattern-matching in base, because users can look at it easily. For full self-awareness, implementations must ensure that all that is defined statically/concretely (like native code or data types) [also exists dynamically/conceptually](en.wikipedia.org/wiki/Quine_(computing\)). For teaching and efficiency, behavior is best mentioned along with the base.)
+
+	//That's a good point; conceptual overrides of a concept (backrefs) should be viewable (though not matched in base, for efficiency), and this graph should be undirected, for maximum flexibility… And it would be best if creation of backrefs was able to be deferred to when needed, for maximum efficiency… How to have both?
+
+Overriding of concepts is a low-level (basic) concept: `(#)` has the interface `first((Data) ⇒ …Code, (Data, Code) ⇒ Override, (Data, Code, Override) ⇒ Data)`. `(#)(Data)` is get all keys, `Data#Code` or `(#)(Data, Code)` is get/read/lookup (returns `none` if the key does not exist), and `(#)(Data, Code, Override)` is set/write/change (copy-modified). (The `#` operator can be overriden too (allowing things like proxies and adapting conceptual storage methods).)
+
+To cancel an override and call the original concept base, return `none` from `Override`; to clear an override, use `(#)(Data, Code, none)`.
+
+(Nothing more and nothing less is overriden; clean development. Conceptual overriding avoids name collisions by referring directly to things that need different behavior, unlike duck typing, which refers to names/strings which can coincide. `(#)` also makes conceptual development natural; if a concept is accessible, it can be developed further without going into it and altering the insides.)
+
+(Complete lack of constraints on values/concepts (compositionality perfected — untypedness) is absolutely required, not only to make every possible thing representable (the only type is "literally anything whatsoever", the rest are optimizations), but also to avoid haphazardly mirroring all concepts near every artificial separation (like programming languages usually do with idea/design/compile/run-time things like intuition/theory/types/values). Performance can be regained by compiling/simplifying for *particular* parameters/values — never all: future of "anything" cannot ever be rigidly defined, only suggested. There is no universally "best" concept or prediction.)
 
 
 
@@ -505,79 +621,9 @@ Purity is the concept that should be overriden to simplify and canonize represen
 
 	//BARRIER (first equality, and decomposition (and hashing)…)
 
-`pure{'a':2}`, except ()/{}/acts/… are pure by default…
+`pure{'a':2}`, except ()/{}/acts/… are pure by default… Non-pure and pure objects can be mixed freely…
 
-
-
-
-
-# Access (`access`, …?)
-
-Many concepts are composed of other concepts (for example, all containers, or about fifty shapes of containers, or allocated byte sequences).
-
-Access to decomposition is granted by `access`, which branches on the number of arguments provided to combine querying keys, getting the value of a key, and setting the value of a key. (For branch prediction efficiency, implementations are *strongly encouraged* to inline these branches.)
-
-Particular shapes define access to them (mostly provided by implementations; see way below). This is the interface for accessing objects, used in many places.
-
-```javascript
-print access { 'x', 12→'y', 13→'z' } // ('x', 12, 13)
-print access({ 'x', 12→'y', 13→'z' }, 'x') // 'x'
-print access({ 'x', 12→'y', 13→'z' }, 12) // 'y'
-print access({ 'x', 12→'y', 13→'z' }, 'y') // (error)
-print access({ 'x', 12→'y', 13→'z' }, 12, 'R') // { 'x', 12→'R', 13→'z' }
-print access({ 'x', 12→'y', 13→'z' }, 'x', 'R') // { 'x'→'R', 12→'y', 13→'z' }
-```
-
-Access-defining code should have the form `first(obj ⇒ …, (obj, key) ⇒ …, (obj, key, value) ⇒ …)`.
-
-Getting all keys should return either a sequence of keys, or an integer length (which represents a sequence of integer keys less than the length), or an access error; mostly used for iteration. Getting at a key returns the value at key, or an access error. Setting at a key sets the value and returns the updated object (not necessarily in-place, so use the returned object for further accesses), or an access error.
-
-	//What about unknown-length sequences (which could still be iterated if paused/aborted at some point)? (An Index⇒Key function.)
-		//And, we might want forEach to act atomically; should we remove override of get-all `access` and instead demand override of `for`?
-			//This would also make things like 'example of' not have to piggyback off of decomposition, and be as first-class as iteration…
-			//(On the other hand, get-all is a concept pretty close to accessing…)
-			//(Also, what about get-length-of-decomposition?)
-
-	//Decomposition-wise, strings should simply be sequences of Unicode codepoints, right?
-
-Unless overriden, getting at 0 returns the object, and setting at 0 returns the value; all else is an access error.
-
-## Re/iteration (`for`)
-
-	//Iteration is mostly forEach (or `for(in, expr[, out])`?), turning each input value into zero or more output values, from sequence to sequence.
-		//(With some transformers available on both in and out, like slice, reverse, match, lzw…)
-		//STILL, how to define variable-length output, preferably in a way that does not just piggyback off of sequences?
-
-
-
-
-
-# Parallelism
-
-## Code-parallelism via fibers (…)
-
-…
-
-## Data-parallelism via broadcasting (`broadcast`)
-
-For performance, broadcast. It is defined by its special interaction with sequences.
-
-`broadcast(base, …values)` broadcasts/maps a single instruction (base) onto multiple data: applies self with the same base to all values in each same-index slice of sequences (extending shorter sequences with their last values), collecting results into a pure sequence (likely removing any superfluous equal last values too). The base is called when values do not override broadcasting anymore.
-
-All mathematic (`+`, `**`, `%`, `&`, …) operators broadcast themselves onto their arguments.
-
-```javascript
-print(1 + (2,3,4)) // (3,4,5)
-print((15, 30) * (1, 2, 3)) // (15, 60, 90)
-print((1,2,3,4) * 0) // 0
-
-print broadcast((a,b) => {a,b}, (1,2), (1, 4, (5,6)))
-	// ({1}, {2,4}, ({2,5}, {2,6}))
-```
-
-The concept of broadcasting is the prime opportunity for data parallelism (in particular, tensors should not be a conceptually fundamental notion).
-
-Implementations are *very strongly encouraged* to implement broadcasting with code-parallel threads and GPU shaders whenever possible (for likely speed-up factors of dozens and millions of times respectively, compared to sequential execution). Even if not done so, inline memory caching of modern CPUs is most friendly to this operation (a likely speed-up of at least twenty times). Humanity has achieved its efficiency by forking and broadcasting its inventions onto lives; share in some of that.
+	//Yeah, we *could* define literally everything as words and functions, and only worry about syntax (which devolves into those words) later.
 
 
 
@@ -593,6 +639,8 @@ Assignment, equality, inclusion, construction, execution — these are the main 
 
 (Successive logical constraints on variables (newly known is both old and constraint) can be written as `X = all{X, constraint}`. When doing type inference of variables, each assignment (newly known is either old or type) alters the type like `T = any{T, type}`. Here, intuition is design, design is implementation.)
 
+	//(What exactly does "pattern-matching error" mean, in code?)
+
 ## Match and capture (`(==)`, `(=)`)
 
 `A == B` (matching/equality) returns the match onto `A` of `B` (checks if and how much B is A). `A = B` (capture/assignment) returns the capture onto `A` of `B` (returning the captured scope or a pattern-matching error).
@@ -603,56 +651,103 @@ If not overriden, `(==)` returns `all{}` (always/true) for same objects or same 
 
 If not overriden, `(=)` throws — use on patterns only.
 
-## Inclusion and generation (`(:)`, `(…)`)
+## Constraining and generating (`(:)`, `(…)`)
 
-`x:T` (or `(:)(x,T)`), when acted on, asserts that `x` is included in `T` and returns `x` (for type inference, `x` can be a type too); if not overriden (`T` is not a type), throws a pattern-matching error unless always equal. Used to easily insert type checks wherever needed. (The word "type" is not used formally here, it is just a label for `T` in `x:T` or `random T`.)
+	//Should these two really be in pattern-matching? Or in another category altogether?
+		//Or maybe `,`/`{}`/`→` should override :/… too, to make them as recursive as ==/=.
 
-	//Should we use `…T` as a substitute for `random T`, both to streamline with natural language ("x is *a* number") and simplicity, and having generation be an operator too?
-		//`random T` can always be implemented as `finish …T`, right?
+`X:T` constrains values to those that pass `T`'s check (included in the set `T`). `…T` generates a value that passes `T`'s check (an instance of the type `T`). They allow (conceptual) evolution/development. (Generate and constrain, create and destroy, birth and kill; for efficiency, free will.)
+
+	//Also probably want a type like range(0, 10, Int), for random-number generation…
+		//(Or, `range(Int, 0, 10)`, for better overriding trust distribution?)
+		//(*Another* pattern?)
+	//Or should comparison operators actually be patterns, and have some interaction with types in …T?
+		//(What interaction, defined how?)
+		//(`0 <= …Int < 10` or `…(0 <= Int < 10)` *does* look good…)
+
+---
+
+`X:T` (or `(:)(X,T)`), when acted on, asserts that `X` is included in `T` and returns `X`; if not overriden, this throws a pattern-matching error unless reference-equal. Used to easily insert tests and type checks wherever needed.
 
 ```javascript
 print(15: Int) // 15
 print('string': Int) // (error)
 print(Int: Int, 1:1) // (Int, 1)
+print(1+2: 3) // 3
+
 print(Int8: Int) // Int8
 print first(
 	(a:Int, b:Int) ⇒ 'ints'
+	(x) ⇒ 'single argument'
 	x ⇒ 'anything else'
 )(1, 2) // 'ints'
-print random Int // possibly -7129
 ```
 
-	//Also probably want something like range(0, 10, Int), for random-number generation…
-		//(Or, `range(Int, 0, 10)`, for better overriding trust distribution?)
-		//(*Another* pattern-matching construct?)
+In natural language, `X:T` is "a `T` `X`" or "`X` satisfying `T`" or "`X` included in `T`" or "`X` which is in `T`" or "`X` (an example of `T`)" or "`X` of type `T`".
 
-(Implementations are encouraged to do type inference and eliminate all redundant checks (whenever checked type is included in inferred) on any code re/write (including JIT inlining).)
+(Implementations are strongly encouraged to do test and type inference and eliminate all redundant constraints (whenever checked type is included in inferred) on any code re/write (including JIT inlining), or show these constraints when viewed in interfaces.)
 
-In natural language, `X:T` is "a `T` `X`" or "`X` which is in `T`" or "`X` (an example of `T`)" or "`X` of type `T`".
+Some concept groups are defined not by what they are, but by what they do.
 
-(Types and sets are usually seen as opposed. In type theory, types are properties of values (exactly one type per value, restricting the 'belongs to'), which is convenient for constructive type checking and inference and induction, at the cost of an `Int8` not directly being an `Int`. In set theory, sets are (possibly-overlapping, possibly-infinite, but non-constructive, restricting the 'example of') collections of values, also conflating syntactically-distinct `{ 1,2,3 }` and `(#)({}, 'in', x => x == any{ 1,2,3 })` into one concept. Here, 'example of' and 'included in' are two separate non-restricted concepts.)
+(Types and sets are usually seen as opposed. In type theory, types are properties of values (exactly one type per value, restricting the 'belongs to'), which is convenient for constructive type checking and inference and induction, at the cost of an `Int8` not directly being an `Int`. In set theory, sets are (possibly-overlapping, possibly-infinite, but non-constructive, restricting the 'example of') collections of values. Here, 'example of' and 'included in' are two non-restricted concepts, separated cleanly to combine easily; types and sets shall fuse and give birth to a world.)
 
 ---
 
-`…`/`...`/`…all{}` (wildcard) stands for anything whatsoever (including a potentially-empty sequence); `…X`/`...X` (no space) stands for anything included in `X` (if not specified, `X` stands for `anything whatsoever`).
+	//(…Doesn't making `(a)` a sequence kind of break grouping — how to make `print(1+2+3)` or smth print just the one value?)
+		//*could* make () be grouping, [] be sequence, and . be access…
+	//…Also, `last Sequence`, the opposite of `first Sequence` — where does it fit in?
 
-Naturally, `…T` is "a/an `T`" or "a particular `T`" or "a random `T`" or "an example of `T`" or "an instance of `T`" or "any `T`" — "if `X` is a number", "let `X` be a number".
+	//(Also, `flatten Sequence` for pattern-matching and acting…)
 
-`X == …T` is the same as `X:T` ("`X` is a number" is the same as "number includes `X`"). On capturing (`=`) or shaping (`allocate`), propagates the assignment to `X`. Used in any other concept than `==`/`=`/`allocate` (including `finish`), an instance is generated; this can always be done if `:` is defined (by generating-anything and checking), though frequently overriden.
+`…T`, if not overriden, repeatedly generates anything in existence (`X`) and returns iff (if and only if) it is included in `T` (`X:T`). This is extremely slow — prefer generating only from those concepts which override generation.
 
-(Shapes: `allocate String` returns a constant reference to the `String` concept; `allocate …String` returns a reference to a string; `allocate any{ 1, 2, …String }` returns a reference to either 1 or 2 or a string.)
+	//I'm worried that this includes "repeatedly"; should this be another concept instead?
+		//What would be the use case?
 
-	//Seems inconvenient to override, since those would have to return what reacts to ==/=/allocate?…
-		//So, should we bring back `random`?
-		//Or should …X not fall through to X on those unless needed? Is this consistent with overriding `random`, or should overriding `…` be the only generator?
+`…`/`...`/`…all{}` (wildcard) stands for anything whatsoever (including a potentially-empty sequence); `…T`/`...T` (no space) stands for anything included in `T` (if not specified, `T` stands for "anything whatsoever").
 
-	//Should also have number ranges for random-number generators and such… Just `Range(A, B)`? Or something fancy like `1 <= …Number < 2`?
+```javascript
+print …1 // 1
+print …Int // possibly -7129
+print …any{1,2,3,4} // possibly 2
+print …all{1,2} // none
+print …(1 < Int < 2) // possibly 1.23456
 
-(Generates randomly/freely, as is required to attain maximal efficiency of conceptual development via free will.)
+print (… ⇒ 12)'zzz' // 12
+print ((…a) ⇒ a)(1, 2, 3) // (1, 2, 3)
+print ((x, …, y) ⇒ {x, y})(1, 2, 3, 4, 5) // {1, 5}
+```
 
-(In function arguments or assignments, could be used to collect the rest in a sequence, like `(x, …rest) ⇒ …`, or to ignore some, like `(first, …, last) ⇒ …`. Could also be used for generating random test inputs conveniently.)
+Naturally, `…T` is "a/an `T`" or "a particular `T`" or "a random `T`" or "an example of `T`" or "an instance of `T`" or "any `T`" or "sample `T`". "If `X` is a number", "let `X` be a number".
 
-(Conceptual existence of a thing that includes any thing implies two things: that nothing can be known about everything for sure (every way of viewing the world is as valid as any other), and that all in existence could reasonably be traced to nothing but basic randomness (as the only perfectly general fallback, any viewpoint/future could be produced from it and some very basic base).)
+(Override `(…)` for `T` with random example generation; no need to re-override `…`'s overrides, since overrides do not override overrides of overriden.)
+
+`X == …T` is the same as `X:T` ("`X` is a number" is the same as "number includes `X`"). On capturing (`=`) or shaping (`allocate`), propagates the override to `X`. Used in any other concept than `=`/`allocate` (including `finish`), an instance is generated; this can always be done if `:` is defined (by infinitely generating anything and constraining), though frequently overriden for efficiency.
+
+	//Should it really generate when-acted-on, or just when finished?
+		//Don't really want to generate before the function even requests it, right?
+
+	//Sequence-flattening here does not seem like something natural, since we treat sequences in patterns with respect now and do not allow (x,y) to capture (1,2,3).
+		//Do we do something else for that?
+	//And just passing override for `allocate` does not seem right either, since Int and …Int in shapes are supposed to be totally different.
+
+	//Do we want to just make `…T` be basically the new substitute for `random T`?
+
+(In shapes: `allocate String` returns a constant reference to the `String` concept; `allocate …String` returns a reference to a string; `allocate any{ 1, 2, …String }` returns a reference to either 1 or 2 or a string.)
+
+(`…:T` should be replaced with `…T` on execution.)
+
+	//Can it be done by overrides, of `:` by `…`?
+
+(All in existence could reasonably be traced to nothing but basic randomness. Evolution is Turing-complete too.)
+
+---
+
+	//Inference (analysis, back-chaining): `when(Expr, Result)` to infer when the result would be of the type specified (like `Int < 5`); specifies types/sets of parameters/holes (inline change-able values)?
+		//(Marginal distribution returns { value→probability } — like all-results inference…)
+
+	//Finishing a raw variable has no purpose, right? Could be used to define new variables for all consequent statements in the current sequence, right?
+		//(Or maybe `var: Type`… But then, don't we have a use for that?)
 
 ## Branching (`any`, `all`; `not`)
 
@@ -673,9 +768,6 @@ The functions below attach semantics to collections, overriding `(=)`/`(==)` for
 
 `the{…}`, one and only — how exactly would it work? Should it be paired with any of the above?
 
-`a{…}`/`example{…}` (shouldn't it be a part of inclusion+example?);
-
-	//uniformly-random (`shuffled`)? Or should it be done on execution of `any`?
 	//cost-considering — what is the best interface, best{c1→e1, c2→e2}?
 		//Or should costs be assigned by a tracing-like function, estimate/suggest (to `any`)?
 			//(Like `trace(Expr, (any{…choices}) ⇒ best{…choices})`?…)
@@ -694,7 +786,7 @@ The functions below attach semantics to collections, overriding `(=)`/`(==)` for
 
 Sequences override `=`/`==` for pattern-matching…
 
-Nested sequences are effectively flattened into one sequence in `=`/`==`.
+Nested sequences are effectively flattened into one sequence in `=`/`==`. Sequences only match sequences.
 
 (Possibly, `=` is emit, and `==` is parse… Except, won't emit (of concrete syntax trees) be better served as `==`-dependent function, possibly even not overriden by nodes?)
 
@@ -707,6 +799,33 @@ Nested sequences are effectively flattened into one sequence in `=`/`==`.
 
 
 # Judgements…
+
+Judgements are a set of reinforcing motivators, all equivalent to each other; united by converging of manifestation input/output with time. (Causation converges to correlation; expectation converges to reality; best action converges to reality.)
+
+(Looking only at their function/results, they may be difficult to classify, or even understand the need for differentiation in the first place; nevertheless, they are united only by convergence, not structure, not definition, not explanation.) (For example, in economics everyone is viewed through best growth/[optimality](en.wikipedia.org/wiki/Bellman_equation)/[serotonin](en.wikipedia.org/wiki/Serotonin), but such a picture is not (and cannot be) the ultimate answer to existence.)
+
+	//What about biasing, which watches out for `…`/`random` or smth? They are not the same, are they?
+		//…Are biases the result of back-propagation of judgements to `random`?
+
+---
+
+From preliminary analysis:
+
+Closest words and code for reinforcing (both un-reified and reified converge with any other) human brain substances (closest code is unknown for all but dopamine):
+
+- (most neurons): correlation, causation (which converge with time — Hebbian learning with limiters)
+
+- dopamine: pleasure, expectation, and causation (expectation and reality converge with time — TD-learning).
+
+- serotonin: growth, resources, and satisfaction (best action and reality converge with time — Q-learning)
+
+- noradrenaline: restlessness, vigilance, and attention
+
+- adrenaline=epinephrine: stress, fear, and anxiety
+
+- endorphins: hunger and pain, novelty and euphoria
+
+- …
 
 
 
@@ -739,6 +858,8 @@ A visible face is a way for the world to cause and observe slices of execution; 
 # Integers and numbers
 
 	//BARRIER (More must be faced to unlock this. Extensible optimization/directed-changing/reinforcement, including equivalent search. Even functions/acts/equality are not usable right now, and therefore in-code precise definitions could not be given.)
+
+		//It requires analysis of convergence of approximation algorithms.
 
 It is common in languages to assume a certain set of numerical operations is available; this black box is then allowed to fester, into undiagnosable problems. But what if there is no arithmetic unit in implementation? What if there are only a bunch of electric NAND gates and an ability to create/destroy their circuits? What if there are only a bunch of neurons and an ability to reinforce correct randomly-found paths? What if non-standard precision is required or allowed?
 
@@ -804,9 +925,9 @@ Programming languages are one way to represent concepts, but natural languages a
 
 The currently supported languages are as follows: ().
 
-## Representations
+## Concrete representations
 
-(These turn syntax trees into their actual representation (and back).)
+An abstract tree stores only what is important. A language, when applied to an abstract tree, returns a concrete tree. A viewing method (representation), when applied to a concrete tree, turns it into a print-able representation. So, for reading/writing, nodes of the abstract tree should override a language to return the correct flattened pattern.
 
 (Minified representation, pretty-printed, tty-colored, DOM (CSS-enabled, event-enabled) output…)
 
@@ -842,6 +963,8 @@ Together, byte allocators and shapes provide a bridge from the processing device
 
 ## Byte allocators (`allocator`/`allocate`)
 
+	//Wouldn't it be better to allocate by-bits, not by-bytes? (More precise and does not need workarounds for bit-packing.)
+
 Allocators are responsible for giving out sequence references for access and re/allocation. (Reallocation either truncates or zero-extends the sequence; no active sequences overlap.)
 
 Most general memory has multiple readers and writers, `deallocate`-overriding objects, no constraints on mutability or reference cycles or exclusivity, and no fixed object size or de/allocation pattern. It must make every access atomic, visit the entire object graph before any deallocations, and keep track of all allocation information.
@@ -849,6 +972,7 @@ Most general memory has multiple readers and writers, `deallocate`-overriding ob
 Byte allocators are specified for the evaluation of an expression with `allocator(Alloc, Expr)`; `Alloc` will then be the first to accept allocation requests (then previously-specified ones up the scope chain, ending at the global byte allocator). Allocators override `allocate`, which accepts an unsigned integer `Bytes` and optionally a previously-allocated reference, and returns the re/de/allocated reference; this is used by implementations of writing accesses (or for defining memories for constructing allocator instances).
 
 	//But, `catch`/`finally` puts the expression to execute first; should we do the same?
+		//(In allocator, printer, with, trace…)
 
 (Specialized/constrained allocators are often more performant than general-purpose ones, but cross-allocators references are usually expensive, so allocators are given per-scope to maximize locality.)
 
@@ -894,6 +1018,8 @@ Allocator modifiers:
 
 ## References (…`reference X`?)
 
+References manage lifetime of resources (objects). Remember it, and it will be alive forever, but forget it, and that is the only death that matters.
+
 A reference is a stand-in for a remote location. To maximize data locality and caching, store it locally (inline); to minimize shape re-allocation and indirection on sharing, store data remotely (by reference to it).
 
 To implementations/processors, objects are references (special types like basic numbers are special-cased to give a base); storage is distinct from processing.
@@ -919,5 +1045,114 @@ Built-in types (`T` in `x:T`) often allow object creation, and are thus (basic) 
 
 	//What about inlining containers, like object marks or maybe reference-counters?
 
-	//What about property-maintaining nodes, like Parent <= …Children or Sorted (like Left <= Value <= Right), or Hashed (?…), for maintaining indexes of collections?
+	//What about property-maintaining nodes, maintaining indexes of collections?
+		//Shapes (of {…}) (all shapes must satisfy get-after-set and iteration-after-set tests):
+			//- key→value, as the base for all maps/dictionaries.
+			//- (…) (or, a number, length?…) (or, `sequence Type`?): least overhead (best iteration), worst access/min/max. Best used as a base case for when there are few items.
+			//- Parent <= …Children (or, L<=V or V<=R): best min(/max), worst access.
+			//- Sorted (like Left <= Value <= Right) (or always L<=V<=R, because there is only one value (which could be a sequence, just like L/R)?): best sort, ok access/min/max.
+			//- Hashed (?…): best access, worst sort/min/max.
+			//- first: for combining shapes (like in update-then-previous-version) — worst iteration; looks at each in order to access, does merge-sort to sort, and min/max to min/max.
+			//- Pattern-matching stuff (any, all, …, and maybe `:`?)…
+				//(`Number` is just that value with no allocated footprint, but `…Number` allocates.)
+			//- All types that want to be are shapes too, but they do not pass the tests. Hmm.
+				//(Don't they do so by overriding `allocate`? Is this shapes — where do tests fit though?)
+					//(Maybe composite-collection-shapes should be in their own test-def namespace…)
+			//- Technically, anything else that passes tests too, but do you really want to generate such code repeatedly and randomly?
 		//What about multi-index containers? Cannot just stack indexes linearly, since we want references to multi-index nodes and not just their data.
+			//Can't they be done with overriding different operations just like `[]`?
+
+
+
+
+
+# Operators and infix expressions (`(+)`, `(*)`, …)
+
+```javascript
+print(1+2) // 3
+```
+
+Operators exist for convenience, readability, and familiarity, even though they take up a good chunk of parsing. Equivalent programs can easily be expressed in terms of other parsing rules if needed.
+
+Whitespace does not determine precedence (`1+2 * 3` is the same as `1+2*3` and `1 + (2*3)`); the used operators do.
+
+In the following list (for completeness), each group (precedence level) is either as specified or falls through to the next group in parsing (meaning that emitting a lower group from a higher one requires grouping `(…)`). To specify, in the set of operands of a group, the left-most will be the next group in RtL groups, or the right-most in others (LtR); other operands will be the current group (so RtL is `1**(2**3)` and LtR is `(1+2)+3`).
+
+- Acts/calls, 2 groups:
+
+	- No-whitespace acts `Code Data`.
+
+	- (RtL) No-line-break with-whitespace acts `Code Data`.
+
+- Object decomposition, 2 groups:
+
+	- Conceptual override `#` (like `A#'str'`).
+
+	- Access `[]` (like `A['str']`; `A[B]` can only read, use the concept in an act to do other things).
+
+- Object composition, 2 groups:
+
+	- Key-value `→`/`->` (`(→)`).
+
+	- Function definition `⇒`/`=>` (`(⇒)`).
+
+- Broadcasted operations, 7 groups (each has an assigning version: `A += B` → `A = A + B`):
+
+	- (RtL) unary `~`, `+`, `-`; unary/nullary no-whitespace wildcard `…` […Should all these really be in the operator precedence order?] [Should these be in a separate global-group right after access?].
+
+	- Arithmetic, 3 groups:
+
+		- (RtL) Exponentiation `**`.
+
+		- `*`, `/`, `%`.
+
+		- Two-operands `+`, `-`.
+
+	- Bitwise shifts `<<`, `>>`, `>>>`.
+
+	- Bitwise, 2 groups:
+
+		- `&`.
+
+		- `|`.
+
+- Pattern-matching, 4 groups:
+
+	- Comparisons `<`, `>`, `<=`, `>=`.
+
+		//1 < 2 < x < 4 < 5; 2<x<4. Should non-comparing things throw an error, and comparing return… one of the values — which one though?
+			//x: (1 < 2 < Int < 5); x: (3<=Int<=4)…
+			//first(x: (0 < Number < 1) ⇒ x*2, …)
+
+	- Inclusion `x:T`. [Should maybe also include `…`, but this priority for that seems unnatural…]
+
+	- In/equality `==`, `!=` (`A != B` is `!(A == B)`).
+
+	- (RtL) Assignment `=` and things like `+=`.
+
+- Control-flow operations, 3 groups:
+
+	- Logical, 2 groups:
+
+		- `&&`.
+
+		- `||`.
+
+	- (RtL) Conditional `?:` (`A ? B : C`).
+
+	//Either `1==2 && 2==3` or `a = 1?2:3` does not fit usual usage… Should control-flow be merged with broadcasted operations (then, `&&`===`&`, maybe?), or only conditional?
+		//Would it make sense for comparison results to accumulate in sequences (and thus to use `?:` for selecting)?
+
+- Sequences, 3 groups:
+
+	- Sequence `,` (`(,)`).
+
+	- Sequence `;`; can be used for more compact two-layer specification of nested sequences.
+
+	- Sequence line break (without `,`/`;` before or after); can be used for more compact three-layer specification of nested sequences, or for readability.
+
+- Expressions/terms (including grouping `(…)`), and everything non-operator: containers, strings, variables…
+
+All operators can also be accessed as a function (requiring grouping): `(+)(1,2)` is the same as `1+2`. Infix (between terms) syntax is merely a convenience. Define variables with those names in the local scope, and those will be used to define the operators.
+
+In addition to implementing the operation on broadcasted-onto values, operators can accept types as arguments to perform type inference: `2 + Int` → `Int`. Type inference is a tool that is usually used to know when to omit things like type checks in generated code, so easy access to it is convenient (though not technically required).
