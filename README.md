@@ -54,7 +54,9 @@ Contents (double as a roadmap for implementation):
 
 - Creation — distinguishing the constrained.
 
-  - Memories — giving out storage pieces??
+  - Memories — giving out managed storage pieces.
+
+  - Caching — non-essential but nice creations.
 
 - Access — sending signals through a wire.
 
@@ -62,15 +64,7 @@ Contents (double as a roadmap for implementation):
 
   - Order — imposing a sorting.
 
-  - Optimization?? — improving layout?? (splaying, balancing)
-
-  - Hashed?? — index calculation??
-
-  - Linearity — sequence manipulation??
-
-    - Flattening — subsequence??
-
-  - Minimal difference — versioning and changing??
+  - …
 
 - Convergence — approaching singularities??
 
@@ -143,7 +137,7 @@ view f(2, 3) // 5
 
 # Concepts (`concept`)
 
-(This is at the top because it is both a goal and cause for the rest.)
+(This is at the top because it is both a goal and origin for the rest.)
 
 Anything knowable is seen through a pure view that defines it; everything is a `concept`. This encapsulates [extensibility](en.wikipedia.org/wiki/Extensibility).
 
@@ -174,7 +168,7 @@ All definitions have two parts: static base at code (implementation) and dynamic
 
 There is no universally "best" concept or viewpoint, apart from a combination of all known.
 
-(Trying to make intelligence prohibits the actual making of intelligence; combining is *the* key, not any approach in particular. Instead, an extremely round-about scheme *must* be employed if there is to be any real hope for AI: seek all the concepts that underlie this world, tune their power, and through their strength, ascend. The rest of this specification exists to show exactly why.)
+(Trying to make intelligence prohibits the actual making of intelligence; combining is *the* key, not any approach in particular. Instead, an extremely round-about scheme *must* be employed if there is to be any real hope for AI: seek all the concepts that underlie this world, tune their power, and through their strength, ascend. Everything is AI, and AI is everything. The rest of this specification exists to show exactly why.)
 
 
 
@@ -422,11 +416,11 @@ view double(yes) f(x)(y)
 	//view⦇ ⦇double(yes)⦈ ⦇f(x)(y)⦈ ⦈
 ```
 
-`act.mem Code` [[or should it be just `mem Code` for ease of use?]] modifies code to return a previously-computed result if available, only executing code if not. [[What about checking for referential transparency?]]
+`act.mem Code` modifies code to return a previously-computed result if available, only executing code if not. Implementations should check for referential transparency (same input always results in the same output), and use this automatically.
 
 [[And even if we could store the result, the act object will likely get deallocated when we return. So there should be some scheme of caching those acts, able to drop some on memory pressure, able to prioritize/bias towards what is likely useful later…]]
 
-[[Also, what about inlining? Stepping and remembering? What about native code generation, during watching?]]
+[[When [inlining](https://en.wikipedia.org/wiki/Inline_expansion), need to pick strategies. Perhaps it is best considered with run-time alt picking.]]
 
 `act.when(Function, …)` returns the set of inputs that produces output as specified, reversing computation. For example, `act.when(x ⇒ 14)` is `…`; `act.when((a,5) ⇒ a+2)` is `(…,5)`; `act.when((a,5) ⇒ a+2; 3)` is `(3,5)`. Useful for analysis.
 
@@ -436,7 +430,7 @@ A function `Args ⇒ Expr` is "given `Args`, we have `Expr`" or "if `Args` then 
 
 `act.func(Args, Expr)` or `Args ⇒ Expr` creates a function: when filled with its act, `Args` (arguments/parameters) will be captured and bound in `Expr`; it also checks and ensures the validity of control flow (like the lack of loops in it). `Args ⇒ Expr` is the same as `x ⇒ bind(Expr, Args = x)`.
 
-(To ensure that a name in `Args` creates a new argument, wrap it in `bind.not`. On the one claw, it can be easy to refer to an already-existing binding; on the other, `view bind.visible` and proper structural editors can easily provide feedback on this.)
+(To ensure that a name in `Args` creates a new argument, wrap it in `bind.not`. On the one claw, it can be too easy to refer to an already-existing binding; on another, `view bind.visible` and proper structural editors can easily provide feedback on this.)
 
 (Implementations are strongly recommended to optimize these heavily, like memoizing if referentially transparent, and/or converting to native code. Everything is done with functions and acts.)
 
@@ -487,7 +481,7 @@ Execution functions and values, future branches and results, can be combined wit
 
 `last Sequence` (or `(|…|)`/`⦇…⦈`): tries all branches in order and returns the last (successful) result (or the first error), forward-chaining. Any branch that is a `last` too can be flattened. (This allows returning a result that depends on side-effects (like setting variables) of previous statements, instead of a sequence.)
 
-`many Collection` (or `{|…|}`/`⦃…⦄`): tries all branches without order and returns many results (or many errors); it watches each to ensure that none ever accesses what another writes (with that guarantee, all branches can be tried independently). Any branch that is a `many` too can be flattened. (This is *the* [parallelization](en.wikipedia.org/wiki/Parallel_computing) primitive; [man can dream, but many can achieve](en.wikipedia.org/wiki/System_Shock_2).)
+`many Collection` (or `{|…|}`/`⦃…⦄`): tries all branches without order and returns many results (or many errors); it watches or proves each to ensure that none ever accesses what another writes (with that guarantee, all branches can be tried independently). Any branch that is a `many` too can be flattened. (This is *the* [parallelization](en.wikipedia.org/wiki/Parallel_computing) primitive; man can dream, but *many* can achieve.)
 
 `many` overrides acting (and likely other native things, like `view`) to execute many branches at once, returning many results.
 
@@ -671,7 +665,7 @@ view …Range(Int, 1, 2) // possibly 1.23456
 
 (Generate and constrain, create and destroy, birth and kill — evolution/development encapsulated (Turing-complete and world-viewing, just like many other viewpoints). All in existence could reasonably be traced to nothing but basic randomness, and incorporated randomness (free will) could reasonably create any future existence too.)
 
-(Unless constrained, new concepts are generally multipliers of a measure (fitness, power, benefit, efficiency…), and thus linear development results in exponential benefits — usable for [sin](en.wikipedia.org/wiki/Theory_of_everything_(philosophy\))[gularity](en.wikipedia.org/wiki/Technological_convergence)/'AI' and humans/'geniuses'.)
+(Unless constrained, new concepts are generally multipliers of a measure (fitness, power, benefit, efficiency…), and thus linear development results in exponential benefits — usable for [singularity](en.wikipedia.org/wiki/Technological_convergence)/'AI' and humans/'geniuses'.)
 
 ## Searching for alternatives (`alt`)
 
@@ -739,7 +733,7 @@ view act.when(natural, '1 plus 2.') // 3
 
 Programming languages are one way to represent concepts, but natural languages are more natural to humans, and converting to them allows self-documenting and readable code. (Simple natural language for concepts here is straightforward to do, since it is largely given in here on definition.)
 
-`natural …` is largely the same as `conceptual …`. It is mostly an experimental thing, to see how natural this language of concepts is.
+`natural …` is largely the same as `conceptual …`. It is mostly an experimental thing, to see how natural and convenient this language of concepts is, and how it looks in a structure editor.
 
 (Natural languages are usually too imprecise and unreliable to simply take in, but with mutual effort, a single consistent communication system could be built.)
 
@@ -751,7 +745,7 @@ An implementation is something that defines basic concepts, bootstrapping them i
 
 (In programming, a compiler to base/machine code (just-in-time or ahead-of-time) is said to be necessary for performance, with zero consideration given to other conversions. In mathematics or other logic, its formal system is said to be necessary for any other things, defining their formal "foundations" as their only source of truth, with zero consideration to other forms of thought or existence (or to performance). While historically it may have been right to consider only those development ways in most cases, such arrogance is definitely not right in general.)
 
-Programming languages; machine code; [operating systems](en.wikipedia.org/wiki/Unikernel); formal or informal logical systems; human minds — all can be implementations, each as valid and foundational as any other. We are not satisfied with mere conquest; we seek complete reconstruction.
+Programming languages; machine code; [operating](en.wikipedia.org/wiki/Unikernel) [systems](en.wikipedia.org/wiki/Language-based_system); formal or informal logical systems; human minds — all can be implementations, each as valid and foundational as any other. We are not satisfied with mere conquest; we seek complete reconstruction.
 
 (Different language versions are separate concepts, likely with mostly-shared implementations, so conversions are very likely to be fast.)
 
@@ -841,6 +835,119 @@ If `Prev` is `doc …`, views should be on an HTML document. The most flexible, 
 
 
 
+
+
+
+# Creation (`create`, `creator`)
+
+Creating an object is requesting the ability to distinguish between all instances of a constraint.
+
+(Everything that is said here is in the context of `bind(…, access)` for brevity.)
+
+`create Type` returns a container of a single value (at `access.none`, unless overriden) — an example of `Type`. It denumerates `Value: Type` but not `Type: Value`. Reading (at `access.none`) always returns the last successfully-written result. (For convenience, this container also overrides access/finish and capture.)
+
+(`create⦇A → B⦈` associates keys of `A` with values of `B`, not allowing reads/writes with a different key. Containers then try to access each of their parts, returning the first success.)
+
+For example, `create⦇(1,2,x) ⇒ x⦈` extracts a certain shared structure (with `x` being of `all{}` types).
+
+In general, `create⦇Transform: Into⦈` transforms all incoming accesses and stores the shaped form (of type `Into`). When writing `none→V`, this writes `Transform V`; when reading `none`, this reads `act.when(Transform, V)`. Can be used to extract shared structure, and reduce the total size and repetition this way. (Implementations should use this aggressively to optimize collections.)
+
+`create.states N` separates `N` states. `create.bits N` separates `2**N` states. `create.bytes N` separates `8*N` bits. These are the building blocks from which all memory can be formed; they are served by creators.
+
+(`all{}` (or `…` in this context) is the type that encompasses all types, including itself; a reference/pointer to anything that allows to be remembered. Complete lack of constraints on values/concepts (untypedness) is absolutely required, not only to make every possible thing representable, but also to avoid haphazardly mirroring all concepts near every artificial separation. Performance can be regained by compiling/simplifying for *particular* parameters/values (`first(…, all{})`) — never all: future of "anything" cannot ever be rigidly defined, only suggested.)
+
+`create.times(Values, N)` represents up to `N` ordered pairs `i→Values` (`0→…`, `1→…`, …, `N-1 → …`), allowing quick random-index access; any existing item can be deleted-then-written, only the last item can be deleted, and only the next item can be added (unless writing past the limit) — a constant-sized array. Has the most straightforward representation in memory (current count and the elements).
+
+`create.sequence Values` represents pairs `i→Values` (`0→…`, `1→…`, …), allowing quick random-index access and re-sizing; any existing item can be deleted-then-written, only the last item can be deleted, and only the next item can be added — a dynamically-sized array. Likely done by doubling the size of a `sized` array when it fills, and possibly making a mark to trim unused memory later. In conceptual syntax, represented with `(…)`, allowing elements to be pre-filled easily: `()`, `(A)`, `(A, B, C)`, `(A; B; C)`; `(A, B; C)` is `((A,B), C)`. (A basic concept, used everywhere.)
+
+`create.collection Type` represents likely-unordered elements of a `Type`; any item can be deleted or added, arbitrarily, without any checks of pre-existence — a container for everything. Should be more optimized than just adding new elements at the end of a list. Conceptually, arbitrary containers are seen as `{…}`, allowing easy element pre-filling. (A basic concept, used everywhere.)
+
+(Containers should fall back (with `first(…)`) to collections to allow anything to be stored.)
+
+(To overwrite, must always delete before writing, else an item will just be added. If multiple items are fit to be read, the first one should be returned.)
+
+`create.resource(Created, Destroy)`: when the `Created` object stops being relevant, it is passed to `Destroy` (whose return value is ignored). It cannot be copied, [its fate](en.wikipedia.org/wiki/Destructor_(computer_programming\)) cannot be averted, and it can only be entrusted to devices/objects if they guarantee responsibility for it (and so will always take it with them on their destruction).
+
+In conceptual syntax, sequences are created with `(…)`, and collections are created with `{…}`, allowing elements to be prefilled easily. `()`, `(A)`, `(A, B, C)`, `(A; B; C)`; `(A, B; C)` is `((A,B), C)`. `{}`, `{1→2}`, `{1, 2, 3}` (concretely the same as `{1→1, 2→2, 3→3}`), `{ (1,2), 7→3, { 'a'→4 }, 5 }`.
+
+```javascript
+bind((|
+	view a // 1
+	a[none → 2] //is 2
+	a[none → any{1,2}] //Error; is 2
+
+	a = 1; view a // 1
+|), { 'a' → create any{1,2} })
+```
+
+---
+
+## Memories (`creator`)
+
+Practically all modern systems represent all storage as a sequence of bytes; interpreting it as objects is program's duty. Being able to go between bytes and objects is essential for implementations, and also allows other tricks like persistence or automatically picking the best memory management scheme, even if implementation's implementation does not support such.
+
+Memories intercept creation to realize objects (constrained distinctions). They give out subsequence references for access and [de/re/allocation](en.wikipedia.org/wiki/Memory_management). (Reallocation either truncates or zero-extends the sequence; no active sequences overlap.)
+
+(Implementing even such basic functionality in the language allows everything made to improve language programs (like inlining) to work on memory allocation too.)
+
+`creator(Expr, Memory)` uses `Memory` to handle lifetimes of all creations within `Expr`. (Much like a visual view, but an in-memory view instead.)
+
+`creator.ref` must be overriden by `Memory`; particular shapes could override it too. `creator.ref(Shape)` acquires an instance of `Shape`, returning `Ref` (which must override `access` to be useful); `creator.ref(Shape, Ref)` re-shapes a creation, returning `Ref`; `creator.ref(any{}, Ref)` drops a creation.
+
+`creator` is also a namespace for memory concepts.
+
+---
+
+(Specialized/limited allocators are often more performant than general-purpose ones.)
+
+Allocators/memories:
+
+- Auto-resizing-storage fixed-size `sized(Bytes, Size)`; throws when allocating more than `Size`, wastes when allocating less, very efficient when exactly so. (`Size` can be `…`, mostly for use in other allocators.) [[In JS, can be done with `WebAssembly.Memory` instances (which grow in increments of 64KB), or a polyfill of `ArrayBuffer.transfer(Old, Bytes)`⇒`New`, or an array of array-buffers. Others should be implemented on top of such.]]
+
+- Linear allocator `linear Bytes`, for batch de/allocation. If passed `…`, will re-use the last linear allocator (for scoped de/allocation) or create a reasonably-sized one. Wastes a lot if any cross-allocator references are left when done. (Has two pointers at the start: to position and an ordered container of pointer-to-resource (for handling destructors). Throws when the end is reached.)
+
+- Auto-resizing-storage any-size `static Bytes`, never changing the position of objects; maintains an ordered container of free space information. Merges adjacent empty spaces, and likely picks the least-sized free block. Must be locked to give out only one place for an object at a time (others allocate atomically).
+
+(`Bytes` can be a byte sequence or an allocator (which could allocate a byte sequence) or `…` (for a reasonable default for allocators).)
+
+Memories are objects too, and responsibility for them can be released or held as needed. For this, they must remember all cross-allocator references separately, to be able to release them. Cross-allocator references are thus a lot more expensive than in-allocator ones.
+
+To maximize locality, memories are specified per-scope (not per-creation). If an object needs to re-allocate, it should do so into its own memory.
+
+---
+
+Limiters for increased performance:
+
+- No resources `data Mem`. As children, data does not hold responsibility, and so can be dropped in bulk. Throws if attempting to acquire a resource.
+
+- Single-processor `exclusive Mem`: atomic instructions do not need to be utilized, and unless the storage is persistent, neither does journaling. Throws if a non-exclusive memory attempts to acquire an exclusive object; copy them first.
+
+(After being modified, the original memory cannot be used.)
+
+---
+
+References only give exclusive responsibility by default (create/destroy), just like dictatorships or parenting — on failure, must use an open-ownership memory (create/destroy becomes take/give responsibility).
+
+Remember it, and it will be alive forever; but forget it, and that is the only death that matters.
+
+Arbitrary object connectivity, all equivalent:
+
+- `count Mem` — [counts references](en.wikipedia.org/wiki/Reference_counting) to objects; when responsibility is dropped, does delayed object freeing (to the end of current access, if any) and cycle dis/unification (sometimes). Best for large long-lived objects. ([Weak references](en.wikipedia.org/wiki/Weak_reference) are fragile and dependent on the using code to do properly. Joining reference counters for cycles is far superior.) (Objects also have int or in-allocator ref counters.)
+
+- `trace(Mem, N=0: Int)` — must first [mark all alive](en.wikipedia.org/wiki/Tracing_garbage_collection) to release the dead; those who are marked `N` times (or randomly less, or when the old becomes full) are moved to the next sub-memory. Cross-allocator references and created or written-to objects become roots of such marking processes. Best for small short-lived objects. (Objects also have a was-marked bit, flipped in meaning between markings, and `N` states. Objects can also become their new position in the next sub-memory. Every sub-memory has an optional reference to its superseding sub-memory.) (With `N=0`, always moves; with `N=∞`, very rarely moves.)
+
+## Caching (`cache`)
+
+Some things are nice to keep in memory (for performance), but should be dropped if that memory is required for other things.
+
+`cache` is the global write-only interface to the container that contains all such objects. When, it will be iterated and encountered objects removed.
+
+`cache.state Mem` or `cache.state …` provides information about available memory: it returns `(Taken, Total)` (both are very likely in bytes). When it is too close to one, the cache can be cleared.
+
+
+
+
+
 # Access (`access`; `for`)
 
 Access is the bridge for processing to storage and other devices — ensures a [serializable](en.wikipedia.org/wiki/Serializability) stream of [linearizable](en.wikipedia.org/wiki/Linearizability)/[indivisible](en.wikipedia.org/wiki/Atomicity_(database_systems)) operations. Reading or writing, atomic or not, cyclic or not, or other useful access patterns are accessible for full access control. (Full abstract control is usually very tedious to do manually, so it is better to do so automatically.)
@@ -875,25 +982,9 @@ Forcing exclusivity is preferable to retrying (journal/atomic) if the same objec
 
 ---
 
-Viewing values (0, 1, ∞):
+Missing values:
 
 - `none`: a value meaning only the lack of a value. When reading/getting a non-existent value, `access.none` is returned; when writing/setting a non-existent value, `access.none` is accepted to delete it (from keys too). Cannot be read from or written to.
-
-[[Shouldn't it be create.none?]]
-
-- `resource(Create, Destroy)`: finishes `Create` to get the constructed object; when it stops being relevant, it is passed to `Destroy` (whose return value is ignored). It cannot be copied, its fate cannot be averted, and it can only be entrusted to devices/objects if they guarantee responsibility for it (so will always take it with them on their destruction). (Remember it, and it will be alive forever; but forget it, and that is the only death that matters.)
-
-[[Maybe resource should be a create.resource thing?]]
-
-- `reference Object`: represents the whole object, whatever it is; a local stand-in for a remote location. Writes and `capture` will change the object pointed to, not write inside of it. For all those that do not override `access`, this is the same as just `Object`. `Object` is not finished (unless directed so with `finish`) and will only be evaluated on demand.
-
-[[Shouldn't this reference be `create …`, not its own access thing?]]
-
-(To memory-manage allocators, they must decompose as a collection of all its cross-allocator references; thus same-allocator references are usually a lot cheaper.)
-
-(Particular memory allocators will define their own references that can hold only their objects (which are cheaper than generic references); to store all, they must be able to fall back to this.)
-
-(References are sometimes open and sometimes closed to functions that operate on objects. To force open a reference, wrap it in `access`; to force close an object, wrap it in `reference`.)
 
 ---
 
@@ -959,28 +1050,15 @@ Swapping items around (useless in stored objects, but can be useful when relocat
 
 Sequential splicing:
 
-	//What is the interface to such splicing? One that can splice in many places at once?
-		//And to constructing such a splice (well, it's the same as just splicing)?
-		//We can just define one-place splice, and combine them via other concepts to have many…
-
 - `start O`, `end O`, `queue O` (which is `move(start O, end O)`): push to (write) or pop from (read) its appropriate end. Basically done by reading/writing an appropriately-positioned splice of the object. Reading what was just written will always return the value without modifying the container.
 
-- `slice(From, To)`: represents a slice with ordered keys from `From` to exclusive `To` (keys for which `From <= Key < To` can be constructed). […What about the slice's value; what does it mean to write a value-less slice, can it even be done? And what about moving the From to 0 in the read result, or from 0 in the written result; `offset(Object, N)`?]
+- `slice(From, To)`: represents a slice with ordered keys from `From` to exclusive `To` (keys for which `From <= Key < To` can be constructed). When read, it is completely removed; when written to, it is completely replaced.
 
-	//And what about non-splicing slices and splicing (shifting other elements) slices?
-
-- `splice(???)`: 
-
-	//Or maybe it should even be slice(from, to) and replace(slice1, data)? Does not seem very consistent…
-		//And what about one-directional and bi-directional splices?
-	//(Maybe the Wikipedia article on ropes could help.)
-
-	//And what about `flatten Seq`; is this an access pattern, or merely a matching pattern?
-		//We could use `flatten` for multiple-element data to replace with…
+- `flatten Sequence`: represents a contiguous sub-sequence that should be spliced in.
 
 ---
 
-	//Should also have "minimal difference between objects/sequences".
+	//Should also have "minimal difference between objects/sequences"; diff(a,b)⇒Diff, diff(a,Diff)⇒b, diff(Diff,b)⇒a.
 
 	//What about splaying an element (making it the first in iteration order, faster to access)?
 		//And what about bounded-worst-case or bounded-X (like balancing of search trees)?
@@ -1007,9 +1085,7 @@ Sequential splicing:
 
 	//Skip-lists: created next node has a set random chance to be either `first(far, next)` or data.
 
-	//Tries (prefix trees): `⦇(prefix, flatten k) → v⦈ ⇒ ⦇k → v⦈`,
-
----
+	//Tries (prefix trees): `⦇(prefix, flatten k) → v⦈ ⇒ ⦇k → v⦈`.
 
 ## Re-iteration (`for`)
 
@@ -1064,7 +1140,7 @@ A conceptual implementation of `for` could be as such:
 
 
 
-# Order (`min`, `max`, `sort`; `ordered`)
+## Order (`min`, `max`, `sort`; `ordered`)
 
 `min Container`, `max Container`: return the minimum/least or maximum/most (by key) element of a container. *The* fastest for ordered containers, and is usually a linear check for others.
 
@@ -1097,7 +1173,7 @@ for(⦇1<2⦈ < 5 < ⦇6<7⦈, view) // 1; 2; 5; 6; 7
 for(1 < {2<6, 5<7}, view) // 1; 2; 5; 6; 7
 ```
 
-[[Not essential: `closest ByKey`, `slice(From, To)`.]]
+[[Not essential for now: `closest ByKey`, `slice(From, To)`.]]
 
 
 
@@ -1106,190 +1182,41 @@ for(1 < {2<6, 5<7}, view) // 1; 2; 5; 6; 7
 
 
 
-# Creation (`create`, `creator`)
 
-Creating an object is requesting the ability to distinguish between all instances of a constraint.
 
-(Everything that is said here is in the context of `bind(…, access)` for brevity.)
 
-`create Type` returns a container of a single value (at `access.none`, unless overriden) — an example of `Type`. It denumerates `Value: Type` but not `Type: Value`. Reading (at `access.none`) always returns the last successfully-written result. (For convenience, this container also overrides access/finish and capture.)
 
-(`create⦇A → B⦈` associates keys of `A` with values of `B`, not allowing reads/writes with a different key. Containers then try to access each of their parts, returning the first success.)
 
-For example, `create⦇(1,2,x) ⇒ x⦈` extracts a certain shared structure (with `x` being of `all{}` types).
 
-In general, `create⦇Transform: Into⦈` transforms all incoming accesses and stores the shaped form (of type `Into`). When writing `none→V`, this writes `Transform V`; when reading `none`, this reads `act.when(Transform, V)`. Can be used to extract shared structure, and reduce the total size and repetition this way. (Implementations should use this aggressively to optimize collections.)
 
-`create.states N` separates `N` states. `create.bits N` separates `2**N` states. `create.bytes N` separates `8*N` bits. These are the building blocks from which all memory can be formed; they are served by creators.
 
-(`all{}` (or `…` in this context) is the type that encompasses all types, including itself; a reference/pointer to anything that allows to be remembered. Complete lack of constraints on values/concepts (untypedness) is absolutely required, not only to make every possible thing representable, but also to avoid haphazardly mirroring all concepts near every artificial separation. Performance can be regained by compiling/simplifying for *particular* parameters/values (`first(…, all{})`) — never all: future of "anything" cannot ever be rigidly defined, only suggested.)
 
-`create.times(Values, N)` represents up to `N` ordered pairs `i→Values` (`0→…`, `1→…`, …, `N-1 → …`), allowing quick random-index access; any existing item can be deleted-then-written, only the last item can be deleted, and only the next item can be added (unless writing past the limit) — a constant-sized array. Has the most straightforward representation in memory (current count and the elements).
 
-`create.sequence Values` represents pairs `i→Values` (`0→…`, `1→…`, …), allowing quick random-index access and re-sizing; any existing item can be deleted-then-written, only the last item can be deleted, and only the next item can be added — a dynamically-sized array. Likely done by doubling the size of a `sized` array when it fills, and possibly making a mark to trim unused memory later. In conceptual syntax, represented with `(…)`, allowing elements to be pre-filled easily: `()`, `(A)`, `(A, B, C)`, `(A; B; C)`; `(A, B; C)` is `((A,B), C)`. (A basic concept, used everywhere.)
 
-`create.collection Type` represents likely-unordered elements of a `Type`; any item can be deleted or added, arbitrarily, without any checks of pre-existence — a container for everything. Generally behave the same as `first(…)`, but are more optimized than just adding new elements to the end of a list. Conceptually, arbitrary containers are seen as `{…}`, allowing easy element pre-filling. (A basic concept, used everywhere.)
 
-(To overwrite, must always delete before writing, else an item will just be added. If multiple items are fit to be read, the first one should be returned.)
 
-In conceptual syntax, sequences are created with `(…)`, and collections are created with `{…}`, allowing elements to be prefilled easily. `()`, `(A)`, `(A, B, C)`, `(A; B; C)`; `(A, B; C)` is `((A,B), C)`. `{}`, `{1→2}`, `{1, 2, 3}` (concretely the same as `{1→1, 2→2, 3→3}`), `{ (1,2), 7→3, { 'a'→4 }, 5 }`.
 
-```javascript
-bind((|
-	view a // 1
-	a[none → 2] //is 2
-	a[none → any{1,2}] //Error; is 2
 
-	a = 1; view a // 1
-|), { 'a' → create any{1,2} })
-```
 
----
+# Convergence (`converges`)
 
-## Memories (`creator`)
+While equivalencies are always true, convergences are made true enough with enough effort.
 
-Practically all modern systems represent all storage as a sequence of bytes; interpreting it as objects is program's duty. Being able to go between bytes and objects is essential for implementations, and also allows other tricks like persistence or automatically picking the best memory management scheme, even if implementation's implementation does not support such.
+`converges(A, F, B)` checks that `F` converges between `A` and `B` when their inputs increase.
 
-Memories intercept creation to realize objects (constrained distinctions).
+[[Having numbers would be good, but they should be done properly, like in math.
 
-`creator(Expr, Memory)`… Very much like a visual concrete view, but an in-storage representation…
+In math, convergence of a sequence F(N) to V is defined as: for every error E>0, there exists an N such that for all n>=N, |F(n) - V| < E — "can always say where values become close enough". This is non-intuitive, not conductive to having experience (knowing that certain other sequences converge), is highly (perhaps overly) complex, and most importantly, does not generalize to non-number sequences.
 
-(Particular creations could override specific allocators/creators…)
+Maybe picking another definition could be better than over-using [theorems](https://en.wikipedia.org/wiki/Squeeze_theorem) to smooth over practical usage.]]
 
+For example: convergence of `F` between `A` and `B` (`converges(A, F, B)`) is: `i<j<k ⇒ { diff(F j, A i), diff(F j, B k) } < diff(A i, B k) : all{}` — "as inputs increase, outputs always get closer". This can obviously use previously-proven knowledge, only requires an ordering to be defined, is intuitive, can prove a limit `N` but does not force that knowledge (by `converges(…⇒N, F, F) & converges(F, F, …⇒N)`), can prove convergence from nothing (by `converges(A,F,F)` or `converges(F,F,B)` [or even `converges(F,F,F)`](https://en.wikipedia.org/wiki/Cauchy_sequence)), and applies to metric spaces (like convergence to a singularity). Better. Maybe.
 
+Equating intuition and formalization can open up new paths (apart from shortening descriptions).
 
+For numbers, convergence allows completing rational numbers with methods of their approximation to represent [everything possible](https://en.wikipedia.org/wiki/Complete_metric_space). For other things, it could allow completing concrete results with their computations to encompass all of reality.
 
-
-# Memories and shapes
-
-## Byte allocators (`allocator`/`allocate`)
-
-	//Wouldn't it be better to allocate by-bits, not by-bytes? (More precise and does not need workarounds for bit-packing.)
-
-Allocators are responsible for giving out sequence references for access and re/allocation. (Reallocation either truncates or zero-extends the sequence; no active sequences overlap.)
-
-Most general memory has multiple readers and writers, `deallocate`-overriding objects, no constraints on mutability or reference cycles or exclusivity, and no fixed object size or de/allocation pattern. It must make every access atomic, visit the entire object graph before any deallocations, and keep track of all allocation information.
-
-Byte allocators are specified for the evaluation of an expression with `allocator(Alloc, Expr)`; `Alloc` will then be the first to accept allocation requests (then previously-specified ones up the scope chain, ending at the global byte allocator). Allocators override `allocate`, which accepts an unsigned integer `Bytes` and optionally a previously-allocated reference, and returns the re/de/allocated reference; this is used by implementations of writing accesses (or for defining memories for constructing allocator instances).
-
-	//But, `catch`/`finally` puts the expression to execute first; should we do the same?
-		//(In allocator, printer, with, trace…)
-
-(Specialized/constrained allocators are often more performant than general-purpose ones, but cross-allocators references are usually expensive, so allocators are given per-scope to maximize locality.)
-
-	//Should maybe package all allocators and modifiers into a namespace?
-
-Allocators (references only give exclusive responsibility by default, just like dictatorships or parenting — on failure, modify to open access):
-
-- [Resizable fixed-object-size, including `WebAssembly.Memory`…]
-
-- [Combiner: array-of-allocators… To make fixed-memories resizable if they are not already?…]
-
-- [Generic-byte-allocator, with polyfill of `ArrayBuffer.transfer` or on top of fixed-object-size with free-list/rb-tree… This is technically the only necessary byte allocator, but others may be much more efficient. How to unite multi-index containers and allocator bookkeeping structures though?…]
-
-- [Scoped allocator, allocating linearly and backtracking on scope exit. No deallocators…]
-
-Allocator modifiers:
-
-- [No-deallocators, so objects can be handled in bulk? Is this actually useful anywhere outside of the scoped allocator?…]
-
-	//Actually, the scoped allocator should be able to handle RAII, right?
-		//(And, is there some way for an instruction to modify the returns-to reference to a `finally` or smth, like for mid-sequence (but still scoped) allocation or mid-sequence definition/assignment?)
-
-- Immutable/copy-on-write `const Alloc`: objects are not modified in-place, allowing easy state snapshots, purity/merging, and inlining. Overriden copied concepts will not be re-overriden, nor will collections be updated to point to the new version. If used with reference-counting (so `owners X` could return non-`any{}`), exclusively-owned objects may be modified in-place for greater efficiency.
-
-	//Reference-counting is not purely an immutability thing though; it is about either a lack of cycles (and not just from disallowing in-place non-exclusive writes), or marking them.
-		//Like, what about putting maybe-a-cycle when any non-exclusive write occurs (and then collecting cycles), to ref-count? That will easily slot with immutability, too.
-			//(Collecting cycles — can it happen only along >=2 refs?…)
-			//…Actually, maybe-dead cycles can occur on any responsibility giving — or can it? Doesn't a cycle need to have at least one already-written responsibility, that points to the node indirectly? (Either on adding a node>1 edge, or removing a node>0 edge — aren't those pretty much the same? If going by adding, then only writing on creation would never trigger cycle-collection.)
-
-- [Mark-all-to-deallocate — overrules reference-counting… Would immutable+gc ever be useful?…]
-
-	//And, mark-and-compact — doesn't it require an indirection for all objects, or at least a global pause?
-
-- [Moving/copying/compacting — moves all objects to another allocator on use (except, there are no objects to move in an initially-empty allocator, and move-from does not seem to make sense?…)… Does it require a global pause, or visit-all or change-object-to-moved-here or something?]
-
-	//And, no-deinit is often useful (able to allocate by incrementing a pointer, possibly with the ability to save/restore for scope-based) — in particular, in copying gc… Does it need to be separate, or is it the same as scoped allocation?
-
-	//And what about generations — making objects that survive markings be marked less often? Is this some combine-allocators thing — what thing?
-
-- Multi-processor `shared Alloc`: objects may be shared between processors, so to prevent torn accesses, each write must take the object's lock of accesses (unless the object is small enough to be lock-free), and every underlying read/write must be atomic to prevent desynchronization of caches. (The returned allocator is guarded with a lock too — only one allocation at a time.)
-
-(In particular, in JS, can use either a `WebAssembly.Memory` instance (and grow in increments of 64KB or by doubling), or polyfill of `ArrayBuffer.transfer(old, bytes)⇒new` or indirection through an array of memories.)
-
-## Shapes (`…#allocate`)
-
-Shapes are concepts that override re/allocation of their instances; they then couple object accesses and their memory. Invalidating a shape invariant with a write is an error; adaptable (deoptimizing) shape combiners will then change the underlying shape.
-
-(A mandatory shape is "anything" (`…`), which is any of implementation types; the rest are optional (but likely beneficial) to implement and use type inference for.)
-
-Shapes overrides `allocate` (when the first argument) to allow object re/creation; when it is not overriden (the first argument is the number of bytes), the current allocators handle the request.
-
-To implementations, objects are mostly their conceptual overrides; any further information (like container shape/data) is held in the overrides, likely by-reference.
-
-Built-in types (`T` in `x:T`) often allow object creation, and are thus (basic) shapes too. They allocate enough bytes to distinguish all their instances and nothing more; shape combiners (like `any`) take care of all other needs.
-
-	//What about inlining containers, like object marks or maybe reference-counters?
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Judgements…
-
-	//BARRIER (Needs convergence analysis — all reinforcing algorithms must be equal under increasing time.)
-
-Judgements are a set of reinforcing motivators, all equivalent to each other; united by converging of manifestation input/output with time. (Causation converges to correlation; expectation converges to reality; best action converges to reality.)
-
-(Looking only at their function/results, they may be difficult to classify, or even understand the need for differentiation in the first place; nevertheless, they are united only by convergence, not structure, not definition, not explanation.) (For example, in economics everyone is viewed through best growth/[optimality](en.wikipedia.org/wiki/Bellman_equation)/[serotonin](en.wikipedia.org/wiki/Serotonin), but such a picture is not (and cannot be) the ultimate answer to existence.)
-
-	//What about biasing, which watches out for `…`/`random` or smth? They are not the same, are they?
-		//…Are biases the result of back-propagation of judgements to `random`?
-
-(Pattern and code transformation rules can naturally be done with functions, like `a+b => b+a`. Such rules can be combined with `any` to create a single rewrite system; if within a judging tracer, this system will even adapt itself to be used better.)
-
----
-
-From preliminary analysis:
-
-Closest words and code for reinforcing (both un-reified and reified converge with any other) human brain substances (closest code is unknown for all but dopamine):
-
-- (most neurons): correlation, causation (which converge with time — Hebbian learning with limiters)
-
-- dopamine: pleasure, expectation, and causation (expectation and reality converge with time — TD-learning).
-
-- serotonin: growth, resources, and satisfaction (best action and reality converge with time — Q-learning)
-
-- noradrenaline: restlessness, vigilance, and attention
-
-- adrenaline=epinephrine: stress, fear, and anxiety
-
-- endorphins: hunger and pain, novelty and euphoria
-
-- …
-
-Humans do not possess evolution natively, and to achieve great speed of changing choices required for faster development, have to [sacrifice some reinforcement methods](en.wikipedia.org/wiki/Creativity_and_mental_illness). It is unstable and dangerous until it is perfect. (There *are* certain standards for the wording, though. "Sacrifices must be made to achieve world domination"? No. "No cost too great"? Yes.)
+Numbers are completed by approximation, behavior is completed by reinforcement, probability distributions are completed by sampling, images are completed by rendering. Putting all those in a precise form into a PL seems very desirable, though difficult. Along with access and object creation, this is the only thing left to complete the first conceptual circle.
 
 
 
@@ -1346,6 +1273,46 @@ By (mathematical) definition, numbers are things that can be approximated by a f
 	//Error-computation, to be used in optimization of error…
 		//Optimize-by-adjusting-input-precision, optimize-by-computation-equivalencing…
 		//Any way, `Number` optimizes error until it is satisfactory.
+
+
+
+
+
+
+# Judgements…
+
+	//BARRIER (Needs convergence analysis — all reinforcing algorithms must be equal under increasing time.)
+
+Judgements are a set of reinforcing motivators, all equivalent to each other; united by converging of manifestation input/output with time. (Causation converges to correlation; expectation converges to reality; best action converges to reality.)
+
+(Looking only at their function/results, they may be difficult to classify, or even understand the need for differentiation in the first place; nevertheless, they are united only by convergence, not structure, not definition, not explanation.) (For example, in economics everyone is viewed through best growth/[optimality](en.wikipedia.org/wiki/Bellman_equation)/[serotonin](en.wikipedia.org/wiki/Serotonin), but such a picture is not (and cannot be) the ultimate answer to existence.)
+
+	//What about biasing, which watches out for `…`/`random` or smth? They are not the same, are they?
+		//…Are biases the result of back-propagation of judgements to `random`?
+
+(Pattern and code transformation rules can naturally be done with functions, like `a+b => b+a`. Such rules can be combined with `any` to create a single rewrite system; if within a judging tracer, this system will even adapt itself to be used better.)
+
+---
+
+From preliminary analysis:
+
+Closest words and code for reinforcing (both un-reified and reified converge with any other) human brain substances (closest code is unknown for all but dopamine):
+
+- (most neurons): correlation, causation (which converge with time — Hebbian learning with limiters)
+
+- dopamine: pleasure, expectation, and causation (expectation and reality converge with time — TD-learning).
+
+- serotonin: growth, resources, and satisfaction (best action and reality converge with time — Q-learning)
+
+- noradrenaline: restlessness, vigilance, and attention
+
+- adrenaline=epinephrine: stress, fear, and anxiety
+
+- endorphins: hunger and pain, novelty and euphoria
+
+- …
+
+Humans do not possess evolution natively, and to achieve great speed of changing choices required for faster development, have to [sacrifice some reinforcement methods](en.wikipedia.org/wiki/Creativity_and_mental_illness). It is unstable and dangerous until it is perfect. (There *are* certain standards for the wording, though. "Sacrifices must be made to achieve world domination"? No. "No cost too great"? Yes.)
 
 
 
