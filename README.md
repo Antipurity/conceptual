@@ -137,7 +137,21 @@ view f(2, 3) // 5
 
 # Concepts (`concept`)
 
-(This is at the top because it is both a goal and origin for the rest.)
+Take this JavaScript snippet:
+
+```javascript
+const a = Symbol()
+function f(x) {
+	if (x === a) return 'str'
+	return x+1
+}
+```
+
+What is `a` here? `a` is a thing that makes `f` return `'str'`. But the code, translated into words, tells a different story: "`a` is a thing, and `f` is a function that returns 'str' if passed that thing or argument plus one otherwise". The user is forced to express natural definition of the concept `a` as a static pattern-match in `f`. It would be more convenient to formalize the `concept` of concepts.
+
+Here, `concept` makes the notion of definition precise.
+
+
 
 Anything knowable is seen through a pure view that defines it; everything is a `concept`. This encapsulates [extensibility](en.wikipedia.org/wiki/Extensibility).
 
@@ -665,7 +679,7 @@ view …Range(Int, 1, 2) // possibly 1.23456
 
 (Generate and constrain, create and destroy, birth and kill — evolution/development encapsulated (Turing-complete and world-viewing, just like many other viewpoints). All in existence could reasonably be traced to nothing but basic randomness, and incorporated randomness (free will) could reasonably create any future existence too.)
 
-(Unless constrained, new concepts are generally multipliers of a measure (fitness, power, benefit, efficiency…), and thus linear development results in exponential benefits — usable for [singularity](en.wikipedia.org/wiki/Technological_convergence)/'AI' and humans/'geniuses'.)
+(Unless constrained, new concepts are generally multipliers of a measure (fitness, power, benefit, efficiency…), and thus linear development results in exponential benefits — usable for [sin](en.wikipedia.org/wiki/Theory_of_everything_(philosophy\))[gularity](en.wikipedia.org/wiki/Technological_convergence)/'AI' and humans/'geniuses'.)
 
 ## Searching for alternatives (`alt`)
 
