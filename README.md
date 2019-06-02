@@ -147,7 +147,12 @@ function f(x) {
 }
 ```
 
-What is `a` here? `a` is a thing that makes `f` return `'str'`. But the code, translated into words, tells a different story: "`a` is a thing, and `f` is a function that returns 'str' if passed that thing or argument plus one otherwise". The user is forced to express natural definition of the concept `a` as a static pattern-match in `f`. It would be more convenient to formalize the `concept` of concepts.
+What is `a` here? `a` is a thing that makes `f` return `'str'`. But the code, translated into words, tells a different story: "`a` is a thing, and `f` is a function that returns 'str' if passed that thing or argument plus one otherwise". The user is forced to express natural definition of the concept `a` as a static pattern-match in `f`. It would be more convenient to formalize the `concept` of concepts:
+
+```javascript
+#f = x => x+1
+#a = concept{ f → 'str' }
+```
 
 Here, `concept` makes the notion of definition precise.
 
