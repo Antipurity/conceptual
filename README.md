@@ -1375,13 +1375,11 @@ Humans do not possess evolution natively, and to achieve great speed of changing
 view⦇1+2⦈ // 3
 ```
 
-Pre-defined precedence rules exist to shorten the most likely programs by hopefully eliminating most need for brackets, increasing convenience, readability, and familiarity. (Equivalent programs can easily be expressed in terms of simpler parsing rules if needed.)
+Any valid program (sequence of characters) is recursively composed of matched  parsing rules, stacked within each other; a good visual representation is that of boxes drawn around each match, outlining program structure.
 
-Whitespace does not determine precedence (`1+2 * 3` is the same as `1+2*3` and `1 + (2*3)`) (except when it explicitly does); the used operators do.
+One way or another, programmers have to form a mental model of the syntax of the programming language they write in. Here is one for this language of concepts (`•` is the first of these items, and a label is the next item):
 
-`•` is the first of these groups (where a name means to apply the group lower):
-
-- Strings. Numbers. Identifiers. Single-argument (unary) (RtL) (the specific order of application does not matter):
+- Strings. Numbers. Identifiers. (Should be the last.) Single-argument (unary) (RtL) (the specific order of application does not matter):
 
   - Bracketed: sequence `(•)`, collection `{•}`; first `⟦•⟧`/`[|•|]`, last `⦇•⦈`/`(|•|)`, many `⦃•⦄`/`{|•|}`. (`⦇1+2⦈ * 3`)
 
