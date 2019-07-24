@@ -40,7 +40,7 @@ There are no character ranges either (in the API). Careful thought about exactly
 
 ---
 
-# Implementation notes
+- Implementation notes
 
 While premature optimization is the root of all evil, we *are* evil, so thinking about how to not write a pile of shit before trying it is acceptable.
 
@@ -80,4 +80,18 @@ In browsers, HTML and CSS have this ability, but JS does not. This would be more
 
 ---
 
-Implement... Chevrotain lexer, Chevrotain parser, class Series extends Array, copy and adjust (zero-)delay, make the interpreter, write functions.
+Implement... Chevrotain lexer, Chevrotain parser, class Series extends Array, copy and adjust (zero-)delay, make the interpreter, write functions. To do.
+
+---
+
+- **Multibase JIT compilers/intetpreters (1 July 2019)**
+
+Traditionally, compilation is a full translation to one base language of some intermediate representation (IR), and interpretation is a slow one-by-one translation (via calls to pre-compiled functions) to one base language; things in between (like JIT inlining) are seen as unimportant implementation details. But today, just one base language may not be enough to get full efficiency --- at the very least, CPUs/GPUs exist; quantum computers will require different base languages; and, programming environments may have different usable base languages with different capabilities (like JavaScript and WebAssembly and experimental developments in browsers). A non-traditional approach to program execution may prove much better.
+
+Suppose that a language is a function that takes a (ready-to-interpret) IR node and returns its description in the language (a mix of strings and return-to-interpreter IR continuations). Suppose that we have some strategy for expanding IR continuations in those descriptions (say, breadth-first search until the total size is over 2KB). Then, program execution is repeated and cached translation into any of base languages. Compilation/interpretation arise from particular (quite rigid --- can be way more flexible here) expansion strategies. No functions, only code generation (and built-in base evaluation).
+
+(There are more details on the need to avoid re-expanding the same node and avoid exponential expansion sizes (via variables), but my finger is tired anyway.)
+
+The best base language for a piece of code can be picked now. Different bases can be used as one. Continuous search/optimization for better equivalent programs can be done (unlike with pure compilation). Structured and beautiful output of executed code is possible. A meta-circular language implementation with a primitive interpreter can self-rewrite into any base language and be more efficient (which is why I'm doing the "first shitty implementation"). And that's with little more than macro-expansion, not full-blown arbitrary language translation.
+
+One IR and one unifying language can be a power like no other. Just one language can be enough for everything; making any more is ultimately a wasted effort. Why work on different languages, making power without unity?
