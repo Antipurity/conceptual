@@ -1,10 +1,12 @@
 # Prologue
 
-Specification of a natural conceptual programming language. Intended to guide its implementation.
+Specification of a (multi-paradigm) natural conceptual programming language. Intended to guide its implementation.
 
 This language prioritizes expressiveness in its every part; its motto is "separate cleanly to combine easily". When language features are improved, they converge towards maximally-expressive ones, so why not go all the way, to concepts?
 
 [Concepts](https://en.wikipedia.org/wiki/Concept) here (pure views defining everything) take over `natural` (English) words and patterns, and occasionally find expression in `conceptual` syntax; other base languages would be implementations.
+
+See also [the philosophy of its design](https://github.com/Antipurity/conceptual/blob/master/philosophy.md) and [the journal of its development](https://github.com/Antipurity/conceptual/blob/master/journal.md).
 
 Contents (double as a roadmap for implementation):
 
