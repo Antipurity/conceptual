@@ -1,3 +1,39 @@
+﻿# Guiding principles
+
+Bullet points are easier to digest than text, so here are guiding principles:
+
+- Extensible is better than monolithic. Many small things on a common base can be created (or learned) gradually, one-by-one; one huge thing is incomprehensible until learned. For understanding, this includes intuitive bases present in a mind.
+
+- Noise before silence. Improvement does not regress, so *anything* is better than nothing. Moreover, the project can easily be cut short at any time, so better to annoy people with the incomplete than risk it never existing.
+
+- Separate cleanly. The first dozen (PL-level) concepts may seem overly unusual, ambitious, and detached from the current way of doing things; but all that is necessary to fully allow not even knowing about any unused concept. (For example, all the complication with access is for this.)
+
+- The same is worthless. Be unique, or do not be.
+
+- One concept, one way of expressing it. Having several ways to define a function is no good; achieve shortness of interface with proper separation.
+
+- Expressivity before speed. Premature optimization is the root of all non-good; it is a collection of concepts, ought to be expressed in a proper framework properly — that framework comes first, and makes building optimization easy. Replace "speed"/"optimization" with any concept.
+
+- Terseness through expressivity. The more expressive the design, the simpler it is to use; the less conceptually artificial special cases, the shorter the using code is.
+
+- Automatic should exactly equal manual. If random self-evolution has even the slightest chance to crash or break the system, then it cannot be used. Bugs and undefined behavior are to be eliminated.
+
+- Formalization should exactly equal intuition. Code, words, or the mind itself — all made to express the same truth; all targets for implementation.
+
+- Combine all in one place. The existing multitude of inventions is only united by a user's mind now. Give them a proper framework to combine in, and the resulting singularity will eat the world it came from.
+
+- Be self-aware. A base implementation is good, a meta-circular one is impressive, but both is immortal. Explain every part of yourself perfectly, and that *is* AI — you in a different medium. Pattern-matching is more natural with self-awareness.
+
+- It can always be better. Improve, do not simply strive towards an ideal (converge to good).
+
+- Do not code a lot. Apparently. This one should probably be dropped.
+
+Conceptual is a strange and experimental PL to develop. It is a half-formed proposal to achieve true AI through creating a conceptual singularity, which is where that strangeness comes from and leads to.
+
+The rest is uninteresting.
+
+# The rest
+
 This document describes the design philosophy behind the Conceptual programming language, and why it exists the way it does.
 
 # Concepts; purity
@@ -21,21 +57,3 @@ Concepts are pure definitions. What has been thought of is remembered, including
 - **By definition**
 
 To cut it short, concepts allow the new to re-define the old, data to re-define code. It is at once a new programming paradigm (requiring a language to try it out in), and a model of a mind (a proper base for AI).
-
-Is this a PL project, or an AI project, or what? Things only get weirder from here.
-
-# Design principles
-
-What is a big and clunky thought, and what is a small and nimble thought? One can identify thoughts with extensibility points; then, the more extensible the better. Usually entrances into black boxes are made manually, but perfecting extensibility, making it automatic like the concept of concepts allows, makes thoughts most small and nimble, to better combine all in one super-dense place.
-
-Without very specifically directed effort, such a conceptual singularity will not happen. And AI is almost incidental to that, such a small thing.
-
-Truly, "*separate cleanly to combine easily*" is the only real design principle here; others are adopted more to develop particular concepts. In other words, "maximally expressible features" or "perfectionism".
-
-There are some other valued principles here, like "of many variants of saying a thing or writing code, pick the *shortest*" and "*suffering makes for* a dozen times *faster* change and *development*" and "*understanding is formalization*", but they are not as essential as "separate cleanly to combine easily" (and arise from different concepts).
-
-# Particular concepts
-
-While they are language features here, quite a few of them do have rich philosophical implications, which were significant during developing their understandings.
-
-[TODO, preferably when code reaches them.]
