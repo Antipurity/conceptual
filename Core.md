@@ -1,28 +1,105 @@
 ﻿# Core
 
-Building something around a small extensible core means that the whole can be learned gradually, and it is effectively as simple or complex as it needs to be. Replacing "something"/"the whole" with "implementation" makes it mean "bootstrapping is maximally easy to start" (with ext.); with "system" — "understanding is easiest to start"; with "view of reality" — "true AI is easiest to start".
+This is the plan for a minimal pure language core. It covers arbitrary and dynamic self-discovery, syntax, computation, pattern-matching, branching, and partial evaluation in a pure context. The core's simplicity ensures that there are obviously no deficiencies.
 
-The Conceptual core permits full and arbitrary extension of (and access to) syntax, semantics, and the host language, whether statically or dynamically; it also defines the functions needed to do that easily. The rest of the Conceptual language can and should be written using only the core.
+Core language concepts overview:
 
-Usually, program syntax defines program semantics; code defines data; base implementation defines the language. These are all one-way artificial separations; far more natural would prove adding mechanisms for (re-)defining in the opposite direction — extensibility. With none being more fundamental, none needs to fully realize the other beforehand, and evolution of the whole can happen naturally and gradually.
+- `concept` to re/define usage of a thing. Extensibility and dynamic self-discovery.
+
+- `eval` for everything about syntax and its evaluation. Inspect or change the current language as it is written. `core` for switching to this language.
+
+- `do` for (continuation-passing style) computation. Control flow and flow control.
+
+  - `error` for reversing control flow.
+
+    - `first` and `last` for branching.
+
+- `record` for creating functions by remembering the unknown.
+
+  - `label` for binding values.
+
+  - `capture` for matching patterns to objects.
+
+    - `flatten` for de/structuring arrays.
+
+Mastering pure programming to see beyond its bounds. Based on a past, this is a base for a future.
+
+---
+
+# Extension
+
+A general principle, that anything created (a past) should leave a hole to allow arbitrary refinement as needed (a future) — branch-to-data; all instances of this are expressed through `concept Redefines` here (`Redefines` is a `Past => Future` function). This dynamic self-discovery is threaded thickly throughout this core: the syntax and the semantics branch-to-data.
+
+Since extensibility is meaningless without what extends it, we won't give any primitive code examples like:
+
+```javascript
+core
+  //The language is picked; what follows is in that language.
+  //The picked here language allows creating any other language.
+  //`concept[eval … => …]` allows using created languages.
+
+[a => 8] [concept[x => 5]]
+  //Call a function that always returns 8.
+  //But its input turns own usage into 5.
+  //So the result is 5.
+```
+
+Instead, we'll talk about what this concept means.
+
+Building some thing around a small extensible core means that this thing can be learned gradually, and it is effectively as simple or complex as it needs to be. Long-term, it is the easiest path to *anything*, for some start-up time cost: if "that thing" is "implementation", that means "bootstrapping is maximally easy to start getting into"; if it is "system", that means "understanding is easiest to start assimilating"; if it is "view of reality", that means "intelligence is easiest to start making". *Not* trying to go through reconstruction of everything around a proper core indicates blindness to future and potential.
+
+Usually, program syntax defines program semantics; code defines data; etc. These are one-way artificial separations; what is far more natural is adding mechanisms for (re-)defining in the opposite direction — extensibility. With none being more fundamental, none needs to fully realize the other beforehand, and evolution of the whole can happen naturally and gradually.
 
 # Syntax
 
-- **Inspecting**
+Allowing runtime extension of parsing means that execution and parsing can flow into each other in the general case, and so cannot be separated into produce-description and act-on-description. So, to extend syntax, we need to extend evaluation of strings.
 
-The precise parsing rules at a point in a program can be hard to remember, so the ability to show them is nice. The label `syntax` binds to the current rule.
+Evaluation with a parsing rule of a string turns them into the extracted description (meaning) and what else needs to be parsed: `eval(Rule, Program) → (Meaning, Rest)`. Usually, this effectively advances the position in a program, but generally the transformation is arbitrary.
 
-By default, it can only show the default parsing rules. Let us explain and describe them first.
+- **Branch-to-data**
 
-Though arrays and labels are technically the only syntax rules necessary to define a language (see Lisp), doing so forces function arguments to be arrays (and the program text to be wrapped in brackets, besides). Since the code/data distinction is so important to us (as are looks, and strings for parsing work), we have more syntax rules in the core than 2. Namely, these are all tried in order (each falls through to the next if it fails):
+Extension of syntax from nothing to something.
 
-- Many, `Rule, Rule, Rule`, separated by commas or newlines. `Rule` is Function by default, changed by `#syntax Rule`.
+The very top level of syntax is intentionally very simple and only allows specifying the language of the rest. Until input's end, it gets an identifier (the longest sequence of non-whitespace characters), looks up its value, then jumps to evaluating with value of the rest (skipping one whitespace character) then to continuing self.
 
-- Function, `Call => Function`, right-to-left.
+This is intended to allow things like:
 
-- Call, `Grouping Call`, left-to-right, without newlines.
+```javascript
+hex 789abc
+[ commaless 1 2 3 4 ]
+[ rtl double sqr 12 ]
+[ core 34 ]
 
-- Grouping, `[Function]`, required when operators are in syntax.
+// comment
+string 'ify'
+group [1,2,3,4]
+
+json { "a": 12 }
+html <br>
+sentence Sum of two and five.
+
+core
+  concept[eval(Core, In) => (5, eval(Core, In))] 6 // (5, 6)
+    //Wraps the result of the rest in (5, …).
+```
+
+There is not even a need for a language-switch directive; it happens as easily as thinking about a language.
+
+As nothing can be done in just the top-level, you should just put `core …` at the beginning of all programs.
+
+- **Core syntax**
+
+Extension of syntax from something to everything (that is do-able).
+
+Though arrays and labels are technically the only syntax rules necessary to define a language, doing so forces function arguments to be arrays (and the program text to be wrapped in brackets, besides). Since the code/data distinction is so important to us (as are good looks, and strings for parsing work), we have more syntax rules in the core than 2. Namely, these are all tried in order (each falls through to the next if it fails):
+
+- Many, `Rule, Rule, Rule`, separated by commas or newlines.
+
+- Rule, `Call => Rule`, right-to-left.
+
+- Call, `Group Call`, left-to-right, without newlines.
+
+- Group, `[Rule]` (required whenever a syntax has operators). Cannot have many items inside.
 
 - Array, `(Many)`.
 
@@ -30,21 +107,11 @@ Though arrays and labels are technically the only syntax rules necessary to defi
 
 - Label, `abc`.
 
-See the meta-circular syntax example for what `syntax` actually binds to by default.
+Any value can (potentially) re-define parsing; if that happens, we jump to execution of that with a continuation of return-to-parsing. Syntax changes, while arbitrary, are scoped and clean.
 
-- **Changing**
+See semantics (and calls/functions and pattern-matching) for how syntax rules are intended to look and work.
 
-Parsing consumes a part of the program string to produce its meaning (usually its AST, to be analyzed/compiled/executed later) — a process that is seen here as `Program => (Meaning, Rest)`.
-
-To extend a parsing process means to give it a function (via `#syntax Rule` in Many), but function definition generally only happens during execution; so, parsing may need to wait for execution at extension points.
-
-The Many parsing rule is the place where all the extending magic happens (the rest of them just return the required executable representation). When it sees an item of the form `#syntax Rule`, it suspends the whole parsing stack, and puts the instruction to continue (with an updated Rule) as the temporary last array item of the resulting meaning; all the Many parents get a raise-error instruction ("cannot parse parent when its child is not yet parsed; ensure that all `#syntax Rule`s here are evaluated before their parents").
-
-Syntax changes, while arbitrary, are thus scoped and clean.
-
-See pattern-matching (and calls/functions) semantics for how rules are intended to look and work.
-
-(Another scoped way to change syntax is to apply a program string to a rule, assert a whole parse, and return the meaning: `[(M, '') => M][Rule '...']`. It makes a part of host rules bleed into hosted (namely quote-escaping), but it can be done on runtime strings too — using the same Rule functions too.)
+(Another scoped way to change syntax is to apply a program string to a rule, assert a whole parse, and return the meaning: `[(M, '') => M][eval(Rule, '...')]`. It makes a part of host rules bleed into hosted (namely, quote-escaping), but it can be done on runtime strings too — using the same Rule functions too.)
 
 # Semantics
 
@@ -107,8 +174,6 @@ Acting can then be thought to be wrapped in a `Then`-handling version of `first(
 [concept Redefines => Redefines] '12' // <some function>
 act[concept[act Self => '12']] // '12'
 ```
-
-Extensibility makes it always possible to add or change a definition, with either the code→data or the data→code avenue. This means that viruses and other ill-intentioned things always have an easy in. The key to the language *not* automatically making all its programs one giant security risk, is literally perfect control and robustness: no crashes, no possibility of side-effects escaping where they should not, everything is designed with arbitrary code in mind. Simplicity helps with ensuring that there are obviously no deficiencies.
 
 - **Pattern-matching**
 
