@@ -1,8 +1,135 @@
 ﻿This is a journal of interesting (at the time) thoughts relating to the development of the Conceptual PL.
 
-Why waste life on another?
+Why waste life on another? Movement to another foundation will cause a remake.
 
 Newest first.
+
+---
+
+- **Acting is doing (24 August 2019)**
+
+Acts are better thought of as continuation-passing style, the most general form of doing stuff, coalesced into a concept…
+
+But then, do we even need to expose the interpreter loop, if "doing stuff" is acting? We used to use act overriding for errors (to always return), but with functions as definitions, we can literally just match that anything. And don't we wrap the interpreter loop in a continuation anyway, to use it (an async-promise or sync-return-or-throw)? Acting is the more general form of doing stuff than endless repetition.
+
+In fact, acting should probably be called `do(What, With, Then)`; defining doing is how time flow should be done. Time is control. A natural dictionary choice is done.
+
+This even solves the "functions accept act objects instead of data, needed for generality but hampering/murking common use" problem; those that need to have custom caching behavior or alter control flow or something can just define doing, and there is no phantom split of stepping/acting.
+
+(And, capturing should match the control-flow graph and not just look at nesting.)
+
+Now... Now... What is the core? `concept`, `eval`, `do`, `error`, `first`, `last`, `capture`, `flatten`, `record`. 9 things for a pure language.
+
+Damn. Two, these *feel* like a great discovery, a great conceptual leap, the core of cores. Record... Remember... Most holy, most divine, most perfect...
+
+Hopefully.
+
+---
+
+- **More involved parse extension (24 August 2019)**
+
+Extensibility of parsing should be put into the extensibility framework, right? Making it a single modification to array parsing is no good. What about this:
+
+Concepts can define `eval(OldRule, String)→(Meaning, Rest)`; the default parsing rule just repeatedly reads an identifier (characters followed by whitespace or end), looks it up, and parses the rest with the parsing it defines (so, `core …` is how Core programs should be written), till the end. Things can define what comes after them — in a manner that is not necessarily native, but done as natively-constructed conceptual objects in-memory; can the bootstrapping stage get any smaller? Well, this is an easy base for extension, at least.
+
+(And again, extension is get-then-branch.)
+
+Functions do not have to be constrained to `Code Data` to be called — that is just the default behavior; they can define the proper syntax after them, like:
+
+```javascript
+hex 789abc
+[ commaless 1 2 3 4 ]
+[ rtl double sqr 12 ]
+[ core 34 ]
+
+// comment
+string 'ify'
+group [1,2,3,4]
+
+json { "a": 12 }
+html <br>
+
+core concept[eval(Core, In) => (5, eval(Core, In))] 6 // (5, 6)
+  //Wraps the result of the rest in (5, …).
+```
+
+(Combining syntaxes is done with `first(…)` to try-in-order, but is more involved to create a sequence — pass A's rest to B: `(Rule, In) => [(result, Rest) => (result, syntax(B, Rest))] syntax(A, In)`.)
+
+(Matching failure should cause an `error(Suggestions, Rest)`; the top level catches those errors, and just continues.)
+
+This removes *all* clunkiness (`#syntax …` in Many) from language-oriented programming, and really makes using a DSL as simple as just thinking its name.
+
+---
+
+- **Thinking about rewriting systems (13 August 2019)**
+
+While the simplest syntax is `(…)`+`name` (nesting and binding), the simplest semantics are `from→to` (match-replace rules, or functions, and pattern-matching).
+
+These rewriting rules are often organized into rewriting systems, where rules can be added to a scope at any time, and any of the ones that can apply, apply. This mirrors how it is done in logic on paper, and is very convenient (like for auto-handling different forms of the same equally: equality is equivalence). But this means giving up precise execution control to "apply any of …", does not allow forbidding nor controlling extension of behavior, and so it seems incompatible with many other basic semantic models. To put it into a singularity, it has to be precise *and* able to search, extensible *and* controlling.
+
+Is there a way to plug holes of rewriting systems? It needs to fundamentally always choose one rule, but have search; it needs to allow re-defining itself. Need to get there from just rules.
+
+Based on the past, a base for the future. It needs a point of configurable transformation: the currently-executed rule (possibly built up from rules and rule combinators, deterministic or probabilistic, just like parser combinators). Since on rule application, we only know the rule and the value (and continuation), values (*all* values) should define that; since a rule *is* arbitrarily-configured transformation, it should be done via a rule.
+
+The extension point here is the value; we need a de/constructor for that (different roles in match and in replace). But we also want to be able to extend that de/constructor, for full control; *but*, that's *2* extension points. The number 2 does not exist in maximally-simple design, only 0/1/∞; so, we need to extend extension itself. We'll cut this one short: de/constructor `concept Defines`, applicable to everything; execution checks itself in that (0→1), and rule application checks the definition of rules by values (1→∞).
+
+This plugs the holes. Though, why would anyone want to *improve* anything that needs such effort? Just focus on reaching on maintaining a level of sophistication: rewriting systems are good enough to be used by humans today.
+
+- **Thinking about acting (9 August 2019)**
+
+Putting responsibility for extending definition onto all functions (all intended to be generated through one source, true, but still) is exactly what we wanted to avoid. It did not seem right to *not* put that in acts anyway. We can do way more in acts than nothing.
+
+Acting should wrap JS functions (that return or throw, access (*take* responsibility for, then drop it) arguments or their parts) to allow much more convenient development.
+
+(Wrap both direct and inverse control flow, intertwining with `error`. Wrap definition, intertwining with `concept`. Use ref-counting to not create a copy on *each* iteration step, and be more efficient. For core functionality, *it makes sense*.)
+
+(Though, "arguments or their parts" — we seem to be unsure about whether to do shallow or deep handling.)
+
+We need a function that is the definition of stepping at acts, `wrap`, that:
+
+- Returns `act(act.then, Result)` to interpreter if successful or if caught `throw result(…)` (`self.result` is part of the JS API for this).
+
+- Returns `error(Err)` to interpreter if caught an error.
+
+- (Cannot think of a good way of requesting an argument properly — don't we need to destructure then restructure an input, where we are not even told which one? If we aim for deep arg requests, anyway. Shallow requests have the same no-extensibility problem, but with less capabilities. …We'll just leave thinking about that to functions — or, to the future.)
+
+- Drops objects that were taken inside; ensures that zero-outside-ref-count objects are freed when the current interpretation step ends (to exploit cache, and to be a little like what needs to be done for parallel sync). …How to ensure that no double-takes happen when we return from requests, or that takes must happen before value use?
+
+Two out of four are unknown. Not good, but can we add them later?
+
+---
+
+Also, right now we demand that definitions are immediately done in terms of base. They should be either functions (executed immediately, wrapped by act) or non-base things (that define stepping in an act). How exactly is code affected? In `call` (essentially a no-object act)… need to open code and look through it. That run-to-completion behavior of a lot of internal searching can be annoying.
+
+- **Thinking about graph/branch search (9 August 2019)**
+
+Purity can be done by overriding `pure` to pattern-match to equal things; `pure Object` does the match or else adds the `Object` pattern to at least one of its components. This is simpler than it was before.
+
+Purity of acts allows immediately cutting off infinite recursion (returning to already-visited states). This means that acting can not only be seen as, but also *be* graph search; we just need to have branch selectors.
+
+Using `first` on every junction makes for depth-first search. Breadth-first has no direct analogue, except for possibly preemptive interleaving of branch executions. (`last` ignores all but one results and is thus not a *search* function.)
+
+The way to choose the branch is, generally, arbitrary; but in all cases, we need to be able to try all the rest if one fails. So branch selection of this graph-search is "the first of some shuffling of an array of branches". For efficiency, the searched graph should have few connections.
+
+Random shuffle is one candidate; sorting is another. They correspond to random and best-first searches respectively.
+
+This approach does not (by itself) handle searches that interleave exploration of sub-branches (by non-push-pop manipulations of the node queue), like breadth-first or beam search. Nor does it (by itself) handle trying several variants *then* evaluating the best. Still, pretty convenient and simple.
+
+Still, integrating search for alternatives as basic functionality seems more important than this trivial thing. Interpreted things always have a chance to be replaced with `alt Thing`; that chance is the system's parameter (potentially optimizable automatically, later).
+
+That "first of reordered array" is just an implementation though. We could want to try randomly rewriting these "any of these" in some way, but the probability distributions could be used elsewhere anyway, so we cannot just pattern-match those away; so we want a separate definition layer, `one(branches, reorderFunc)`.
+
+...This is almost the same as before. This thought is worthless. Go back to acting.
+
+- **first (8 August 2019)**
+
+(A failed experiment. That sharpness of thought has been lost. A shame. It was a favorite of mine. No matter, just need to keep looking for an approach that works.)
+
+Try each item in order, passing the first success to continuation; if all fail, fail too.
+
+Go to 0th, then [return if not failed, else go to 1st then [return if not failed, else go to 2nd then [… else return `fail`]]]. We want to encode this behavior in a function, with all state passing through continuation-closures. Can it be any less efficient? No matter.
+
+[...]
 
 - **Thinking about first/last and branching (4 August 2019)**
 
@@ -47,7 +174,11 @@ Array.prototype[def] = (f,v) => {
 
 The real work of acting happens in recording; acts are just a middle-man.
 
-(Based on a past, a base for a future — this is the extensibility principle. Potential becomes real, multiplying effectiveness, thus allowing exponential improvements.)
+(Based on a past, a base for a future — this is the extensibility principle. Potential becomes implemented, multiplying effectiveness, thus allowing exponential improvements. …Though all this is too trivial for that.)
+
+To calculate an act's argument, return `act(step, arg, result => replaceArgWithResult)` from the acting function (…shouldn't `step` here be `finish` though?). Once in an act, one remains in the act.
+
+Conceptually, returning that allows args to re-define stepping to re-define returning; but what does that mean for our JS code? Should we check re-definition in acts; how? Having questions is unprofessional for the explainer, and they must be answered.
 
 - **The interpreter loop (1 August 2019)**
 
