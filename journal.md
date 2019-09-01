@@ -27,17 +27,21 @@ These round brackets are extremely easy to parse. They are *the* best choice for
 The rewriting rules for this, in terms of Core, are:
 
 ```javascript
-(f) => f
-(f x) => core f x
-(f x y z) => core f(x, y, z)
+(concept {
+  (f) => f
+  (f x) => core f x
+  (f x y z) => core f(x, y, z)
+})
 ```
 
 Alternatively, in terms of `call` and `array`:
 
 ```javascript
-(f) => f
-(f x) => (call f x)
-(f x y z) => (call f (array x y z))
+(concept {
+  (f) => f
+  (f x) => (call f x)
+  (f x y z) => (call f (array x y z))
+})
 ```
 
 These array expressions (`ax`; `(ax …) => (…)`) *branch to data* by returning the first success of its sub-items:
@@ -50,13 +54,41 @@ These array expressions (`ax`; `(ax …) => (…)`) *branch to data* by returnin
 
 Now, there are two things that hinders us from making literally-2-parse-rules `ax` and using it to define the rest of the Core:
 
-- `=>`. `(rewrite From To)`? Any shorter name?
+- `=>`. `(rewrite From To)`? Any shorter name? `(to From To From To From To)`?
 
-- `…`. `flatten` is both too long (should be `_`) and too complicated to define; we should use its particular form, like `(head Head Tail) => _((Head), Tail)`. Any more descriptive name?
+- `…`. `flatten` is both too long (should be `_`) and too complicated to define; we should use its particular form, like `(head Head Tail) => _((Head), Tail)`. Any more descriptive name? `array` is taken, maybe… `conc`? Or should arrays be composed from `(array a (array b …))` and `()`?
 
-- Also, in the `ax` sub-language, we have not decided how to extend syntax, have we? We're gonna need that to promote `ax` from an internal-only or mind-only DSL to Stage-0. Via semantics (`(concept { (eval Rule Program) => … })`), used when we have finished one expression but there is a string left, or what?
+- Also, in the `ax` sub-language, we have not decided how to extend syntax, have we? We're gonna need that to promote `ax` from an internal-only or mind-only DSL to Stage-0. Via semantics (`(concept { (eval Rule Program) => … })`), used when we have finished one expression but there is a string left, or what? (Just once, or recursively? Since ax forwards definition to its items, I don't think recursive will work very well. So, syntax is "read value, then use it to parse the rest".)
+
+```javascript
+(concept (first
+  (to (f) f)
+  (to (f x) (call f x))
+  (to (array f Args) (call f Args))
+))
+
+//Must define the semantics for all of these, in one big concept (that defines its further evaluation too):
+
+//(do (to From To) Data) — to evaluate in the proper order, must do CPS-inversion dynamically.
+//(array Head Rest), () — binds both ways. `[…]`
+//(error Info) — special as second arg of call/bind, to allow catching errors.
+
+//(array _ Args) — must be done in terms of `array`.
+//(array first Args) — special as first arg of do/bind. `{…}`
+//(array last Args) — special as first arg of do/bind.
+
+//(bind To From) — assignment.
+//(label Named) — records parents unless it is rewritten (looked-up) into a value.
+
+//(concept Defines) — semantics.
+//(eval Rule Program) — syntax.
+```
 
 (Also, working in the edit-file window... this is even better than using a proper text/program editor. Unless the browser crashes. So, should save. Question answers can be edited in later.)
+
+---
+
+This horror, fear, and desire to kill myself or others; they are so fast to come back, here. But now I know one... slight possibility... of getting out of this place. I guess this detour wasn't *just* a useless vacation.
 
 ---
 
