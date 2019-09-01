@@ -1,8 +1,62 @@
-﻿This is a journal of interesting (at the time) thoughts relating to the development of the Conceptual PL.
+This is a journal of interesting (at the time) thoughts relating to the development of the Conceptual project.
 
 Why waste life on another? Movement to another foundation will cause a remake.
 
 Newest first.
+
+---
+
+- **Concepts as semantics (1 September 2019)**
+
+Rewriting rules (like `(a,b) => 12`) are pretty cool. We can use them for arbitrary transforms, functions, destructuring (binding), objects (the first of matching keys becomes the resulting value). But why do we ignore the "any semantics can be specified as a bunch of rewriting rules"? It would be great for usability. Concepts (`(concept …, concept …)`) could make it extensible.
+
+Anyway, we *could* specify the whole semantics of the Core as a *single* bunch of semantic rewriting rules, applied only to the currently-looked-at expression, and a way to combine sub-semantics via `concept`.
+
+Uh... The point is, is there really a need for something like `do`? Can't the whole semantics be specified as just `concept` at their core (and very simple symbol-based pattern-matching-replacing), with the rest being extensions of that?
+
+There should be.
+
+Let's try to devise it.
+
+First, let's change the intended core syntax a bit. `[Square brackets]` should be used for arrays, like in JS; `{fancy brackets}` should be used for objects (first-of-members, or just first; `{ 'a'=>1, 'b'=>2 }`), just like in JS. This leaves room for… `(round brackets)` — a Lisp-like way of specifying code+data.
+
+These round brackets are extremely easy to parse. They are *the* best choice for the core of the core. So, for now, we should become basically Lisp that sources out its semantics to data.
+
+(Also, using JS for syntax highlighting is even better-looking with this, probably.)
+
+The rewriting rules for this, in terms of Core, are:
+
+```javascript
+(f) => f
+(f x) => core f x
+(f x y z) => core f(x, y, z)
+```
+
+Alternatively, in terms of `call` and `array`:
+
+```javascript
+(f) => f
+(f x) => (call f x)
+(f x y z) => (call f (array x y z))
+```
+
+These array expressions (`ax`; `(ax …) => (…)`) *branch to data* by returning the first success of its sub-items:
+
+```javascript
+(concept (…items)) => {…items}
+
+(concept (…items)) => (first …items)
+```
+
+Now, there are two things that hinders us from making literally-2-parse-rules `ax` and using it to define the rest of the Core:
+
+- `=>`. `(rewrite From To)`? Any shorter name?
+
+- `…`. `flatten` is both too long (should be `_`) and too complicated to define; we should use its particular form, like `(head Head Tail) => _((Head), Tail)`. Any more descriptive name?
+
+- Also, in the `ax` sub-language, we have not decided how to extend syntax, have we? We're gonna need that to promote `ax` from an internal-only or mind-only DSL to Stage-0. Via semantics (`(concept { (eval Rule Program) => … })`), used when we have finished one expression but there is a string left, or what?
+
+(Also, working in the edit-file window... this is even better than using a proper text/program editor. Unless the browser crashes. So, should save. Question answers can be edited in later.)
 
 ---
 
