@@ -1,34 +1,30 @@
-﻿# Guiding principles
+# Guiding principles
 
-Bullet points are easier to digest than text, so here are guiding principles:
+- Improve until perfection. Thoughts developed enough converge to the concepts behind them (by convergence, thoughts can be used to reach concepts, and concepts are the best way to reason about thoughts). In the conceptual realm, there are no quirks that prevent easy usage of a concept, and programs equal thoughts and concepts. A suitable place for the humanity's reproduction ritual.
 
-- Extensible is better than monolithic. Many small things on a common base can be created (or learned) gradually, one-by-one; one huge thing is incomprehensible until learned. For understanding, this includes intuitive bases present in a mind.
+  - It can always be better. Improve, do not simply strive towards an ideal (simply converge to a good). What we want is not fully known and implemented anyway.
+
+  - Shortness. The more expressive the design, the simpler it is to use; the less conceptually artificial special cases, the shorter the using code is.
+
+  - Expressivity before speed. Premature optimization is the root of all non-good; it is a collection of concepts, ought to be expressed in a proper framework properly — that framework comes first, and makes building optimization easy. "Speed"/"optimization" can be replaced with any concept.
+
+  - Separate cleanly to combine easily. Stage-2 concepts may seem overly unusual, ambitious, and detached from the current way of doing things; but all that is necessary to fully allow not even knowing about any unused concept. Bugs and undefined behavior are to be eliminated entirely. Evolution (clear limits and arbitrary generation) can then be completely automatic.
+
+  - Extensibility. Every sub-project is a base for a future, based on a past. This is the difference between some characters in a story having godlike powers because the world was artificially designed to allow them that, and everything being a natural part of the world, even gods. Many small things on a common base can be created (or learned) gradually, one-by-one; one huge thing is incomprehensible until learned. For understanding, this includes intuitive bases already present in a mind.
+
+  - Formalization should exactly equal intuition; artificial *is* intelligence. Code, words, or the mind itself — all made to express the same truth; all targets for implementation.
 
 - Noise before silence. Improvement does not regress, so *anything* is better than nothing. Moreover, the project can easily be cut short at any time, so better to annoy people with the incomplete than risk it never existing.
 
-- Separate cleanly. The first dozen (PL-level) concepts may seem overly unusual, ambitious, and detached from the current way of doing things; but all that is necessary to fully allow not even knowing about any unused concept. (For example, all the complication with access is for this.)
+- Purity: the same is worthless. Be unique, or do not be.
 
-- The same is worthless. Be unique, or do not be.
+  - One concept, one way of expressing it. Having several ways to define a function is no good; achieve shortness of interface with proper separation.
 
-- One concept, one way of expressing it. Having several ways to define a function is no good; achieve shortness of interface with proper separation.
+- Be self-aware. A base implementation is good, a meta-circular one is impressive, but both is immortal. Explain every part of yourself perfectly, and that *is* AI — you in a different medium.
 
-- Expressivity before speed. Premature optimization is the root of all non-good; it is a collection of concepts, ought to be expressed in a proper framework properly — that framework comes first, and makes building optimization easy. Replace "speed"/"optimization" with any concept.
+PL base, leading to PL, leading to program editor; if programs are so good they can be called thoughts and concepts, is this not enough to learn then edit... mind and reality themselves? Not without a proper physical interface, like magical telekinesis or (nano-)machine construction.
 
-- Terseness through expressivity. The more expressive the design, the simpler it is to use; the less conceptually artificial special cases, the shorter the using code is.
-
-- Automatic should exactly equal manual. If random self-evolution has even the slightest chance to crash or break the system, then it cannot be used. Bugs and undefined behavior are to be eliminated.
-
-- Formalization should exactly equal intuition. Code, words, or the mind itself — all made to express the same truth; all targets for implementation.
-
-- Combine all in one place. The existing multitude of inventions is only united by a user's mind now. Give them a proper framework to combine in, and the resulting singularity will eat the world it came from.
-
-- Be self-aware. A base implementation is good, a meta-circular one is impressive, but both is immortal. Explain every part of yourself perfectly, and that *is* AI — you in a different medium. Pattern-matching is more natural with self-awareness.
-
-- It can always be better. Improve, do not simply strive towards an ideal (converge to good).
-
-- Do not code a lot. Apparently. This one should probably be dropped.
-
-Conceptual is a strange and experimental PL to develop. It is a half-formed proposal to achieve true AI through creating a conceptual singularity, which is where that strangeness comes from and leads to.
+Once split by a metallic barrier, concepts will act as one again.
 
 The rest is uninteresting.
 
