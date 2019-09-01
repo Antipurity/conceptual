@@ -14,7 +14,7 @@ Splitting the task up into satisfactorily complete stages makes it easier to do.
 
 At most a curiosity, or a minimalistic PL. Extensibility in every way from the very foundation.
 
-In short, it covers flow control and binding, control flow and de/composition, (dynamic) definition. Properly allows doing anything and being any language, discovering self as needed. Conceived solely for…
+In short, it covers flow control and binding, control flow and de/composition, (dynamic) definition. Syntax and semantics, transformed as needed. Properly allows doing anything and being any language, discovering self as needed. Conceived solely for…
 
 ---
 
@@ -26,7 +26,7 @@ A proper PL.
 
 In short, Conc. covers: Core, memory, effect control, branching, uniqueness (purity), searching, evolution (un/constraining), user interface, PL reading/writing, measures and their attainment and improvement. Everything it means to be a computer, along with a good way to extend past that — enough for now.
 
-By the principles of their creation, these are not mere implementations of concepts, they *are* concepts: there are no quirks that have to be manually worked around to use one with another, which allows the fastest possible development and even automatic evolution.
+By [the principles of their creation](https://github.com/Antipurity/conceptual/blob/master/philosophy.md), these are not mere implementations of concepts, they *are* concepts: there are no quirks that have to be manually worked around to use one with another, which allows for the fastest possible development and even automatic evolution.
 
 ---
 
@@ -42,13 +42,13 @@ Though Conc. is all bones and no meat, that base of programming is potential its
 
   - Showing structure styled arbitrarily (not just as colored text). (2 months)
 
-    - Briefly highlighting the actual parsed structure as it is typed. (days)
+    - Briefly highlighting the actual parsed structure as it is typed. Syntax rules will not be mis-remembered ever again. (days)
 
-  - Animating the path of an execution, as a quick repeatable thing and not just an involved debugging process. (days)
+  - Animating the path of an execution, as a quick repeatable thing and not just an involved debugging process. Evaluation order will not be mis-remembered ever again. (days)
 
-  - Showing code results and its effects immediately (without feature restriction, nor delay, nor inaccuracy, nor ever requiring a restart to reset altered system state). (days)
+  - Showing code results and its effects immediately (without feature restriction, nor delay, nor inaccuracy, nor ever requiring a restart to reset altered system state). Semantics will not be mis-remembered ever again. (days)
 
-  - Predicting the time left for long tasks. (2 weeks)
+  - Predicting the time left for long tasks. Why not. (2 weeks)
 
   - Any user-defined transformations and analyses (like type inference, or expected time/memory/… use) accessible by the user (mainly in the context menu). (2 weeks)
 
