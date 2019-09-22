@@ -6,6 +6,67 @@ Newest first.
 
 ---
 
+- **Self-editable page vision (22 september 2019)**
+
+Ah, my old friend, a half-hour memory thrashing session, I missed you so.
+
+Dear diary,
+
+Today I learned that Visual Studio Code cannot handle our loving sessions. It's like it doesn't love running out of memory.
+
+I should bump up swappiness. From 60 to 80.
+
+…Though you are not the actual diary, where I put my most brutally honest self-assessments that should not be seen by anyone.
+
+Anyway.
+
+I am remembering the glory of the old network framework. What I could do with it.
+
+A layer that knows all code, including itself, can output a listing of itself, in spoilered format (details-with-summary), with the description on a layer before code and all other properties.
+
+That listing can have spots for:
+- a function applied to each network function/property before saving, saved with the network;
+  - [Can this be the serialization function, dictating (and translating into) the format in which the network accepts its parts?]()
+- a before-loading function (say, to undo compression performed by the saving function);
+  - [Can this be the "parsing" function, usually just eval-ing?]()
+- network HTML (in CodeMirror), including also the JS needed to start the rest;
+- the network:
+  - individual JS expressions to execute on network start (after their dependencies), edited with CodeMirror;
+    - JS functions are expressed as `function(…) {…}`;
+      - (If a function runs in a WebWorker, that *could* be used to show examples of its usage dynamically. If *the expression* runs, could show its result.)
+    - exposing also the environment (constant bindings of variables), like an object, but with unused bindings being highlighted and not saved;
+  - text viewing/editing places, via a borderless non-monospace-font `<textarea>`s;
+    - (With a floating checkbox "× natural", that prettifies a string (first letters of sentences are capitalized, and a dot is added at the end if the string ends with a letter), unchecked and uncheckable if prettify-then-unprettify would be different.)
+  - number-editing places — literally just a borderless `<input type=number>`;
+  - no-value places, deleted immediately when they appear, but always shown at the bottom of each object to allow adding new properties;
+  - object-editing places:
+    - property, with the key (natural-text), the value type (a dropdown, one of 5 options), and the value;
+    - (.doc and .call are shown first, then integer-indexed properties, then the rest sorted by key);
+  - a reference — when seen/created, scans through all currently-expanded references and highlights all equal ones with a bright unused-before-this `#N` label, removing the label if only one is left, thus showing cycles gracefully and dynamically;
+    - everything is actually a reference;
+    - shown as details-with-summary, dynamically showing/creating the contents when clicked on;
+    - when collapsed (but still seen), has a button to set it to something else (by then clicking on another ref);
+    - (Is: optional label, value type (dropdown, one of 5 non-ref options), expansion/collapse icon, and optionally value.)
+- a button to "save" the whole network (serialize it, and either view it in an `<iframe>`, copy the Data URL, or download it as a file).
+
+This listing could be put at the end of document.body in details-with-summary, or, say, a non-intrusive floating gear icon in the bottom-right corner.
+
+(I won't go into benefits of The Network Style over regular JS.)
+
+Just this will allow us to ascend beyond a file editor.  
+Movement to another foundation can even be automated with it.  
+And more importantly, we can stop our flight through the realm of pure thought, so cold and lonely, and stop pretending that it didn't grow out of this.
+
+What I need:
+
+- Take the old network out. Blow dust off of it.
+  - That `emit` of old looks sexy… but it does not do DOM elements, nor dynamic seen-first expansion.
+- A mixed DOM element and string *and* thunk, serialization *and* parsing, mini-lib.
+
+Familiar territory. …Even though my time is running out.
+
+---
+
 - **Concepts as semantics (1 September 2019)**
 
 Rewriting rules (like `(a,b) => 12`) are pretty cool. We can use them for arbitrary transforms, functions, destructuring (binding), objects (the first of matching keys becomes the resulting value). But why do we ignore the "any semantics can be specified as a bunch of rewriting rules"? It would be great for usability. Concepts (`(concept …, concept …)`) could make it extensible.
