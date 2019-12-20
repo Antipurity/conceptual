@@ -1,0 +1,49 @@
+<!doctype html>
+<head>
+  <meta charset=utf-8>
+  <title>A PL REPL</title>
+  <style>
+    * {transition: all .2s ease, margin 0s; vertical-align: top; box-sizing: border-box}
+    body {
+      background-color:var(--background);
+      color:var(--main);
+      --background:white;
+      --highlight:royalblue;
+      --main:black;
+    }
+    body.dark {
+      --background:rgb(15,15,15);
+      --highlight:rgb(225, 110, 65);
+      --main:white;
+    }
+    *:focus {outline:none; box-shadow:var(--highlight) 0 0 .1em .1em}
+    .hover {box-shadow:var(--highlight) 0 0 .1em .1em}
+    bracket {color:saddlebrown}
+    string {color:darkgreen}
+    body.dark string {color: limegreen}
+    number {color:cornflowerblue}
+    known {font-weight:bold; cursor:pointer}
+    node {display:inline-block; font-family:monospace}
+    error {color:red; text-shadow:0 0 .5em var(--background)}
+    extracted {display:inline-block}
+
+    scrollHighlight { position:fixed; right:0; box-shadow:var(--highlight) 0 0 .2em .2em }
+
+    .broken>* {margin-left:1em; display:table; max-width:calc(100% - 1em)}
+    .broken>bracket {margin-left:0}
+    .code>* {display:table}
+    body>* {display:table; white-space:pre-wrap}
+
+    .code {display:block; font-family:monospace}
+    .replInputContainer { display: table; width: 100% }
+    .replInputContainer>:first-child { color: red }
+    .replInputContainer>:nth-child(2) { min-height:1em; width:100%; display:table-cell }
+  </style>
+</head>
+<body>
+  <noscript>This requires JS to run, and a fairly modern browser.</noscript>
+  <div style="position:fixed; left:0; bottom:0"
+    ><input id=Lightness type=checkbox title="Use dark theme?"
+    ><script>(Lightness.oninput = () =>document.body.classList.toggle('dark', Lightness.checked, true))()</script></div>
+  <script src=self.js></script>
+</body>
