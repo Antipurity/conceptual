@@ -8,22 +8,6 @@ Low-level thoughts broken apart and suspended outside of time, in endless wait f
 
 
 
-# Concepts (`concept`)
-
-Anything knowable is seen through a pure view that defines it; everything is a `concept`. (This means an interface like `concept View Value`.)
-
-Words like "when acted on, …" or "on stepping, …" specify an override. Used extensively to define concepts, here.
-
-Data can override code. (Meaning: branch to data, extensibility.)
-
-`concept` allows escaping locality, and encoding global transformations locally. Users never have to implement mini-interpreters to add a non-native feature.
-
----
-
-
-
-
-
 # Execution
 
 ## Timing and interrupting
@@ -76,17 +60,15 @@ Examples of scheduling containers:
 
 
 
-# Constraints (`limit`)
-
-[Shouldn't this be turned into a generative enumerable dependent type system?]
+# Constraints (`is`)
 
 Some things must be done according to formal and precise specifications/constraints.
 
-`limit(X, T)` (or `X:T`) constrains `X` to be an instance of a sort/type/set `T`; it returns `X` if included, or fails/throws otherwise. Unless overriden, this checks that `X` and `T` are the same (either as-is or after finishing). (Containers are checked by-element.)
+`is(X, T)` (or `X:T`) constrains `X` to be an instance of a sort/type/set `T`; it returns `X` if included, or fails/throws otherwise. Unless overriden, this checks that `X` and `T` are the same (either as-is or after finishing). (Containers are checked by-element.)
 
 If all values of a sort `A` are also of another sort `B`, `A:B` must also succeed — [`X:A` and `A:B` implies `X:B`; `X:X` always succeeds](https://en.wikipedia.org/wiki/Preorder). (Basic operations that take values must also be able to operate on types, like `1 + Int` returning `Int`, for uniformity.)
 
-`limit(X)` returns a value's native/recommended/conceptual type `T`; `limit(X, limit(X))` always succeeds. [[Might remove this one if it proves unnecessary.]]
+`is(X)` returns a value's native/recommended/conceptual type `T`; `is(X, is(X))` always succeeds. [[Might remove this one if it proves unnecessary.]]
 
 In natural language, `X:T` is "a/an `T` `X`" or "`X` covered by `T`" or "`X` satisfying `T`" or "`X` included in `T`" or "`X` in the set `T`" or "`X` of the sort/type `T`" or "`X` which is in `T`" or "`X` (an example of `T`)".
 
@@ -149,7 +131,7 @@ view⦇(a, flatten(b,b), b) & (1,2,2,1)⦈ // any{}
 
 ## Negation (`not`)
 
-`not T` or `!T` returns a proxy of `T` that inverts coverage by the constraint (if `x:T` is ok, `x:!T` fails; if `x:T` fails, `x:!T` succeeds), and removes any `random` overrides.
+`not T` or `!T` returns a proxy of `T` that inverts coverage by the constraint (if `x:T` is ok, `x:!T` fails; if `x:T` fails, `x:!T` succeeds), and removes any `gen` overrides.
 
 (Negating a thrown constraint still fails checks, so `!Err` is the same as `Err`.)
 
@@ -165,17 +147,15 @@ view⦇1 | !2⦈ // !2
 view⦇2 | !2⦈ // all{}
 ```
 
-## Generation (`random`)
+## Generation (`gen`)
 
-`random T` (or `gen T`?) generates and returns an `X` such that `X:T` succeeds. If `T` does not override `limit`, this just returns `T`. (While `limit` represents the inclusivity of sets, `random` represents the constructivity of types.)
+`gen T` generates and returns an `X` such that `X:T` (`is(X,T)`) succeeds. If `T` does not override `is`, this just returns `T`. (While `is` represents the inclusivity of sets, `gen` represents the constructivity of types.)
 
 Naturally, `…T` is "a/an `T`" or "a particular `T`" or "a random `T`" or "an example of `T`" or "an instance of `T`" or "any `T`" or "sample `T`". "If `X` is a number", "let `X` be a number".
 
-Conceptually, `…` is `random bind.visible` ("anything whatsoever"), and `…T` (no whitespace) is `random T` ("a solution/example of `T`").
-
 (Implementations should ensure that this [choice](https://en.wikipedia.org/wiki/Axiom_of_choice) made from any set is complete, and it is impossible to otherwise create an element of a native set that cannot be generated, for intuitiveness.)
 
-`random bind.visible` or `random all{}` picks one of visible bindings and returns its instance. Since everything known is visible through the global scope, this can generate anything (knowable) in existence; the global scope overrides generation to allow and optimize such usage. In fact, repeated constrained arbitrary generation is how `X:T` works if `T` overrides only `limit` and not `random` (this is usually extremely slow though). `random` overrides `limit` to make `X:…` always succeed, and to make `…:T` into `…T`, and to make capturing `…` capture each element as `…`.
+`gen bind.visible` or `gen all{}` picks one of visible bindings and returns its instance. Since everything known is visible through the global scope, this can generate anything (knowable) in existence; the global scope overrides generation to allow and optimize such usage. In fact, repeated constrained arbitrary generation is how `X:T` works if `T` overrides only `is` and not `gen` (this is usually extremely slow though). `gen` overrides `is` to make `X:…` always succeed, and to make `…:T` into `…T`, and to make capturing `…` capture each element as `…`.
 
 (Implementations are encouraged to give special attention to recording the usage and constraints of the result, so that the needs can be merged to allow generation to fail much less.)
 
