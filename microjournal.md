@@ -3579,7 +3579,7 @@ Okay, I fixed it…
 And, how would multi-occuring-inside-quotes behave?  
 …Should we just make `finish` do its cache inside label-env, so it could be purged and restored by function calls?
 
-The useless things I do… I now use `structuredSentence` mini-parser with syntax like `{{this} is {long}}` to convey sentence structure for messages.
+The useless things I do… I now use `structuredSentence` mini-parser with syntax like `{this is long}` to convey sentence structure for messages.
 
 …I should make the name allocator an option, so that non-displayed serializations could be faster. Or, uh, it depends on being able to access a local var, so, probably an option `nameResult:false`.
 
@@ -4001,4 +4001,4 @@ That's why the god of nightmares needs *your* open-source contributions.
 
 ---
 
-Modern machine learning really is stuck in a primitive state, now that I think about it; adjusting output by adjusting variables, mostly by gradient descent… It's like if, to sort an array, everyone used quick sort or radix sort, some hipsters used merge sort, and some idiots used insertion sort on their worthless toy problems. Modern sorting is about combining algorithms, by knowing approximations of their relative runtimes and dynamically picking the best, resulting in something that's better than any one. Modern machine learning is about statically picking a way of adjusting that seems best. Approximating performance of an adjustment step may be a far more difficult task than sorting's, by itself requiring advanced combination, but isn't it necessary to achieve learning performance superior to any one algorithm's?
+Modern machine learning really is stuck in a primitive state, now that I think about it; adjusting output by adjusting variables, mostly by gradient descent… It's like if, to sort an array, everyone used radix sort, some hipsters found out that quick and merge sorts are not bad, and some idiots used insertion sort on their worthless toy problems. Modern sorting is about combining algorithms, by knowing approximations of their relative runtimes and dynamically picking the best, resulting in something that's better than any one. Modern machine learning is about statically picking a way of adjusting that seems best. Approximating performance of an adjustment step may be a far more difficult task than sorting's, by itself requiring advanced combination, but isn't it necessary to achieve learning performance superior to any one algorithm's?
