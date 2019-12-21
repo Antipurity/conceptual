@@ -1,6 +1,7 @@
 <!doctype html>
 <head>
   <meta charset=utf-8>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>A PL REPL</title>
   <style>
     * {transition: all .2s ease, margin 0s; vertical-align: top; box-sizing: border-box}
@@ -39,8 +40,11 @@
     .replInputContainer>:first-child { color: red }
     .replInputContainer>:nth-child(2) { min-height:1em; width:100%; display:table-cell }
 
-    #Working { width:.5em; height:.5em; margin-top:.5em; transition:none; background-color:black; border-radius:50%; display:inline-block }
-    #Working.yes { background-color:green }
+    #Working { width:.5em; height:.5em; margin-top:.5em; margin-left:.5em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
+    #Working.yes { background-color:var(--highlight) }
+    button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:#4CAF50; color:var(--main) }
+    button:hover { background-color:#5CBF60 }
+    button:active { background-color:#3C9F40 }
   </style>
 </head>
 <body>
