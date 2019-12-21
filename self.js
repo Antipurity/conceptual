@@ -383,7 +383,7 @@ Used by functions.
       } else {
         // v is probably the value result.
         if (_isDeferred(v)) // Then defer purification too.
-          return array(deferred, array(purify, v[1]), ...v.slice(2))
+          return array(_deferred, array(purify, v[1]), ...v.slice(2))
         return quote(v)
       }
     },
@@ -674,8 +674,8 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   ['*']:[Symbol('broadcasted'), Symbol('_mult')],
   ['+']:[Symbol('broadcasted'), Symbol('_sum')],
-  _sum(a,b) { return a = _toNumber(a), b = _toNumber(b), a + b },
-  _mult(a,b) { return a = _toNumber(a), b = _toNumber(b), a * b },
+  _sum(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a + b },
+  _mult(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a * b },
 
 
 
@@ -721,42 +721,9 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       addEventListener('transitionstart', () => (atEnd && scrollTo(scrollX, scrollMaxY, atEnd = false), atEnd = atEnd || scrollY && scrollY >= scrollMaxY - 10))
       addEventListener('transitionend', () => atEnd && scrollTo(scrollX, scrollMaxY, atEnd = false))
 
-      // Highlight equal-id <node>s over selection or under cursor.
-      let prevHover
-      function changeHoverTo(elem) {
-        const selector = elem && elem.id ? '#' + CSS.escape(elem.id) : typeof elem == 'string' ? elem : null
-        if (prevHover) document.querySelectorAll(prevHover).forEach(el => el.classList.remove('hover'))
-        if (selector) {
-          const New = document.querySelectorAll(selector)
-          New.forEach(el => el.classList.add('hover'))
-          scrollHighlight(New)
-        } else scrollHighlight()
-        prevHover = selector
-      }
-      function nodeParent(elem) {
-        while (elem && elem.tagName !== 'NODE') elem = elem.parentNode
-        return elem
-      }
-      function highlightParent(evt) {
-        const active = document.activeElement && document.activeElement.contentEditable == 'true'
-        const s = getSelection()
-        const el = s.isCollapsed && !active && evt ? evt.target : s.rangeCount ? s.getRangeAt(0).commonAncestorContainer : null
-        changeHoverTo(nodeParent(el))
-      }
-      const highlight = _throttled(highlightParent)
-      addEventListener('pointerover', highlight, true)
-      addEventListener('pointerout', highlight, true)
-      addEventListener('selectionchange', highlight, true)
-
-      // On any element tree mutations inside document.body, re-highlight.
-      new MutationObserver(_throttled(record => {
-        changeHoverTo(prevHover)
-      }, .05))
-      .observe(document.body, { childList:true, subtree:true })
-
       // Show the current highlight on the global scrollbar.
       const scrollHighlights = new Map
-      function scrollHighlight(els) {
+      const scrollHighlight = _throttled(function scrollHighlight(els) {
         const free = []
         scrollHighlights.forEach(v => free.push(v)), scrollHighlights.clear()
         els && els.forEach(el => {
@@ -775,7 +742,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
           document.body.offsetHeight
           scrollHighlights.forEach(v => v.style.opacity !== '' && (v.style.opacity = 1))
         }
-      }
+      }, .2)
       function updateScrollHighlights() {
         if (!scrollHighlights.size) return
         const rect = document.body.getBoundingClientRect()
@@ -788,6 +755,37 @@ Does not count memory allocated in interruptions (between executions of Expr) as
         scrollHighlights.forEach(v => { if (v._top <= 1 && v._height <= 1) v.style.top = v._top*100+'%', v.style.height = v._height*100+'%' })
       }
       addEventListener('resize', _throttled(updateScrollHighlights), true)
+
+      // Highlight equal-id <node>s over selection or under cursor.
+      let prevHover
+      function changeHoverTo(elem) {
+        const selector = elem && elem.id ? '#' + CSS.escape(elem.id) : null
+        const New = elem == null ? null : elem instanceof Set ? elem : document.querySelectorAll(selector)
+        const set = new Set
+        New && New.forEach(el => (el.classList.add('hover'), set.add(el)))
+        if (prevHover) prevHover.forEach(el => !set.has(el) && el.classList.remove('hover'))
+        scrollHighlight(New)
+        prevHover = set
+      }
+      const nodeParent = _closestNodeParent
+      function highlightParent(evt) {
+        const active = document.activeElement && document.activeElement.contentEditable == 'true'
+        const s = getSelection()
+        let el
+        if (s.isCollapsed && !active && evt) el = evt.type !== 'pointerout' ? evt.target : null
+        else el = s
+        changeHoverTo(nodeParent(el))
+      }
+      const highlight = _throttled(highlightParent, .1)
+      addEventListener('pointerover', highlight, true)
+      addEventListener('pointerout', highlight, true)
+      addEventListener('selectionchange', highlight, true)
+
+      // On any element tree mutations inside document.body, re-highlight.
+      new MutationObserver(_throttled(record => {
+        changeHoverTo(prevHover)
+      }, .05))
+      .observe(document.body, { childList:true, subtree:true })
 
       // Create a REPL.
       const env = finish.env = _newExecutionEnv()
@@ -854,6 +852,19 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     return ('\x1b['+pre+'m') + str + ('\x1b['+post+'m')
   },
 
+  _closestNodeParent(elem) {
+    if (elem instanceof Selection) elem = elem.rangeCount ? elem.getRangeAt(0).commonAncestorContainer : null
+    while (elem && elem.tagName !== 'NODE') elem = elem.parentNode
+    return elem
+  },
+  _bracketize(range, brackets = '()') {
+    // Appends brackets at range's start and end.
+    range.insertNode(elem('span', brackets[0]))
+    range.collapse(false)
+    range.insertNode(elem('span', brackets[1]))
+    range.setEnd(range.endContainer, range.endOffset-1)
+  },
+
 
 
 
@@ -908,12 +919,16 @@ Does not count memory allocated in interruptions (between executions of Expr) as
           for (let ch = pureOutput.firstChild; ch; ch = ch.nextSibling)
             if (!ch.removed) ch.style.position = 'absolute', _elemRemove(ch)
         }
-        if (expr !== purifyAndDisplay)
+        if (expr !== purifyAndDisplay) {
           try {
             const p = purify(expr)
             if (quote(p) === p)
-              _elemInsert(pureOutput, serialize(p, serialize.displayed))
-          } catch (err) {}
+              return _elemInsert(pureOutput, serialize(p, serialize.displayed))
+          } catch (err) {/*console.log(err)*/}
+          const el = elem('button', 'Evaluate')
+          el.onclick = evaluate
+          _elemInsert(pureOutput, el)
+        }
       }, .1)
 
       const replInput = elem('node')
@@ -948,8 +963,23 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       log(structuredSentence('{{{(txt)} for {all functions}}, {{(examples)} for {code examples}}, {{`.`} for {all current bindings}}}. {{a}, {`a`}, {"s"}, {(0 1)}, {(a:2 a)}}. {Click on {{an entered command}\'s prompt} to {remove it}}.\n{{A REPL} of {{an interpreter} geared towards {generality and {maximizing {re-use of {{assumed-expensive} {computation results}}}}}}, {even detecting {computation cycles} in {pure functions}}}.'))
       finish.env = prev
       replInput.onkeydown = evt => {
+        // On Escape, blur replInput. On Shift or Ctrl and Enter, add a newline. On Enter, evaluate the expression.
         if (evt.key === 'Escape' && document.activeElement === replInput) replInput.blur()
+        if (!evt.ctrlKey && !evt.altKey) {
+          // '(' surrounds the selection in brackets. ')' surrounds the closest node parent in brackets.
+          if (evt.key === '(')
+            return _bracketize(getSelection().getRangeAt(0)), evt.preventDefault()
+          if (evt.key === ')') {
+            const r = document.createRange(), el = _closestNodeParent(getSelection())
+            if (el === replInput) return
+            r.selectNode(el)
+            return _bracketize(r), evt.preventDefault()
+          }
+        }
         if (evt.key !== 'Enter' || evt.shiftKey || evt.ctrlKey) return
+        evaluate()
+      }
+      function evaluate() {
         const cmd = replInput.innerText.trim()
         const prev = finish.env
         try {
@@ -1924,7 +1954,7 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
       x = _use(x)
       if (serialize.backctx.has(x)) return x
       if (_isError(x)) return x
-      if (_isArray(x) && (_isLabel(x[0]) || _isArray(x[0]))) return array(quote, x)
+      if (_isArray(x) && (_isLabel(x[0]) || _isArray(x[0])) && _hasCallableParts(x)) return array(quote, x)
       if (_isArray(x) && x[0] === _unknown) return x
       if (_isArray(x) && x[0] === _deferred) return x
       if (_isFunc(x)) return x
@@ -1932,12 +1962,21 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
       if (_isString(x)) return x
       if (typeof x == 'function') return x
       if (overrides(x, finish) === undefined && (!_isArray(x) || overrides(x, call) === undefined)) return x
+      if (!_hasCallableParts(x)) return x
       return array(quote, x)
     },
     assign(a,b) {
       // Recurse into the quoted value. To not, use `(only X)`.
       if (_isArray(a) && a[0] === quote) return call(array(assign, a[1], b))
     },
+  },
+  _hasCallableParts(x, m) {
+    if (!_isArray(x)) return
+    if (m && m.has(x)) return
+    m && m.add(x)
+    if (overrides(x, finish) !== undefined || overrides(x, call) !== undefined) return true
+    for (let i = 0; i < x.length; ++i)
+      if (_hasCallableParts(x, m || (m = new Set))) return true
   },
 
 
