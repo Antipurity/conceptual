@@ -38,11 +38,16 @@
     .replInputContainer { display: table; width: 100% }
     .replInputContainer>:first-child { color: red }
     .replInputContainer>:nth-child(2) { min-height:1em; width:100%; display:table-cell }
+
+    #Working { width:.5em; height:.5em; margin-top:.5em; transition:none; background-color:black; border-radius:50%; display:inline-block }
+    #Working.yes { background-color:green }
   </style>
 </head>
 <body>
   <noscript>This requires JS to run, and a fairly modern browser.</noscript>
   <div style="position:fixed; left:0; bottom:0"
+    ><span id=Working title="Are we currently running any tasks?"
+    ></span
     ><input id=Lightness type=checkbox title="Use dark theme?"
     ><script>(Lightness.oninput = () =>document.body.classList.toggle('dark', Lightness.checked, true))()</script></div>
   <script src=self.js></script>
