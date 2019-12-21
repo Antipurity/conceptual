@@ -118,7 +118,8 @@ For string keys, can be written as \`obj.key\`.`,
 
 
   Self:{
-    txt:`(Self): the entry point; do not call manually. (Capitalized to not conflict with JS's \`self\`.)`,
+    txt:`(Self): the entry point; do not call manually. (Capitalized to not conflict with JS's \`self\`.)
+Project page: https://github.com/Antipurity/conceptual`,
     future:[
       `Have non-conceptual interruptions (throw _interrupt) that preserve function label-envs, store on throw (in env[_interrupt][Array] — …but what if we need to evaluate Array multiple nested times, for impure expressions?), restore on func call. …How exactly do we restore the stack, if just re-executing isn't guaranteed to go to what we want immediately?`,
       [
@@ -1236,19 +1237,26 @@ Imprecise here; demands ref-equality if not perfectly general.`,
 
 
 
+  _checkValueOverride(data, code) {
+    let r = overrides(data, code)
+    if (r !== undefined)
+      return _getOverrideResult(r, array(code, data)) || r
+  },
   txt:{
     txt: `(txt F): Returns a helpful textual description of a function.
 (txt): Returns all available descriptions in a (… (Name Description) …) format.`,
     nameResult: ['description', 'asText'],
     call(f) {
-      if (f !== undefined) return error
+      if (f !== undefined) {
+        const r = _checkValueOverride(f, txt)
+        return r
+      }
       const result = []
       parse.ctx.forEach((v,k) => {
         if (k[0] === '_') return
-        let r = overrides(v, txt)
+        let r = _checkValueOverride(v, txt)
         if (r !== undefined) {
-          r = _getOverrideResult(r, array(txt, v))
-          if (r !== undefined) _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
+          _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
         }
       })
       return result
@@ -1265,11 +1273,9 @@ Imprecise here; demands ref-equality if not perfectly general.`,
         const result = []
         parse.ctx.forEach((v,k) => {
           if (k[0] === '_') return
-          let r = overrides(v, examples)
-          if (r !== undefined) {
-            r = _getOverrideResult(r, array(examples, v))
-            if (r !== undefined) _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
-          }
+          const r = _checkValueOverride(v, examples)
+          if (r !== undefined)
+            _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
         })
         return result
       } else
@@ -1285,11 +1291,9 @@ Imprecise here; demands ref-equality if not perfectly general.`,
       if (f !== undefined) return error
       const result = []
       parse.ctx.forEach((v,k) => {
-        let r = overrides(v, future)
-        if (r !== undefined) {
-          r = _getOverrideResult(r, array(future, v))
-          if (r !== undefined) _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
-        }
+        const r = _checkValueOverride(v, future)
+        if (r !== undefined)
+          _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
       })
       return result
     },
@@ -1457,8 +1461,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
     // Execute while checking for end.
     if (!_jobs.expr.length) return
+    Working.classList.toggle('yes', true)
     do {
-      let id = _use(_jobs.expr.pop()), then = _use(_jobs.expr.pop()), env = _use(_jobs.expr.pop()), expr = _use(_jobs.expr.pop())
+      let [expr, env, then, id] = _jobs.expr.splice(0,4)
       if (_isDeferred(expr)) {
         // Go through all expr's promises and bind their instances inside to promise.result if present.
         const ctx = new Map
@@ -1484,7 +1489,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
       if (v instanceof Promise) v = 'result' in v ? v.result : array(_deferred, v, v)
       env = finish.env
       // Uncaught exceptions in low-level code (except in promises) will bring the whole loop to a halt; these are our errors to see and regret and fix.
-      if (overrides(v, _use) || _isDeferred(v) && v.length == 2) // Re-schedule.
+      if (_isDeferred(v) && v.length == 2) // Re-schedule.
         _schedule(v, env, then, id)
       else if (_isDeferred(v)) // Make promises know we're here.
         log('<Deferring', v.length-2, 'promises…>'),
@@ -1506,6 +1511,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
         then(v)
     } while (_jobs.expr.length && time() < end)
     if (_jobs.expr.length) setTimeout(_jobs, 0)
+    Working.classList.toggle('yes', false)
   },
   _scheduleAndConsumeMany(a) {
     if (a) {
@@ -2561,9 +2567,10 @@ Override \`overrides\` to specify arbitrary global rewrites locally. For example
 Technical notes:
 Array data gets its head consulted (but not recursively). A function acts like a concept that defined \`call\` as that function. A JS object with a Map \`.defines\` consults that map with Code as the key, and if not present, consults its \`overrides\` override (which should be a function from a Code key to the override).
 In a JS function that uses \`call\`/\`finish\` to call another function and ignore its override, check the override of \`overrides\` still, to materialize the inner conceptual structure only on demand.`,
-    call(data, code) {
+    call(data, code, auto = false) {
       const vc = _view(code)
-      if (vc instanceof Map && vc.get(_manualConcepts) === true) code = overrides
+      if (auto && vc instanceof Map && vc.get(_manualConcepts) === true) code = overrides
+        // For `at`, this will change our check to something undesirable…
 
       if (code === call && typeof data == 'function') return data
       if (code === call && _isArray(data) && typeof data[0] == 'function') return data[0]
@@ -2596,16 +2603,15 @@ In a JS function that uses \`call\`/\`finish\` to call another function and igno
     if (over !== undefined) {
       if (typeof over == 'function')
         return _isArray(whole) ? over.call(...whole) : over(whole)
-      if (typeof over != 'function' && overrides(over, call) !== undefined)
+      if (typeof over != 'function' && overrides(over, call, true) !== undefined)
         return directCall(array(over, whole))
-      return over
     }
   },
   _checkOverride(data, code, whole) {
     // Return undefined if there is no result overriden. Combines overrides and _getOverrideResult in one.
     // No _use.
     let r
-    if ((r = overrides(data, code)) !== undefined)
+    if ((r = overrides(data, code, true)) !== undefined)
       return _getOverrideResult(r, whole)
   },
 
