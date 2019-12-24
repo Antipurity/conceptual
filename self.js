@@ -3,7 +3,7 @@
   _XXX methods are private and somewhat invisible.
   When using any arg as a part of an expression/statement (but not an argument to another non-JS-native function call), `_use(arg)` it; possibly do `arg = _use(arg)` at function entry if there is more than one use.
   Concepts define (some of) their usage at the concept, defined like `f:{…}`. Functions like `f(){}` are also `f:{call(){}}`. Concepts that define `call` can be called directly in JS code, though that won't check overrides or finish arguments.
-  See technical notes of `finish` for more details.
+  See technical notes of `finish` for more details. Also see `_interrupt` for how to handle inner state.
 */
 'use strict';
 
@@ -112,7 +112,7 @@ For string keys, can be written as \`obj.key\`.`,
       if (m instanceof Map) return k !== undefined ? (m.get(k) !== undefined ? m.get(k) : notFound) : [...m.keys()]
       return k !== undefined ? (m[k] !== undefined ? m[k] : notFound) : Object.keys(m)
     },
-    _manualConcepts:true,
+    _manualView:true,
   },
   notFound:{ txt: `An indicator that a key is not found in an object, returned from \`at\`.`, },
 
@@ -121,7 +121,6 @@ For string keys, can be written as \`obj.key\`.`,
     txt:`(Self): the entry point; do not call manually. (Capitalized to not conflict with JS's \`self\`.)
 Project page: https://github.com/Antipurity/conceptual`,
     future:[
-      `Have non-conceptual interruptions (throw _interrupt) that preserve function label-envs, store on throw (in env[_interrupt][Array] — …but what if we need to evaluate Array multiple nested times, for impure expressions?), restore on func call. …How exactly do we restore the stack, if just re-executing isn't guaranteed to go to what we want immediately?`,
       [
         `Self-modifying code (\`read X\` and \`write X Y\` and \`journal Expr\` and \`commit Journal\`, respected by \`finish\` too). Migrate Bounded/Walk/Prob in. Probably also "read as X if we have time, else as Y".`,
         `Goals, and optimization, of arbitrary code foremost (so, repeat it several times, and commit the best — not the most efficient, but the most general).`,
@@ -672,16 +671,23 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   },
 
 
-  ['*']:[Symbol('broadcasted'), Symbol('_mult')],
   ['+']:[Symbol('broadcasted'), Symbol('_sum')],
+  ['*']:[Symbol('broadcasted'), Symbol('_mult')],
   _sum(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a + b },
   _mult(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a * b },
-
-
-
-
   _plus:Symbol('+'),
   _star:Symbol('*'),
+
+  ['-']:[Symbol('broadcasted'), Symbol('_subtract')],
+  ['/']:[Symbol('broadcasted'), Symbol('_divide')],
+  _subtract(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a - b },
+  _divide(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a / b },
+  _minus:Symbol('-'),
+  _slash:Symbol('/'),
+
+
+
+
   _Worker:{
     future:`Have a function that executes code (Expr) in a web worker. (Synchronizing journals of self-modifying code, too.) (Benefits: parallelism; costs: lack of inter-worker merging.)`,
     call() { throw "Workers not supported for now" },
@@ -915,16 +921,25 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
       const pureOutput = elem('node')
       const purifyAndDisplay = _throttled(expr => {
+        const justClear = expr === purifyAndDisplay
+        let preserved
         if (pureOutput.firstChild) {
           for (let ch = pureOutput.firstChild; ch; ch = ch.nextSibling)
-            if (!ch.removed) ch.style.position = 'absolute', _elemRemove(ch)
+            if (!ch.removed) {
+              if (ch.onclick === evaluate && !justClear) preserved = ch
+              else ch.style.position = 'absolute', _elemRemove(ch)
+            }
         }
-        if (expr !== purifyAndDisplay) {
+        if (!justClear) {
           try {
             const p = purify(expr)
-            if (quote(p) === p)
+            if (quote(p) === p) {
+              if (preserved)
+                preserved.style.position = 'absolute', _elemRemove(preserved)
               return _elemInsert(pureOutput, serialize(p, serialize.displayed))
-          } catch (err) {/*console.log(err)*/}
+            }
+          } catch (err) {}
+          if (preserved) return
           const el = elem('button', 'Evaluate')
           el.onclick = evaluate
           _elemInsert(pureOutput, el)
@@ -962,18 +977,19 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       const prev = finish.env; finish.env = env
       log(structuredSentence('{{{(txt)} for {all functions}}, {{(examples)} for {code examples}}, {{`.`} for {all current bindings}}}. {{a}, {`a`}, {"s"}, {(0 1)}, {(a:2 a)}}. {Click on {{an entered command}\'s prompt} to {remove it}}.\n{{A REPL} of {{an interpreter} geared towards {generality and {maximizing {re-use of {{assumed-expensive} {computation results}}}}}}, {even detecting {computation cycles} in {pure functions}}}.'))
       finish.env = prev
+      const brackets = '(){}[]\'\'""'
       replInput.onkeydown = evt => {
         // On Escape, blur replInput. On Shift or Ctrl and Enter, add a newline. On Enter, evaluate the expression.
         if (evt.key === 'Escape' && document.activeElement === replInput) replInput.blur()
         if (!evt.ctrlKey && !evt.altKey) {
           // '(' surrounds the selection in brackets. ')' surrounds the closest node parent in brackets.
-          if (evt.key === '(')
-            return _bracketize(getSelection().getRangeAt(0)), evt.preventDefault()
-          if (evt.key === ')') {
+          const i = brackets.indexOf(evt.key)
+          if (i >= 0 && i%2) {
             const r = document.createRange(), el = _closestNodeParent(getSelection())
-            if (el === replInput) return
-            r.selectNode(el)
-            return _bracketize(r), evt.preventDefault()
+            r.selectNodeContents(el)
+            return _bracketize(r, brackets.slice(i-1,i+1)), evt.preventDefault()
+          } else if (i >= 0) {
+            return _bracketize(getSelection().getRangeAt(0), brackets.slice(i,i+2)), evt.preventDefault()
           }
         }
         if (evt.key !== 'Enter' || evt.shiftKey || evt.ctrlKey) return
@@ -1152,17 +1168,21 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
 
 
 
-  symbol:{
-    txt: `Finished (symbol): Creates a new unique symbol, usable as a label.`,
+  _var:Symbol('var'),
+  var:{
+    txt: `Finished (var): Creates a new unique variable, usable as a label.`,
     examples: [
-      [`(a a a:(symbol))`, `(a a a:(symbol))`],
-      [`((symbol) (symbol))`, `((symbol) (symbol))`],
-      [`(a→a 5) a:(symbol)`, `5`],
+      [`(a a a:(var))`, `(a a a:(var))`],
+      [`((var) (var))`, `((var) (var))`],
+      [`(a→a 5) a:(var)`, `5`],
     ],
-    nameResult: ['symbol'],
+    nameResult: ['x', 'y', 'z', 'w', 'a', 'b', 'c', 'd', 'variable'],
     finish() { return Symbol() },
     _impure:true,
   },
+
+
+
   log:{
     txt: `(log …Values): For debugging; logs to console or the current DOM node.`,
     _impure:true,
@@ -1196,6 +1216,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     call() {
       log(123, 'hello', 123, 'um', [])
     },
+    _impure:true,
   },
   RL:{
     call() {
@@ -1246,7 +1267,7 @@ Imprecise here; demands ref-equality if not perfectly general.`,
     txt: `Returns the greatest type containing both.`,
     call(a,b) {
       if (_isLabel(a)) return a
-      if (a !== b) return symbol()
+      if (a !== b) return _var()
       return a
     },
   },*/
@@ -1267,27 +1288,24 @@ Imprecise here; demands ref-equality if not perfectly general.`,
 
 
 
-  _checkValueOverride(data, code) {
+  _getDataOverride(data, code) {
     let r = overrides(data, code)
-    if (r !== undefined)
-      return _getOverrideResult(r, array(code, data)) || r
+    if (r !== undefined && typeof r !== 'function')
+      return r
   },
   txt:{
     txt: `(txt F): Returns a helpful textual description of a function.
 (txt): Returns all available descriptions in a (… (Name Description) …) format.`,
     nameResult: ['description', 'asText'],
     call(f) {
-      if (f !== undefined) {
-        const r = _checkValueOverride(f, txt)
-        return r
-      }
-      const result = []
+      if (f !== undefined)
+        return _getDataOverride(f, txt)
+      const result = [map]
       parse.ctx.forEach((v,k) => {
         if (k[0] === '_') return
-        let r = _checkValueOverride(v, txt)
-        if (r !== undefined) {
-          _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
-        }
+        let r = _getDataOverride(v, txt)
+        if (r !== undefined)
+          result.push(v, r)
       })
       return result
     },
@@ -1300,12 +1318,12 @@ Imprecise here; demands ref-equality if not perfectly general.`,
       if (_isArray(f)) return error
       if (f === undefined) {
         // Accumulate all examples (from parse.ctx).
-        const result = []
+        const result = [map]
         parse.ctx.forEach((v,k) => {
           if (k[0] === '_') return
-          const r = _checkValueOverride(v, examples)
+          const r = _getDataOverride(v, examples)
           if (r !== undefined)
-            _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
+            result.push(v, r)
         })
         return result
       } else
@@ -1319,11 +1337,11 @@ Imprecise here; demands ref-equality if not perfectly general.`,
     nameResult: ['todo'],
     call(f) {
       if (f !== undefined) return error
-      const result = []
+      const result = [map]
       parse.ctx.forEach((v,k) => {
-        const r = _checkValueOverride(v, future)
+        const r = _getDataOverride(v, future)
         if (r !== undefined)
-          _isArray(r) ? result.push([v, ...r]) : result.push([v, r])
+          result.push(v, r)
       })
       return result
     },
@@ -1512,14 +1530,17 @@ If any promises the job depends on have a method .cancel, calls those.`,
       }
 
       finish.env = env
-      let v
+      let v, interrupted
       try { v = finish(expr) }
-      catch (err) { v = err && err.stack ? array(_jsRejected, String(err), err.stack) : array(_jsRejected, String(err)) }
+      catch (err) {
+        if (err === _interrupt) interrupted = true, v = expr
+        else v = err && err.stack ? array(_jsRejected, String(err), err.stack) : array(_jsRejected, String(err))
+      }
 
       if (v instanceof Promise) v = 'result' in v ? v.result : array(_deferred, v, v)
       env = finish.env
       // Uncaught exceptions in low-level code (except in promises) will bring the whole loop to a halt; these are our errors to see and regret and fix.
-      if (_isDeferred(v) && v.length == 2) // Re-schedule.
+      if (interrupted || _isDeferred(v) && v.length == 2) // Re-schedule.
         _schedule(v, env, then, id)
       else if (_isDeferred(v)) // Make promises know we're here.
         log('<Deferring', v.length-2, 'promises…>'),
@@ -1541,7 +1562,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
         then(v)
     } while (_jobs.expr.length && time() < end)
     if (_jobs.expr.length) setTimeout(_jobs, 0)
-    Working.classList.toggle('yes', false)
+    else Working.classList.toggle('yes', false)
   },
   _scheduleAndConsumeMany(a) {
     if (a) {
@@ -1887,7 +1908,7 @@ f:(A …R)→R, when called, returns array elements past the first one; (f (arra
     assign:undefined,
     _impure:undefined,
     merge:undefined,
-    overrides(f) { return _restSpread },
+    overrides(f) { if (f !== overrides) return _restSpread },
   },
   _restSpread(...x) {
     // Spread all `(rest Y)`s in caller into caller, then call the caller.
@@ -1959,9 +1980,8 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
       if (_isArray(x) && x[0] === _deferred) return x
       if (_isFunc(x)) return x
       if (_isArray(x) && x[0] === broadcasted) return x
-      if (_isString(x)) return x
       if (typeof x == 'function') return x
-      if (overrides(x, finish) === undefined && (!_isArray(x) || overrides(x, call) === undefined)) return x
+      if (overrides(x, finish) === undefined && (!_isArray(x) || overrides(x, call) === undefined) && !_hasCallableParts(x)) return x
       if (!_hasCallableParts(x)) return x
       return array(quote, x)
     },
@@ -1972,11 +1992,12 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
   },
   _hasCallableParts(x, m) {
     if (!_isArray(x)) return
+    if (_isLabel(x)) return true
     if (m && m.has(x)) return
     m && m.add(x)
     if (overrides(x, finish) !== undefined || overrides(x, call) !== undefined) return true
     for (let i = 0; i < x.length; ++i)
-      if (_hasCallableParts(x, m || (m = new Set))) return true
+      if (_hasCallableParts(x[i], m || (m = new Set))) return true
   },
 
 
@@ -1992,12 +2013,13 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
       [`(string "sum is " (+ 1 2))`, `"sum is 3"`],
       [`(f "hello there") f:(string "hello" R)→R`, `" there"`],
       [`(f "hello there") f:(string R "there")→R`, `"hello "`],
-      [`(f "yZZZZxz") f:(string "y" R "x" "z")→R`, `"ZZZZ"`],
+      [`(f "yZZZZxz") f:(string "y" R "xz")→R`, `"ZZZZ"`],
     ],
     nameResult: ['joined'],
-    _manualConcepts:true,
+    _manualView:true,
+    finish(...s) {
+    },
     call(...s) {
-      // A string; not bound by `bound` unless it is of a non-standard form.
       if (s.length == 1 && _isString(s[0])) return s[0]
       if (this !== string && this !== undefined) return
       let unstring = false
@@ -2239,7 +2261,7 @@ Use (array F …) instead of (F …) in function args to ignore F's override of 
 
 
 
-  ['enumerable-types']:{
+  ['enumerableTypes']:{
     txt:`A namespace for when/forany/forall/only/any/all, none of which we have found a use for, so far.`,
     at:{
       when:Symbol('_when'),
@@ -2548,23 +2570,25 @@ To call, an array's zeroth element's concept is looked up; so, ((try …Inner) �
         finish.env.get(label).set(v, cycle)
       }
 
-      let result
       try {
-        let r
-        // Check if v overrides its own evaluation (finishing).
-        if (finish.v = v, (r = _checkOverride(v, finish, v)) !== undefined)
-          return result = r
+        let result
+        try {
+          let r
+          // Check if v overrides its own evaluation (finishing).
+          if (finish.v = v, (r = _checkOverride(v, finish, v)) !== undefined)
+            return result = r
 
-        if (_isArray(v)) {
-          // Evaluate arguments.
-          const finished = _maybeMerge(v.map(finish))
+          if (_isArray(v)) {
+            // Evaluate arguments.
+            const finished = _maybeMerge(v.map(finish))
 
-          // Do the call with evaluated args.
-          r = call(finished)
-          return result = r
-        }
-        return result = v
-      } finally { c && _cache(finish.env.get(label), v, result) }
+            // Do the call with evaluated args.
+            r = call(finished)
+            return result = r
+          }
+          return result = v
+        } finally { c && _cache(finish.env.get(label), v, result) }
+      } catch (err) { if (err === _interrupt) finish.env.get(label).delete(v);  throw err }
     },
   },
   call:{
@@ -2583,15 +2607,17 @@ Caches results of pure functions.`,
       r = _maybeUncache(m2, v)
       if (r !== _notFound) return r
 
-      let result
       try {
-        // See if any data overrides code; use that as our result if so. Else see if code overrides call; use that if so. Else just return v.
-        for (let i = v.length-1; i >= 0; --i)
-          if ((r = _checkOverride(v[i], i ? v[0] : call, v)) !== undefined)
-            return result = r
-        if (defaultToV) return result = v
-          // The second arg is something of a hack.
-      } finally { _cache(m2, v, result) }
+        let result
+        try {
+          // See if any data overrides code; use that as our result if so. Else see if code overrides call; use that if so. Else just return v.
+          for (let i = v.length-1; i >= 0; --i)
+            if ((r = _checkOverride(v[i], i ? v[0] : call, v)) !== undefined)
+              return result = r
+          if (defaultToV) return result = v
+            // The second arg is something of a hack.
+        } finally { _cache(m2, v, result) }
+      } catch (err) { if (err === _interrupt) m2.delete(v);  throw err }
     },
   },
   directCall:{
@@ -2607,20 +2633,23 @@ Technical notes:
 Array data gets its head consulted (but not recursively). A function acts like a concept that defined \`call\` as that function. A JS object with a Map \`.defines\` consults that map with Code as the key, and if not present, consults its \`overrides\` override (which should be a function from a Code key to the override).
 In a JS function that uses \`call\`/\`finish\` to call another function and ignore its override, check the override of \`overrides\` still, to materialize the inner conceptual structure only on demand.`,
     call(data, code, auto = false) {
-      const vc = _view(code)
-      if (auto && vc instanceof Map && vc.get(_manualConcepts) === true) code = overrides
-        // For `at`, this will change our check to something undesirable…
-
       if (code === call && typeof data == 'function') return data
       if (code === call && _isArray(data) && typeof data[0] == 'function') return data[0]
 
+      const vc = _view(code)
+      //if (auto && vc instanceof Map && vc.get(_manualView) === true) code = overrides
+
       let d = _view(data)
-      if (d === undefined) return
+      if (d == null) return
       if (d instanceof Map) {
-        if (d.has(code)) return d.get(code)
-        if (code !== overrides && (d = d.get(overrides)) !== undefined) // c c:(concept c) leads to infinite recursion.
-          return typeof d == 'function' ? d.call(data, code) : directCall(array(d, code))
-        return
+        //console.log(code, serialize.backctx.get(code))
+        //if (code === overrides) console.log('uhhhh', data)
+        if (code !== overrides && d.has(code)) return d.get(code)
+        let over
+        if (/*code !== overrides && */(over = d.get(overrides)) !== undefined) // c c:(concept c) leads to infinite recursion.
+          return /*console.log(over), */typeof over == 'function' ? over.call(data, code) : directCall(array(over, code))
+        //if (code === overrides && d.has(code)) return d.get(code)
+        return //console.log('NONE', code, serialize.backctx.get(code), data, serialize.backctx.get(data))
       }
       throw "Unrecognized .defines; should be either undefined or a Map."
     },
@@ -2633,9 +2662,9 @@ In a JS function that uses \`call\`/\`finish\` to call another function and igno
 
       return data.defines
     },
-    _manualConcepts:true,
+    _manualView:true,
   },
-  _manualConcepts:{txt:`A marker on Code that conceptual checks should check not overrides of Code, but overrides of \`overrides\` (to still allow arbitrary global rewrites, without functions needing to check for that).`},
+  _manualView:{txt:`A marker on Code that conceptual checks should check not overrides of Code, but overrides of \`overrides\` (to still allow arbitrary global rewrites, without functions needing to check for that).`},
   _getOverrideResult(over, whole) {
     // Execute the override returned from `overrides`.
     // No _use.
@@ -2682,7 +2711,6 @@ Concepts come from dynamic languages like JS or Python, where most functions end
       [`(+ 2 (concept (map + (func a 3))))`, `3`],
     ],
     overrides(f) { if (_isArray(this) && this[0] === concept) return directCall(array(this[1], f)) },
-    philosophy:`Concepts make the language practically un-compilable in the general case. This is analogous to the no-free-lunch theorem in optimization: no optimization works universally, so if the execution model is un-optimizable, that means it's perfectly general. Performance can eventually be regained for specific cases, but doing things properly is extremely hard, since this way pushes back hard at first.`,
   },
 
 
@@ -2783,7 +2811,7 @@ Used by serialization.`,
     },
     call(v) {
       if (_isArray(v)) return v.slice()
-      if (typeof v == 'symbol') return [symbol]
+      if (typeof v == 'symbol') return [_var]
       if (v instanceof Map) {
         const arr = [map]
         v.forEach((v,k) => arr.push(quote(k), quote(v)))
@@ -2802,12 +2830,9 @@ Used by serialization.`,
         return [concept, new Map([[txt, `A marker that represents the lack of a conceptual override.`]])]
       if (!v || typeof v != 'object')
         return v
-      if (true) {
-        const arr = [map]
-        Object.keys(v).forEach(k => arr.push(k, quote(v[k])))
-        return arr
-      }
-      throw new Error("unknown value to deconstruct")
+      const arr = [map]
+      Object.keys(v).forEach(k => arr.push(k, quote(v[k])))
+      return arr
     },
   },
   _unevalFunction(f) {
@@ -2817,19 +2842,22 @@ Used by serialization.`,
     let src = (''+f).split('\n')
     const ws = /^\s*/.exec(src[src.length-1])[0]
     src = src.map(line => line.replace(ws, '')).join('\n')
+    src = src.replace(/^[_a-zA-Z]+/, '')
+    try { Function('('+src+')') }
+    catch (err) { src = 'function'+src }
 
     return ctx !== undefined ? array(_jsEval, src, ctx) : array(_jsEval, src)
   },
-  ['js.eval']:{
-    txt: `Finished (\`js.eval\` Source Ctx): evaluates (strict-mode) JS source code that can statically reference values of Ctx (a map) with JS-identifier keys.`,
+  ['_jsEval']:{
+    txt: `Finished (_jsEval Source Ctx): evaluates (strict-mode) JS source code that can statically reference values of Ctx (a map) with JS-identifier keys.`,
     examples: [
-      [`(\`js.eval\` '(x) { return x+5 }') 5`, `10`],
-      [`(\`js.eval\` '(x) { return x+a+5 }' (map 'a' 10)) 5`, `20`],
-      [`(\`js.eval\` 'b=>a+b' (map 'a' 'q')) 'w'`, `'qw'`],
-      [`(\`js.eval\` 'b=>a(12)+b' (map 'a' (\`js.eval\` 'x=>x' (map)))) 'w'`, `'12w'`],
-      [`\`js.eval\` 'a(12)+13' (map 'a' (\`js.eval\` 'x=>x' (map)))`, `25`],
-      [`( \`js.eval\` '(x) { return x+a()+b+5 }' (map 'b' 1 'a' (\`js.eval\` 'x=>b' (map 'b' (\`js.eval\` '10')))) ) 0`, `16`],
-      [`( \`js.eval\` '(x) { return x+a()+5 }' (map 'a' (\`js.eval\` 'x=>a' (map 'a' (\`js.eval\` '10')))) ) 0`, `15`],
+      [`(_jsEval '(x) { return x+5 }') 5`, `10`],
+      [`(_jsEval '(x) { return x+a+5 }' (map 'a' 10)) 5`, `20`],
+      [`(_jsEval 'b=>a+b' (map 'a' 'q')) 'w'`, `'qw'`],
+      [`(_jsEval 'b=>a(12)+b' (map 'a' (_jsEval 'x=>x' (map)))) 'w'`, `'12w'`],
+      [`_jsEval 'a(12)+13' (map 'a' (_jsEval 'x=>x' (map)))`, `25`],
+      [`( _jsEval '(x) { return x+a()+b+5 }' (map 'b' 1 'a' (_jsEval 'x=>b' (map 'b' (_jsEval '10')))) ) 0`, `16`],
+      [`( _jsEval '(x) { return x+a()+5 }' (map 'a' (_jsEval 'x=>a' (map 'a' (_jsEval '10')))) ) 0`, `15`],
     ],
     finish(src, ctx) {
       // Finish ctx (with arbitrary dependencies) ourselves.
@@ -3004,7 +3032,12 @@ Used by serialization.`,
       return linked
     },
   },
-  _jsEval:Symbol('js.eval'),
+  js:{
+    txt:`A namespace of everything pertaining to the host language, JavaScript.`,
+    at:{
+      eval:Symbol('_jsEval'),
+    },
+  },
 
 
 
@@ -3017,17 +3050,14 @@ Used by serialization.`,
 
     // Run all examples to make sure that they indeed evaluate to what we have specified.
     parse.ctx.forEach(v => {
-      let r = overrides(v, examples)
-      if (r !== undefined) {
-        r = _getOverrideResult(r, array(examples, v))
-        if (_isArray(r))
-          r.forEach(a => {
-            if (!_isArray(a)) return
-            const [code, becomes] = a
-            if (typeof code != 'string' || typeof becomes != 'string') return
-            eq(code, becomes)
-          })
-      }
+      const r = _getDataOverride(v, examples)
+      if (_isArray(r))
+        r.forEach(a => {
+          if (!_isArray(a)) return
+          const [code, becomes] = a
+          if (typeof code != 'string' || typeof becomes != 'string') return
+          eq(code, becomes)
+        })
     })
 
     function eq(a,b) {
@@ -3194,8 +3224,9 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
           copy = array(bound, x, ctx)
           unenv.set(x, copy)
           for (let i = 0; i < ch.length; ++i) {
-            const name = nameAllocator(ch[i], 0)
-            if (currentAncestors.has(name)) throw "Name is not unique: "+name
+            let name
+            do { name = nameAllocator(ch[i], 0) }
+            while (currentAncestors.has(name))
             currentAncestors.add(name)
             names.set(ch[i], name)
           }
@@ -3263,7 +3294,7 @@ Indicates a bug in code, and is intended to be presented to the user.`,
   _funcPlaceholder:{},
   closure:{
     txt: `(closure Function): makes Function into a closure — names existing in a containing function will be bound by the outer function when a closure is created.
-With binding, the actual definition can be outside of the function (particularly if equal-structure closures in different functions are merged) (even though the interface copies closure definitions into each serialized-to-DOM case), so actually separating closures semantically is required. \`symbol\` can be used to highlight the same symbol on parsing.
+With binding, the actual definition can be outside of the function (particularly if equal-structure closures in different functions are merged) (even though the interface copies closure definitions into each serialized-to-DOM case), so actually separating closures semantically is required. \`var\` can be used to highlight the same variable on parsing.
 Uses \`bound\`, and partially-evaluates the result before returning.
 Can be written as \`!Function\`.`,
     examples: [
@@ -3362,7 +3393,7 @@ Serialization pretends that these are \`(func …)\`.`,
             return r
         if (b === undefined) return assigned
         const result = _use(finish(b))
-        if (_isError(result)) return assigned
+        if (_isError(result)) return result
         if ((r = overrides(result, overrides)) !== undefined)
           if ((r = _getOverrideResult(r, array(_withEnv, labels, quote(assigned), quote(result)))) !== undefined)
             return r
@@ -3380,15 +3411,15 @@ Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` i
       if (this !== assign) return error
       a = _use(a)
       if (_isArray(a) && a[0] === quote) a = a[1]
-      if (_isLabel(a) || typeof a == 'symbol' || _isArray(a) && a[0] === symbol && a.length == 1)
-        return b // Allow a kind of unification, by having labels be allowed in both positions.
-      if (_isLabel(a) || typeof a == 'symbol' || _isArray(a) && a[0] === symbol && a.length == 1) {
+      if (_isLabel(a) || typeof a == 'symbol' || _isArray(a) && a[0] === _var && a.length == 1) {
         // Set the value in the current label-environment.
         const m = finish.env.get(label)
         const to = _isLabel(a) ? a[1] : a
         if (!m.has(to)) return m.set(to, b), b
         else return m.set(to, call(array(assign, m.get(to), b)))
       }
+      if (_isLabel(b) || typeof b == 'symbol' || _isArray(b) && b[0] === _var && b.length == 1)
+        return b // Allow a kind of unification, by having labels be allowed in both positions.
       b = _use(b)
       if (_isArray(b) && b[0] === quote) b = b[1]
       if (a === b) return a
@@ -3981,6 +4012,374 @@ Should probably accept a Language parameter, and check the override of \`parse\`
       return [b, newCtx, styled]
     },
   },
+
+
+
+
+
+
+  _specialParsedValue:{txt:`When matched in \`parse\`, represents a value that should be preserved as-is (as it likely comes from a special DOM element/reference).`},
+
+  _basicNotMatching(match, u, j, illegal) {
+    // Parses the input string until a character that matches `illegal`.
+    if (j !== undefined) {
+      // parse; u is the parsed string.
+      const i = j
+      while (j < u.length && !illegal.test(u[j])) ++j
+      match(j)
+      if (i >= j) return
+      return u.slice(i,j)
+    }
+    // emit; u is the string to emit (the result of parsing).
+    if (typeof u != 'string' || illegal.test(u)) throw "Invalid non-illegal usage"
+    match(u)
+  },
+
+  _basicLabel(match, u, i) { // a, qwer, ^a^; 12, 1e6
+    const illegal = /[:\s\(\)→>\+\+\*\/\.\ue000-\uf8ff]/
+    const quote = '^'
+    if (i !== undefined) {
+      const r = _basicQuoted(match, u, i, quote)
+      if (r !== undefined) return array(label, r)
+
+      const n = _basicNotMatching(match, u, i, illegal)
+      if (n === undefined) return
+      return +n === +n || n === 'NaN' ? +n : array(label, n)
+    }
+    if (typeof u == 'number') match(''+u)
+    else if (_isArray(u) && u[0] === label && typeof u[1] == 'string' && u.length == 2) {
+      match(illegal.test(u[1]) ? u[1] : _basicQuoted(match, u[1], undefined, quote))
+    } else throw "Invalid label"
+  },
+
+  _basicQuoted(match, u, i, quote = "'") { // '...''...' with any quote character.
+    if (i !== undefined) {
+      if (typeof quote != 'string' || quote.length != 1) throw "Quote length must be 1"
+      if (u[i] === quote) {
+        const start = ++i
+        while (i < u.length && (u[i] !== quote || u[i+1] === quote))
+          i += u[i] === quote && u[i+1] === quote ? 2 : 1
+        if (i === u.length) match(i), match.notEnoughInfo('Unclosed quoted-with-'+quote+' character sequence')
+        let s = u.slice(start, i++)
+        match(i)
+        if (s.indexOf(quote+quote)>=0) s = s.split(quote+quote).join(quote)
+        return s
+      }
+    }
+    // Double the quotes inside, and return quoted.
+    if (typeof u != 'string') throw "Expected a string"
+    if (u.indexOf(quote) < 0) return quote + u + quote
+    return match(quote + u.split(quote).join(quote+quote) + quote)
+  },
+
+  _basicString(match, u, i) { // '...''...' or "...""..."
+    if (i !== undefined) {
+      const r = _basicQuoted(match, u, i, '"')
+      return r !== undefined ? r : (match(i), _basicQuoted(match, u, i, "'"))
+    }
+    // Unquote with both quotes, and return the min-length one.
+    const a = _basicQuoted(match, u, undefined, '"')
+    const b = _basicQuoted(match, u, undefined, "'")
+    match(a.length < b.length ? a : b)
+  },
+
+  _basicExtracted(match, u, i, value) { // c:x
+    if (i !== undefined) {
+      const key = match(value)
+      if (key !== undefined && match(':')) {
+        match(/\s+/y)
+        const v = match(value)
+        v === undefined && match.notEnoughInfo("Expected an actual value to be extracted")
+        return [_extracted, key, v]
+      } else return key
+    }
+    if (_isArray(u) && u[0] === _extracted && u.length == 3)
+      match(value, u[1]), match(':'), match(value, u[2])
+    else match(value, u)
+  },
+
+  _basicMany(match, u, i, value) { // a b c c:x
+    if (i !== undefined) {
+      const arr = []
+      let ctx
+      while (true) {
+        match(/\s+/y)
+        const v = match(_basicExtracted, value)
+        if (v === undefined) break
+        if (_isArray(v) && v[0] === _extracted)
+          (ctx || (ctx = new Map)).set(_isLabel(v[1]) ? v[1][1] : v[1], v[2])
+        else arr.push(v)
+      }
+      if (ctx) return array(bound, arr, ctx)
+      return arr
+    }
+    if (!_isArray(u)) throw "Must be an array"
+    let ctx
+    if (_isArray(u) && u[0] === bound && u.length == 3 && u[2] instanceof Map)
+      ctx = u[2], u = u[1]
+    let b = false
+    for (let j = 0; j < u.length; ++j) {
+      b ? match(' ') : (b = true)
+      match(_basicExtracted, u[j], value)
+    }
+    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], value)))
+  },
+
+  _basicCall(match, u, i, value) { // (a b c c:x)
+    if (i !== undefined) {
+      if (!match('(')) return
+      const arr = _basicMany(match, value)
+      if (!match(')')) match.notEnoughInfo('Expected a closing bracket')
+      return arr
+    }
+    if (!_isArray(u)) throw "A call must be an array"
+    match('('), match(_basicMany, u, value), match(')')
+  },
+
+  _basicValue(match, u, i, call, value) { // String or label or call.
+    if (i !== undefined) {
+      let r
+      if ((r = match(_specialParsedValue)) !== undefined) return r
+      if ((r = match(_basicString)) !== undefined) return r
+      if ((r = match(_basicLabel)) !== undefined) return r
+      if ((r = match(call, value)) !== undefined) return r
+      return
+    }
+    if (u === _specialParsedValue)
+      match(u)
+    else if (typeof u == 'string')
+      match(_basicString, u)
+    else if (typeof u == 'number')
+      match(_basicLabel, u)
+    else if (_isLabel(u))
+      match(_basicLabel, u[1])
+    else if (_isArray(u))
+      match(call, u, value)
+    else throw "Invalid value"
+  },
+
+  _emAt(match, u, i) { // obj.key
+    if (i !== undefined) {
+      let obj = match(_basicValue, _basicCall, _emClosure)
+      if (obj === undefined) return
+      while (match('.')) {
+        let key = match(_basicLabel)
+        if (key === undefined) obj = array(at, obj)
+        else obj = array(at, obj, _isLabel(key) ? key[1] : key)
+      }
+      return obj
+    }
+    if (_isArray(u) && u[0] === at && (u[2] === undefined || typeof u[2] == 'number' || typeof u[2] == 'string')) {
+      _emAt(match, u[1]), match('.')
+      if (u[2] !== undefined) match(_basicLabel, typeof u[2] == 'string' ? [label, u[2]] : u[2])
+    } else match(_basicValue, u, _basicCall, _emClosure)
+  },
+
+  _emRest(match, u, i) { // …a, ...a; `a
+    if (i !== undefined) {
+      if (match('…') || match('...')) {
+        const r = match(_emRest)
+        r === undefined && match.notEnoughInfo('Expected the rest')
+        return array(rest, r)
+      }
+      if (match('`')) {
+        const r = match(_emRest)
+        r === undefined && match.notEnoughInfo('Expected the quoted value')
+        return array(quote, r)
+      }
+      return match(_emAt)
+    }
+    if (_isArray(u) && u[0] === rest && u.length == 2)
+      match('…'), match(_emRest, u[1])
+      if (_isArray(u) && u[0] === quote && u.length == 2)
+        match('`'), match(_emRest, u[1])
+    else match(_emAt, u)
+  },
+
+  _emSumSub(match, u, i) { // a+b, a-b
+    if (i !== undefined) {
+      let a = match(_emRest), op
+      if (a === undefined) return
+      while (op = match(/\s*(?:\+|-)/y)) {
+        match(/\s+/y)
+        const b = match(_emClosure)
+        b === undefined && match.notEnoughInfo('Expected the second arg of +')
+        a = array(op.trim() === '+' ? _plus : _minus, a, b)
+      }
+      return a
+    }
+    if (_isArray(u) && u[0] === _plus && u.length == 3)
+      match(_emRest, u[1]), match('+'), match(_emClosure, u[2])
+    else if (_isArray(u) && u[0] === _minus && u.length == 3)
+      match(_emRest, u[1]), match('-'), match(_emClosure, u[2])
+    else match(_emRest, u)
+  },
+
+  _emMultDiv(match, u, i) { // a*b, a/b
+    if (i !== undefined) {
+      let a = match(_emSumSub), op
+      if (a === undefined) return
+      while (op = match(/\s*(?:\*|\/)/y)) {
+        match(/\s+/y)
+        const b = match(_emClosure)
+        b === undefined && match.notEnoughInfo('Expected the second arg of +')
+        a = array(op.trim() === '*' ? _star : _slash, a, b)
+      }
+      return a
+    }
+    if (_isArray(u) && u[0] === _star && u.length == 3)
+      match(_emSumSub, u[1]), match('*'), match(_emClosure, u[2])
+    else if (_isArray(u) && u[0] === _slash && u.length == 3)
+      match(_emSumSub, u[1]), match('/'), match(_emClosure, u[2])
+    else match(_emSumSub, u)
+  },
+
+  _emArrowFunc(match, u, i) { // a→b, a->b
+    if (i !== undefined) {
+      const a = match(_emMultDiv)
+      if (a === undefined) return
+      if (match(/\s*(?:→|->)/y)) {
+        match(/\s+/y)
+        const b = match(_emClosure)
+        b === undefined && match.notEnoughInfo('Expected the body of an arrow function')
+        return array(func, a, b)
+      } else return a
+    }
+    if (_isArray(u) && u[0] === func && u.length == 3)
+      match(_emMultDiv, u[1]), match('→'), match(_emClosure, u[2])
+    else match(_emMultDiv, u)
+  },
+
+  _emClosure(match, u, i) { // !f, !a→b
+    if (i !== undefined) {
+      if (match('!')) {
+        const r = match(_emArrowFunc)
+        return r !== undefined ? array(closure, r) : undefined
+      }
+      return match(_emArrowFunc)
+    }
+    if (_isArray(u) && u[0] === closure && u.length == 2)
+      match('!'), match(_emArrowFunc, u[1])
+    else match(_emArrowFunc, u)
+  },
+
+  _emTopLevel(match, u, i) { // (f);  a b c c:x
+    if (i !== undefined) {
+      const arr = _basicMany(match, u, i, _emClosure)
+      match(/\s+/y)
+      if (!arr.length) match.notEnoughInfo("No value at top level")
+      if (arr.length == 1) return arr[0]
+      return arr
+    }
+    return _basicMany(match, arr.length <= 1 ? [arr] : arr, undefined, _emClosure)
+  },
+
+  _basicTopLevel(match, u, i) { // (f);  a b c c:x
+    const value = (match, u, i) => _basicValue(match, u, i, _basicCall, value)
+    if (i !== undefined) {
+      const arr = _basicMany(match, u, i, value)
+      match(/\s+/y)
+      if (!arr.length) match.notEnoughInfo("No value at top level")
+      if (arr.length == 1) return arr[0]
+      return arr
+    }
+    return _basicMany(match, arr.length <= 1 ? [arr] : arr, undefined, value)
+  },
+
+  basic:{
+    txt:`A language for ordered-edge-list graphs. label, ^label^, 'string', "string", (0 1), (a:2 a).
+Machinery to use this is currently unimplemented.`,
+    parse:Symbol('_basicTopLevel'),
+      // Needed additions:
+        // Get text content of a node ourselves (not with .innerText), preserving .special=… DOM elements; make the parsed string into an array.
+        // Still pass a string as `u` to matched functions (and properly-adjusted `i`), but also allow matching _specialParsedValue (that can advance the passed string).
+        // Allow index-gotos to go to arbitrary locations (with a non-adjusted index), counting special DOM elements as 1-length.
+    serialize:Symbol('_basicTopLevel'),
+      // Needed:
+        // Pass in the match function. It can use a string (to emit that into the current structural array) or a function with unbound value and two args x,y (to do `f(match, u, undefined, x, y)`).
+        // Then basically style and/or pretty-print as needed. (Maybe extract `style` into a separate function?)
+    // And what about styling, what to override for that?
+  },
+
+  embellished:{
+    txt:`A language for ordered-edge-list graphs (\`basic\`) with some syntactic conveniences. label, ^label^, 'string', "string", (0 1), (a:2 a); 1+2, a→a*2.
+Machinery to use this is currently unimplemented.`,
+    parse:Symbol('_emTopLevel'),
+    serialize:Symbol('_emTopLevel'),
+    // And what about styling, what to override for that?
+  },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  __populate:{
+    txt:`Store 4 values in tmp at a time, up to the interrupt's state length.
+\`...args\` in JS allocates, so this way tries to avoid that.
+Only use when returned from _interrupt, and immediately.`,
+    call(a,b,c,d) {
+      const tmp = _interrupt.tmp
+      let index = tmp[tmp.length-1]
+      if (index < tmp.length-1) tmp[index++] = a
+      if (index < tmp.length-1) tmp[index++] = b
+      if (index < tmp.length-1) tmp[index++] = c
+      if (index < tmp.length-1) tmp[index++] = d
+      if (index >= tmp.length-1) {
+        if (!finish.env) return
+        if (!finish.env.has(_interrupt)) finish.env.set(_interrupt, [])
+        const stack = finish.env.get(_interrupt)
+        tmp.pop(), stack.push(...tmp), stack.push(tmp.length), tmp.length = 0
+      } else
+        return tmp[tmp.length-1] = index, __populate
+    },
+    _manualView:true, _impure:true,
+  },
+  _interrupt:{
+    txt:`Used to make functions re-entrant, in a non-interruptible language.
+\`throw _interrupt\` to interrupt execution.
+Create function state like \`let [i = 0, j = 0] = _interrupt()\`.
+Wrap function body in \`try{…}catch(err){ if (err === _interrupt) err(2)(i,j) }\`. See \`__populate\` for reasoning behind this.
+`,
+    future:[
+      `Make all functions (that call \`call\`/\`finish\` or are them, and have state and likely a loop) use this.`,
+      `Then, add "interrupt when taking too long" functionality to \`call\`.`,
+    ],
+    call(len = undefined) {
+      if (!_interrupt.tmp) _interrupt.tmp = []
+      const tmp = _interrupt.tmp
+      if (len === undefined) {
+        // Collect items from the stack into tmp and return it.
+        if (!finish.env || !finish.env.has(_interrupt)) return tmp.length = 0, tmp
+        const stack = finish.env.get(_interrupt)
+        if (!stack.length) return tmp.length = 0, tmp
+        const end = stack.length-1
+        const length = stack[end]
+        tmp.length = length
+        const start = end - length
+        for (let i = start; i < end; ++i)
+        tmp[i - start] = stack[i]
+        stack.length -= length+1
+        return tmp
+      }
+      // Return a function that stores 4 values at a time, up to len.
+      if (typeof len != 'number') throw "Must be a number"
+      tmp.length = len+1
+      tmp[len] = 0
+      return __populate
+    },
+    _manualView:true, _impure:true,
+  },
+
+
 
 
 })
