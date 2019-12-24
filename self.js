@@ -8,6 +8,17 @@
 'use strict';
 
 
+(typeof self !== ''+void 0 ? self : typeof global !== ''+void 0 ? global : window).is = name => {
+  // A way to provide backpatchable labels that will be linked. An implementation detail.
+  if (!is.cache) is.cache = Object.create(null)
+  if (typeof name == 'string' && is.cache[name]) return is.cache[name]
+  const obj = Object.create(is)
+  if (typeof name == 'string') is.cache[name] = obj
+  obj.is = name
+  return obj
+}
+
+
 (function(net) {
   const globals = typeof self !== ''+void 0 ? self : typeof global !== ''+void 0 ? global : window
   const env = new Map
@@ -15,6 +26,7 @@
   // preload is for easier lookups. load is basically a copy of `bound` with a little notational convenience stuff thrown in.
   preload(net, globals)
   load(net, globals, true)
+  delete globals.is
 
   //net.env.js = [], net.env.bin = new WebAssembly.Memory({ initial:64 }), net.env.accessor = new Int32Array(net.env.bin.buffer), net.env.at = 0
 
@@ -38,9 +50,13 @@
       if (into[k] !== from[k]) into[k] = from[k]
     })
     Object.keys(from).forEach(k => {
-      if (typeof from[k] == 'symbol') {
-        if (!(from[k].description in net)) throw "Not a link to an existing thing: "+from[k]
-        from[k] = into[k] = into[from[k].description]
+      if (from[k] && Object.getPrototypeOf(from[k]) == is) {
+        if (Array.isArray(from[k].is)) { // Evaluate arrays.
+          const m = from[k].is.map(load)
+          return from[k] = into[k] = m[0].call(...m)
+        }
+        if (!(from[k].is in net)) throw "Not a link to an existing thing: "+from[k]
+        from[k] = into[k] = into[from[k].is]
       }
     })
   }
@@ -49,10 +65,11 @@
 
     // Cache to prevent cycles from referring to old not-loaded versions of objects.
     if (env.has(from)) return env.get(from)
-    if (typeof from == 'symbol') {
+    if (from && Object.getPrototypeOf(from) == is) {
       // Look up symbols in the network.
-      if (!(from.description in net)) throw "Not a link to an existing thing: "+from.description
-      return load(net[from.description])
+      if (Array.isArray(from.is)) return from = from.is.map(load), from[0].call(...from)
+      if (!(from.is in net)) throw "Not a link to an existing thing: "+from.name
+      return load(net[from.is])
     }
     if (from && Object.getPrototypeOf(from) === Object.prototype) {
       // Load object values: turn {…} into {defines:new Map([…])}, as a notational convenience.
@@ -63,7 +80,7 @@
         const m = new Map
         into.defines = m
         for (let key of Object.keys(from)) {
-          const k = load(Symbol(key))
+          const k = load(is(key))
           m.set(k, load(from[key], undefined, k === globals.at))
         }
         return into.defines = m, into
@@ -106,7 +123,6 @@ For string keys, can be written as \`obj.key\`.`,
       [`Self.at`, `at`],
     ],
     call(m,k) {
-      if (this !== at) return
       if (overrides(m, at)) m = overrides(m, at)
       m = _use(m), k = _use(k)
       if (m instanceof Map) return k !== undefined ? (m.get(k) !== undefined ? m.get(k) : notFound) : [...m.keys()]
@@ -182,7 +198,7 @@ Project page: https://github.com/Antipurity/conceptual`,
               let end = (s[s.length-1].textContent || s[s.length-1]) === ')' ? s.length-1 : s.length-2
               const rows = []
               for (i = start; i < end; ) {
-                if (i + 4 >= s.length) break
+                if (i + 4 > s.length) break
                 if ((s[i].textContent || s[i]).trim()) break
                 if ((s[i+2].textContent || s[i+2]).trim()) break
                 const k = s[i + 1]
@@ -224,7 +240,7 @@ Project page: https://github.com/Antipurity/conceptual`,
             let end = (s[s.length-1].textContent || s[s.length-1]) === ')' ? s.length-1 : s.length-2
             const rows = []
             for (i = start; i < end; ) {
-              if (i + 4 >= s.length) break
+              if (i + 4 > s.length) break
               if ((s[i].textContent || s[i]).trim()) break
               if ((s[i+2].textContent || s[i+2]).trim()) break
               const k = s[i + 1]
@@ -462,7 +478,7 @@ Makes no attempt to correct for the memory-to-measure, \`(_memorySince (_memoryS
     nameResult: ['resultAndElapsed'],
     _impure:true,
     finish(x, add = 0) {
-      if (this !== time) return
+      if (typeof this == 'function') return
       const start = _timeSince()
       const v = _use(finish(x))
       if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _timeSince(start)), ...v.slice(2))
@@ -474,7 +490,7 @@ Makes no attempt to correct for the memory-to-measure, \`(_memorySince (_memoryS
     nameResult: ['resultAndIncrease'],
     _impure:true,
     finish(x, add = 0) {
-      if (this !== memory) return
+      if (typeof this == 'function') return
       const start = _memorySince()
       const v = _use(finish(x))
       if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _memorySince(start)), ...v.slice(2))
@@ -487,7 +503,6 @@ Does not count time spent in interruptions (between executions of Expr) as part 
     nameResult: ['elapsed', 'ms'],
     _impure:true,
     call(x, add = 0) {
-      if (this !== time) return
       const start = _timeSince()
       const v = _use(finish(x))
       if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _timeSince(start)), ...v.slice(2))
@@ -500,7 +515,6 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     nameResult: ['increase', 'bytes'],
     _impure:true,
     call(x, add = 0) {
-      if (this !== memory) return
       const start = _memorySince()
       const v = _use(finish(x))
       if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _memorySince(start)), ...v.slice(2))
@@ -509,30 +523,30 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   },
 
 
-  least:{
-    txt: `((least Function) A B): returns either A or B, whichever has the least measure.`,
-    call(a,b) {
-      if (!_isArray(this) || this[0] !== least) return
-      if (this.length != 2) return error
-      const am = call(array(this[1], a)), bm = call(array(this[1], b))
-      const r = _use(call(array(less, am, bm)))
-      if (r === false) return b
-      if (r === true) return a
-      return finish(array(pick, r, b, a))
-    },
-  },
-  most:{
-    txt: `((most Function) A B): returns either A or B, whichever has the most measure.`,
-    call(a,b) {
-      if (!_isArray(this) || this[0] !== most) return
-      if (this.length != 2) return error
-      const am = call(array(this[1], a)), bm = call(array(this[1], b))
-      const r = _use(call(array(less, am, bm)))
-      if (r === false) return a
-      if (r === true) return b
-      return finish(array(pick, r, a, b))
-    },
-  },
+  // least:{
+  //   txt: `((least Function) A B): returns either A or B, whichever has the least measure.`,
+  //   call(a,b) {
+  //     if (!_isArray(this) || this[0] !== least) return
+  //     if (this.length != 2) return error
+  //     const am = call(array(this[1], a)), bm = call(array(this[1], b))
+  //     const r = _use(call(array(less, am, bm)))
+  //     if (r === false) return b
+  //     if (r === true) return a
+  //     return finish(array(pick, r, b, a))
+  //   },
+  // },
+  // most:{
+  //   txt: `((most Function) A B): returns either A or B, whichever has the most measure.`,
+  //   call(a,b) {
+  //     if (!_isArray(this) || this[0] !== most) return
+  //     if (this.length != 2) return error
+  //     const am = call(array(this[1], a)), bm = call(array(this[1], b))
+  //     const r = _use(call(array(less, am, bm)))
+  //     if (r === false) return a
+  //     if (r === true) return b
+  //     return finish(array(pick, r, a, b))
+  //   },
+  // },
 
   _isArray(a) { return Array.isArray(a) },
   stopIteration:{
@@ -548,7 +562,6 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     ],
     nameResult: ['reduced'],
     call(a, f, initial) {
-      if (this !== reduce) return
       if (!_isArray(a)) return a
       let result = initial
       for (let i = 0; i < a.length; ++i) {
@@ -575,7 +588,6 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     ],
     nameResult: ['transformed', 'mapped'],
     call(a,f) {
-      if (this !== transform) return
       if (!_isArray(a)) return call(array(f, a))
       const result = []
       for (let i = 0; i < a.length; ++i) {
@@ -606,7 +618,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   f64:{
     txt: `(f64 …Strings)⇒Number: converts a string to a 64-bit float, broadcasted if an array.`,
     nameResult: ['float'],
-    call(...s) { if (this === f64) return _toNumber(s) },
+    call(...s) { return _toNumber(s) },
   },
   less:{
     txt: `(less Number1 Number2)⇒Bool: returns true if Number1 is less than Number2, or false otherwise.`,
@@ -637,53 +649,51 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   broadcasted:{
     txt: `(broadcasted Function): creates a function that is broadcasted over array arguments (\`((broadcasted Func) …Args)\`). No array inputs means just applying Function; having array inputs means returning an array of applying (broadcasted Function) to each element, with the same index for all arguments, using the last element if out-of-bounds for an argument, and non-array inputs treated as arrays of length 1.`,
-    call(...args) {
-      const f = _use(this)
-      if (!_isArray(f) || (f[0] = _use(f[0])) !== broadcasted) return
-      for (let i = 1; i < f.length; ++i) f[i] = _use(f[i])
-      for (let i = 0; i < args.length; ++i) args[i] = _use(args[i])
+    call(fun) {
+      const decorated = function decorated(...args) {
+        // Just apply the function if there are no arrays.
+        if (!args.some(_isArray)) return call(array(fun, ...args))
 
-      // Just apply the function if there are no arrays.
-      let noArrays = true
-      for (let i = 0; i < args.length; ++i) if (_isArray(args[i])) { noArrays = false; break }
-      if (noArrays) return call(array(f[1], ...args))
-
-      let maxLen = 1
-      for (let i = 0; i < args.length; ++i)
-        if (_isArray(args[i])) {
-          if (!args[i].length) return args[i]
-          maxLen = Math.max(maxLen, args[i].length)
+        let maxLen = 1
+        for (let i = 0; i < args.length; ++i)
+          if (_isArray(args[i])) {
+            if (!args[i].length) return args[i]
+            maxLen = Math.max(maxLen, args[i].length)
+          }
+        const results = [], argsSlice = args.slice()
+        for (let k = 0; k < maxLen; ++k) {
+          // Apply f to a slice of args.
+          for (let i = 0; i < args.length; ++i) {
+            const el = args[i]
+            argsSlice[i] = _use(!_isArray(el) ? el : k < el.length ? el[k] : el[el.length-1])
+          }
+          results.push(call(array(decorated, ...argsSlice)))
+            // We probably don't even want to cache. But whatever, this works, *and* is maximally correct.
         }
-      const results = [], argsSlice = args.slice()
-      for (let k = 0; k < maxLen; ++k) {
-        // Apply f to a slice of args.
-        for (let i = 0; i < args.length; ++i) {
-          const el = args[i]
-          argsSlice[i] = _use(!_isArray(el) ? el : k < el.length ? el[k] : el[el.length-1])
-        }
-        results.push(call(array(f, ...argsSlice)))
-          // We probably don't even want to cache. But whatever, this works, *and* is maximally correct.
+        // Slice off superfluous end results.
+        while (results.length > 1 && results[results.length-2] === results[results.length-1]) results.pop()
+        return results.length === 1 && !_isArray(results[0]) ? results[0] : results
       }
-      // Slice off superfluous end results.
-      while (results.length > 1 && results[results.length-2] === results[results.length-1]) results.pop()
-      return results.length === 1 && !_isArray(results[0]) ? results[0] : results
+      decorated.defines = new Map
+      decorated.defines.set(deconstruct, () => array(broadcasted, fun))
+      return decorated
     },
   },
 
 
-  ['+']:[Symbol('broadcasted'), Symbol('_sum')],
-  ['*']:[Symbol('broadcasted'), Symbol('_mult')],
+  ['+']:is([is('broadcasted'), is('_sum')]),
+  ['*']:is([is('broadcasted'), is('_mult')]),
   _sum(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a + b },
   _mult(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a * b },
-  _plus:Symbol('+'),
-  _star:Symbol('*'),
+  _plus:is('+'),
+  _star:is('*'),
 
-  ['-']:[Symbol('broadcasted'), Symbol('_subtract')],
-  ['/']:[Symbol('broadcasted'), Symbol('_divide')],
+  ['-']:is([is('broadcasted'), is('_subtract')]),
+  ['/']:is([is('broadcasted'), is('_divide')]),
   _subtract(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a - b },
   _divide(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a / b },
-  _minus:Symbol('-'),
-  _slash:Symbol('/'),
+  _minus:is('-'),
+  _slash:is('/'),
 
 
 
@@ -704,7 +714,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   _Browser:{
     future:[
       `A custom DOM context menu, with overridable-by-value contents (and collapsing for all, copy-contents for strings, showing bound value and renaming for labels).`,
-      `Some flavor of clicking (Ctrl+click? Alt+click?) to insert a reference to a value into REPL input (not really serializable, runtime-only).`,
+      `Some flavor of clicking (Shift+click?) to insert a reference to a value into REPL input (not really serializable, runtime-only).`,
       `Have _cameFrom(to, from) and call it from bound (and recording of _deferred/_unknown). Have \`finish\` highlight the currently-executing original (throttled).`,
     ],
     call() {
@@ -793,6 +803,10 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       }, .05))
       .observe(document.body, { childList:true, subtree:true })
 
+      // On resize, update the "all-or-nothing" line-break-ingness of <node>s.
+      let width = innerWidth
+      addEventListener('resize', _throttled(() => width !== innerWidth ? _updateBroken(document.body) : (width = innerWidth)), .1)
+
       // Create a REPL.
       const env = finish.env = _newExecutionEnv()
       finish.env.set(log, document.body)
@@ -809,48 +823,58 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       _test(env)
     },
   },
-  _NodeJS() {
-    let ctx = parse.ctx, env = finish.env = _newExecutionEnv()
-    _test(env)
-    console.log('ctrl-D or .exit to exit, (txt) for all functions. a, `a`, "s", (0 1), (a:2 a).')
-    const repl = require('repl')
-    const prompt = '> ', coloredPrompt = colored(prompt, 31) // red
-    const out = process.stdout
-    const opt = serialize.displayed = out.isTTY && out.hasColors() ? serialize.consoleColored : {maxDepth:3}
-    opt.breakLength = out.columns
-    repl.start({
-      eval(cmd, _jsContext, _filename, then) {
-        cmd = cmd.trim()
-        try {
-          let expr, styled
-          log.did = false;
-          [expr, ctx, styled] = parse(cmd, undefined, ctx)
-          opt.breakLength = out.columns
-          if (out.isTTY && !log.did) {
-            const n = Math.ceil((cmd.length + prompt.length) / out.columns)
-            out.moveCursor(0,-n)
-            out.clearScreenDown()
-            out.write(coloredPrompt + serialize(expr, {...opt, offset:1}) + '\n')
+  _NodeJS:{
+    call() {
+      let ctx = parse.ctx, env = finish.env = _newExecutionEnv()
+      _test(env)
+      console.log('ctrl-D or .exit to exit, (txt) for all functions. a, `a`, "s", (0 1), (a:2 a).')
+      const repl = require('repl')
+      const prompt = '> ', coloredPrompt = _colored(prompt, 31) // red
+      const out = process.stdout
+      const opt = serialize.displayed = out.isTTY && out.hasColors() ? serialize.consoleColored : {maxDepth:3}
+      let n = 0
+      opt.breakLength = out.columns
+      repl.start({
+        eval(cmd, _jsContext, _filename, then) {
+          cmd = cmd.trim()
+          try {
+            let expr, newCtx, styled
+            log.did = false;
+            [expr, newCtx, styled] = parse(cmd, undefined, ctx)
+            opt.breakLength = out.columns
+            if (out.isTTY && !log.did) {
+              const lines = Math.ceil((cmd.length + prompt.length) / out.columns)
+              out.moveCursor(0, -lines)
+              out.clearScreenDown()
+              out.write(coloredPrompt + serialize(expr, {...opt, offset:1}) + '\n')
+            }
+            _schedule(expr, env, result => {
+              // If ctx contains result in values, set name to that; if not, create a new one.
+              let name
+              ctx.forEach((v,k) => v === result && (name = k))
+              if (!name) do { name = '#' + n++ } while (ctx.has(name))
+              if (!ctx.has(name))
+                (ctx = new Map(ctx)).set(name, quote(result))
+
+              then(null, _colored(name, 33) + ': ' + serialize(result, {...opt, offset:1+Math.ceil(name.length/2)})) // brown
+            })
+          } catch (err) {
+            if (_isArray(err) && err[0] === 'give more') then(new repl.Recoverable(err))
+            else console.log(typeof err == 'string' ? _colored(err, 31) : err), then() // red
           }
-          _schedule(expr, env, v => {
-            then(null, serialize(v, opt))
-          })
-        } catch (err) {
-          if (_isArray(err) && err[0] === 'give more') then(new repl.Recoverable(err))
-          else console.log(typeof err == 'string' ? _colored(err, 31) : err), then() // red
-        }
-      },
-      writer: id,
-      completer: cmd => {
-        const arr = /[^`:\s\[\]]+$/.exec(cmd)
-        const begins = arr ? arr[0] : ''
-        const matches = []
-        ctx.forEach((_v,k) => k.slice(0, begins.length) === begins && matches.push(k))
-        return [matches, begins]
-      },
-      coloredPrompt,
-    }).on('reset', () => { ctx = parse.ctx })
-    // Cannot seem to react to SIGINT (and stop execution).
+        },
+        writer: id,
+        completer: cmd => {
+          const arr = /[^`:\s\[\]]+$/.exec(cmd)
+          const begins = arr ? arr[0] : ''
+          const matches = []
+          ctx.forEach((_v,k) => k.slice(0, begins.length) === begins && matches.push(k))
+          return [matches, begins]
+        },
+        coloredPrompt,
+      }).on('reset', () => { ctx = parse.ctx, n = 0 })
+      // Cannot seem to react to SIGINT (and stop execution).
+    },
   },
 
   _colored(str, pre=39, post = 39) {
@@ -1168,7 +1192,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
 
 
 
-  _var:Symbol('var'),
+  _var:is('var'),
   var:{
     txt: `Finished (var): Creates a new unique variable, usable as a label.`,
     examples: [
@@ -1206,7 +1230,8 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     if (!_isStylableDOM(e)) return
     for (let ch = e.firstChild; ch; ch = ch.nextSibling)
       _updateBroken(ch)
-    if (e.tagName !== 'NODE') return
+    if (e.tagName !== 'NODE' || e.classList.contains('code')) return
+    e.classList.toggle('broken', false)
     const broken = e.firstChild && e.firstChild.offsetTop < e.lastChild.offsetTop
     if (broken !== e.classList.contains('broken'))
       e.classList.toggle('broken', broken)
@@ -1233,7 +1258,6 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     txt: `Finished (typeof Expr): A relic from an ancient time, to be removed; infer the type of Expr based on each intermediate value being both input and output.
 …Or, you know, just recurse into array parts.`,
     finish(x) {
-      if (this !== _typeof) return
       if (_isArray(x) && x[0] === gen) return x
       // We are mixing up types badly here: mixing execution directives (expressions) with types.
       if (_isString(x)) return x
@@ -1253,7 +1277,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
         // Um, we probably want to call ourselves directly, not through `finish`.
     },
   },
-  _typeof:Symbol('typeof'),
+  _typeof:is('typeof'),
   _both:{
     txt: `Returns the least type containing both, or error.
 Imprecise here; demands ref-equality if not perfectly general.`,
@@ -1415,7 +1439,7 @@ Examples: \`(+ (delay 1) (delay 2))\` eventually returns 3. \`(+ (* (delay 1) (d
       `Change the stack to \`(Func Line)\` — which needs to both know the source and locations of functions in it…`,
     ],
   },
-  _jsRejected: Symbol('js.rejected'),
+  _jsRejected: is('js.rejected'),
   _deferred:{
     txt: `(_deferred Expr …Promises): An internal mechanism for recording the continuation, and continuing evaluation when JS promises return. Denotes that X is dependent on deferred factors, and its evaluation has to be deferred. Promises are deferred.`,
     finish(...x) {
@@ -1509,7 +1533,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
     // Execute while checking for end.
     if (!_jobs.expr.length) return
-    Working.classList.toggle('yes', true)
+    if (typeof document != ''+void 0) Working.classList.toggle('yes', true)
     do {
       let [expr, env, then, id] = _jobs.expr.splice(0,4)
       if (_isDeferred(expr)) {
@@ -1562,7 +1586,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
         then(v)
     } while (_jobs.expr.length && time() < end)
     if (_jobs.expr.length) setTimeout(_jobs, 0)
-    else Working.classList.toggle('yes', false)
+    else if (typeof document != ''+void 0) Working.classList.toggle('yes', false)
   },
   _scheduleAndConsumeMany(a) {
     if (a) {
@@ -1602,30 +1626,6 @@ If any promises the job depends on have a method .cancel, calls those.`,
   id:{
     txt: `id: The identity function that just returns x from \`(id x)\`.`,
     call(x) { return x },
-  },
-  compose:{
-    txt: `((compose …Functions) …Data): composes functions right-to-left: applies the last function to data, then the second-last to result, then the third-last to result, and eventually returns first function's result.
-(f "1") f:(compose a→(* a "8") b→(+ b "2")) is "24".`,
-    examples: [
-      [`(f 1) f:(compose a→(* a 8) b→(+ b 2))`, `24`],
-      [`((compose g f) 1) f:x→(+ 1 x) g:x→(* 2 x)`, `4`],
-    ],
-    call(...data) {
-      if (this === compose) return
-      if (!_isArray(this)) return error
-      if (this[0] !== compose) return call(array(call(this), ...data))
-      let v = [rest, data], r
-      for (let i = this.length; i-- > 1; ) {
-        v = _use(call(array(this[i], v)))
-        if (_isError(v)) return error
-        // If r overrides compose, pretend that we are ((compose …rest) v).
-        if (i > 1)
-          if ((r = overrides(v, overrides)) !== undefined)
-            if ((r = _getOverrideResult(r, array(array(compose, ...this.slice(1, i)), v))) !== undefined)
-              return r
-      }
-      return v
-    },
   },
 
 
@@ -1680,45 +1680,69 @@ If any promises the job depends on have a method .cancel, calls those.`,
     },
   },
 
-  try:{
-    txt: `((try …Functions) …Data): tries to call functions in order, returning the first non-error result or error.`,
-    examples: [
-      [`(f 1 2) f:(try (func 1 3 5) (func 1 6) (func a b (+ a b)))`, `3`],
-    ],
-    call(...data) {
-      if (this === _try) return
-      if (!_isArray(this)) return error
-      if (this[0] !== _try) return call(array(call(this), ...data))
-      let v = error, r
-      for (let i = 1; i < this.length; ++i)
-        if (!_isError(v = _use(call(array(this[i], ...data))))) {
-          if (i+1 < this.length)
-            if ((r = overrides(v, first)) !== undefined)
-              if ((r = _getOverrideResult(r, array(first, v, array(_lazy, array(array(_try, ...this.slice(i+1)), ...data))))) !== undefined)
-                return r
-          return v
-        }
-      return v
-    },
-  },
-  _try: Symbol('try'),
-  guard:{
-    txt: `((guard …Functions) …Data): tries to call functions in order, returning the first error or last non-error result.`,
-    call(...data) {
-      if (this === guard) return
-      if (!_isArray(this)) return error
-      if (this[0] !== guard) return call(array(call(this), ...data))
-      let v = error
-      for (let i = 1; i < this.length; ++i)
-        if (_isError(v = _use(call(array(this[i], ...data)))))
-          return v
-        else if (i+1 < this.length)
-          if ((r = overrides(v, last)) !== undefined)
-            if ((r = _getOverrideResult(r, array(last, v, array(_lazy, array(array(guard, ...this.slice(i+1)), ...data))))) !== undefined)
-              return r
-      return v
-    },
-  },
+//   try:{
+//     txt: `((try …Functions) …Data): tries to call functions in order, returning the first non-error result or error.`,
+//     examples: [
+//       [`(f 1 2) f:(try (func 1 3 5) (func 1 6) (func a b (+ a b)))`, `3`],
+//     ],
+//     call(...data) {
+//       if (this === _try) return
+//       if (!_isArray(this)) return error
+//       if (this[0] !== _try) return call(array(call(this), ...data))
+//       let v = error, r
+//       for (let i = 1; i < this.length; ++i)
+//         if (!_isError(v = _use(call(array(this[i], ...data))))) {
+//           if (i+1 < this.length)
+//             if ((r = overrides(v, first)) !== undefined)
+//               if ((r = _getOverrideResult(r, array(first, v, array(_lazy, array(array(_try, ...this.slice(i+1)), ...data))))) !== undefined)
+//                 return r
+//           return v
+//         }
+//       return v
+//     },
+//   },
+//   _try: is('try'),
+//   guard:{
+//     txt: `((guard …Functions) …Data): tries to call functions in order, returning the first error or last non-error result.`,
+//     call(...data) {
+//       if (this === guard) return
+//       if (!_isArray(this)) return error
+//       if (this[0] !== guard) return call(array(call(this), ...data))
+//       let v = error
+//       for (let i = 1; i < this.length; ++i)
+//         if (_isError(v = _use(call(array(this[i], ...data)))))
+//           return v
+//         else if (i+1 < this.length)
+//           if ((r = overrides(v, last)) !== undefined)
+//             if ((r = _getOverrideResult(r, array(last, v, array(_lazy, array(array(guard, ...this.slice(i+1)), ...data))))) !== undefined)
+//               return r
+//       return v
+//     },
+//   },
+//   compose:{
+//     txt: `((compose …Functions) …Data): composes functions right-to-left: applies the last function to data, then the second-last to result, then the third-last to result, and eventually returns first function's result.
+// (f "1") f:(compose a→(* a "8") b→(+ b "2")) is "24".`,
+//     examples: [
+//       [`(f 1) f:(compose a→(* a 8) b→(+ b 2))`, `24`],
+//       [`((compose g f) 1) f:x→(+ 1 x) g:x→(* 2 x)`, `4`],
+//     ],
+//     call(...data) {
+//       if (this === compose) return
+//       if (!_isArray(this)) return error
+//       if (this[0] !== compose) return call(array(call(this), ...data))
+//       let v = [rest, data], r
+//       for (let i = this.length; i-- > 1; ) {
+//         v = _use(call(array(this[i], v)))
+//         if (_isError(v)) return error
+//         // If r overrides compose, pretend that we are ((compose …rest) v).
+//         if (i > 1)
+//           if ((r = overrides(v, overrides)) !== undefined)
+//             if ((r = _getOverrideResult(r, array(array(compose, ...this.slice(1, i)), v))) !== undefined)
+//               return r
+//       }
+//       return v
+//     },
+//   },
 
 
 
@@ -1728,113 +1752,113 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
 
 
-  /*many:{
-    txt: `(many …Values): Represents many values at once. Calls with many arguments return many results, unless they are all ref-equal.
-Enumeration is NOT automatically deferred if the result is too big (or even infinite); deferred results DON'T show up as \`(rest (lazy X))\` in the list. We need a hero for this — automatic laziness.
-\`(+ "1" (many "2" "3" "4"))\` is \`(many "3" "4" "5")\`.
-\`(many X)\` is just \`X\` unless it's \`(rest Y)\`.`,
-    examples: [
-      [`(+ 1 (many 2))`, `3`],
-      [`(+ 1 (many))`, `(many)`],
-      [`(+ 1 (many 2 3 4))`, `(many 3 4 5)`],
-    ],
-    finish:undefined,
-    call:undefined,
-    _impure:undefined,
-    merge:undefined,
-    overrides(f) { return _manyEvaluations },
-  },
-  manyPossibilities:{
-    txt: `Now, we just use this override as a way to signal that a call should not be merged.
-Before:
-Finished (manyPossibilities Expr): Returns all possibilities that can arise from evaluation of Expr. If not overriden, just evaluates Expr.
-Everything impure must override \`manyPossibilities\`, as we rely on being able to partially evaluate expressions. Override this to not merge.`,
-    finish(x) {
-      if (this !== manyPossibilities) return
-      if (_isString(x)) return x
-      // Allow x to override manyPossibilities.
-      let r
-      if ((r = overrides(x, manyPossibilities)) !== undefined)
-        if ((r = _getOverrideResult(r, array(manyPossibilities, x))) !== undefined)
-          return r
-      // Finish x after replacing every part of x with (manyPossibilities Part).
-      if (!_isArray(x)) return x
-      let y = x.slice()
-      for (let i = 0; i < y.length; ++i)
-        y[i] = array(manyPossibilities, x[i])
-      return finish(_maybeMerge(y))
-    },
-  },
-  enum:{
-    txt: `Finished (enum Expr): Returns an array of all possible results of Expr; enumerates possibilities.
-Functions (particularly impure ones, like random number generation) can override \`enum\` like they would override \`finish\` to become \`many\` possibilities.
-\`(enum (+ (many "1" "2") (many "2" "3" "4")))\` is \`("3" "4" "6" "5")\` or some permutation.
-\`(enum (many))\` is an \`error\`.
+//   many:{
+//     txt: `(many …Values): Represents many values at once. Calls with many arguments return many results, unless they are all ref-equal.
+// Enumeration is NOT automatically deferred if the result is too big (or even infinite); deferred results DON'T show up as \`(rest (lazy X))\` in the list. We need a hero for this — automatic laziness.
+// \`(+ "1" (many "2" "3" "4"))\` is \`(many "3" "4" "5")\`.
+// \`(many X)\` is just \`X\` unless it's \`(rest Y)\`.`,
+//     examples: [
+//       [`(+ 1 (many 2))`, `3`],
+//       [`(+ 1 (many))`, `(many)`],
+//       [`(+ 1 (many 2 3 4))`, `(many 3 4 5)`],
+//     ],
+//     finish:undefined,
+//     call:undefined,
+//     _impure:undefined,
+//     merge:undefined,
+//     overrides(f) { return _manyEvaluations },
+//   },
+//   manyPossibilities:{
+//     txt: `Now, we just use this override as a way to signal that a call should not be merged.
+// Before:
+// Finished (manyPossibilities Expr): Returns all possibilities that can arise from evaluation of Expr. If not overriden, just evaluates Expr.
+// Everything impure must override \`manyPossibilities\`, as we rely on being able to partially evaluate expressions. Override this to not merge.`,
+//     finish(x) {
+//       if (this !== manyPossibilities) return
+//       if (_isString(x)) return x
+//       // Allow x to override manyPossibilities.
+//       let r
+//       if ((r = overrides(x, manyPossibilities)) !== undefined)
+//         if ((r = _getOverrideResult(r, array(manyPossibilities, x))) !== undefined)
+//           return r
+//       // Finish x after replacing every part of x with (manyPossibilities Part).
+//       if (!_isArray(x)) return x
+//       let y = x.slice()
+//       for (let i = 0; i < y.length; ++i)
+//         y[i] = array(manyPossibilities, x[i])
+//       return finish(_maybeMerge(y))
+//     },
+//   },
+//   enum:{
+//     txt: `Finished (enum Expr): Returns an array of all possible results of Expr; enumerates possibilities.
+// Functions (particularly impure ones, like random number generation) can override \`enum\` like they would override \`finish\` to become \`many\` possibilities.
+// \`(enum (+ (many "1" "2") (many "2" "3" "4")))\` is \`("3" "4" "6" "5")\` or some permutation.
+// \`(enum (many))\` is an \`error\`.
 
-…Should be replaced with (goal Expr Measure) — enum-and-commit-best, given meaning to by (minimize Expr)/(maximize Expr) inside (likely returning many results, each associated with its self-write journal, and choosing-best on knowing the goal).`,
-    examples: [
-      [`(enum 2)`, `(2)`],
-      [`(enum (+ 1 (many)))`, `error`],
-      [`(enum (+ (many 1 2) (many 2 3 4)))`, `(3 4 6 5)`],
-    ],
-    finish(x) {
-      return _manysToArrays(finish(array(manyPossibilities, _use(x))))
-    },
-  },
-  _manysToArrays(x, toRest = false) {
-    x = _use(x)
-    if (!_isArray(x) || x[0] !== many) return !toRest ? array(x) : x
-    if (x.length === 1) return error
-    // Replace x with merge(x.slice(1).map(…)). Put every element through _manysToArrays, creating a rest element in the result for each.
-    let to = x.slice(1)
-    for (let i = 0; i < to.length; ++i)
-      to[i] = _manysToArrays(to[i], true)
-    to = _maybeMerge(to)
-    return !toRest ? to : array(rest, to)
-  },
-  _manyEvaluations(...args) {
-    // Eager version that does not defer any computations at all. Laziness will eventually save it.
-    if (this === _manyEvaluations) return many
-    args.unshift(this)
+// …Should be replaced with (goal Expr Measure) — enum-and-commit-best, given meaning to by (minimize Expr)/(maximize Expr) inside (likely returning many results, each associated with its self-write journal, and choosing-best on knowing the goal).`,
+//     examples: [
+//       [`(enum 2)`, `(2)`],
+//       [`(enum (+ 1 (many)))`, `error`],
+//       [`(enum (+ (many 1 2) (many 2 3 4)))`, `(3 4 6 5)`],
+//     ],
+//     finish(x) {
+//       return _manysToArrays(finish(array(manyPossibilities, _use(x))))
+//     },
+//   },
+//   _manysToArrays(x, toRest = false) {
+//     x = _use(x)
+//     if (!_isArray(x) || x[0] !== many) return !toRest ? array(x) : x
+//     if (x.length === 1) return error
+//     // Replace x with merge(x.slice(1).map(…)). Put every element through _manysToArrays, creating a rest element in the result for each.
+//     let to = x.slice(1)
+//     for (let i = 0; i < to.length; ++i)
+//       to[i] = _manysToArrays(to[i], true)
+//     to = _maybeMerge(to)
+//     return !toRest ? to : array(rest, to)
+//   },
+//   _manyEvaluations(...args) {
+//     // Eager version that does not defer any computations at all. Laziness will eventually save it.
+//     if (this === _manyEvaluations) return many
+//     args.unshift(this)
 
-    let relevant = false
-    for (let i = 0; i < args.length; ++i) {
-      args[i] = _use(args[i])
-      if (_isArray(args[i]) && args[i][0] === many) { relevant = true; break }
-    }
-    if (!relevant) return
+//     let relevant = false
+//     for (let i = 0; i < args.length; ++i) {
+//       args[i] = _use(args[i])
+//       if (_isArray(args[i]) && args[i][0] === many) { relevant = true; break }
+//     }
+//     if (!relevant) return
 
-    const had = new Set
-    const results = [many, args]
-    // For each (many …) argument of each result shallow-expr, copy the result shallow-expr many times, and call the (many …)-less result.
-    for (let i = 1; i < results.length; ++i) {
-      const src = results[i]
-      if (!_isArray(src)) continue
-      for (let j = 0; j < src.length; ++j) {
-        let arg
-        while (_isArray(arg = src[j]) && arg[0] === many) {
-          if (arg.length === 1) return arg // Can't perform any operations on no values.
-          //if ((arg.length-2) + (results.length-1) >= maxResultSize) return // Can't defer without laziness.
-          src[j] = arg[1]
-          for (let k = 2; k < arg.length; ++k) {
-            // Copy results[i] with its a[j] being replaced with arg[k].
-            let copy = src.slice()
-            copy[j] = arg[k]
-            copy = _maybeMerge(copy)
-            results.push(copy)
-          }
-        }
-      }
-      const r = call(src)
-      if (!had.has(r))
-        results[i] = r, had.add(r)
-      else
-        [results[i--], results[results.length-1]] = [results[results.length-1]]
-    }
-    results.length = had.size + 1
-    if (results.length === 2) return results[1]
-    return _maybeMerge(results)
-  },*/
+//     const had = new Set
+//     const results = [many, args]
+//     // For each (many …) argument of each result shallow-expr, copy the result shallow-expr many times, and call the (many …)-less result.
+//     for (let i = 1; i < results.length; ++i) {
+//       const src = results[i]
+//       if (!_isArray(src)) continue
+//       for (let j = 0; j < src.length; ++j) {
+//         let arg
+//         while (_isArray(arg = src[j]) && arg[0] === many) {
+//           if (arg.length === 1) return arg // Can't perform any operations on no values.
+//           //if ((arg.length-2) + (results.length-1) >= maxResultSize) return // Can't defer without laziness.
+//           src[j] = arg[1]
+//           for (let k = 2; k < arg.length; ++k) {
+//             // Copy results[i] with its a[j] being replaced with arg[k].
+//             let copy = src.slice()
+//             copy[j] = arg[k]
+//             copy = _maybeMerge(copy)
+//             results.push(copy)
+//           }
+//         }
+//       }
+//       const r = call(src)
+//       if (!had.has(r))
+//         results[i] = r, had.add(r)
+//       else
+//         [results[i--], results[results.length-1]] = [results[results.length-1]]
+//     }
+//     results.length = had.size + 1
+//     if (results.length === 2) return results[1]
+//     return _maybeMerge(results)
+//   },
 
 
 
@@ -1854,6 +1878,8 @@ Functions (particularly impure ones, like random number generation) can override
 Should be done to each arg of each function when it's used in a non-function-call-or-not-ours expression/statement.`,
     call(a) {
       if (_isArray(a) && a[0] === concept && a.length === 3) return _use(a[2])
+      const va = _view(a)
+      if (va instanceof Map && va.has(_use)) return va.get(_use)
       return a
     },
   },
@@ -2017,11 +2043,8 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
     ],
     nameResult: ['joined'],
     _manualView:true,
-    finish(...s) {
-    },
     call(...s) {
       if (s.length == 1 && _isString(s[0])) return s[0]
-      if (this !== string && this !== undefined) return
       let unstring = false
       for (let i = 0; i < s.length; ++i) {
         let v = s[i] = _toString(s[i])
@@ -2142,28 +2165,28 @@ The internal mechanism for \`purify\`; can that be done without this costly thin
     if (got) return array(_unknown, _maybeMerge(x))
   },
 
-  /*ref:{
-    txt: `(ref Type)⇒Ref: Represents a reference to instances of a type.
-\`(Ref)\` reads the current value; \`(Ref Value)\` writes (changes subsequent reads).
+//   ref:{
+//     txt: `(ref Type)⇒Ref: Represents a reference to instances of a type.
+// \`(Ref)\` reads the current value; \`(Ref Value)\` writes (changes subsequent reads).
 
-…Should probably be removed; instead, should have read/write for doing this to an arbitrary array (to allow self-modifying code directly), and reads/writes for virtualization of those to a value-associated journal (so that multiple ones can be generated and the best can be picked).`,
-    nameResult: ['reference'],
-    _impure:true,
-    call(v) {
-      if (!_isArray(this) || this[0] !== ref) return
-      if (v === undefined) {
-        // Read: bound(Type, Map, false) yields the value we want.
-        if (this[1] === undefined || this[2] === undefined) return error
-        return bound(this[1], this[2], false)
-      } else {
-        // Write: assign(Type, Value) yields what we need to remember; be lazy and just store the resulting Map.
-          // …We can't use `assign` anymore, since it doesn't return anything good anymore.
-        const r = call(array(assign, this[1], v))
-        if (!(r instanceof Map)) return r
-        this[2] = r
-      }
-    },
-  },*/
+// …Should probably be removed; instead, should have read/write for doing this to an arbitrary array (to allow self-modifying code directly), and reads/writes for virtualization of those to a value-associated journal (so that multiple ones can be generated and the best can be picked).`,
+//     nameResult: ['reference'],
+//     _impure:true,
+//     call(v) {
+//       if (!_isArray(this) || this[0] !== ref) return
+//       if (v === undefined) {
+//         // Read: bound(Type, Map, false) yields the value we want.
+//         if (this[1] === undefined || this[2] === undefined) return error
+//         return bound(this[1], this[2], false)
+//       } else {
+//         // Write: assign(Type, Value) yields what we need to remember; be lazy and just store the resulting Map.
+//           // …We can't use `assign` anymore, since it doesn't return anything good anymore.
+//         const r = call(array(assign, this[1], v))
+//         if (!(r instanceof Map)) return r
+//         this[2] = r
+//       }
+//     },
+//   },
 
 
 
@@ -2264,12 +2287,12 @@ Use (array F …) instead of (F …) in function args to ignore F's override of 
   ['enumerableTypes']:{
     txt:`A namespace for when/forany/forall/only/any/all, none of which we have found a use for, so far.`,
     at:{
-      when:Symbol('_when'),
-      forany:Symbol('_forany'),
-      forall:Symbol('_forall'),
-      only:Symbol('_only'),
-      any:Symbol('_any'),
-      all:Symbol('_all'),
+      when:is('_when'),
+      forany:is('_forany'),
+      forall:is('_forall'),
+      only:is('_only'),
+      any:is('_any'),
+      all:is('_all'),
     },
   },
 
@@ -2340,7 +2363,7 @@ Generating instances of this always returns X.`,
   _any:{
     txt: `(_any X Y Z …): A type of things that are either of type X, or of Y, or of Z. The order of types within does not matter.
 Generating instances of this returns any element with equal probability.`,
-    call(...x) { if (this !== _any) return error;  return _repack(x, undefined, _any, 0) },
+    call(...x) { return _repack(x, undefined, _any, 0) },
     _when(lt, gt) { return _whenRepack(lt, gt, _any) },
     _forany(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _any) return _repack(type, prop, _any) },
     _forall(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _any) return _repack(type, prop, _all) },
@@ -2353,7 +2376,7 @@ Generating instances of this returns any element with equal probability.`,
   },
   _all:{
     txt: `(_all X Y Z …): A type of things that are of types X, and of Y, and of Z, all at once. The order of types within does not matter.`,
-    call(...x) { if (this !== _all) return error;  return _repack(x, undefined, _all, 0) },
+    call(...x) { return _repack(x, undefined, _all, 0) },
     _when(lt, gt) { return _whenRepack(lt, gt, _all) },
     _forany(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _all) return _repack(type, prop, _all) },
     _forall(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _all) return _repack(type, prop, _any) },
@@ -2403,8 +2426,8 @@ Generating instances of this returns any element with equal probability.`,
     if (_isArray(lt) && lt[0] === side)
       return _repack(lt, elem => call(array(_when, elem, gt)), side)
   },
-  _emptyAny:[Symbol('_any')],
-  _emptyAll:[Symbol('_all')],
+  _emptyAny:[is('_any')],
+  _emptyAll:[is('_all')],
 
 
 
@@ -2540,7 +2563,7 @@ Equivalent to 'Math.random() < p' with checks on p (it should be 0…1), but (pr
 
 
   cycle:{
-    txt: `The result of circular calls, ordinarily an infinite loop that never returns, is instead this.`,
+    txt: `The result of circular calls, ordinarily an infinite loop that never returns, is instead \`cycle\`.`,
     examples: [
       [`f 1 f:1→(f 1)`, `cycle`],
       [`a a:(a (a) a)`, `(x (x) x x:cycle)`],
@@ -2557,7 +2580,7 @@ Technical notes:
 JS functions have Expr spread across their args (with \`this\` being the zeroth arg, code) (unless not-an-array, in which case \`this\` is undefined and the first arg is what is called/finished), resulting in both convenience and inefficiency (of array allocation for varargs).
 In JS overrides of finish, finish.v is the currently-executing Expr.
 finish.env is the current execution environment; put everything non-local there. It already has the DOM element to put logs into and label-bindings.
-To call, an array's zeroth element's concept is looked up; so, ((try …Inner) …Outer) finishes Outer but not Inner. In JS, \`this\` is the zeroth element, so there is often some boilerplate code to ignore invalid-position cases (by returning \`undefined\`). In non-finish non-call overrides, \`this\` is always what is overriden.
+To call, an array's zeroth element's concept is looked up; so, ((try …Inner) …Outer) finishes Outer but not Inner. In JS, \`this\` is the zeroth element, so there is often some boilerplate code to ignore invalid-position cases (by returning \`undefined\`). In non-finish overrides, \`this\` is always what is overriden.
 `,
     nameResult: ['finished'],
     call(v) {
@@ -2610,10 +2633,21 @@ Caches results of pure functions.`,
       try {
         let result
         try {
+
           // See if any data overrides code; use that as our result if so. Else see if code overrides call; use that if so. Else just return v.
-          for (let i = v.length-1; i >= 0; --i)
-            if ((r = _checkOverride(v[i], i ? v[0] : call, v)) !== undefined)
+          let code = v[0]
+          const vc = _view(code)
+          if (vc instanceof Map && vc.get(_manualView) === true) code = overrides
+          for (let i = 1; i < v.length; ++i)
+            if ((r = _checkOverride(v[i], code, v)) !== undefined)
               return result = r
+          if ((r = _checkOverride(v[0], overrides, v)) !== undefined)
+            return result = r
+
+          // Do the function call, just like regular people do.
+          if ((r = _checkOverride(v, call, v)) !== undefined)
+            return result = r
+
           if (defaultToV) return result = v
             // The second arg is something of a hack.
         } finally { _cache(m2, v, result) }
@@ -2632,24 +2666,18 @@ Override \`overrides\` to specify arbitrary global rewrites locally. For example
 Technical notes:
 Array data gets its head consulted (but not recursively). A function acts like a concept that defined \`call\` as that function. A JS object with a Map \`.defines\` consults that map with Code as the key, and if not present, consults its \`overrides\` override (which should be a function from a Code key to the override).
 In a JS function that uses \`call\`/\`finish\` to call another function and ignore its override, check the override of \`overrides\` still, to materialize the inner conceptual structure only on demand.`,
-    call(data, code, auto = false) {
+    call(data, code) {
       if (code === call && typeof data == 'function') return data
       if (code === call && _isArray(data) && typeof data[0] == 'function') return data[0]
-
-      const vc = _view(code)
-      //if (auto && vc instanceof Map && vc.get(_manualView) === true) code = overrides
 
       let d = _view(data)
       if (d == null) return
       if (d instanceof Map) {
-        //console.log(code, serialize.backctx.get(code))
-        //if (code === overrides) console.log('uhhhh', data)
         if (code !== overrides && d.has(code)) return d.get(code)
         let over
-        if (/*code !== overrides && */(over = d.get(overrides)) !== undefined) // c c:(concept c) leads to infinite recursion.
-          return /*console.log(over), */typeof over == 'function' ? over.call(data, code) : directCall(array(over, code))
-        //if (code === overrides && d.has(code)) return d.get(code)
-        return //console.log('NONE', code, serialize.backctx.get(code), data, serialize.backctx.get(data))
+        if ((over = d.get(overrides)) !== undefined) // c c:(concept c) leads to infinite recursion.
+          return typeof over == 'function' ? over.call(data, code) : directCall(array(over, code))
+        return
       }
       throw "Unrecognized .defines; should be either undefined or a Map."
     },
@@ -2671,7 +2699,7 @@ In a JS function that uses \`call\`/\`finish\` to call another function and igno
     if (over !== undefined) {
       if (typeof over == 'function')
         return _isArray(whole) ? over.call(...whole) : over(whole)
-      if (typeof over != 'function' && overrides(over, call, true) !== undefined)
+      if (typeof over != 'function' && overrides(over, call) !== undefined)
         return directCall(array(over, whole))
     }
   },
@@ -2679,7 +2707,7 @@ In a JS function that uses \`call\`/\`finish\` to call another function and igno
     // Return undefined if there is no result overriden. Combines overrides and _getOverrideResult in one.
     // No _use.
     let r
-    if ((r = overrides(data, code, true)) !== undefined)
+    if ((r = overrides(data, code)) !== undefined)
       return _getOverrideResult(r, whole)
   },
 
@@ -2700,7 +2728,7 @@ In a JS function that uses \`call\`/\`finish\` to call another function and igno
 
 
   concept:{
-    txt: `(concept View) or (concept View Value): Represents an object that looks up its every definition in View, overriding its own usage, so data overrides code. If Value is specified, the object becomes Value on use.
+    txt: `(concept View) or (concept View Value): Creates an object that looks up its every definition in View, overriding its own usage, so data overrides code. If Value is specified, the object becomes Value on use.
 Views should not be changed.
 Concepts are used extensively to extensibly define functions by-parts, and to give each function a free extensibility point.
 Concepts are the assembly of definitions, very easy to misuse; random generation of these would be a great feat indeed. Use these only to either override not-overriding-\`finish\` extensibility points, or as explicitly suggested by \`finish\`-overriding extensibility points.
@@ -2708,9 +2736,13 @@ Concepts are the assembly of definitions, very easy to misuse; random generation
 Concepts come from dynamic languages like JS or Python, where most functions end up defining some unique property/key/symbol/string so that input can override a function's behavior. Rather than co-opting strings and files (duck typing, docstrings and documentation) to convey parts of a concept, override functionality directly.`,
     examples: [
       [`(str (concept (map str a→"1"))) str:a→b`, `"1"`],
-      [`(+ 2 (concept (map + (func a 3))))`, `3`],
+      [`(+ 2 (concept (map + (func a b 3))))`, `3`],
     ],
-    overrides(f) { if (_isArray(this) && this[0] === concept) return directCall(array(this[1], f)) },
+    call(view, value) {
+      if (!(view instanceof Map)) throw "The view must be a Map"
+      if (value !== undefined) view = new Map(view), view.set(_use, value)
+      return {defines:view}
+    },
   },
 
 
@@ -2805,6 +2837,7 @@ Concepts come from dynamic languages like JS or Python, where most functions end
   deconstruct:{
     txt: `(deconstruct Object): turn a native object into its array-representation (that could be evaluated to re-create that native value).
 Used by serialization.`,
+    future:`Should make this work on a graph (extracting what is in \`serialize\` into this). Should quote complex expressions. (And maybe rename this to \`unfinish\`.)`,
     finish(v) {
       // Don't allow *any* overrides.
       if (this === deconstruct) return deconstruct(v)
@@ -2812,6 +2845,8 @@ Used by serialization.`,
     call(v) {
       if (_isArray(v)) return v.slice()
       if (typeof v == 'symbol') return [_var]
+      const vv = _view(v)
+      if (vv instanceof Map && typeof vv.get(deconstruct) == 'function') return vv.get(deconstruct)(v)
       if (v instanceof Map) {
         const arr = [map]
         v.forEach((v,k) => arr.push(quote(k), quote(v)))
@@ -3035,7 +3070,7 @@ Used by serialization.`,
   js:{
     txt:`A namespace of everything pertaining to the host language, JavaScript.`,
     at:{
-      eval:Symbol('_jsEval'),
+      eval:is('_jsEval'),
     },
   },
 
@@ -3344,20 +3379,30 @@ Single-input functions can be written as \`Input→Output\`.`,
     ],
     finish(...inputs) {
       // Purify all inputs (and output).
-      // Idempotent: `func …` is the same as `_func …`.
       if (_use(this) !== func) return
       const us = finish.v
-      inputs.unshift(_func)
+      inputs.unshift(func)
       for (let i = 1; i < inputs.length; ++i) {
         const escaped = bound(inputs[i], x => x === us ? _funcPlaceholder : undefined, false)
         const purified = purify(escaped)
         inputs[i] = purified
       }
-      inputs = bound(inputs, x => x === _funcPlaceholder ? inputs : undefined, false)
+      const impl = function impl(...data) {
+        if (typeof this != 'function') return
+        //log('calling', impl, data)
+        if (inputs.length-2 != data.length) return array(error, "Provided a different count of args than expected")
+        const a = data.length == 1 ? array(assign, quote(inputs[1]), quote(data[0])) : array(assign, quote(inputs.slice(1,-1)), quote(data))
+        return finish([_withEnv, new Map, a, inputs[inputs.length-1]])
+      }
+      inputs = bound(inputs, x => x === _funcPlaceholder ? impl : undefined, false)
       if (inputs.length == 3 && _isLabel(inputs[1]) && inputs[1][1] === inputs[2][1])
         return id // Shouldn't we not do this if we are in a closure? Since we may bind. But how not to?
       merge(inputs)
-      return inputs
+      impl.defines = new Map
+      impl.defines.set(deconstruct, () => inputs)
+      impl.defines.set(_impure, _impure(inputs))
+      //log('created', inputs, impl)
+      return impl
     },
   },
   _isFunc(x) { return _isArray(x) && (x[0] === func || x[0] === _func) },
@@ -3408,7 +3453,6 @@ Returns a map from holes to their values needed to make a bound Pattern and Valu
 Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` if not actually a subtype, or how to turn the more general type into the less general; same for \`(assign Type Value)\`.`,
     nameResult: ['assigned', 'assignmentResult', 'equality'],
     call(a,b) {
-      if (this !== assign) return error
       a = _use(a)
       if (_isArray(a) && a[0] === quote) a = a[1]
       if (_isLabel(a) || typeof a == 'symbol' || _isArray(a) && a[0] === _var && a.length == 1) {
@@ -3425,7 +3469,7 @@ Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` i
       if (a === b) return a
       if (_isArray(a)) {
         // Assign each element, mindful of potential `(rest Y)` in a.
-        if (b == null) return error
+        if (b == null) return array(error, "Expected an array, got "+b)
         if (!_isArray(b)) return call(array(assign, a, deconstruct(b)))
 
         // Find the index of the sole (rest X) in a.
@@ -3434,8 +3478,8 @@ Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` i
 
         // Check sizes.
         const RestLen = b.length - a.length + 1
-        if (RestLen < 0) return error
-        if (Rest === a.length && a.length != b.length) return error
+        if (RestLen < 0) return array(error, "Args too short: expected", a.length-1, "or more, but got", b.length)
+        if (Rest === a.length && a.length != b.length) return array(error, "Array lengths mismatch: expected", a.length, "but got", b.length)
 
         let result
         for (let i = 0; i < a.length; ++i) {
@@ -3630,7 +3674,7 @@ Options must be undefined or a JS object with properties: { maxDepth=∞, offset
         // Associate with the value to bathe same-objects in the same light.
         if (v === undefined) v = valueOfUnbound(u)
         const el = styles[style](str, v, u)
-        if (v !== undefined) el.id = _valuedElemId(v, el.id)
+        if (v !== undefined && typeof el == 'object') el.id = _valuedElemId(v, el.id)
 
         return lengths.set(el, originalLen), el
       }
@@ -4289,12 +4333,12 @@ Should probably accept a Language parameter, and check the override of \`parse\`
   basic:{
     txt:`A language for ordered-edge-list graphs. label, ^label^, 'string', "string", (0 1), (a:2 a).
 Machinery to use this is currently unimplemented.`,
-    parse:Symbol('_basicTopLevel'),
+    parse:is('_basicTopLevel'),
       // Needed additions:
         // Get text content of a node ourselves (not with .innerText), preserving .special=… DOM elements; make the parsed string into an array.
         // Still pass a string as `u` to matched functions (and properly-adjusted `i`), but also allow matching _specialParsedValue (that can advance the passed string).
         // Allow index-gotos to go to arbitrary locations (with a non-adjusted index), counting special DOM elements as 1-length.
-    serialize:Symbol('_basicTopLevel'),
+    serialize:is('_basicTopLevel'),
       // Needed:
         // Pass in the match function. It can use a string (to emit that into the current structural array) or a function with unbound value and two args x,y (to do `f(match, u, undefined, x, y)`).
         // Then basically style and/or pretty-print as needed. (Maybe extract `style` into a separate function?)
@@ -4304,8 +4348,8 @@ Machinery to use this is currently unimplemented.`,
   embellished:{
     txt:`A language for ordered-edge-list graphs (\`basic\`) with some syntactic conveniences. label, ^label^, 'string', "string", (0 1), (a:2 a); 1+2, a→a*2.
 Machinery to use this is currently unimplemented.`,
-    parse:Symbol('_emTopLevel'),
-    serialize:Symbol('_emTopLevel'),
+    parse:is('_emTopLevel'),
+    serialize:is('_emTopLevel'),
     // And what about styling, what to override for that?
   },
 
