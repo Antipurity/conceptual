@@ -30,6 +30,7 @@
 
     scrollHighlight { position:fixed; right:0; box-shadow:var(--highlight) 0 0 .2em .2em }
 
+    .broken {border-left:1px solid mediumblue}
     .broken>* {margin-left:1em; display:table; max-width:calc(100% - 1em)}
     .broken>bracket {margin-left:0}
     .code>* {display:table}
@@ -50,7 +51,7 @@
 <body>
   <noscript>This requires JS to run, and a fairly modern browser.</noscript>
   <div style="position:fixed; left:0; bottom:0"
-    ><span id=Working title="Are we currently running any tasks?"
+    ><span id=Working title="Are we currently running any jobs?"
     ></span
     ><input id=Lightness type=checkbox title="Use dark theme?"
     ><script>(Lightness.oninput = () =>document.body.classList.toggle('dark', Lightness.checked, true))()</script></div>
