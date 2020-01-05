@@ -1,9 +1,9 @@
 /*
   To add code, scroll down to the first `})({` and add functions as methods after that. They can be bound-to in written programs by the method name.
   _XXX methods are private and somewhat invisible.
-  When using any arg as a part of an expression/statement (but not an argument to another non-JS-native function call), `_use(arg)` it; possibly do `arg = _use(arg)` at function entry if there is more than one use.
-  Concepts define (some of) their usage at the concept, defined like `f:{…}`. Functions like `f(){}` are also `f:{call(){}}`. Concepts that define `call` can be called directly in JS code, though that won't check overrides or finish arguments.
-  See technical notes of `finish` for more details. Also see `_interrupt` for how to handle inner state.
+  Concepts define some things, seen as `f:{…}`. `f(){}` is exactly the same as `f:{call(){}}`.
+  Markers of functions to be aware of: `_impure`, `_argCount`.
+  Functions should _interrupt gracefully. Concepts that define `finish` and functions that use `call`/`finish` should check _isError and _isUnknown.
 */
 'use strict';
 
@@ -30,7 +30,7 @@
 
   //net.env.js = [], net.env.bin = new WebAssembly.Memory({ initial:64 }), net.env.accessor = new Int32Array(net.env.bin.buffer), net.env.at = 0
 
-  return globals.Self.defines.get(globals.call).call(globals, net)
+  return globals.Self.call(globals, net)
 
   function objectFor(x) {
     // Load {call(){}} into a trivially-callable function, as a notational convenience.
@@ -55,8 +55,8 @@
           const m = from[k].is.map(load)
           return from[k] = into[k] = m[0].call(...m)
         }
-        if (!(from[k].is in net)) throw "Not a link to an existing thing: "+from[k]
-        from[k] = into[k] = into[from[k].is]
+        else if (!(from[k].is in net)) throw "Not a link to an existing thing: "+from[k].is
+        else from[k] = into[k] = into[from[k].is]
       }
     })
   }
@@ -68,8 +68,8 @@
     if (from && Object.getPrototypeOf(from) == is) {
       // Look up symbols in the network.
       if (Array.isArray(from.is)) return from = from.is.map(load), from[0].call(...from)
-      if (!(from.is in net)) throw "Not a link to an existing thing: "+from.name
-      return load(net[from.is])
+      else if (!(from.is in net)) throw "Not a link to an existing thing: "+from.is
+      else return load(net[from.is])
     }
     if (from && Object.getPrototypeOf(from) === Object.prototype) {
       // Load object values: turn {…} into {defines:new Map([…])}, as a notational convenience.
@@ -77,13 +77,13 @@
       env.set(from, into)
 
       if (!inAt) {
-        const m = new Map
-        into.defines = m
+        let m
         for (let key of Object.keys(from)) {
           const k = load(is(key))
-          m.set(k, load(from[key], undefined, k === globals.at))
+          if (k !== globals.call || typeof from[key] != 'function')
+            (m || (m = new Map)).set(k, load(from[key], undefined, k === globals.at))
         }
-        return into.defines = m, into
+        return m && (into.defines = m), into
       } else {
         for (let k of Object.keys(from)) {
           const loaded = load(from[k], into[k])
@@ -115,7 +115,7 @@
 
 
   at:{
-    txt: `(at Map Key): returns the value in Map at Key (neither Key nor Value can be \`undefined\`), or \`notFound\` if not found. (at Map): returns an array of Map's keys.
+    txt: `(at Map Key): returns the value in Map at Key (neither Key nor Value can be \`undefined\`), or \`undefined\` if not found. (at Map): returns an array of Map's keys.
 For string keys, can be written as \`obj.key\`.`,
     examples:[
       [`at (map 1 2 3 4 5 6 7 8)`, `1 3 5 7`],
@@ -123,27 +123,17 @@ For string keys, can be written as \`obj.key\`.`,
       [`Self.at`, `at`],
     ],
     call(m,k) {
-      if (overrides(m, at)) m = overrides(m, at)
-      m = _use(m), k = _use(k)
-      if (m instanceof Map) return k !== undefined ? (m.get(k) !== undefined ? m.get(k) : notFound) : [...m.keys()]
-      return k !== undefined ? (m[k] !== undefined ? m[k] : notFound) : Object.keys(m)
+      if (defines(m, at)) m = defines(m, at)
+      if (m instanceof Map) return k !== undefined ? m.get(k) : [...m.keys()]
+      return k !== undefined ? m[k] : Object.keys(m)
     },
-    _manualView:true,
   },
-  notFound:{ txt: `An indicator that a key is not found in an object, returned from \`at\`.`, },
 
 
   Self:{
     txt:`(Self): the entry point; do not call manually. (Capitalized to not conflict with JS's \`self\`.)
-Project page: https://github.com/Antipurity/conceptual`,
+Project's GitHub page: https://github.com/Antipurity/conceptual`,
     future:[
-      [
-        `Self-modifying code (\`read X\` and \`write X Y\` and \`journal Expr\` and \`commit Journal\`, respected by \`finish\` too). Migrate Bounded/Walk/Prob in. Probably also "read as X if we have time, else as Y".`,
-        `Goals, and optimization, of arbitrary code foremost (so, repeat it several times, and commit the best — not the most efficient, but the most general).`,
-        `In evaluator, a button for repeating a computation, maybe a checkbox too. (For optimizing self-modifying code by repeated evaluation.)`,
-        `Ability for the interface to detect self-modification and update accordingly (\`observe X OnChange\`?).`,
-        `Make actually good(-ish) self-modifying code pieces: "usually do this but rarely decide to start analyzing and optimizing this spot (recommendations) (\`rec This …ButSometimes\`)", "this is cheap, this is expensive, and they should agree (approximation)", "optimize this finite-branches spot by picking the likely-best option by predicted measure", "optimize this number in any way we know".`,
-      ],
       [
         `Have a function for turning a Self object into executable code (and maybe HTML).`,
         `Have a DOM element for that (display in an iframe).`,
@@ -155,14 +145,16 @@ Project page: https://github.com/Antipurity/conceptual`,
         `Have a function for pulling in a JS library from URL — unsafe, just assuming that it imports a global (with a name that we pass in too).`,
         `(There are few usages of \`defines\` in code; maybe replace it with some globally-known symbol, to minimize risk of collision?)`,
       ],
-      `Separate concept-checking/caching into separate functions, and rewrite programs with those before evaluating them.`,
+      `With the interrupt stack now preserved, we should now be able to have a heap-walker, and estimate memory usage. So estimate it.`,
+      `Interrupt-based 'debugger' (stepper) for jobs, with at least stepping and interrupt-stack save/load and highlighting the last-executed node, and possibly more involved information display.`,
       [
-        `Generative types: \`is Value Type\` and \`gen Type\`. For self-modifying alternatives, \`remembering Type\`, \`instances Type\`.`,
-        `…Actually, a more integrated approach to types would be to allow overriding \`concept\`, to allow assertions (and modifications) of views on values. Types can override just \`concept\`, and users can rely on types. …Then again, having them override \`call\` (be functions) could be good too; how would users actually say that they want to rely on a type otherwise?`,
-        `Types of structure: \`tree …Of\`, \`acyclic …Of\`, \`graph …Of\`.`,
-        `Expr equivalence: (equals A … B) as a simple interface to checking equivalence proofs, based on traversing the graph of applications of any functions in an array stored as an \`equals\` override (anything between first and last can be omitted, but the check will last longer); (equals.trace A B Filter) for writing out details of a proof, (equals.search A B NodePicker AltPicker ResultReducer) for more control over equivalence search. Or \`(forany (alts Expr) …)\`/\`(forall (alts Expr) …)\`?`,
+        `Rewards and evolution?
+        \`best …Functions\` and \`best.\` (probability-sampling, max-past-reward (additive, exponentially fading, average, min)), along with some way of getting judgment to these, may be good, but they are not the most fundamental. What if we wanted to choose between inlining a function or not, caching its results or not? A \`choice N\` node (and \`choice.\`) (using \`read\` to store past-reward data; culling most-average nodes to save memory) (using \`reward Metric Expr\` to reward the choices done) seems more fundamental.  
+        (Do we want \`rewarded Value MutateFunction\`?)  
+        Evolution (or particle swarm optimization, rather) is only possible if we fully control the reward function (the optimization metric), and executions are very repeatable (likely pure). \`many Metric Expr\`. …But this needs random-mutation acceptors, like walkers and bounded numbers and become-another-mutation-acceptor, not done on an initial run but done on all others; \`mutated Value MutateFunction\`?  
+        Is this only a case of "our execution is pure and one-shot, vs our execution is not pure and multi-shot"?  `,
+        `Make actually good(-ish) self-modifying code pieces: "usually do this but rarely decide to start analyzing and optimizing this spot (recommendations) (\`rec This …ButSometimes\`)", "this is cheap, this is expensive, and they should agree (approximation)", "optimize this finite-branches spot by picking the likely-best option by predicted measure", "optimize this number in any way we know".`,
       ],
-      `Make the actual language straightforward and trustworthy, and actually use it for new things (like low-level numeric/graphic operations). Implement object memory-management (ref-counting with cycle un/merging), fully supporting partial evaluation, and actually be efficient with memory (without compromising generality and prototyping speed, and without optimizing special cases like a stack (when an object is created but not returned)).`,
     ],
     at:undefined, // Fill in at load-time.
     call(net) {
@@ -176,7 +168,7 @@ Project page: https://github.com/Antipurity/conceptual`,
       ctx.forEach(v => _isArray(v) && _maybeMerge(v))
 
       // Define concepts of some JS objects.
-      Promise.prototype.defines = new Map([[merge, undefined], [overrides, f => _preserveDeferred]])
+      Promise.prototype.defines = new Map([[merge, undefined]])
       Map.prototype.defines = new Map([[call, map]])
 
       // Store styling instructions in JS objects.
@@ -201,9 +193,9 @@ Project page: https://github.com/Antipurity/conceptual`,
                 if (i + 4 > s.length) break
                 if ((s[i].textContent || s[i]).trim()) break
                 if ((s[i+2].textContent || s[i+2]).trim()) break
-                const k = s[i + 1]
-                const v = s[i + 3]
-                rows.push(elem('tr', [elem('td', k), elem('td', v)]))
+                if (s[i+1].nodeName === 'EXTRACTED') break
+                if (s[i+3].nodeName === 'EXTRACTED') break
+                rows.push(elem('tr', [elem('td', s[i+1]), elem('td', s[i+3])]))
                 i += 4
               }
               s = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
@@ -232,24 +224,24 @@ Project page: https://github.com/Antipurity/conceptual`,
           if (typeof unbound == 'string') return elem('node', elem('string', _highlightGlobalsInString(struct)))
           if (_isArray(v) && v[0] === _extracted && struct[struct.length-1].id)
             struct[0].id = struct[struct.length-1].id, struct[0].style.color = _valuedColor(v[2])
-          /*if (_isArray(v) && v[0] === map || v instanceof Map) {
-            // Construct a <table>, with brackets and `map` outside of it, and each key-value pair having its own <tr>.
-              // Doesn't work well with editing it, mainly due to tr/td elements being seen with line-breaks and tab stops in .innerText, changing the structure.
-            const s = struct
-            let i, start = (s[0].textContent || s[0]) === '(' ? 2 : 1
-            let end = (s[s.length-1].textContent || s[s.length-1]) === ')' ? s.length-1 : s.length-2
-            const rows = []
-            for (i = start; i < end; ) {
-              if (i + 4 > s.length) break
-              if ((s[i].textContent || s[i]).trim()) break
-              if ((s[i+2].textContent || s[i+2]).trim()) break
-              const k = s[i + 1]
-              const v = s[i + 3]
-              rows.push(elem('tr', [elem('td', k), elem('td', v)]))
-              i += 4
-            }
-            struct = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
-          }*/
+          // if (_isArray(v) && v[0] === map || v instanceof Map) {
+          //   // Construct a <table>, with brackets and `map` outside of it, and each key-value pair having its own <tr>.
+          //     // Doesn't work well with editing it, mainly due to tr/td elements being seen with line-breaks and tab stops in .innerText, changing the structure.
+          //   const s = struct
+          //   let i, start = (s[0].textContent || s[0]) === '(' ? 2 : 1
+          //   let end = (s[s.length-1].textContent || s[s.length-1]) === ')' ? s.length-1 : s.length-2
+          //   const rows = []
+          //   for (i = start; i < end; ) {
+          //     if (i + 4 > s.length) break
+          //     if ((s[i].textContent || s[i]).trim()) break
+          //     if ((s[i+2].textContent || s[i+2]).trim()) break
+          //     if (s[i+1].nodeName === 'EXTRACTED') break
+          //     if (s[i+3].nodeName === 'EXTRACTED') break
+          //     rows.push(elem('tr', [elem('td', [s[i], s[i+1]]), elem('td', [s[i+2], s[i+3]])]))
+          //     i += 4
+          //   }
+          //   struct = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
+          // }
           if (_isArray(struct) && struct[0] === '(' && struct[struct.length-1] === ')')
             return elem('node', [elem('bracket', '('), ...struct.slice(1,-1), elem('bracket', ')')])
 
@@ -316,48 +308,48 @@ Project page: https://github.com/Antipurity/conceptual`,
     },
   },
 
-  /*alt:{
-    txt: `(alt Expr): returns any alternative representation of Expr that semantically does the same thing.
-A function should override \`alt\` to sometimes become its semantic alternative.
-Doesn't allow an override in the initial call.`,
-    _impure:true,
-    finish(x) { const r = finish(x);  return !_isDeferred(r) ? alt(r) : array(_deferred, array(alt, r[1]), ...r.slice(2)) },
-    call(x) {
-      if (this !== alt) return
-      const n = graphSize(x, _overridesAlt)
-      if (!n) return x
-      // Use on average 1 alt-override.
-      const b = bound(x, x => {
-        const r = overrides(x, alt)
-        if (_isArray(x) && r !== undefined && !_pickNatLessThan(n))
-          return _getOverrideResult(r, array(alt, x))
-          // Don't fall through to default alt if it returns undefined; we already handle graphs.
-      }, false)
-      return b
-    },
-  },
-  _overridesAlt(x) { return !_isArray(x) && overrides(x, alt) !== undefined },*/
-  gen:{
-    txt: `(gen Type)⇒Value: generate a random instance of Type. "a Type", "a random Type".
-By default, decomposes generation of arrays into generation of its elements.`,
-    _impure:true,
-    call(x) {
-      if (_isArray(x)) {
-        let r
-        if ((r = overrides(x, gen)) !== undefined)
-          if ((r = _getOverrideResult(r, !_isArray(finish.v) || finish.v[0] !== gen || finish.v[1] !== x ? [gen, x] : finish.v)) !== undefined)
-            return r
-        return x.map(gen)
-      }
-      return x
-    },
-  },
+//   alt:{
+//     txt: `(alt Expr): returns any alternative representation of Expr that semantically does the same thing.
+// A function should override \`alt\` to sometimes become its semantic alternative.
+// Doesn't allow an override in the initial call.`,
+//     _impure:true,
+//     finish(x) { const r = finish(x);  return !_isDeferred(r) ? alt(r) : array(_deferred, array(alt, r[1]), ...r.slice(2)) },
+//     call(x) {
+//       if (this !== alt) return
+//       const n = graphSize(x, _definesAlt)
+//       if (!n) return x
+//       // Use on average 1 alt-override.
+//       const b = bound(x, x => {
+//         const r = defines(x, alt)
+//         if (_isArray(x) && r !== undefined && !_pickNatLessThan(n))
+//           return _getOverrideResult(r, array(alt, x))
+//           // Don't fall through to default alt if it returns undefined; we already handle graphs.
+//       }, false)
+//       return b
+//     },
+//   },
+//   _definesAlt(x) { return !_isArray(x) && defines(x, alt) !== undefined },
+//   gen:{
+//     txt: `(gen Type)⇒Value: generate a random instance of Type. "a Type", "a random Type".
+// By default, decomposes generation of arrays into generation of its elements.`,
+//     _impure:true,
+//     call(x) {
+//       if (_isArray(x)) {
+//         let r
+//         if ((r = defines(x, gen)) !== undefined)
+//           if ((r = _getOverrideResult(r, !_isArray(finish.v) || finish.v[0] !== gen || finish.v[1] !== x ? [gen, x] : finish.v)) !== undefined)
+//             return r
+//         return x.map(gen)
+//       }
+//       return x
+//     },
+//   },
 
-  prob:{
-    txt: `(prob ProbabilityGen): a type of false/true that, when generated, returns true with a given probability and false otherwise.`,
-    _impure:true,
-    gen(x) { if (_isArray(x) && x[0] === prob) return _pickProb(gen(x[1])) },
-  },
+//   prob:{
+//     txt: `(prob ProbabilityGen): a type of false/true that, when generated, returns true with a given probability and false otherwise.`,
+//     _impure:true,
+//     gen(x) { if (_isArray(x) && x[0] === prob) return _pickProb(gen(x[1])) },
+//   },
 
 
 
@@ -374,9 +366,7 @@ By default, decomposes generation of arrays into generation of its elements.`,
 
 
   purify:{
-    txt: `(purify Expr)⇒Expr: partially-evaluates Expr, not executing _impure subexpressions.
-Used by functions.
-\`(purify 7)\` is \`7\`. \`(purify (quote x) x:(+ 3 4))\` is \`7\`. \`(purify (quote x) x:(+ 3 x))\` is \`(+ 3 x)\`. \`(purify (quote x) x:(gen (nats 5)))\` is \`(gen (nats 5))\`.`,
+    txt: `(purify Expr)⇒Expr: partially-evaluates Expr, not executing _impure subexpressions. Used by func.`,
     examples: [
       [`x→(+ 1 2)`, `x→3`],
       [`X→(pick false X Y)`, `id`],
@@ -384,29 +374,28 @@ Used by functions.
       [`Z→(pick Z X Y)`, `Z→(pick Z X Y)`],
       [`(purify 1)`, `1`],
       [`(purify (quote x) x:(+ 1 2))`, `3`],
-      [`(purify (quote x) x:(gen (nats 5)))`, `(gen (nats 5))`],
+      [`(purify (quote x) x:(gen (nats 5)))`, `(_unknown (gen (nats 5)))`],
     ],
     nameResult: ['purified'],
+    _argCount:1,
     call(x) {
-      x = _use(x)
-      // Add `_unknown` around strings and _impure-overriding subexpressions.
-      const expr = bound(x, _addUnknown, false)
-      const v = finish(expr)
-      if (_isArray(v) && v[0] === _unknown) {
-        // v[1] is an expression. Unwrap any `_unknown`s we may have left inside.
-        return bound(v, _removeUnknown, false)
-      } else {
-        // v is probably the value result.
-        if (_isDeferred(v)) // Then defer purification too.
-          return array(_deferred, array(purify, v[1]), ...v.slice(2))
-        return quote(v)
+      // Set finish.pure to true and just evaluate.
+      const prev = finish.pure
+      finish.pure = true
+      try {
+        const r = finish(x)
+        if (!_isUnknown(r)) return r
+        else if (!_isDeferred(r)) return r
+        else return r[1] = array(purify, r[1]), r
       }
+      finally { finish.pure = prev }
     },
   },
 
   _impure:{
     txt: `(_impure Array): returns whether the call is pure and can be \`merge\`d (or executed in \`purify\`) — a boolean.
 All JS functions are pure unless explicitly said otherwise.`,
+    _argCount:1,
     call(a) {
       if (_isArray(a) && _isFunc(a[0])) {
         // Go through the whole graph, and if anything is impure there, return false. Also cache.
@@ -417,36 +406,28 @@ All JS functions are pure unless explicitly said otherwise.`,
         function check(node) {
           if (checked.has(node)) return
           checked.add(node)
-          if (_impure(node)) return true
+          const b = _impure(node)
+          if (b !== undefined) return b
           if (_isArray(node) && node[0] !== quote) return node.some(check)
         }
         r = check(a[0])
         return _impure.cache.set(a[0], r), r
       }
-      if (_isArray(a) && overrides(a, _impure) === true) return true
+      if (_isArray(a) && defines(a, _impure) === true) return true
       return false
     },
   },
-
-  _addUnknown(x) {
-    if (_isArray(x) && (x[0] === _unknown || _isFunc(x))) return x
-    return (_isLabel(x) || _isArray(x) && _impure(x)) ? array(_unknown, x) : undefined
-  },
-  _removeUnknown(x) {
-    if (_isFunc(x)) return x
-    return _isArray(x) && x[0] === _unknown ? x[1] : undefined
-  },
+  _argCount:{txt:`A marker for the number of args to a function.`},
 
 
 
 
 
   _timeSince:{
-    txt: `(_timeSince)⇒TimeMark or (_timeSince TimeMark): returns the current time as f64 milliseconds, or the non-negative time elapsed since the mark.
-Makes no attempt to correct for the time to measure, \`(_timeSince (_timeSince))\`.`,
+    txt: `(time.since)⇒TimeMark or (time.since TimeMark): returns the current time as f64 milliseconds, or the non-negative time elapsed since the mark.
+Makes no attempt to correct for the time to measure, \`(time.since (time.since))\`.`,
     _impure:true,
     call(mark = 0) {
-      mark = _use(mark)
       if (typeof performance != ''+void 0 && performance.now) // Browser
         return performance.now() - mark
       else if (typeof process != ''+void 0 && process.hrtime && process.hrtime.bigint()) { // NodeJS
@@ -464,8 +445,8 @@ Makes no attempt to correct for the time to measure, \`(_timeSince (_timeSince))
     },
   },
   _memorySince:{
-    txt: `(_memorySince)⇒MemMark or (_memorySince MemMark): Measures required-memory-size change (allocated memory) as non-negative f64 bytes. Always 0 in browsers.
-Makes no attempt to correct for the memory-to-measure, \`(_memorySince (_memorySince))\`.`,
+    txt: `(memory.since)⇒MemMark or (memory.since MemMark): Measures required-memory-size change (allocated memory) as non-negative f64 bytes. Always 0 in browsers.
+Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.since))\`.`,
     _impure:true,
     call(mark = 0) {
       if (typeof process == ''+void 0 || !process.memoryUsage) return 0
@@ -473,52 +454,48 @@ Makes no attempt to correct for the memory-to-measure, \`(_memorySince (_memoryS
       return Math.max(0, m.rss + m.heapUsed - m.heapTotal - mark)
     },
   },
-  ['with.time']:{
-    txt: `Finished (with.time Expr): returns (Result ElapsedTime). The same as \`(time Expr)\`, but finished and with the result.`,
-    nameResult: ['resultAndElapsed'],
+  _timeOnly:{
+    txt: `Finished (time.only Expr): returns ElapsedTime. The same as \`(time Expr)\`, but finished and without the result.`,
+    nameResult: ['elapsed', 'ms'],
     _impure:true,
-    finish(x, add = 0) {
-      if (typeof this == 'function') return
-      const start = _timeSince()
-      const v = _use(finish(x))
-      if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _timeSince(start)), ...v.slice(2))
-      return array(v, _timeSince(start) + add)
-    },
+    finish(x, add = 0) { return time(x, add)[1] },
   },
-  ['with.memory']:{
-    txt: `Finished (with.memory Expr): returns (Result MemoryIncrease). The same as \`(memory Expr)\`, but finished and with the result.`,
-    nameResult: ['resultAndIncrease'],
+  _memoryOnly:{
+    txt: `Finished (memory.only Expr): returns MemoryIncrease. The same as \`(memory Expr)\`, but finished and without the result.`,
+    nameResult: ['increase', 'bytes'],
     _impure:true,
-    finish(x, add = 0) {
-      if (typeof this == 'function') return
-      const start = _memorySince()
-      const v = _use(finish(x))
-      if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _memorySince(start)), ...v.slice(2))
-      return array(v, _memorySince(start) + add)
-    },
+    finish(x, add = 0) { return memory(x, add)[1] },
   },
   time:{
-    txt: `(time Expr): Returns ElapsedTime: the time needed to execute Expr, in f64 ms.
+    txt: `(time Expr): Returns (Result ElapsedTime): the time needed to execute Expr, in f64 ms.
 Does not count time spent in interruptions (between executions of Expr) as part of execution time.`,
-    nameResult: ['elapsed', 'ms'],
+    nameResult: ['resultAndElapsed'],
     _impure:true,
     call(x, add = 0) {
       const start = _timeSince()
-      const v = _use(finish(x))
-      if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _timeSince(start)), ...v.slice(2))
-      return _timeSince(start) + add
+      const v = finish(x)
+      if (_isUnknown(v)) return v[1] = [time, v[1], add + _timeSince(start)], v
+      return [v, _timeSince(start) + add]
+    },
+    at:{
+      only:is('_timeOnly'),
+      since:is('_timeSince'),
     },
   },
   memory:{
-    txt: `(memory Expr): Returns MemoryIncrease.
+    txt: `(memory Expr): Returns (Result MemoryIncrease).
 Does not count memory allocated in interruptions (between executions of Expr) as part of the reported result.`,
-    nameResult: ['increase', 'bytes'],
+    nameResult: ['resultAndIncrease'],
     _impure:true,
     call(x, add = 0) {
       const start = _memorySince()
-      const v = _use(finish(x))
-      if (_isDeferred(v)) return array(v[0], array(time, v[1], add + _memorySince(start)), ...v.slice(2))
-      return _memorySince(start) + add
+      const v = finish(x)
+      if (_isUnknown(v)) return v[1] = [time, v[1], add + _memorySince(start)], v
+      return [v, _memorySince(start) + add]
+    },
+    at:{
+      only:is('_memoryOnly'),
+      since:is('_memorySince'),
     },
   },
 
@@ -527,9 +504,9 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   //   txt: `((least Function) A B): returns either A or B, whichever has the least measure.`,
   //   call(a,b) {
   //     if (!_isArray(this) || this[0] !== least) return
-  //     if (this.length != 2) return error
+  //     if (this.length != 2) return _emptyError
   //     const am = call(array(this[1], a)), bm = call(array(this[1], b))
-  //     const r = _use(call(array(less, am, bm)))
+  //     const r = call(array(less, am, bm))
   //     if (r === false) return b
   //     if (r === true) return a
   //     return finish(array(pick, r, b, a))
@@ -539,9 +516,9 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   //   txt: `((most Function) A B): returns either A or B, whichever has the most measure.`,
   //   call(a,b) {
   //     if (!_isArray(this) || this[0] !== most) return
-  //     if (this.length != 2) return error
+  //     if (this.length != 2) return _emptyError
   //     const am = call(array(this[1], a)), bm = call(array(this[1], b))
-  //     const r = _use(call(array(less, am, bm)))
+  //     const r = call(array(less, am, bm))
   //     if (r === false) return a
   //     if (r === true) return b
   //     return finish(array(pick, r, a, b))
@@ -555,58 +532,69 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   reduce:{
     txt: `(reduce Array Function) or (reduce Array Function Initial): reduces Array with Function, reducing dimensionality (array nestedness) by 1: repeatedly sets Initial to (Function Initial Element). If Initial is undefined, it is the first array element.`,
     examples: [
-      [`(reduce 1 +)`, `1`],
-      [`(reduce (1 2 3 4 5) +)`, `15`],
-      [`(reduce (1 …(2 3 4) 5) +)`, `15`],
-      [`(reduce (1 (2 3 4) 5) +)`, `(8 9 10)`],
+      [`(reduce + 1)`, `1`],
+      [`(reduce + (1 2 3 4 5))`, `15`],
+      [`(reduce + (1 …(2 3 4) 5))`, `15`],
+      [`(reduce + (1 (2 3 4) 5))`, `(8 9 10)`],
     ],
     nameResult: ['reduced'],
-    call(a, f, initial) {
+    call(f, a, initial) {
       if (!_isArray(a)) return a
-      let result = initial
-      for (let i = 0; i < a.length; ++i) {
-        const v = _use(a[i])
-        if (_isArray(v) && v[0] === rest && _isArray(v[1]) && v.length == 2) {
-          if (i === a.length-1) return call(array(reduce, v[1], f, result)) // Try to tail-call.
-          result = call(array(reduce, v[1], f, result)) // In …Array, reduce Array too.
+      let [result = initial, i = 0] = _interrupt(reduce)
+      try {
+        for (; i < a.length; ++i) {
+          const v = a[i]
+          if (_isArray(v) && v[0] === rest && _isArray(v[1]) && v.length == 2) {
+            if (i === a.length-1) return call(array(reduce, f, v[1], result)) // Try to tail-call.
+            result = call(array(reduce, f, v[1], result)) // In …Array, reduce Array too.
+          }
+          else if (result === undefined) result = v
+          else if (f === _plus && typeof result == 'number' && typeof v == 'number') result += v
+          else if (f === _star && typeof result == 'number' && typeof v == 'number') result *= v
+          else result = call(array(f, result, v))
+          if (_isArray(result) && result[0] === stopIteration) return result[1]
+          
+          if (_isError(result)) return result
+          // …Also control-flow defines (_isUnknown(result))…
         }
-        else if (result === undefined) result = v
-        else if (f === _plus && typeof result == 'number' && typeof v == 'number') result += v
-        else if (f === _star && typeof result == 'number' && typeof v == 'number') result *= v
-        else result = call(array(f, result, v))
-        if (_isArray(result) && result[0] === stopIteration) return result[1]
-      }
+      } catch (err) { if (err === _interrupt) _interrupt(reduce, 2)(result, i);  throw err }
       return result
     },
   },
   transform:{
-    txt: `(transform Array Function): transforms each element of Array by applying Function.
-\`(transform (transform A F) G)\` is the same as \`(transform A (compose G F)).\``,
+    txt: `(transform Function Array): transforms each element of Array by applying Function.
+\`(transform G (transform F A))\` is the same as \`(transform (compose F G) A).\``,
     examples: [
-      [`(transform 1 x→(+ x 2))`, `3`],
-      [`(transform (1 …(2 3) 4) x→…(0 (* x 2) 0))`, `(0 2 0 0 4 0 0 6 0 0 8 0)`],
+      [`(transform x→(+ x 2) 1)`, `3`],
+      [`(transform x→…(0 (* x 2) 0) (1 …(2 3) 4))`, `(0 2 0 0 4 0 0 6 0 0 8 0)`],
     ],
     nameResult: ['transformed', 'mapped'],
-    call(a,f) {
+    _argCount:2,
+    call(f,a) {
       if (!_isArray(a)) return call(array(f, a))
-      const result = []
-      for (let i = 0; i < a.length; ++i) {
-        let v = _use(a[i]), r
-        if (_isArray(v) && v[0] === rest && _isArray(v[1]) && v.length == 2)
-          r = array(rest, call(array(transform, v[1], f))) // In …Array, transform Array too.
-        else
-          r = call(array(f, v))
+      let [result = [], i = 0] = _interrupt(transform)
+      try {
+        for (; i < a.length; ++i) {
+          let v = a[i], r
+          if (_isArray(v) && v[0] === rest && _isArray(v[1]) && v.length == 2)
+            r = array(rest, call(array(transform, f, v[1]))) // In …Array, transform Array too.
+          else
+            r = call(array(f, v))
 
-        // Maybe we were told to stop iteration.
-        if (r === stopIteration) break
+          // Maybe we were told to stop iteration.
+          if (r === stopIteration) break
 
-        // Add r to result.
-        if (_isArray(r) && r[0] === rest && _isArray(r[1]) && r.length == 2)
-          result.push(...r[1])
-        else
-          result.push(r)
-      }
-      return _maybeMerge(result)
+          if (_isError(r)) return r
+          // …Also control-flow defines (_isUnknown(result))…
+
+          // Add r to result.
+          if (_isArray(r) && r[0] === rest && _isArray(r[1]) && r.length == 2)
+            result.push(...r[1])
+          else
+            result.push(r)
+        }
+        return _maybeMerge(result)
+      } catch (err) { if (err === _interrupt) _interrupt(transform, 2)(result, i);  throw err }
     },
   },
 
@@ -615,42 +603,42 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
 
 
-  f64:{
-    txt: `(f64 …Strings)⇒Number: converts a string to a 64-bit float, broadcasted if an array.`,
-    nameResult: ['float'],
-    call(...s) { return _toNumber(s) },
-  },
-  less:{
-    txt: `(less Number1 Number2)⇒Bool: returns true if Number1 is less than Number2, or false otherwise.`,
-    nameResult: ['isLess', 'bool'],
-    call(a,b) { return _toNumber(a) < _toNumber(b) },
-  },
-  nats:{
-    txt: `(nats Number): a type of all natural numbers less than Number, including 0.`,
-    gen(n) {
-      n = _use(n)
-      if (!_isArray(n) || n[0] !== nats) return error
-      return _pickNatLessThan(n[1])
-    },
-  },
+  // f64:{
+  //   txt: `(f64 …Strings)⇒Number: converts a string to a 64-bit float, broadcasted if an array.`,
+  //   nameResult: ['float'],
+  //   call(...s) { return _toNumber(s) },
+  // },
+  // less:{
+  //   txt: `(less Number1 Number2)⇒Bool: returns true if Number1 is less than Number2, or false otherwise.`,
+  //   nameResult: ['isLess', 'bool'],
+  //   _argCount:2,
+  //   call(a,b) { return _toNumber(a) < _toNumber(b) },
+  // },
+  // nats:{
+  //   txt: `(nats Number): a type of all natural numbers less than Number, including 0.`,
+  //   gen(n) {
+  //     if (!_isArray(n) || n[0] !== nats) return
+  //     return _pickNatLessThan(n[1])
+  //   },
+  // },
   _toNumber(a) {
-    a = _use(a)
     if (_isArray(a)) return a.length == 1 ? _toNumber(a[0]) : a.map(_toNumber)
     if (typeof a == 'number') return a
     if (a === cycle) return cycle
-    if (!_isString(a)) return error
+    if (!_isString(a)) return array(error, "Cannot convert to a number")
     return +a
   },
   _toString(a) {
-    a = _use(a)
     if (typeof a == 'number') return ''+a
     return a
   },
 
   broadcasted:{
     txt: `(broadcasted Function): creates a function that is broadcasted over array arguments (\`((broadcasted Func) …Args)\`). No array inputs means just applying Function; having array inputs means returning an array of applying (broadcasted Function) to each element, with the same index for all arguments, using the last element if out-of-bounds for an argument, and non-array inputs treated as arrays of length 1.`,
+    future:`Make reduce and transform and broadcasted check _isUnknown.`,
+    _argCount:1,
     call(fun) {
-      const decorated = function decorated(...args) {
+      const impl = function decorated(...args) {
         // Just apply the function if there are no arrays.
         if (!args.some(_isArray)) return call(array(fun, ...args))
 
@@ -660,38 +648,59 @@ Does not count memory allocated in interruptions (between executions of Expr) as
             if (!args[i].length) return args[i]
             maxLen = Math.max(maxLen, args[i].length)
           }
-        const results = [], argsSlice = args.slice()
-        for (let k = 0; k < maxLen; ++k) {
-          // Apply f to a slice of args.
-          for (let i = 0; i < args.length; ++i) {
-            const el = args[i]
-            argsSlice[i] = _use(!_isArray(el) ? el : k < el.length ? el[k] : el[el.length-1])
+        let [k = 0, results = [], argsSlice = [decorated, ...args.slice()]] = _interrupt(broadcasted)
+        try {
+          for (; k < maxLen; ++k) {
+            // Apply f to a slice of args.
+            for (let i = 0; i < args.length; ++i) {
+              const el = args[i]
+              argsSlice[i+1] = !_isArray(el) ? el : k < el.length ? el[k] : el[el.length-1]
+            }
+            if (call.cache && call.cache.has(argsSlice)) call.cache.delete(argsSlice)
+            const r = call(_maybeMerge(argsSlice))
+            if (_isError(r)) return r
+            // …Also check _isUnknown(r)…
+            results.push(r)
           }
-          results.push(call(array(decorated, ...argsSlice)))
-            // We probably don't even want to cache. But whatever, this works, *and* is maximally correct.
-        }
+        } catch (err) { if (err === _interrupt) _interrupt(broadcasted, 3)(k, results, argsSlice);  throw err }
         // Slice off superfluous end results.
         while (results.length > 1 && results[results.length-2] === results[results.length-1]) results.pop()
         return results.length === 1 && !_isArray(results[0]) ? results[0] : results
       }
-      decorated.defines = new Map
-      decorated.defines.set(deconstruct, () => array(broadcasted, fun))
-      return decorated
+      _cameFrom(impl, finish.v)
+      impl.defines = new Map
+      impl.defines.set(deconstruct, array(broadcasted, fun))
+      impl.defines.set(_impure, _impure(fun))
+      if (_view(fun) instanceof Map && _view(fun).has(_argCount))
+        impl.defines.set(_argCount, _view(fun).get(_argCount))
+      return impl
     },
   },
 
 
-  ['+']:is([is('broadcasted'), is('_sum')]),
-  ['*']:is([is('broadcasted'), is('_mult')]),
-  _sum(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a + b },
-  _mult(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a * b },
+  ['+']:is([is('_overridable'), is([is('broadcasted'), is('_sum')])]),
+  ['*']:is([is('_overridable'), is([is('broadcasted'), is('_mult')])]),
+  _sum:{
+    _argCount:2,
+    call(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a + b },
+  },
+  _mult:{
+    _argCount:2,
+    call(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a * b },
+  },
   _plus:is('+'),
   _star:is('*'),
 
-  ['-']:is([is('broadcasted'), is('_subtract')]),
-  ['/']:is([is('broadcasted'), is('_divide')]),
-  _subtract(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a - b },
-  _divide(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a / b },
+  ['-']:is([is('_overridable'), is([is('broadcasted'), is('_subtract')])]),
+  ['/']:is([is('_overridable'), is([is('broadcasted'), is('_divide')])]),
+  _subtract:{
+    _argCount:2,
+    call(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a - b },
+  },
+  _divide:{
+    _argCount:2,
+    call(a,b) { return a = _toNumber(a), b = _toNumber(b), typeof a != 'number' ? a : typeof b != 'number' ? b : a / b },
+  },
   _minus:is('-'),
   _slash:is('/'),
 
@@ -705,17 +714,18 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   _Extension:{
     future:[
       `Into every page, inject a simple script that creates a fixed-position small button in a corner, that requests Self from the extension on click (that creates a REPL in the page's context).`,
-      `Clicking the extension icon opens a popup with the REPL, with its input preserved across openings.`,
-      `Allow some flavor of clicking to refer to the page's elements, both for/at in-page and extension REPL. Different pages can communicate like this.`,
+      `Allow some flavor of clicking to refer to the page's elements.`,
       `Have some small DOM event un/registering (with objects, event→function) and dispatching API. Store any self-modifications that occured.`,
     ],
     call() { throw "Being a browser extension not supported for now" },
   },
   _Browser:{
     future:[
-      `A custom DOM context menu, with overridable-by-value contents (and collapsing for all, copy-contents for strings, showing bound value and renaming for labels).`,
+      `Go through everything DOM-related and make sure that any custom-property communication happens *only* through .defines.`,
+      `Have \`finish\` highlight the currently-executing per-expression original (when interrupted). Not use element IDs for highlighting the same value; instead, keep an array from values to displayed-via-element.`,
       `Some flavor of clicking (Shift+click?) to insert a reference to a value into REPL input (not really serializable, runtime-only).`,
-      `Have _cameFrom(to, from) and call it from bound (and recording of _deferred/_unknown). Have \`finish\` highlight the currently-executing original (throttled).`,
+      `A custom DOM context menu, with definable-by-value/element contents.`,
+      `Context menu things: collapse an element, use a <textarea> to display a string, use a clickable <button> to display a function, rename label, change evaluator's language and context, move an element to a window or to the side of another element.`,
     ],
     call() {
       serialize.displayed = serialize.dom
@@ -728,7 +738,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
         const el = evt.target
         if (!el || el.tagName !== 'KNOWN') return
         const v = 'to' in el ? el.to : parse(el.textContent)[0]
-        scrollTo(0,0)
+        if (!evt.ctrlKey) scrollTo(0,0)
         _elemInsert(document.body, elem(evaluator, array(deconstruct, v)), document.body.firstChild)
       })
 
@@ -773,15 +783,21 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       addEventListener('resize', _throttled(updateScrollHighlights), true)
 
       // Highlight equal-id <node>s over selection or under cursor.
-      let prevHover
       function changeHoverTo(elem) {
+        const prev = changeHoverTo.prev
         const selector = elem && elem.id ? '#' + CSS.escape(elem.id) : null
         const New = elem == null ? null : elem instanceof Set ? elem : document.querySelectorAll(selector)
         const set = new Set
-        New && New.forEach(el => (el.classList.add('hover'), set.add(el)))
-        if (prevHover) prevHover.forEach(el => !set.has(el) && el.classList.remove('hover'))
+        let b = false
+        New && New.forEach(el => {
+          if (prev.has(el)) set.add(el)
+          else el.classList.add('hover'), set.add(el)
+          el = el.parentNode
+          !b && el && el.tagName === 'EXTRACTED' && (el.classList.add('hover'), set.add(el), b = true)
+        })
+        if (prev) prev.forEach(el => !set.has(el) && el.classList.remove('hover'))
         scrollHighlight(New)
-        prevHover = set
+        changeHoverTo.prev = set
       }
       const nodeParent = _closestNodeParent
       function highlightParent(evt) {
@@ -799,7 +815,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
       // On any element tree mutations inside document.body, re-highlight.
       new MutationObserver(_throttled(record => {
-        changeHoverTo(prevHover)
+        changeHoverTo(changeHoverTo.prev)
       }, .05))
       .observe(document.body, { childList:true, subtree:true })
 
@@ -807,10 +823,14 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       let width = innerWidth
       addEventListener('resize', _throttled(() => width !== innerWidth ? _updateBroken(document.body) : (width = innerWidth)), .1)
 
+      // Update CPU's title.
+      ;(CPU.oninput = () => { CPU.title = CPU.title.replace(/[0-9]+%/, ((+CPU.value*100)|0) + '%') })()
+
       // Create a REPL.
       const env = finish.env = _newExecutionEnv()
       finish.env.set(log, document.body)
-      log(elem(REPL))
+      document.body.insertBefore(elem(REPL), document.body.firstChild)
+      document.querySelector('[contenteditable]').focus()
 
       // If our URL has `#…` at the end, parse and evaluate that command.
       function evalHash(hash) {
@@ -903,6 +923,10 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   evaluator:{
     txt: `(elem evaluator Expr): When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.`,
+    future:[
+      `A checkbox for repeating computation. (Clearing the logs when re-starting, and clearing the previous output and immediately replacing it when finishing.) (For optimizing self-modifying code by repeated evaluation.)`,
+      `Have adjustable (per-REPL and per-evaluator) per-job relative importances, defining the time-to-interrupt. Show relative resources (CPU time) that an evaluator takes up with a color.`,
+    ],
     elem(tag, expr, style) {
       if (tag !== evaluator || typeof document == ''+void 0) return
 
@@ -915,58 +939,73 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       el.classList.add('code')
       _elemStyle(el, style)
       el.append(query)
+      const waiting = elem('waiting')
+      waiting.style.display = 'none'
+      setTimeout(() => waiting.style.removeProperty('display'), 300)
+      el.append(waiting)
 
       const env = _newExecutionEnv(finish.env)
       env.set(log, el)
 
       const id = _schedule(expr, env, v => {
+        _elemRemove(waiting)
         finish.env = env
         log(serialize(v, serialize.displayed))
       })
       prompt.title = 'Click to remove this.'
-      prompt.onclick = () => (_elemRemove(el), _cancel(id))
+      prompt.onclick = () => (_elemRemove(el), _cancel(id), getSelection() && getSelection().collapseToStart())
       return el
     },
   },
   REPL:{
     txt: `(elem REPL Language): Creates a visual REPL instance. The Language parameter doesn't work (but ideally, the language should define parsing, serialization, and styling, for DOM and console).`,
     future:[
-      `Make the Language parameter work.`,
+      `History of edits, currently broken by constant DOM replacements: Ctrl+Z / Ctrl+Shift+Z.`,
+      `Make the Language parameter work. (basic/embellished, and _innerText.)`,
       `Allow changing the binding context too.`,
+      `Make REPL input a read-write evaluator (extracting functionality to there) (becoming read-only and impurely-executed when evaluated).`,
     ],
     elem(tag, lang, style) {
       if (tag !== REPL || typeof document == ''+void 0) return
 
       let ctx = parse.ctx, env = _newExecutionEnv(finish.env)
-      ctx.set('.', ctx)
 
       const repl = elem('node')
       const logContainer = elem('code')
 
       const pureOutput = elem('node')
+      pureOutput.classList.add('code')
+      let id, waiting
       const purifyAndDisplay = _throttled(expr => {
         const justClear = expr === purifyAndDisplay
         let preserved
         if (pureOutput.firstChild) {
           for (let ch = pureOutput.firstChild; ch; ch = ch.nextSibling)
             if (!ch.removed) {
-              if (ch.onclick === evaluate && !justClear) preserved = ch
-              else ch.style.position = 'absolute', _elemRemove(ch)
+              if (ch.onclick === evaluate && !justClear && !preserved) preserved = ch
+              else _elemRemove(ch), ch.style.position = 'absolute'
             }
         }
+        if (id !== undefined) _cancel(id), waiting.remove(), id = undefined, waiting = undefined
         if (!justClear) {
-          try {
-            const p = purify(expr)
-            if (quote(p) === p) {
+          const e = _newExecutionEnv(env)
+          e.set(log, pureOutput)
+          id = _schedule([purify, array(quote, expr)], e, p => {
+            id = undefined, waiting.remove(), waiting = undefined
+            if (!_isUnknown(p)) {
               if (preserved)
-                preserved.style.position = 'absolute', _elemRemove(preserved)
+                _elemRemove(preserved), preserved.style.position = 'absolute'
               return _elemInsert(pureOutput, serialize(p, serialize.displayed))
+            } else {
+              if (preserved) return
+              const el = elem('button', 'Evaluate')
+              el.onclick = evaluate
+              _elemInsert(pureOutput, el)
             }
-          } catch (err) {}
-          if (preserved) return
-          const el = elem('button', 'Evaluate')
-          el.onclick = evaluate
-          _elemInsert(pureOutput, el)
+          }), waiting = elem('waiting')
+          waiting.style.display = 'none'
+          setTimeout(() => waiting && waiting.style.removeProperty('display'), 300)
+          pureOutput.append(waiting)
         }
       }, .1)
 
@@ -984,7 +1023,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
           if (i !== undefined) _loadCaret(replInput, i, s)
           obs.takeRecords()
           purifyAndDisplay(expr)
-        } catch (err) { if(!replInput.innerText) purifyAndDisplay(purifyAndDisplay) }
+        } catch (err) { if (!replInput.innerText) purifyAndDisplay(purifyAndDisplay) }
       }, .2))
       obs.observe(replInput, { childList:true, subtree:true, characterData:true })
 
@@ -999,7 +1038,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       env.set(log, logContainer)
       
       const prev = finish.env; finish.env = env
-      log(structuredSentence('{{{(txt)} for {all functions}}, {{(examples)} for {code examples}}, {{`.`} for {all current bindings}}}. {{a}, {`a`}, {"s"}, {(0 1)}, {(a:2 a)}}. {Click on {{an entered command}\'s prompt} to {remove it}}.\n{{A REPL} of {{an interpreter} geared towards {generality and {maximizing {re-use of {{assumed-expensive} {computation results}}}}}}, {even detecting {computation cycles} in {pure functions}}}.'))
+      log(structuredSentence('{{A REPL}. {{(txt)} for {all functions}}, {{(examples)} for {code examples}}, {{`.`} for {all current bindings}}}. {{a}, {`a`}, {"s"}, {(0 1)}, {(a:2 a)}}. {Click on {{an entered command}\'s prompt} to {remove it}}.'))
       finish.env = prev
       const brackets = '(){}[]\'\'""'
       replInput.onkeydown = evt => {
@@ -1017,17 +1056,16 @@ Does not count memory allocated in interruptions (between executions of Expr) as
           }
         }
         if (evt.key !== 'Enter' || evt.shiftKey || evt.ctrlKey) return
-        evaluate()
+        evaluate(evt)
       }
-      function evaluate() {
+      function evaluate(evt) {
         const cmd = replInput.innerText.trim()
         const prev = finish.env
         try {
-          let expr, styled
+          let expr, newCtx, styled
           log.did = false
           finish.env = env;
-          [expr, ctx, styled] = parse(cmd, undefined, ctx)
-          ctx.set('.', ctx)
+          [expr, newCtx, styled] = parse(cmd, undefined, ctx)
 
           log(elem(evaluator, expr))
         } catch (err) {
@@ -1088,6 +1126,13 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     if (into instanceof Selection) ch ? into.collapse(ch, index - sum) : into.collapse(el, el.childNodes.length)
     else return [ch, index - sum]
   },
+  _innerText:{
+    txt:`Returns the inner text of an element (in an array with strings and other things), preserving .special elements.`,
+    // To save, we need to count until element and inner-index, and return the index.
+    // To load, we need to go-until-index, and return the element and inner index.
+    // Do we re-implement saving and loading (to go deep into elements instead of using .innerText)? Is there a way to re-use this code there?
+    call(el) {},
+  },
 
 
   _elemInsert:{
@@ -1103,7 +1148,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       _updateBroken(el)
 
       // Handle the "insert into a being-inserted element" case smoothly, by transitioning the parent between two computed heights.
-      // Since height does not transition correctly by default, we explicitly help it.
+      // Since height:auto does not transition by default, we explicitly help it.
       const heightTransitioning = !!into.style.height
       into.style.removeProperty('height')
       const posth = getComputedStyle(into).height
@@ -1137,7 +1182,12 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     txt: `Removes a DOM element from the displayed document smoothly (if CSS transitions are enabled for it, and are specified in seconds, with all-props being the first), by transitioning height and opacity to 0.`,
     _impure:true,
     call(el) {
+      if (!(el instanceof Element)) el.remove()
       el.removed = true
+
+      const r1 = el.getBoundingClientRect(), r2 = document.documentElement.getBoundingClientRect()
+      _particles(r1.left - r2.left, r1.top - r2.top, r1.width, r1.height)
+
       const style = getComputedStyle(el)
       const {height} = style
       const dur = parseFloat(style.transitionDuration)*1000
@@ -1149,6 +1199,21 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
         setTimeout(el => el.remove(), dur, el)
       } else el.remove()
       return el
+    },
+  },
+  _particles:{
+    txt: `A splash of magical particles lol`,
+    call(x,y,w,h) {
+      const n = Math.sqrt(w*h)/10
+      for (let i = 0; i < n; ++i) {
+        const p = elem('particle')
+        p.style.left = x + Math.random() * w + 'px'
+        p.style.top = y + Math.random() * h + 'px'
+        p.style.setProperty('--x', (Math.random()*20-10) + 'px')
+        p.style.setProperty('--y', (Math.random()*20-10) + 'px')
+        document.body.append(p)
+        setTimeout(() => p.remove(), 500)
+      }
     },
   },
 
@@ -1163,13 +1228,14 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       // Return a promise to measure non-sync time.
     let lastTime = 0
     let scheduledId = null, running = false
-    function throttled(x) {
+    function throttled(x,y) {
       if (running) return
       if (scheduledId) clearTimeout(scheduledId)
-      const requiredRest = cpu === .5 ? lastTime : lastTime/cpu - lastTime
+      const target = typeof cpu == 'number' ? cpu : cpu()
+      const requiredRest = target === .5 ? lastTime : lastTime/target - lastTime
       if (requiredRest > 2)
-        scheduledId = setTimeout(run, requiredRest, x)
-      else run(x)
+        scheduledId = setTimeout(run, requiredRest, x, y)
+      else run(x, y)
     }
     function run(x) {
       scheduledId = null, running = true
@@ -1192,7 +1258,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
 
 
 
-  _var:is('var'),
+  _var:is('var'), // This makes tests run twice.
   var:{
     txt: `Finished (var): Creates a new unique variable, usable as a label.`,
     examples: [
@@ -1201,9 +1267,21 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       [`(a→a 5) a:(var)`, `5`],
     ],
     nameResult: ['x', 'y', 'z', 'w', 'a', 'b', 'c', 'd', 'variable'],
-    finish() { return Symbol() },
+    finish: { _argCount:0, call() { return Symbol() }, },
     _impure:true,
   },
+  _const:is('const'),
+  const:{
+    txt: `(const): A new unique object with no inner structure, only good for ref-equality checks.`,
+    examples: [
+      [`(a a a:(const))`, `(a a a:(const))`],
+      [`((const) (const))`, `((const) (const))`],
+      [`(a→a a) a:(const)`, `(const)`],
+      [`(a→a 5) a:(const)`, `error 'Not assignable'`],
+    ],
+    nameResult: ['o', 'obj'],
+  },
+  _isVar(x) { return typeof x == 'symbol' || _isLabel(x) || _isArray(x) && x[0] === _var && x.length == 1 },
 
 
 
@@ -1254,47 +1332,47 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
 
 
 
-  /*typeof:{
-    txt: `Finished (typeof Expr): A relic from an ancient time, to be removed; infer the type of Expr based on each intermediate value being both input and output.
-…Or, you know, just recurse into array parts.`,
-    finish(x) {
-      if (_isArray(x) && x[0] === gen) return x
-      // We are mixing up types badly here: mixing execution directives (expressions) with types.
-      if (_isString(x)) return x
-      // Allow x to override typeof.
-      let r
-      if ((r = overrides(x, _typeof)) !== undefined)
-        if ((r = _getOverrideResult(r, array(_typeof, x))) !== undefined)
-          return r
-          // If it does override, we should do _both. And, _both should probably recurse into arrays too.
-      // Finish x after replacing every part of x with (_typeof Part).
-      if (!_isArray(x)) return x
-      let y = x.slice()
-      // Maybe handle _unknowns too?
-      for (let i = 0; i < y.length; ++i)
-        y[i] = array(_typeof, x[i])
-      return finish(_maybeMerge(y))
-        // Um, we probably want to call ourselves directly, not through `finish`.
-    },
-  },
-  _typeof:is('typeof'),
-  _both:{
-    txt: `Returns the least type containing both, or error.
-Imprecise here; demands ref-equality if not perfectly general.`,
-    call(a,b) {
-      if (_isLabel(a)) return b
-      if (a !== b) return error
-      return a
-    },
-  },
-  _either:{
-    txt: `Returns the greatest type containing both.`,
-    call(a,b) {
-      if (_isLabel(a)) return a
-      if (a !== b) return _var()
-      return a
-    },
-  },*/
+//   typeof:{
+//     txt: `Finished (typeof Expr): A relic from an ancient time, to be removed; infer the type of Expr based on each intermediate value being both input and output.
+// …Or, you know, just recurse into array parts.`,
+//     finish(x) {
+//       if (_isArray(x) && x[0] === gen) return x
+//       // We are mixing up types badly here: mixing execution directives (expressions) with types.
+//       if (_isString(x)) return x
+//       // Allow x to override typeof.
+//       let r
+//       if ((r = defines(x, _typeof)) !== undefined)
+//         if ((r = _getOverrideResult(r, array(_typeof, x))) !== undefined)
+//           return r
+//           // If it does override, we should do _both. And, _both should probably recurse into arrays too.
+//       // Finish x after replacing every part of x with (_typeof Part).
+//       if (!_isArray(x)) return x
+//       let y = x.slice()
+//       // Maybe handle _unknowns too?
+//       for (let i = 0; i < y.length; ++i)
+//         y[i] = array(_typeof, x[i])
+//       return finish(_maybeMerge(y))
+//         // Um, we probably want to call ourselves directly, not through `finish`.
+//     },
+//   },
+//   _typeof:is('typeof'),
+//   _both:{
+//     txt: `Returns the least type containing both, or error.
+// Imprecise here; demands ref-equality if not perfectly general.`,
+//     call(a,b) {
+//       if (_isLabel(a)) return b
+//       if (a !== b) return _emptyError
+//       return a
+//     },
+//   },
+//   _either:{
+//     txt: `Returns the greatest type containing both.`,
+//     call(a,b) {
+//       if (_isLabel(a)) return a
+//       if (a !== b) return _var()
+//       return a
+//     },
+//   },
 
 
 
@@ -1313,7 +1391,7 @@ Imprecise here; demands ref-equality if not perfectly general.`,
 
 
   _getDataOverride(data, code) {
-    let r = overrides(data, code)
+    let r = defines(data, code)
     if (r !== undefined && typeof r !== 'function')
       return r
   },
@@ -1322,11 +1400,13 @@ Imprecise here; demands ref-equality if not perfectly general.`,
 (txt): Returns all available descriptions in a (… (Name Description) …) format.`,
     nameResult: ['description', 'asText'],
     call(f) {
+      if (_isArray(f)) return array(error, "Can only view txt of simple functions")
       if (f !== undefined)
         return _getDataOverride(f, txt)
-      const result = [map]
+      const result = [map], seen = new Set
       parse.ctx.forEach((v,k) => {
         if (k[0] === '_') return
+        if (seen.has(v)) return; else seen.add(v)
         let r = _getDataOverride(v, txt)
         if (r !== undefined)
           result.push(v, r)
@@ -1339,12 +1419,13 @@ Imprecise here; demands ref-equality if not perfectly general.`,
     txt: `(examples F): Returns examples of usage of a function, in \`(… (CodeString BecomesString) …)\` format.
 (examples): Returns all available examples in a (… (Name … (CodeString BecomesString) …) …) format.`,
     call(f) {
-      if (_isArray(f)) return error
+      if (_isArray(f)) return array(error, "Can only view examples of simple functions")
       if (f === undefined) {
         // Accumulate all examples (from parse.ctx).
-        const result = [map]
+        const result = [map], seen = new Set
         parse.ctx.forEach((v,k) => {
           if (k[0] === '_') return
+          if (seen.has(v)) return; else seen.add(v)
           const r = _getDataOverride(v, examples)
           if (r !== undefined)
             result.push(v, r)
@@ -1360,9 +1441,10 @@ Imprecise here; demands ref-equality if not perfectly general.`,
 (future): Returns all known things to be done. Less than a third is usually done.`,
     nameResult: ['todo'],
     call(f) {
-      if (f !== undefined) return error
-      const result = [map]
+      if (f !== undefined) return array(error, "Can only view futures of simple functions")
+      const result = [map], seen = new Set
       parse.ctx.forEach((v,k) => {
+        if (seen.has(v)) return; else seen.add(v)
         const r = _getDataOverride(v, future)
         if (r !== undefined)
           result.push(v, r)
@@ -1380,9 +1462,9 @@ Imprecise here; demands ref-equality if not perfectly general.`,
         `— In the end, the best and most capable thing always wins. Might as well try to do as much as possible correctly from the start. (Design for generality first, and derive optimized versions as special cases.)`,
         `— There are no false trails and things that are so for no reason, and everything can be pursued to its underlying powerful idea(s), leaving an implementation in your personality or a program (or a story or whatever) you've intertwined it with, in the process. No truths nor lies, only evidence you've seen and what you've made of it. Effects and their reasons are intrinsically linked, and metaphors are not meaningless wordplay. (In particular, the only true god of humans is an extremely correct implementation/explanation of their intelligence, and some of physics.) (Believe in yourself.)`,
         `— No idea by itself, no matter how real and underlying and powerful and pure, can compete against multiple ideas that come together. Paperclip maximizers, super-intelligent viruses, one-trick pony philosophers and idea-men, ideas and ideologies and separate forms of governance may struggle as hard as they want, but they will fail against life's unity; saying that a thing that can do everything *will* do everything is just inexperience — do not fall into this trap of infinite generality. (Design for unity, not dominance of a paradigm. Build on top of a popular thing. Do not split across many projects.)`,
-        `— A worthwhile mind's most fundamental concepts are concepts of a very high-level programming language too. By now, there are no significant holes left in that view, and someone just needs to put together a myriad pieces properly. Communication by a single word with all the meaning, interconnectedness into a global network of all knowledge, eternal improvement and learning, multiple bodies for one mind and multiple minds for one body, reproduction, life after and in death, imagination, logic, emotions — all implemented and practically perfected somewhere in the world, often with its own set of programming languages and frameworks. Finding all these to unite is how humanity would *begin* to create AI: a convenient-to-use singularity is the only first step possible. The picture is about precise enough already, and top-down is very slowly starting to meet the bottom-up.
+        `— A worthwhile mind's most fundamental concepts are concepts of a very high-level programming language too. By now, there are no significant holes left in that view, and someone just needs to put together a myriad pieces properly. Communication by a single word with all the meaning, interconnectedness into a global network of all knowledge, eternal improvement and learning, multiple bodies for one mind and multiple minds for one body, reproduction, life after and in death, planning, imagination, logic, emotions — all implemented and practically perfected somewhere in the world, often with its own set of programming languages and frameworks. Finding all these to unite is how humanity would *begin* to create AI: a convenient-to-use singularity is the only first step possible. The picture is about precise enough already, and top-down is very slowly starting to meet the bottom-up.
 
-(To be full, these are the more bottom-up words for the things above: properly-integrated conceptual links, Internet, evolution and more specific optimizers, multiprocessing and scheduling, copying, copying and self-rewriting, most of modern maching learning, logic and types and proof assistants, reinforcement learning. This is about as good of a match as it can get. Only with all the pieces can the full picture be seen, as they enrich each other: a nigh-impossible engineering task today, but one that at least someone will have to undertake and complete eventually.)`,
+(To be full, these are the more bottom-up words for the things above: properly-integrated conceptual links, Internet, evolution and more specific optimizers, multiprocessing and scheduling, copying, copying and self-rewriting, virtualization of operations, most of modern maching learning, logic and types and proof assistants, reinforcement learning. This is about as good of a match as it can get. Only with all the pieces can the full picture be seen, as they enrich each other: a nigh-impossible engineering task today, but one that at least someone will have to undertake and complete eventually.)`,
         `— If something is difficult to the point of death wish, then no one has likely done it before, which means that it's worth doing. (Do it.)`,
       ],
       `Humanity's beauty; amazing…`,
@@ -1414,21 +1496,23 @@ Examples: \`(+ (delay 1) (delay 2))\` eventually returns 3. \`(+ (* (delay 1) (d
     nameResult: ['firstOf'],
     finish(...x) {
       if (this !== race) return
-      const exprs = [race], promises = []
-      for (let i = 0; i < x.length; ++i) {
-        // Why not do it in random order? Or some order that measures times and starts with the least-time one, or uses some other performance approximation.
-        const v = finish(x[i])
-        if (v instanceof Promise) {
-          if ('result' in v) return v.result
-          promises.push(v)
-          exprs.push(v)
-        } else if (_isArray(v) && v[0] === _deferred) {
-          promises.push(...v.slice(2))
-          exprs.push(v[1])
-        } else // A non-deferred result.
-          return v
-      }
-      return array(_deferred, merge(exprs), ...promises)
+      let [i = 0, exprs = [race], promises = []] = _interrupt(race)
+      try {
+        for (; i < x.length; ++i) {
+          // Why not do it in random order? Or some order that measures times and starts with the least-time one, or uses some other performance approximation.
+          const v = finish(x[i])
+          if (v instanceof Promise) {
+            if ('result' in v) return v.result
+            promises.push(v)
+            exprs.push(v)
+          } else if (_isUnknown(v)) {
+            promises.push(...v.slice(2))
+            exprs.push(v[1])
+          } else // A non-deferred result.
+            return v
+        }
+      } catch (err) { if (err === _interrupt) _interrupt(race, 3)(i, exprs, promises);  throw err }
+      return [_unknown, merge(exprs), ...promises]
     },
   },
 
@@ -1440,54 +1524,12 @@ Examples: \`(+ (delay 1) (delay 2))\` eventually returns 3. \`(+ (* (delay 1) (d
     ],
   },
   _jsRejected: is('js.rejected'),
-  _deferred:{
-    txt: `(_deferred Expr …Promises): An internal mechanism for recording the continuation, and continuing evaluation when JS promises return. Denotes that X is dependent on deferred factors, and its evaluation has to be deferred. Promises are deferred.`,
-    finish(...x) {
-      // …What are we even doing here? If we are in `finish`, we want to know the value of `(_deferred Expr …)` which is just `(_deferred Expr …)` — no need to look into this and record it. Should find some other way to record/defer the continuation.
-      // On any usage of `(_deferred Expr …Promises)` at all, wrap the result in (_deferred Try …Promises), removing any deferred things in Try.
-      if (this === undefined && x.length == 1 && x[0] instanceof Promise) return array(_deferred, x[0], x[0])
-      if (this === undefined && x.length == 1 && x[0] === _deferred) return _deferred
-      if (this === _deferred && x.length != 1) return error
-      const f = this === undefined ? _deferred : this
-      if (f === _deferred && x.length == 1) return array(f, x[0])
-      x.unshift(f)
-      return _preserveDeferredCommon(x, false)
-      // We just copied `_unknown` with slight adjustments.
-    },
-    merge: undefined,
-    overrides(f) { return _preserveDeferred },
-  },
-  _isDeferred(v) { return _isArray(v) && v[0] === _deferred },
-  _preserveDeferred(...x) {
-    // On any usage of `(_deferred Expr …Promises)` at all, wrap the result in (_deferred Try …Promises), removing any deferred things in Try.
-    if (this === undefined && x.length == 1 && x[0] instanceof Promise) return array(_deferred, x[0], x[0])
-    if (this === _deferred && x.length != 1) return error
-    const f = this === undefined ? _deferred : this
-    if (f === _deferred && x.length == 1) return array(f, x[0])
-    x.unshift(f)
-    return _preserveDeferredCommon(x, true)
-  },
-  _preserveDeferredCommon(x, q) {
-    // Code shared between _preserveDeferred and _preserveDeferredFinish, callable without *another* allocation.
-    const promises = []
-    let got = false
-    for (let i = 0; i < x.length; ++i)
-      if (x[i] instanceof Promise)
-        got = true, 'result' in x[i] ? x[i] = quote(x[i].result) : promises.push(x[i])
-      else if (_isDeferred(x[i]))
-        got = true, promises.push(...x[i].slice(2)), x[i] = x[i][1]
-      else if (q && _isLazy(x[i]))
-        x[i] = x[i][1]
-      else if (q)
-        x[i] = quote(x[i])
-    if (got) return array(_deferred, _maybeMerge(x), ...promises)
-  },
   _schedule:{
     txt: `(_schedule Expr Env Then): schedule an expression for evaluation, with an environment (defining where its logging should go to, and its current variables, and read/write journals; use _newExecutionEnv() for those) and a native function for continuation.
 This is a low-level primitive that a user can indirectly interact with. Sub-job scheduling must be implemented in-job, to deny resource denial.
 Returns job id that can be passed to \`cancel\`.`,
     future:[
-      `We only had promises that needed special handling at interpreter-loop time, but we might have scheduling too. Maybe react to an override?`,
+      `Possibly make hovering over the jobs indicator highlight all the jobs' log areas. (Possibly start checking defines(element, …) for that.)`,
     ],
     call(expr, env, then, id = _newJobId()) {
       // Call this to initiate a later evaluation of an expression; the callback will be called with the result.
@@ -1507,9 +1549,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
       for (let i = 0; i < _jobs.expr.length; i += 4)
         if (_jobs.expr[i+3] === id) {
           const v = _jobs.expr[i]
-          if (_isDeferred(v))
+          if (_isUnknown(v))
             for (let j = 2; j < v.length; ++j)
-              if (typeof v[j].cancel == 'function')
+              if (v[j] instanceof Promise && typeof v[j].cancel == 'function')
                 v[j].cancel()
           _jobs.expr.splice(i, 4)
           return true
@@ -1521,86 +1563,107 @@ If any promises the job depends on have a method .cancel, calls those.`,
     if (!_newJobId.id) _newJobId.id = 0
     return _newJobId.id++
   },
-  _jobs() {
-    // The interpreter loop. Most of it is about dealing with deferred stuff.
-    let time, end
-    if (typeof global == ''+void 0) // Browser
-      time = performance.now.bind(performance), end = time() + 10
-    else { // NodeJS
-      const {performance} = require('perf_hooks')
-      time = performance.now, end = time() + 100
-    }
-
-    // Execute while checking for end.
-    if (!_jobs.expr.length) return
-    if (typeof document != ''+void 0) Working.classList.toggle('yes', true)
-    do {
-      let [expr, env, then, id] = _jobs.expr.splice(0,4)
-      if (_isDeferred(expr)) {
-        // Go through all expr's promises and bind their instances inside to promise.result if present.
-        const ctx = new Map
-        for (let i = 2; i < expr.length; ++i) {
-          const p = expr[i]
-          if ('result' in p)
-            ctx.set(p, p.result)
-          // Remove us from the promise's continuation (and only us, since there might be different contexts listening to the same promise).
-          for (let i = 0; i < p.cont.length; i += 4)
-            if (p.cont[i] === expr && p.cont[i+1] === env && p.cont[i+2] === then && p.cont[i+3] === id) {
-              p.cont.splice(i, 4)
-              break
-            }
-        }
-        expr = bound(expr[1], ctx)
+  _jobs:{
+    txt:`The interpreter loop. Most of it is about dealing with deferred stuff. Use _schedule to do stuff with it.`,
+    call() {
+      if (!_jobs.expr.length) return
+      let time, start, end
+      if (typeof global == ''+void 0) // Browser
+        time = performance.now.bind(performance), start = time(), end = start + 10
+      else { // NodeJS
+        const {performance} = require('perf_hooks')
+        time = performance.now, start = time(), end = start + 100
       }
+      if (!_jobs.duration) _jobs.duration = 0
 
-      finish.env = env
-      let v, interrupted
-      try { v = finish(expr) }
-      catch (err) {
-        if (err === _interrupt) interrupted = true, v = expr
-        else v = err && err.stack ? array(_jsRejected, String(err), err.stack) : array(_jsRejected, String(err))
-      }
-
-      if (v instanceof Promise) v = 'result' in v ? v.result : array(_deferred, v, v)
-      env = finish.env
-      // Uncaught exceptions in low-level code (except in promises) will bring the whole loop to a halt; these are our errors to see and regret and fix.
-      if (interrupted || _isDeferred(v) && v.length == 2) // Re-schedule.
-        _schedule(v, env, then, id)
-      else if (_isDeferred(v)) // Make promises know we're here.
-        log('<Deferring', v.length-2, 'promises…>'),
-        v.forEach(p => {
-          if (p instanceof Promise) {
-            if (!p.cont)
-              p.cont = [],
-              p.then(result => {
-                p.result = result
-                _scheduleAndConsumeMany(p.cont)
-              }, reason => {
-                p.result = array(_jsRejected, reason)
-                _scheduleAndConsumeMany(p.cont)
-              })
-            p.cont.push(v, env, then, id)
+      // Execute while checking for end.
+      if (typeof document != ''+void 0) Working.classList.toggle('yes', true)
+      let jobs = _jobs.expr, begin = 0
+      do {
+        let expr = jobs[begin++], env = jobs[begin++], then = jobs[begin++], id = jobs[begin++]
+        if (_isUnknown(expr)) {
+          // Go through all expr's promises and bind their instances inside to promise.result if present.
+          const ctx = new Map
+          for (let i = 2; i < expr.length; ++i) {
+            const p = expr[i]
+            if (!(p instanceof Promise)) continue
+            if ('result' in p)
+              ctx.set(p, p.result)
+            // Remove us from the promise's continuation (and only us, since there might be different contexts listening to the same promise).
+            for (let i = 0; i < p.cont.length; i += 4)
+              if (p.cont[i] === expr && p.cont[i+1] === env && p.cont[i+2] === then && p.cont[i+3] === id) {
+                p.cont.splice(i, 4)
+                break
+              }
           }
-        })
-      else // We have our result.
-        then(v)
-    } while (_jobs.expr.length && time() < end)
-    if (_jobs.expr.length) setTimeout(_jobs, 0)
-    else if (typeof document != ''+void 0) Working.classList.toggle('yes', false)
+          expr = bound(expr[1], ctx)
+        }
+
+        finish.env = env
+        finish.pure = false
+        _interrupt.started = _timeSince()
+        let v, interrupted
+        try { v = finish(expr) }
+        catch (err) {
+          if (err === _interrupt) interrupted = true, v = expr
+          else {
+            if (err instanceof Error)
+              v = array(_jsRejected, String(err), err.stack)
+            else
+              v = array(_jsRejected, err)
+          }
+        }
+        finish.env = env
+
+        if (v instanceof Promise) v = 'result' in v ? v.result : [_unknown, v, v]
+        // Uncaught exceptions in low-level code (except in promises) will bring the whole loop to a halt; these are our errors to see and regret and fix.
+        if (interrupted) // Re-schedule.
+          _schedule(v, env, then, id)
+        else if (_isDeferred(v)) // Make promises know we're here.
+          log('<Deferring', v.filter(x => x instanceof Promise).length, 'promises…>'),
+          v.forEach(p => {
+            if (p instanceof Promise) {
+              if (!p.cont)
+                p.cont = [],
+                p.then(result => {
+                  p.result = result
+                  _scheduleAndConsumeMany(p.cont)
+                }, reason => {
+                  p.result = array(_jsRejected, reason)
+                  _scheduleAndConsumeMany(p.cont)
+                })
+              p.cont.push(v, env, then, id)
+            }
+          })
+        else // We have our result.
+          try { then(v) }
+          catch (err) { }
+      } while (begin < jobs.length && time() < end)
+      jobs.splice(0, begin)
+      _jobs.duration = time() - start
+      if (typeof document != ''+void 0) {
+        Working.title = Working.title.replace(/[0-9]+/, jobs.length>>>2)
+        if (jobs.length) setTimeout(_jobs, Math.min(_jobs.duration / (+CPU.value || 1) - _jobs.duration, 1000))
+        else Working.classList.toggle('yes', false)
+      } else if (jobs.length)
+        setTimeout(_jobs, 0)
+      // _jobs.expr, _jobs.duration
+    },
   },
   _scheduleAndConsumeMany(a) {
-    if (a) {
-      for (let i = 0; i < a.length; i += 4)
-        _schedule(a[i], a[i+1], a[i+2], a[i+4])
-      a.length = 0
-    }
+    // A little function for very slight efficiency gains in promise-handling.
+    for (let i = 0; i < a.length; i += 4)
+      _schedule(a[i], a[i+1], a[i+2], a[i+4])
+    a.length = 0
   },
 
 
   _newExecutionEnv(basedOn) {
+    // Don't ever re-use the same env in _schedule, use this instead.
     const m = new Map(basedOn)
     m.set(log, finish.env && finish.env.has(log) ? finish.env.get(log) : undefined)
     m.set(label, new Map)
+    m.delete(_interrupt)
     return m
   },
 
@@ -1625,6 +1688,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   id:{
     txt: `id: The identity function that just returns x from \`(id x)\`.`,
+    _argCount:1,
     call(x) { return x },
   },
 
@@ -1636,24 +1700,23 @@ If any promises the job depends on have a method .cancel, calls those.`,
     txt: `Finished (first …Branches): tries to evaluate each expression in order, returning the first non-error result or else error.`,
     examples: [
       [`(first "1" "2")`, `"1"`],
-      [`(first error "2")`, `"2"`],
-      [`x→(first error x "1")`, `x→(first x "1")`],
+      [`(first (error) "2")`, `"2"`],
+      [`x→(first (error) x "1")`, `x→(first x "1")`],
     ],
     nameResult: ['firstOf', 'result'],
     finish(...branches) {
-      if (branches.length == 1 && branches[0] === first) return branches[0]
-      if (this !== first) return
-        // Overrides of `finish` may have their function nested at arbitrary depth.
-        // (Overrides of `call` will have `this` be finished before themselves, so if they handle 0/1 depth, they will never see any more.)
-      let v = error, r
-      for (let i = 0; i < branches.length; ++i)
-        if (!_isError(v = _use(finish(branches[i])))) {
-          if (i+1 < branches.length)
-            if ((r = overrides(v, overrides)) !== undefined)
-              if ((r = _getOverrideResult(r, array(first, v, ...branches.slice(i+1)))) !== undefined)
-                return r
-          return v
+      const us = finish.v
+      if (branches.length == 1) return finish(branches[0])
+      let [i = 0, v = _emptyError] = _interrupt(first)
+      try {
+        for (; i < branches.length; ++i) {
+          if (!_isError(v = finish(branches[i]))) {
+            if (i+1 < branches.length && _isUnknown(v))
+              return v[1] = _cameFrom(array(first, v[1], ...branches.slice(i+1)), us), v
+            return v
+          }
         }
+      } catch (err) { if (err === _interrupt) _interrupt(first, 2)(i,v);  throw err }
       return v
     },
   },
@@ -1661,88 +1724,123 @@ If any promises the job depends on have a method .cancel, calls those.`,
     txt: `Finished (last …Branches): tries to evaluate each expression in order, returning the first error or else the last non-error result.`,
     examples: [
       [`(last "1" "2")`, `"2"`],
-      [`(last error "2")`, `error`],
-      [`x→(last "1" x error "2")`, `x→(last x error "2")`],
+      [`(last (error) "2")`, `(error)`],
+      [`x→(last "1" x (error) "2")`, `x→(last x (error) "2")`],
     ],
     nameResult: ['lastOf', 'result'],
     finish(...branches) {
-      if (branches.length == 1 && branches[0] === last) return branches[0]
-      if (this !== last) return
-      let v = error, r
-      for (let i = 0; i < branches.length; ++i)
-        if (_isError(v = _use(finish(branches[i]))))
-          return v
-        else if (i+1 < branches.length)
-          if ((r = overrides(v, overrides)) !== undefined)
-            if ((r = _getOverrideResult(r, array(last, v, ...branches.slice(i+1)))) !== undefined)
-              return r
+      const us = finish.v
+      if (branches.length == 1) return finish(branches[0])
+      let [i = 0, v = _emptyError] = _interrupt(last)
+      try {
+        for (; i < branches.length; ++i)
+          if (_isError(v = finish(branches[i])))
+            return v
+          else if (i+1 < branches.length && _isUnknown(v))
+            return v[1] = _cameFrom(array(last, v[1], ...branches.slice(i+1)), us), v
+      } catch (err) { if (err === _interrupt) _interrupt(last, 2)(i,v);  throw err }
       return v
     },
   },
 
-//   try:{
-//     txt: `((try …Functions) …Data): tries to call functions in order, returning the first non-error result or error.`,
-//     examples: [
-//       [`(f 1 2) f:(try (func 1 3 5) (func 1 6) (func a b (+ a b)))`, `3`],
-//     ],
-//     call(...data) {
-//       if (this === _try) return
-//       if (!_isArray(this)) return error
-//       if (this[0] !== _try) return call(array(call(this), ...data))
-//       let v = error, r
-//       for (let i = 1; i < this.length; ++i)
-//         if (!_isError(v = _use(call(array(this[i], ...data))))) {
-//           if (i+1 < this.length)
-//             if ((r = overrides(v, first)) !== undefined)
-//               if ((r = _getOverrideResult(r, array(first, v, array(_lazy, array(array(_try, ...this.slice(i+1)), ...data))))) !== undefined)
-//                 return r
-//           return v
-//         }
-//       return v
-//     },
-//   },
-//   _try: is('try'),
-//   guard:{
-//     txt: `((guard …Functions) …Data): tries to call functions in order, returning the first error or last non-error result.`,
-//     call(...data) {
-//       if (this === guard) return
-//       if (!_isArray(this)) return error
-//       if (this[0] !== guard) return call(array(call(this), ...data))
-//       let v = error
-//       for (let i = 1; i < this.length; ++i)
-//         if (_isError(v = _use(call(array(this[i], ...data)))))
-//           return v
-//         else if (i+1 < this.length)
-//           if ((r = overrides(v, last)) !== undefined)
-//             if ((r = _getOverrideResult(r, array(last, v, array(_lazy, array(array(guard, ...this.slice(i+1)), ...data))))) !== undefined)
-//               return r
-//       return v
-//     },
-//   },
-//   compose:{
-//     txt: `((compose …Functions) …Data): composes functions right-to-left: applies the last function to data, then the second-last to result, then the third-last to result, and eventually returns first function's result.
-// (f "1") f:(compose a→(* a "8") b→(+ b "2")) is "24".`,
-//     examples: [
-//       [`(f 1) f:(compose a→(* a 8) b→(+ b 2))`, `24`],
-//       [`((compose g f) 1) f:x→(+ 1 x) g:x→(* 2 x)`, `4`],
-//     ],
-//     call(...data) {
-//       if (this === compose) return
-//       if (!_isArray(this)) return error
-//       if (this[0] !== compose) return call(array(call(this), ...data))
-//       let v = [rest, data], r
-//       for (let i = this.length; i-- > 1; ) {
-//         v = _use(call(array(this[i], v)))
-//         if (_isError(v)) return error
-//         // If r overrides compose, pretend that we are ((compose …rest) v).
-//         if (i > 1)
-//           if ((r = overrides(v, overrides)) !== undefined)
-//             if ((r = _getOverrideResult(r, array(array(compose, ...this.slice(1, i)), v))) !== undefined)
-//               return r
-//       }
-//       return v
-//     },
-//   },
+  try:{
+    txt: `(try …Functions): returns a function that tries to call functions in order, returning the first non-error result or error.`,
+    examples: [
+      // [`(f 1 2) f:(func 2 3 4)`, `(error 'Not assignable')`],
+      // [`(f 1 2) f:(func a b 3)`, `3`],
+      // [`(f 1 2) f:(func 2 3 4)`, `(error 'Not assignable')`],
+      // [`(f 1 2) f:(func a b 3)`, `3`],
+      // [`(f 1 2) f:(func 2 3 4)`, `(error 'Not assignable')`],
+      // [`(f 1 2) f:(func a b 3)`, `3`],
+      // [`(f 1 2) f:(try (func 2 3 4) (func a b 3))`, `3`],
+      [`(f 1 2) f:(try (func 1 3 5) (func 1 6) (func a b (+ a b)))`, `3`],
+    ],
+    future:`Compute the type if not undefined.`,
+    call(...functions) {
+      const impl = function tryInOrder(...data) {
+        let [i = 0, v = _emptyError, arr] = _interrupt(tryInOrder)
+        let us = finish.v
+        try {
+          for (; i < functions.length; ++i) {
+            if (arr === undefined) arr = _cameFrom(array(functions[i], ...data), functions[i])
+            if (!_isError(v = call(arr))) {
+              if (i+1 < functions.length && _isUnknown(v))
+                return v[1] = _cameFrom(array(first, v[1], _cameFrom(array(_cameFrom(array(_try, ...functions.slice(i+1)), us), ...data), us)), us), v
+              return v
+            }
+            arr = undefined
+          }
+          return v
+        } catch (err) { if (err === _interrupt) _interrupt(tryInOrder, 3)(i,v,arr);  throw err }
+      }
+      _cameFrom(impl, finish.v)
+      impl.defines = new Map
+      impl.defines.set(deconstruct, array(_try, ...functions))
+      impl.defines.set(_impure, functions.some(_impure))
+      return impl
+    },
+  },
+  _try: is('try'),
+  guard:{
+    txt: `(guard …Functions): returns a function that tries to call functions in order, returning the first error or last non-error result.`,
+    future:`Compute the type if not undefined.`,
+    call(...functions) {
+      const impl = function tryInOrder(...data) {
+        let [i = 0, v = _emptyError] = _interrupt(tryInOrder)
+        let us = finish.v
+        try {
+          for (; i < functions.length; ++i)
+            if (_isError(v = call(_cameFrom(array(functions[i], ...data), is))))
+              return v
+            else
+              if (i+1 < functions.length && _isUnknown(v))
+                return v[1] = _cameFrom(array(last, v[1], _cameFrom(array(_cameFrom(array(guard, ...functions.slice(i+1)), us), ...data), us)), us), v
+          return v
+        } catch (err) { if (err === _interrupt) _interrupt(tryInOrder, 2)(i,v);  throw err }
+      }
+      _cameFrom(impl, finish.v)
+      impl.defines = new Map
+      impl.defines.set(deconstruct, array(guard, ...functions))
+      impl.defines.set(_impure, functions.some(_impure))
+      return impl
+    },
+  },
+  compose:{
+    txt: `(compose …Functions): returns a function that composes functions left-to-right, passing the output of each function to the next one.`,
+    examples: [
+      [`(f 1) f:(compose a→(* a 8) b→(+ b 2))`, `10`],
+      [`((compose f g) 1) f:x→(+ 1 x) g:x→(* 2 x)`, `4`],
+    ],
+    future:`Compute the type if not undefined.`,
+    call(...functions) {
+      // A shorter and less valid version, simpler to understand:
+      // return x => { for (let f of functions) x = f(x);  return x }
+      if (functions.length == 1) return functions[0]
+      if (!functions.length) return id
+      const impl = function doInOrder(...data) {
+        const us = finish.v
+        let [i = 0, v = data.length == 1 ? data[0] : array(rest, data)] = _interrupt(doInOrder)
+        let r
+        try {
+          for (; i < functions.length; ++i) {
+            v = call(_cameFrom(array(functions[i], v), functions[i]))
+            if (_isError(v)) return v
+            if (i > 1)
+              if (i+1 < functions.length && _isUnknown(v))
+                return v[1] = _cameFrom(array(_cameFrom(array(compose, ...functions.slice(0,i)), us), v[1]), us), v
+          }
+          return v
+        } catch (err) { if (err === _interrupt) _interrupt(doInOrder, 2)(i,v);  throw err }
+      }
+      _cameFrom(impl, finish.v)
+      impl.defines = new Map
+      impl.defines.set(deconstruct, array(compose, ...functions))
+      impl.defines.set(_impure, functions.some(_impure))
+      if (_view(functions[0]) instanceof Map && _view(functions[0]).has(_argCount))
+        impl.defines.set(_argCount, _view(functions[0]).get(_argCount))
+      return impl
+    },
+  },
 
 
 
@@ -1766,7 +1864,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 //     call:undefined,
 //     _impure:undefined,
 //     merge:undefined,
-//     overrides(f) { return _manyEvaluations },
+//     defines(f) { return _manyEvaluations },
 //   },
 //   manyPossibilities:{
 //     txt: `Now, we just use this override as a way to signal that a call should not be merged.
@@ -1778,7 +1876,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 //       if (_isString(x)) return x
 //       // Allow x to override manyPossibilities.
 //       let r
-//       if ((r = overrides(x, manyPossibilities)) !== undefined)
+//       if ((r = defines(x, manyPossibilities)) !== undefined)
 //         if ((r = _getOverrideResult(r, array(manyPossibilities, x))) !== undefined)
 //           return r
 //       // Finish x after replacing every part of x with (manyPossibilities Part).
@@ -1793,22 +1891,21 @@ If any promises the job depends on have a method .cancel, calls those.`,
 //     txt: `Finished (enum Expr): Returns an array of all possible results of Expr; enumerates possibilities.
 // Functions (particularly impure ones, like random number generation) can override \`enum\` like they would override \`finish\` to become \`many\` possibilities.
 // \`(enum (+ (many "1" "2") (many "2" "3" "4")))\` is \`("3" "4" "6" "5")\` or some permutation.
-// \`(enum (many))\` is an \`error\`.
+// \`(enum (many))\` is an \`(error)\`.
 
 // …Should be replaced with (goal Expr Measure) — enum-and-commit-best, given meaning to by (minimize Expr)/(maximize Expr) inside (likely returning many results, each associated with its self-write journal, and choosing-best on knowing the goal).`,
 //     examples: [
 //       [`(enum 2)`, `(2)`],
-//       [`(enum (+ 1 (many)))`, `error`],
+//       [`(enum (+ 1 (many)))`, `(error)`],
 //       [`(enum (+ (many 1 2) (many 2 3 4)))`, `(3 4 6 5)`],
 //     ],
 //     finish(x) {
-//       return _manysToArrays(finish(array(manyPossibilities, _use(x))))
+//       return _manysToArrays(finish(array(manyPossibilities, x)))
 //     },
 //   },
 //   _manysToArrays(x, toRest = false) {
-//     x = _use(x)
 //     if (!_isArray(x) || x[0] !== many) return !toRest ? array(x) : x
-//     if (x.length === 1) return error
+//     if (x.length === 1) return _emptyError
 //     // Replace x with merge(x.slice(1).map(…)). Put every element through _manysToArrays, creating a rest element in the result for each.
 //     let to = x.slice(1)
 //     for (let i = 0; i < to.length; ++i)
@@ -1823,7 +1920,6 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
 //     let relevant = false
 //     for (let i = 0; i < args.length; ++i) {
-//       args[i] = _use(args[i])
 //       if (_isArray(args[i]) && args[i][0] === many) { relevant = true; break }
 //     }
 //     if (!relevant) return
@@ -1867,22 +1963,12 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
 
 
-  _lazy:{
-    txt: `(_lazy Expr): Just a marker to denote that Expr must be evaluated.
-(Since conceptual-checking would need to force lazy thunks to be sure, lazy thunks would be useless.)`,
-    finish(x) { return finish(x) },
-  },
-  _isLazy(a) { return _isArray(a) && a[0] === _lazy },
-  _use:{
-    txt: `_use(Concept): an internal function for getting the value of a concept.
-Should be done to each arg of each function when it's used in a non-function-call-or-not-ours expression/statement.`,
-    call(a) {
-      if (_isArray(a) && a[0] === concept && a.length === 3) return _use(a[2])
-      const va = _view(a)
-      if (va instanceof Map && va.has(_use)) return va.get(_use)
-      return a
-    },
-  },
+//   _lazy:{
+//     txt: `(_lazy Expr): Just a marker to denote that Expr must be evaluated.
+// (Since conceptual-checking would need to force lazy thunks to be sure, lazy thunks would be useless.)`,
+//     finish(x) { return finish(x) },
+//   },
+//   _isLazy(a) { return _isArray(a) && a[0] === _lazy },
 
 //   lazy:{
 //     txt: `Finished (lazy Expr): Defers evaluation of Expr to when it is first needed, if ever.
@@ -1899,12 +1985,12 @@ Should be done to each arg of each function when it's used in a non-function-cal
 //   _use:{
 //     txt: `_use(X): an internal function for unwrapping lazy thunks. Finishes X if it is lazy.
 // Should be done to each arg of each function when it's used in a non-function-call-or-not-ours expression/statement.
-// \`this\` in a function cannot be lazy, as finish/call/overrides do not _use their args.`,
+// \`this\` in a function cannot be lazy, as finish/call/defines do not _use their args.`,
 //     call(a) {
 //       if (a === lazy) return a
 //       if (_isLazy(a)) return _use(finish(a[1]))
 //       if (_isArray(a) && a[0] === concept && a.length === 3) return _use(a[2])
-//       let r = overrides(a, _use)
+//       let r = defines(a, _use)
 //       if (r === undefined) return a
 //       r = _getOverrideResult(r, a)
 //       return r !== undefined ? r : a
@@ -1916,12 +2002,9 @@ Should be done to each arg of each function when it's used in a non-function-cal
 
 
   rest:{
-    txt: `(rest Array): when used in a call, spreads the Array into the user. When used in an assignment (such as function args), collects the rest of arguments into an array.
-Also written as …Array.
-(+ …(array 1 2)) is the same as (+ 1 2).
-f:(A …R)→R, when called, returns array elements past the first one; (f (array 1 2 3)) is (2 3). For simplicity, can only be used once per array.`,
+    txt: `(rest Array) or …Array: when used in a call, spreads the Array into the user. When used in an assignment (such as function args), collects the rest of arguments into an array (for simplicity, can only be used once per array).`,
     examples: [
-      [`(+ (rest (quote (1 2))))`, `3`],
+      [`(+ (rest (1 2)))`, `3`],
       [`R→…R`, `R→(rest R)`],
       [`(f (array "a" "b" "c")) f:(A …R)→R`, `("b" "c")`],
       [`(f (array "a" "b" "c")) f:(A (rest R))→R`, `("b" "c")`],
@@ -1929,35 +2012,14 @@ f:(A …R)→R, when called, returns array elements past the first one; (f (arra
       [`(+ …(array 2 3))`, `5`],
       [`(+ …(array …(array 2) 3))`, `5`],
     ],
-    finish:undefined,
-    call:undefined,
-    assign:undefined,
-    _impure:undefined,
-    merge:undefined,
-    overrides(f) { if (f !== overrides) return _restSpread },
-  },
-  _restSpread(...x) {
-    // Spread all `(rest Y)`s in caller into caller, then call the caller.
-    x.unshift(this)
-    let found = false
-    for (let i = 0; i < x.length; ++i) {
-      if (_isError(x[i])) return error
-      if (_isArray(x[i]) && x[i][0] === rest) {
-        found = true
-        if (x[i].length != 2 || !_isArray(x[i][1])) return error
-        x.splice(i, 1, ...x[i][1]), --i // Check all the values we've just inserted too.
-      }
-    }
-    if (!found) return
-    return call(_maybeMerge(x))
   },
   _restFind(a) {
     // Find (up to) one `(rest Y)` in a and return its index (or a.length).
-    if (!_isArray(a)) return error
+    if (!_isArray(a)) return array(error, "Finding rest in not-an-array")
     let r = a.length
     for (let i = 0; i < a.length; ++i)
       if (_isArray(a[i]) && a[i][0] === rest && a[i].length == 2) {
-        if (r < a.length) return error
+        if (r < a.length) return array(error, "Two (rest …) in an array")
         r = i
       }
     return r
@@ -1972,15 +2034,17 @@ f:(A …R)→R, when called, returns array elements past the first one; (f (arra
   pick:{
     txt: `Finished (pick Bool A B): Returns A if Bool is false, else B. Evaluates the condition C, then evaluates A if C is false, or B otherwise.`,
     nameResult: ['picked', 'result'],
-    finish(c,a,b) {
-      if (this === pick) {
-        const v = _use(finish(c))
-        let r
-        if ((r = overrides(v, overrides)) !== undefined)
-          if ((r = _getOverrideResult(r, array(pick, quote(v), a, b))) !== undefined)
-            return r
-        return v === false ? finish(a) : finish(b)
-      }
+    finish: {
+      _argCount:3,
+      call(c,a,b) { // NOT _interrupt-safe!
+        if (this === pick) {
+          const us = finish.v
+          const v = finish(c)
+          if (_isError(v)) return v
+          if (_isUnknown(v)) return v[1] = _cameFrom(array(pick, v[1], a, b), us), v // Why does this not remove unknowns?
+          return v === false ? finish(a) : finish(b)
+        }
+      },
     },
   },
 
@@ -1994,26 +2058,20 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
       [`(quote x)`, `x`],
     ],
     nameResult: ['quoted', 'exactly'],
-    future:`Syntax proposal: maybe make \`x quote the expression, and have arbitrary-string-label syntax be \`#js.eval#\`\`? \`(quote …)\` is too verbose.`,
-    finish(x) { if (this === quote) return _use(x) },
+    _argCount:1,
+    finish(x) { if (this === quote) return x },
     call(x) { // Value ⇒ Expr
       // Create the (quote Expr) representation if needed.
-      x = _use(x)
       if (serialize.backctx.has(x)) return x
       if (_isError(x)) return x
+      if (_isUnknown(x)) return x
       if (_isArray(x) && (_isLabel(x[0]) || _isArray(x[0])) && _hasCallableParts(x)) return array(quote, x)
-      if (_isArray(x) && x[0] === _unknown) return x
-      if (_isArray(x) && x[0] === _deferred) return x
       if (_isFunc(x)) return x
       if (_isArray(x) && x[0] === broadcasted) return x
       if (typeof x == 'function') return x
-      if (overrides(x, finish) === undefined && (!_isArray(x) || overrides(x, call) === undefined) && !_hasCallableParts(x)) return x
+      if (defines(x, finish) === undefined && (!_isArray(x) || defines(x, call) === undefined) && !_hasCallableParts(x)) return x
       if (!_hasCallableParts(x)) return x
       return array(quote, x)
-    },
-    assign(a,b) {
-      // Recurse into the quoted value. To not, use `(only X)`.
-      if (_isArray(a) && a[0] === quote) return call(array(assign, a[1], b))
     },
   },
   _hasCallableParts(x, m) {
@@ -2021,7 +2079,7 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
     if (_isLabel(x)) return true
     if (m && m.has(x)) return
     m && m.add(x)
-    if (overrides(x, finish) !== undefined || overrides(x, call) !== undefined) return true
+    if (x[0] !== array && (defines(x, finish) !== undefined || defines(x, call) !== undefined)) return true
     for (let i = 0; i < x.length; ++i)
       if (_hasCallableParts(x[i], m || (m = new Set))) return true
   },
@@ -2042,54 +2100,34 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
       [`(f "yZZZZxz") f:(string "y" R "xz")→R`, `"ZZZZ"`],
     ],
     nameResult: ['joined'],
-    _manualView:true,
     call(...s) {
       if (s.length == 1 && _isString(s[0])) return s[0]
-      let unstring = false
       for (let i = 0; i < s.length; ++i) {
-        let v = s[i] = _toString(s[i])
-        if (!_isString(v)) { unstring = true; break }
+        const v = s[i] = _toString(s[i])
+        if (!_isString(v)) return array(error, 'Not-a-string encountered when joining strings')
       }
-      if (unstring) {
-        // Probably failed, but *maybe* some part overrides `string`.
-        let prev = false, current
-        for (let i = 0; i < s.length; ++i) {
-          // Merge consequent known strings, to play nicer.
-          let v = s[i]
-          current = _isString(v)
-          if (prev && current)
-            s.splice(i-1, 2, s[i-1] + v), --i
-          prev = current
-        }
-        s.unshift(string), s = merge(s)
-        let r
-        for (let i = s.length; i-- > 1; )
-          if ((r = _checkOverride(s[i], string, s)) !== undefined)
-            return r
-        return error
-      } else
-        // Everything inside is an escaped string.
-        return s.join('')
+      return s.join('')
     },
     assign(a,b) {
       if (!_isArray(a) || a[0] !== string || !_isString(b)) return
 
-      // Find the index of the sole non-escaped-string in a.
+      // Find the index of the sole non-string in a.
       let Rest = a.length
       for (let i = 1; i < a.length; ++i)
         if (!_isString(a[i])) {
-          if (Rest < a.length) return error // It is easiest to support only one non-escaped string in assigned-to arrays, and not fiddle with multiple results.
+          if (Rest < a.length) return array(error, "Two non-strings in an assigned-to array")
+            // It is easiest to support only one non-escaped string in assigned-to arrays, and not fiddle with multiple results.
           Rest = i
         }
 
       // Assign strings.
-      if (Rest > 2 || Rest < a.length-2) return error // Non-definites must be merged.
+      if (Rest > 2 || Rest < a.length-2) return array(error, "There must be only one concrete string before or after non-string")
       const start = Rest === 2 ? a[1].length : 0
       const end = b.length - (Rest === a.length-2 ? a[a.length-1].length : 0)
-      if (end < start) return error
+      if (end < start) return array(error, "The assigned string is too short")
       // Check that beginnings and ends coincide.
-      if (Rest === 2 && a[1] !== b.slice(0, start)) return error
-      if (Rest === a.length-2 && a[a.length-1] !== b.slice(end)) return error
+      if (Rest === 2 && a[1] !== b.slice(0, start)) return array(error, "String prefix is different")
+      if (Rest === a.length-2 && a[a.length-1] !== b.slice(end)) return array(error, "String suffix is different")
       // Assign a[Rest]'s pattern to what's in between.
       return call(array(assign, a[Rest], b.slice(start, end)))
     },
@@ -2099,15 +2137,17 @@ Has somewhat the same effect as adding \`array\` at the beginning of every array
 
   label:{
     txt: `(label Name): represents a name that can be bound or assigned. Equal-name labels are bound to the same thing within the same binding.
-Evaluating an unbound label results in \`error\`; evaluating a bound label results in its value, in the current function call.
+Evaluating an unbound label results in \`(error)\`; evaluating a bound label results in its value, in the current function call.
 These do not merge.`,
+    _argCount:1,
+    _impure:true,
     examples: [
       [`a a:1`, `1`],
       [`0 0 1 0 0`, `a a 1 a a a:0`],
       [`a a:(a (a) a)`, `(x (x) x x:cycle)`],
       [`x→(+ \`x\` 1)`, `x→(+ x 1)`],
     ],
-    finish(l) { if (this === label) return finish.env.get(label).has(l) ? finish.env.get(label).get(l) : error },
+    finish(l) { if (this === label) return finish.env.get(label).has(l) ? finish.env.get(label).get(l) : array(error, "An unbound label to "+l+" was evaluated") },
   },
   _isLabel(v) { return _isArray(v) && v[0] === label && v.length == 2 },
 
@@ -2116,77 +2156,18 @@ These do not merge.`,
   _unknown:{
     txt: `(_unknown Expr): denotes that Expr is dependent on unknown factors and cannot be evaluated now, so it has to be deferred.
 Unbound variables are unknown.
-The internal mechanism for \`purify\`; can that be done without this costly thing?`,
+The internal mechanism for \`purify\` and recording and using the continuation of JS promises.
+Check _isUnknown to materialize the inner structure only on demand.`,
     examples: [
-      [`(_unknown 1)`, `(_unknown 1)`],
-      [`((_unknown 1) 2)`, `(_unknown (1 2))`],
-      [`((_unknown 1) (_unknown 2))`, `(_unknown (1 2))`],
+      [`(_unknown 1)`, `1`],
       [`a→(_unknown a)`, `id`],
       [`_unknown`, `_unknown`],
-      [`(_unknown)`, `error`],
-      [`(_unknown 1 2)`, `error`],
     ],
-    finish(...x) {
-      // …What are we even doing here? If we are in `finish`, we want to know the value of `(_unknown Expr)` which is just `(_unknown Expr)` — no need to look into this and record it. Should find some other way to record/defer the continuation.
-      // On any usage of `(_unknown X)` at all, wrap the result in (_unknown Try), removing any unknowns in Try.
-      if (this === undefined && x.length == 1 && x[0] === _unknown) return _unknown
-      if (this === _unknown && x.length != 1) return error
-      if (_isArray(this)) return
-      const f = this === undefined ? _unknown : this
-      if (f === _unknown && x.length == 1) return array(f, x[0])
-      x.unshift(f)
-      return _preserveUnknownCommon(x, false)
-    },
-    merge:undefined,
-    overrides(f) { return _preserveUnknown },
+    finish() { return finish.v },
   },
-  _preserveUnknown(...x) {
-    // On any usage of `(_unknown X)` at all, wrap the result in (_unknown Try), removing any unknowns in Try.
-    if (this === _unknown && x.length != 1) return error // Too many args.
-    const f = _use(this)
-    if (f === _unknown && x.length == 1) return
-    x.unshift(f)
-    return _preserveUnknownCommon(x, true)
-  },
-  _preserveUnknownCommon(x, q) {
-    // Code shared between _preserveUnknown and _preserveUnknownFinish, callable without yet another allocation.
-    let got = false
-    for (let i = 0; i < x.length; ++i)
-      if (_isArray(x[i]) && x[i][0] === _unknown && x[i].length == 2)
-        got = true, x[i] = x[i][1]
-      else if (q && _isLazy(x[i]))
-        x[i] = x[i][1]
-      else if (q)
-        x[i] = quote(x[i])
-    if (_isFunc(x)) { // A func will be able to know the unknown when called, so we don't wrap that.
-      x[0] = func
-      return merge(x)
-    }
-    if (got) return array(_unknown, _maybeMerge(x))
-  },
-
-//   ref:{
-//     txt: `(ref Type)⇒Ref: Represents a reference to instances of a type.
-// \`(Ref)\` reads the current value; \`(Ref Value)\` writes (changes subsequent reads).
-
-// …Should probably be removed; instead, should have read/write for doing this to an arbitrary array (to allow self-modifying code directly), and reads/writes for virtualization of those to a value-associated journal (so that multiple ones can be generated and the best can be picked).`,
-//     nameResult: ['reference'],
-//     _impure:true,
-//     call(v) {
-//       if (!_isArray(this) || this[0] !== ref) return
-//       if (v === undefined) {
-//         // Read: bound(Type, Map, false) yields the value we want.
-//         if (this[1] === undefined || this[2] === undefined) return error
-//         return bound(this[1], this[2], false)
-//       } else {
-//         // Write: assign(Type, Value) yields what we need to remember; be lazy and just store the resulting Map.
-//           // …We can't use `assign` anymore, since it doesn't return anything good anymore.
-//         const r = call(array(assign, this[1], v))
-//         if (!(r instanceof Map)) return r
-//         this[2] = r
-//       }
-//     },
-//   },
+  _isUnknown(v) { return _isArray(v) && v[0] === _unknown },
+  _isDeferred(v) { return _isUnknown(v) && v.some(_isPromise) },
+  _isPromise(v) { return v instanceof Promise },
 
 
 
@@ -2204,7 +2185,7 @@ The internal mechanism for \`purify\`; can that be done without this costly thin
 (Does not merge cycles. How would we merge cycles?)`,
     nameResult: ['merged'],
     call(arr, indexes = undefined) {
-      if (!_isArray(arr)) throw "Expected an array for a content-based merge"
+      if (!_isArray(arr)) throw new Error("Expected an array for a content-based merge")
       if (!merge.contentToArr) merge.contentToArr = new Map
 
 
@@ -2212,7 +2193,7 @@ The internal mechanism for \`purify\`; can that be done without this costly thin
       if (_indexOf(arr, indexes, true) !== undefined)
         return arr
       // See if arr's content is in the global content-to-arr map.
-      const m = merge.contentToArr, content = _contentString(arr, _use(indexes))
+      const m = merge.contentToArr, content = _contentString(arr, indexes)
       const r = _mapGetOrSet(m, content, arr)
       return r !== _notFound ? r : arr
     },
@@ -2220,14 +2201,17 @@ The internal mechanism for \`purify\`; can that be done without this costly thin
   array:{
     txt: `(array …): an array of items with semantically constant content (so equal-content arrays are merged). Use "bound" to merge cycles, when it can do that.
 Use (array F …) instead of (F …) in function args to ignore F's override of "assign", if any.`,
+    examples:[
+      [`array + 1 2`, `+ 1 2`],
+    ],
     call(...x) { return _maybeMerge(x) },
   },
-  _maybeMerge(x) { return !_isArray(x) || _impure(x) || _isLabel(x) ? x : merge(x) },
+  _maybeMerge(x) { return !_isArray(x) || _impure(x) || _isLabel(x) || x[0] === _const ? x : merge(x) },
 
 
   _mapGetOrSet(m, k, v, limit = 100000) {
     // Return m.get(k) if it's there, or m.set(k, v) and return _notFound if not. Limits map size.
-    m = _use(m)
+    // (To reduce memory usage, find all uses of this function and reduce the limit.)
     if (m.has(k)) {
       v = m.get(k)
       if (m.size > (limit>>>1)) // Refresh recently-accessed items, so that limiting will evict least-recently-used and not first-added.
@@ -2242,15 +2226,13 @@ Use (array F …) instead of (F …) in function args to ignore F's override of 
     txt: `A marker for signifying the not-found state, returned from _mapGetOrSet.`,
   },
   _limitMapSize(m, n) {
-    m = _use(m), n = _use(n)
     if (m.size > n) // Delete the first (least-recently-added) element.
       try { m.forEach(_deleteFirstMapElement) }
       catch (err) { if (err !== null) throw err }
   },
-  _deleteFirstMapElement(_v,k,m) { _use(m).delete(_use(k)); throw null },
+  _deleteFirstMapElement(_v,k,m) { m.delete(k); throw null },
   _indexOf(x, indexes = undefined, readonly = false) {
     // Return the unique index of an object, possibly newly given.
-    indexes = _use(indexes)
     if (indexes instanceof Map && indexes.has(x)) return indexes.get(x)
     if (!_indexOf.arrToIndex) _indexOf.arrToIndex = new Map, _indexOf.n = 0
     const m = _indexOf.arrToIndex
@@ -2268,7 +2250,7 @@ Use (array F …) instead of (F …) in function args to ignore F's override of 
     const a = _contentString.a // Do not allocate new arrays each call, re-use the same empty one.
     try {
       for (let i = 0; i < arr.length; ++i) {
-        const n = _indexOf(arr[i], _use(indexes))
+        const n = _indexOf(arr[i], indexes)
         // Encode 48-bit as 3 16-bit utf8 characters. If indexes get larger, we are in big trouble already.
         a.push(String.fromCharCode(n & 65535, (n>>>16) & 65535, ((n/65536)>>>16) & 65535))
       }
@@ -2336,10 +2318,9 @@ Generating instances of this always returns X.`,
       // Demand ref-equality.
       if (_isArray(a) && a[0] === _only) a = a[1]
       if (_isArray(b) && b[0] === _only) b = b[1]
-      return a === b ? a : error
+      return a === b ? a : array(error, "Not ref-equal")
     },
     _when(lt, gt) {
-      lt = _use(lt), gt = _use(gt)
       if (_isArray(lt) && lt[0] === _any)
         return _repack(lt, elem => call(array(_when, elem, gt)), _any)
       if (_isArray(lt) && lt[0] === _all)
@@ -2355,72 +2336,72 @@ Generating instances of this always returns X.`,
     _forany(type, prop) { return call(array(prop, type)) },
     _forall(type, prop) { return call(array(prop, type)) },
 
-    gen(x) {
-      if (!_isArray(x) || x[0] !== _only) return error
-      return x[1]
-    },
+    // gen(x) {
+    //   if (!_isArray(x) || x[0] !== _only) return
+    //   return x[1]
+    // },
   },
   _any:{
     txt: `(_any X Y Z …): A type of things that are either of type X, or of Y, or of Z. The order of types within does not matter.
 Generating instances of this returns any element with equal probability.`,
     call(...x) { return _repack(x, undefined, _any, 0) },
     _when(lt, gt) { return _whenRepack(lt, gt, _any) },
-    _forany(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _any) return _repack(type, prop, _any) },
-    _forall(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _any) return _repack(type, prop, _all) },
+    _forany(type, prop) { if (_isArray(type) && type[0] === _any) return _repack(type, prop, _any) },
+    _forall(type, prop) { if (_isArray(type) && type[0] === _any) return _repack(type, prop, _all) },
 
-    gen(x) {
-      if (!_isArray(x) || x[0] !== _any) return error
-      if (!x.length) return error
-      return call(array(gen, x[1 + _pickNatLessThan(x.length-1)]))
-    },
+    // gen(x) {
+    //   if (!_isArray(x) || x[0] !== _any) return
+    //   return call(array(gen, x[1 + _pickNatLessThan(x.length-1)]))
+    // },
   },
   _all:{
     txt: `(_all X Y Z …): A type of things that are of types X, and of Y, and of Z, all at once. The order of types within does not matter.`,
     call(...x) { return _repack(x, undefined, _all, 0) },
     _when(lt, gt) { return _whenRepack(lt, gt, _all) },
-    _forany(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _all) return _repack(type, prop, _all) },
-    _forall(type, prop) { type = _use(type);  if (_isArray(type) && type[0] === _all) return _repack(type, prop, _any) },
+    _forany(type, prop) { if (_isArray(type) && type[0] === _all) return _repack(type, prop, _all) },
+    _forall(type, prop) { if (_isArray(type) && type[0] === _all) return _repack(type, prop, _any) },
   },
 
   _repack(from, transform, to, fromIndex=1) {
     // We managed to extract almost everything related to _any/_all into this function.
-    from = _use(from), transform = _use(transform), to = _use(to), fromIndex = _use(fromIndex)
     if (from.length - fromIndex === 0) return to === _any ? _emptyAny : _emptyAll
     const a = to, b = a !== _any ? _any : _all
     // `from` must be an array.
     let result
     const already = new Set, onlys = new Set
     // (vwhen X (_any …Elems)) => (_any …(_when X Elem)) — iterate.
-    for (let i = fromIndex; i < from.length; ++i) {
-      const x = transform !== undefined ? call(array(transform, from[i])) : from[i]
+    let [i = fromIndex] = _interrupt(_repack)
+    try {
+      for (; i < from.length; ++i) {
+        const x = transform !== undefined ? call(array(transform, from[i])) : from[i]
 
-      // Ignore cyclic parts of proofs.
-      if (x === cycle) continue
+        // Ignore cyclic parts of proofs (we get induction for free, then).
+        if (x === cycle) continue
 
-      // Simplify (_only X)s inside.
-      if (_isArray(x) && x.length == 2 && x[0] === _only) {
-        if (onlys.has(x[1])) continue // (_any (_only X) (_only X)) => (_any (_only X))
-        if (!onlys.size || a === _any) onlys.add(x[1])
-        else return _emptyAny // (_all (_only X) (_only Y)) => (_any)
+        // Simplify (_only X)s inside.
+        if (_isArray(x) && x.length == 2 && x[0] === _only) {
+          if (onlys.has(x[1])) continue // (_any (_only X) (_only X)) => (_any (_only X))
+          if (!onlys.size || a === _any) onlys.add(x[1])
+          else return _emptyAny // (_all (_only X) (_only Y)) => (_any)
+        }
+
+        // (_any … (_any) …) => (_any … …) — do not push. The equal gets ignored.
+        if (_isArray(x) && x.length == 1 && x[0] === a) continue
+        // (_any … (_all) …) => (_all) — break iteration. The opposite takes over.
+        if (_isArray(x) && x.length == 1 && x[0] === b) return x
+
+        if (already.has(x)) continue // No need to add definitely-equal things.
+        already.add(x)
+        if (!result) result = [a]
+        result.push(x)
       }
-
-      // (_any … (_any) …) => (_any … …) — do not push. The equal gets ignored.
-      if (_isArray(x) && x.length == 1 && x[0] === a) continue
-      // (_any … (_all) …) => (_all) — break iteration. The opposite takes over.
-      if (_isArray(x) && x.length == 1 && x[0] === b) return x
-
-      if (already.has(x)) continue // No need to add definitely-equal things.
-      already.add(x)
-      if (!result) result = [a]
-      result.push(x)
-    }
+    } catch (err) { if (err === _interrupt) _interrupt(_repack, 1)(i);  throw err }
     if (!result || result.length == 1) return to === _any ? _emptyAny : _emptyAll // (_any) => (_any)
     if (result.length == 2) return result[1] // (_any X) => X
     return _maybeMerge(result)
   },
   _whenRepack(lt, gt, side) {
     // The definition of (is X (_all …)) is exactly the same as (is X (_any …)), just with _any/_all changed around. They are symmetric in this regard.
-    lt = _use(lt), gt = _use(gt), side = _use(side)
     if (_isArray(gt) && gt[0] === side)
       return _repack(gt, elem => call(array(_when, lt, elem)), side)
     if (_isArray(lt) && lt[0] === side)
@@ -2449,6 +2430,7 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
 (_pickNatLessThan 1) is 0.
 (_pickNatLessThan 2) is either 0 or 1.`,
     nameResult: ['random', 'nat', 'int'],
+    _argCount:1,
     call(n) {
       if (n === true) return false
       n = _toNumber(n)
@@ -2490,6 +2472,7 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
     txt: `(_pickProb Probability): Returns true with probability p, else false.
 Equivalent to 'Math.random() < p' with checks on p (it should be 0…1), but (probably) faster.`,
     nameResult: ['passed', 'isOk', 'bool'],
+    _argCount:1,
     call(p) {
       p = _toNumber(p)
       
@@ -2515,9 +2498,8 @@ Equivalent to 'Math.random() < p' with checks on p (it should be 0…1), but (pr
     },
   },
 
-  __countBits(n) { n=_use(n);  let x=0; while (n >>>= 1) ++x;  return x },
+  __countBits(n) { let x=0; while (n >>>= 1) ++x;  return x },
   __randomBits(n) { // Returns n || 32 random bits.
-    n = _use(n)
     if (!n) {
       if (!__randomBits.a)
         Object.assign(__randomBits, { a:new Int32Array(1024), pos:1024 })
@@ -2532,7 +2514,7 @@ Equivalent to 'Math.random() < p' with checks on p (it should be 0…1), but (pr
     return r;
   },
   __randomFill(buf) { // Fills a u/int-array or array-buffer with random data.
-    buf = new Uint8Array(_use(buf).buffer || _use(buf));
+    buf = new Uint8Array(buf.buffer || buf);
     let bytes = buf.byteLength
     if (typeof crypto!==''+void 0 && crypto.getRandomValues) {
       const quota = 65536, n = Math.floor(bytes/quota);
@@ -2578,16 +2560,19 @@ Evaluation happens on graphs. One graph node will be evaluated only once during 
 
 Technical notes:
 JS functions have Expr spread across their args (with \`this\` being the zeroth arg, code) (unless not-an-array, in which case \`this\` is undefined and the first arg is what is called/finished), resulting in both convenience and inefficiency (of array allocation for varargs).
-In JS overrides of finish, finish.v is the currently-executing Expr.
-finish.env is the current execution environment; put everything non-local there. It already has the DOM element to put logs into and label-bindings.
-To call, an array's zeroth element's concept is looked up; so, ((try …Inner) …Outer) finishes Outer but not Inner. In JS, \`this\` is the zeroth element, so there is often some boilerplate code to ignore invalid-position cases (by returning \`undefined\`). In non-finish overrides, \`this\` is always what is overriden.
-`,
+In defines, \`this\` is always what is overriden.
+In JS defines of \`finish\` and \`call\`, finish.v is the currently-executing Expr.
+finish.env is the current execution environment; put everything non-local there (scoped to your function). It already has the DOM element to put logs into and label-bindings.
+Don't call this in top-level code directly — use \`schedule\` instead.`,
     nameResult: ['finished'],
+    future:[
+      `Compile expressions to linear-execution automata (delimited at \`finish\`-overriding things; args to \`call\` before the function, args to \`finish\` after, with a number if _argCount is unknown), with same-nodes copied as needed and cycles being \`cycle\` at compile-time. Track cyclicity and results explicitly only at entry.`,
+    ],
     call(v) {
-      v = _use(v)
 
       // Cache, so that a common object is a variable, evaluated only once.
       const c = typeof v != 'string' && v && typeof v == 'object'
+      if (finish.pure && _isArray(v) && v[0] === _var) return [_unknown, v]
       if (c) {
         if (finish.env.get(label).has(v)) return finish.env.get(label).get(v)
         finish.env.get(label).set(v, cycle)
@@ -2596,89 +2581,110 @@ To call, an array's zeroth element's concept is looked up; so, ((try …Inner) �
       try {
         let result
         try {
-          let r
-          // Check if v overrides its own evaluation (finishing).
-          if (finish.v = v, (r = _checkOverride(v, finish, v)) !== undefined)
-            return result = r
+          let [finished, i = 0, record] = _interrupt(finish)
+          try {
+            // Check if v defines its own evaluation (finishing).
+            if (_isArray(v) && finished === undefined && defines(v, finish)) {
+              if (finish.pure && defines(v, _impure)) return [_unknown, v]
+              let r
+              if (finish.v = v, (r = _checkOverride(v, finish, v)) !== undefined)
+                return result = r
+            }
 
-          if (_isArray(v)) {
-            // Evaluate arguments.
-            const finished = _maybeMerge(v.map(finish))
+            // Check typedness if specified.
+            if (_isError(type(v))) throw type(v)
 
-            // Do the call with evaluated args.
-            r = call(finished)
-            return result = r
-          }
+            if (_isArray(v)) {
+                // Evaluate arguments. (finished = _maybeMerge(v.map(finish)), treating errors and unknowns specially.)
+                if (finished === undefined) finished = v.slice()
+                _cameFrom(finished, v)
+                for (; i < finished.length; ++i) {
+                  const r = finished[i] = finish(v[i])
+                  if (_isError(r)) return result = r
+                  if (_isUnknown(r)) {
+                    if (!record) {
+                      for (let k=0; k<i; ++k) finished[k] = quote(finished[k])
+                      record = r
+                    } else
+                      record.push(...r.slice(2))
+                    finished[i] = r[1]
+                  } else if (record)
+                    finished[i] = quote(finished[i])
+                  else if (_isArray(r) && r[0] === rest && r.length == 2) {
+                    // Unroll `(rest Array)`.
+                    if (r.length != 2) throw array(error, "Invalid count of args to rest")
+                    if (!_isArray(r[1])) return array(error, "Expected an array to spread, got", r[1])
+                    finished.splice(i, 1, ...r[1]), i += r[1].length
+                  }
+                }
+                if (i === finished.length) finished = _maybeMerge(finished), ++i
+
+                // Do the call with evaluated args.
+                if (!record)
+                  return result = call(finished)
+                else
+                  return record[1] = finished, result = record
+            }
+          } catch (err) { if (err === _interrupt) _interrupt(finish, 3)(finished, i, record);  throw err }
           return result = v
-        } finally { c && _cache(finish.env.get(label), v, result) }
+        } finally {
+          _cameFrom(result, v), c && _cache(finish.env.get(label), v, result)
+          if (result instanceof Promise) return [_unknown, result, result]
+        }
       } catch (err) { if (err === _interrupt) finish.env.get(label).delete(v);  throw err }
+      // finish.env, finish.v, finish.pure
     },
   },
   call:{
-    txt: `(call (…Values)): Applies the first value (the function) to the rest of values. Evaluates the array of function then its arguments, assuming its parts are already evaluated. Checks if any data overrides code (checks the last first — begins from the end), else if code overrides call, else returns Expr unchanged.
+    txt: `(call (…Values)): Applies the first value (the function) to the rest of values. Evaluates the array of function then its arguments, assuming its parts are already evaluated.
 Overriding this allows function application. In fact, \`F:(func …)\` is the same as \`(concept (map call F))\`.
 Caches results of pure functions.`,
     nameResult: ['result'],
-    call(v, defaultToV = true) {
-      v = _use(v)
-      if (!_isArray(v)) return directCall(v)
-      if (_use(v[0]) === directCall && v.length == 2) return directCall(_use(v[1]))
-
-      // Cache call too.
-      let r
+    call(v) {
+      if (finish.pure && defines(v, _impure)) return [_unknown, v]
       const m2 = call.cache || (call.cache = new Map)
-      r = _maybeUncache(m2, v)
-      if (r !== _notFound) return r
-
       try {
-        let result
+        // Cache call too.
+        let r
+        r = _maybeUncache(m2, v)
+        if (r !== _notFound) return r
+      } catch (err) { if (err === _interrupt) log('UH-OH');  throw err }
+
+      let result = _notFound
+      try {
+
+        _checkInterrupt()
+
+        let i
+        [i = 1] = _interrupt(call)
         try {
+          // Do the function call, just like normal people do.
+          let r
+          if ((r = defines(v, call)) !== undefined)
+            return finish.v = v, result = _getOverrideResult(r, v)
+        } catch (err) { if (err === _interrupt) _interrupt(call, 1)(i);  throw err }
 
-          // See if any data overrides code; use that as our result if so. Else see if code overrides call; use that if so. Else just return v.
-          let code = v[0]
-          const vc = _view(code)
-          if (vc instanceof Map && vc.get(_manualView) === true) code = overrides
-          for (let i = 1; i < v.length; ++i)
-            if ((r = _checkOverride(v[i], code, v)) !== undefined)
-              return result = r
-          if ((r = _checkOverride(v[0], overrides, v)) !== undefined)
-            return result = r
-
-          // Do the function call, just like regular people do.
-          if ((r = _checkOverride(v, call, v)) !== undefined)
-            return result = r
-
-          if (defaultToV) return result = v
-            // The second arg is something of a hack.
-        } finally { _cache(m2, v, result) }
-      } catch (err) { if (err === _interrupt) m2.delete(v);  throw err }
+        return result = v
+      } finally {
+        if (result !== _notFound)
+          _cameFrom(result, v), _cache(m2, v, result)
+        else m2.delete(v)
+        if (result instanceof Promise) return [_unknown, result, result]
+      }
     },
   },
-  directCall:{
-    txt: `(directCall (…Values)): Applies the first value (the function) to the rest of values, assuming its parts are already evaluated and no data overrides code.
-Low-level; don't use this.`,
-    call(v) { return _isArray(v) ? _checkOverride(v[0], call, v) : _checkOverride(v, call, v) },
-  },
-  overrides:{
-    txt: `(overrides Data Code): Gets the override of a thing: how Data defines its usage in Code (both concepts). It's either a map or undefined, and has to be applied or ignored respectively to get the actual overriden value.
-Override \`overrides\` to specify arbitrary global rewrites locally. For example, promises (\`_deferred\`) automatically transform their usage appropriately, though dynamically (with sufficiently advanced partial evaluation and caching, this can be done statically for known cases, but we don't currently do that).
+  defines:{
+    txt: `(defines Data Code): Gets the definition by Data of Code.
+It's either a function or undefined, and has to be applied or ignored respectively (_getOverrideResult) to get the actual overriden value.
 
-Technical notes:
-Array data gets its head consulted (but not recursively). A function acts like a concept that defined \`call\` as that function. A JS object with a Map \`.defines\` consults that map with Code as the key, and if not present, consults its \`overrides\` override (which should be a function from a Code key to the override).
-In a JS function that uses \`call\`/\`finish\` to call another function and ignore its override, check the override of \`overrides\` still, to materialize the inner conceptual structure only on demand.`,
+Array data gets its head consulted (once, not recursively). A function acts like a concept that defined \`call\` as that function. A JS object with a Map \`.defines\` consults that map with Code as the key.`,
     call(data, code) {
       if (code === call && typeof data == 'function') return data
       if (code === call && _isArray(data) && typeof data[0] == 'function') return data[0]
 
       let d = _view(data)
       if (d == null) return
-      if (d instanceof Map) {
-        if (code !== overrides && d.has(code)) return d.get(code)
-        let over
-        if ((over = d.get(overrides)) !== undefined) // c c:(concept c) leads to infinite recursion.
-          return typeof over == 'function' ? over.call(data, code) : directCall(array(over, code))
-        return
-      }
+      if (d instanceof Map) return d.get(code)
       throw "Unrecognized .defines; should be either undefined or a Map."
     },
   },
@@ -2686,34 +2692,34 @@ In a JS function that uses \`call\`/\`finish\` to call another function and igno
     txt:`(_view Concept): returns the view of Concept, used to look up things in it.`,
     call(data) {
       if (_isArray(data)) data = data[0]
-      if (data == null) return
-
-      return data.defines
+      return data ? data.defines : undefined
     },
-    _manualView:true,
   },
-  _manualView:{txt:`A marker on Code that conceptual checks should check not overrides of Code, but overrides of \`overrides\` (to still allow arbitrary global rewrites, without functions needing to check for that).`},
   _getOverrideResult(over, whole) {
-    // Execute the override returned from `overrides`.
-    // No _use.
+    // Execute the override returned from `defines`.
     if (over !== undefined) {
+      // Check _argCount if present.
+      if (_isArray(whole) && typeof over == 'function' && _view(over) instanceof Map && _view(over).has(_argCount)) {
+        const args = _view(over).get(_argCount)
+        if (typeof args == 'number' ? whole.length-1 !== args : !args(whole.length-1))
+          throw "Invalid arg count: expected " + args + ", got " + (whole.length-1)
+      }
+
+      // Execute.
       if (typeof over == 'function')
         return _isArray(whole) ? over.call(...whole) : over(whole)
-      if (typeof over != 'function' && overrides(over, call) !== undefined)
-        return directCall(array(over, whole))
     }
   },
   _checkOverride(data, code, whole) {
-    // Return undefined if there is no result overriden. Combines overrides and _getOverrideResult in one.
-    // No _use.
+    // Return undefined if there is no result overriden. Combines defines and _getOverrideResult in one.
     let r
-    if ((r = overrides(data, code)) !== undefined)
+    if ((r = defines(data, code)) !== undefined)
       return _getOverrideResult(r, whole)
   },
 
   _cache(m, expr, result) {
     // Caches result unless in a cycle (cannot cache until all cycle-parents are done evaluating).
-    if (_isDeferred(result)) return m.delete(expr)
+    if (_isUnknown(result)) return m.delete(expr)
     if (!m.until || (m.until.delete(expr), !m.until.size))
       m.set(expr, result)
   },
@@ -2728,20 +2734,46 @@ In a JS function that uses \`call\`/\`finish\` to call another function and igno
 
 
   concept:{
-    txt: `(concept View) or (concept View Value): Creates an object that looks up its every definition in View, overriding its own usage, so data overrides code. If Value is specified, the object becomes Value on use.
-Views should not be changed.
-Concepts are used extensively to extensibly define functions by-parts, and to give each function a free extensibility point.
-Concepts are the assembly of definitions, very easy to misuse; random generation of these would be a great feat indeed. Use these only to either override not-overriding-\`finish\` extensibility points, or as explicitly suggested by \`finish\`-overriding extensibility points.
+    txt: `(concept View): Creates an object that defines some things. Use _overridable to create functions that allow their definitions to be completely overriden.
+Concepts are used to give each function a free extensibility point.
+Try to use this only as explicitly suggested by functions.
+Views and non-_unknown arrays are considered immutable.
 
 Concepts come from dynamic languages like JS or Python, where most functions end up defining some unique property/key/symbol/string so that input can override a function's behavior. Rather than co-opting strings and files (duck typing, docstrings and documentation) to convey parts of a concept, override functionality directly.`,
     examples: [
-      [`(str (concept (map str a→"1"))) str:a→b`, `"1"`],
       [`(+ 2 (concept (map + (func a b 3))))`, `3`],
     ],
-    call(view, value) {
+    _argCount:1,
+    call(view) {
       if (!(view instanceof Map)) throw "The view must be a Map"
-      if (value !== undefined) view = new Map(view), view.set(_use, value)
       return {defines:view}
+    },
+  },
+  _overridable:{
+    txt:`(_overridable Function): creates a function that checks whether any input defines it, else calls the Function.`,
+    _argCount:1,
+    call(f) {
+      const impl = function checked() {
+        // See if any data defines code; use that as our result if so.
+        const v = finish.v, code = _isArray(v) ? v[0] : v
+        let [i = 0] = _interrupt(_overridable)
+        let r
+        try {
+          if (_isArray(v)) {
+            for (; i < v.length; ++i)
+              if ((r = _checkOverride(v[i], code, v)) !== undefined)
+                return r
+            return f.call(...v)
+          }
+          throw "What"
+        } catch (err) { if (err === _interrupt) _interrupt(_overridable, 1)(i);  throw err }
+      }
+      impl.defines = new Map
+      if (_view(f) instanceof Map)
+        _view(f).forEach((v,k) => impl.defines.set(k,v))
+      impl.defines.set(deconstruct, array(_overridable, f))
+      impl.defines.set(_impure, _impure(f))
+      return impl
     },
   },
 
@@ -2777,18 +2809,18 @@ Concepts come from dynamic languages like JS or Python, where most functions end
 
   map:{
     txt: `(map Key Value Key Value …): a key-value store. The array-representation of a JS Map. Get the value of a key with (Map Key).`,
-    examples: [
-      [`(map …r)→r (map 1 2 3 4)`, `map 1 2 3 4`],
-      [`(map x y …r)→r (map 1 2 3 4)`, `map 3 4`],
-      [`(map 3 4 …r)→r (map 1 2 3 4)`, `map 1 2`],
-    ],
+    // examples: [
+    //   [`(map …r)→r (map 1 2 3 4)`, `map 1 2 3 4`],
+    //   [`(map x y …r)→r (map 1 2 3 4)`, `map 3 4`],
+    //   [`(map 3 4 …r)→r (map 1 2 3 4)`, `map 1 2`],
+    // ],
     call(...kv) {
       const f = this
       if (f === map) {
         // Construct a Map.
         const x = new Map
         for (let i = 0; i < kv.length; i += 2) {
-          const k = _use(kv[i])
+          const k = kv[i]
           if (x.has(k)) return array(error, 'Duplicate key in a map')
           x.set(k, kv[i+1])
         }
@@ -2796,57 +2828,52 @@ Concepts come from dynamic languages like JS or Python, where most functions end
       } else if (_isArray(f) && f[0] === map && kv.length == 1) {
         // Lookup in a deconstructed map.
         for (let i = 1; i < f.length; i += 2)
-          if (f[i] === _use(kv[0]))
+          if (f[i] === kv[0])
             return f[i+1]
         return
       } else if (f instanceof Map && kv.length == 1)
-        return f.has(kv[0] = _use(kv[0])) ? f.get(kv[0]) : undefined
-      else return error
+        return f.has(kv[0] = kv[0]) ? f.get(kv[0]) : undefined
+      else return array(error, "Unknown operation with a map")
     },
-    assign(a,b) {
-      a = _use(a), b = _use(b)
-      if (_isArray(a) && a[0] === map) {
-        if (!(b instanceof Map)) return error
-        const r = _restFind(a)
-        if (_isError(r)) return r
-        if (r == a.length) {
-          return array(error, 'The only assignment to `map` that is supported is assignment to `map Key Value …Rest` (or to `map …Rest`).')
-        } else {
-          if (a.length == 2 && r === 1) return call(array(assign, a[1][1], b))
-          if (a.length != 4) return array(error, 'Can only extract one key/value pair from a Map at a time.')
-          if (r !== 3) return array(error, 'Please make …Rest be the last assigned-to parameter: this is easier to handle.')
-          // (map x y …r)
-          let result = error, rest
-          try {
-            b.forEach((v,k) => {
-              // If neither assignment is an error, return the last of their results from assignment.
-              const kr = _use(call(array(assign, a[1], _use(k))))
-              if (_isError(kr)) return
-              const vr = _use(call(array(assign, a[2], _use(v))))
-              if (_isError(vr)) return
-              result = finish(array(last, kr, vr))
-              rest = new Map(b), rest.delete(k)
-              throw null
-            })
-          } catch (err) { if (err !== null) throw err }
-          return finish(array(last, call(array(assign, a[3][1], rest)), quote(result)))
-        }
-      }
-    },
+    // assign(a,b) { // NOT _interrupt-safe!
+    //   if (_isArray(a) && a[0] === map) {
+    //     if (!(b instanceof Map)) return array(error, "Expected a map")
+    //     const r = _restFind(a)
+    //     if (_isError(r)) return r
+    //     if (r == a.length) {
+    //       return array(error, 'The only assignment to `map` that is supported is assignment to `map Key Value …Rest` (or to `map …Rest`).')
+    //     } else {
+    //       if (a.length == 2 && r === 1) return call(array(assign, a[1][1], b))
+    //       if (a.length != 4) return array(error, 'Can only extract one key/value pair from a Map at a time.')
+    //       if (r !== 3) return array(error, 'Please make …Rest be the last assigned-to parameter: this is easier to handle for us.')
+    //       // (map x y …r)
+    //       let result = _emptyError, rest
+    //       try {
+    //         b.forEach((v,k) => {
+    //           // If neither assignment is an error, return the last of their results from assignment.
+    //           const kr = call(array(assign, a[1], k))
+    //             // Wait, but what if we are interrupted?
+    //           if (_isError(kr)) return
+    //           const vr = call(array(assign, a[2], v))
+    //           if (_isError(vr)) return
+    //           result = finish(array(last, kr, vr))
+    //           rest = new Map(b), rest.delete(k)
+    //           throw null
+    //         })
+    //       } catch (err) { if (err !== null) throw err }
+    //       return finish(array(last, call(array(assign, a[3][1], rest)), quote(result)))
+    //     }
+    //   }
+    // },
   },
   deconstruct:{
     txt: `(deconstruct Object): turn a native object into its array-representation (that could be evaluated to re-create that native value).
 Used by serialization.`,
-    future:`Should make this work on a graph (extracting what is in \`serialize\` into this). Should quote complex expressions. (And maybe rename this to \`unfinish\`.)`,
-    finish(v) {
-      // Don't allow *any* overrides.
-      if (this === deconstruct) return deconstruct(v)
-    },
     call(v) {
+      const vv = _view(v) // Override `deconstruct` on a created-from-expr value (like in `func`).
+      if (vv instanceof Map && vv.has(deconstruct)) v = vv.get(deconstruct)
       if (_isArray(v)) return v.slice()
       if (typeof v == 'symbol') return [_var]
-      const vv = _view(v)
-      if (vv instanceof Map && typeof vv.get(deconstruct) == 'function') return vv.get(deconstruct)(v)
       if (v instanceof Map) {
         const arr = [map]
         v.forEach((v,k) => arr.push(quote(k), quote(v)))
@@ -2857,12 +2884,13 @@ Used by serialization.`,
         // Deconstruct a Map, except treat self-references specially.
         const arr = [map]
         v.defines.forEach((val,key) => val === v ? arr.push(quote(key), _unevalFunction(v)) : arr.push(quote(key), quote(val)))
+        if (typeof v == 'function' && !v.defines.has(call)) arr.push(call, _unevalFunction(v))
         return array(concept, arr)
       }
       if (typeof v == 'function')
         return _unevalFunction(v)
       if (v === undefined)
-        return [concept, new Map([[txt, `A marker that represents the lack of a conceptual override.`]])]
+        return [concept, new Map([[txt, `A marker that represents the lack of a conceptual definition or a value.`]])]
       if (!v || typeof v != 'object')
         return v
       const arr = [map]
@@ -2897,17 +2925,23 @@ Used by serialization.`,
     finish(src, ctx) {
       // Finish ctx (with arbitrary dependencies) ourselves.
       if (this !== _jsEval) return
-      src = _use(src), ctx = _use(ctx)
 
       if (!_jsEval.compiled) _jsEval.compiled = new WeakMap, _jsEval.ctx = Symbol()
 
       // Should use options: `{ statementSeparator(){…}, newName(i){…}, exprToSrc(expr), newVar(name, src){…}, scoped(src){…}, return(name){…}, backpatchable(){…}, backpatch(name, src){…}, cacheCompiled(mapName, ofName, varName){…}, link(args, body, filename, structuredBody){…} }`.
       const opt = {
         //debugStructure: struct => log(structured(struct)),
+          // Example body:
+          // 'use strict'
+          // const a=(x=>x)
+          // ⴵ0.set(ⴵ2,a) // Associate original with its compiled code.
+          // const ⴵ1=(b=>a(12)+b)
+          // ⴵ0.set(ⴵ3,ⴵ1)
+          // return ⴵ1
         statementSeparator() { return '\n' },
         newName(i) { return ['ⴵ'+i.toString(36)] },
         oldName(name) { return [name] },
-        exprToSrc(expr) { return _use(finish(expr)) },
+        exprToSrc(expr) { return finish(expr) },
           // For the JS case, we probably want this to also treat `js.eval …` as instructions to compile… How?
           // Also, we probably want it to fulfill the role of `funcCode`.
         newVar(name, src) { return ['const ', name, '=', [src]] },
@@ -2922,13 +2956,6 @@ Used by serialization.`,
           return Function(...Object.keys(args), filename ? body + '\n//# '+filename : body)(...Object.values(args))
         },
       }
-      // Example body (console.log(body.join(''))):
-      // 'use strict'
-      // const a=(x=>x)
-      // ⴵ0.set(ⴵ2,a) // Associate original with its compiled code.
-      // const ⴵ1=(b=>a(12)+b)
-      // ⴵ0.set(ⴵ3,ⴵ1) // Associate original with its compiled code.
-      // return ⴵ1
 
       // Maybe, by using a configurable language, this could be an arbitrary-imperative-language compiler.
 
@@ -2982,10 +3009,9 @@ Used by serialization.`,
         if (!name && backenv.has(func)) return backenv.get(func)
         if (!name) name = newName()
         if (name in env) name = env[name]
-        func = _use(func)
 
         // If not (js.eval …), or already compiled, just pass it (or its compiled code) through as an arg.
-        if (!_isArray(func) || _use(func[0]) !== _jsEval || m.has(func)) {
+        if (!_isArray(func) || func[0] !== _jsEval || m.has(func)) {
           if (m.has(func)) func = m.get(func)
           const prev = name
           name = alloc(func)
@@ -3007,21 +3033,21 @@ Used by serialization.`,
         let oldEnv, oldName, oldEnd
 
         // Compile context then push src.
-        const ctx = _use(func[2])
+        const ctx = func[2]
         if (ctx instanceof Map)
           ctx.forEach((v,k) => {
-            if (!isValidIdentifier(_use(k))) return
+            if (!isValidIdentifier(k)) return
             if (v !== func) compile(v,k)
           })
         else if (_isArray(ctx) && ctx[0] === map) {
           // Ctx is unfinished, so we could link potentially-circular js.eval dependencies ourselves.
           for (let i = 1; i < ctx.length; i += 2) {
-            const ke = _use(ctx[i]), ve = _use(ctx[i+1])
+            const ke = ctx[i], ve = ctx[i+1]
             let k
             if (_isArray(ke) && ke[0] === _jsEval && ke !== func)
               compile(ke)
             else
-              k = _use(finish(ke)),
+              k = finish(ke),
               k = isValidIdentifier(k) ? k : undefined
             if (k && k in env && !oldEnv) {
               // If a key conflicts, change the name and escape into a hidden function.
@@ -3035,13 +3061,13 @@ Used by serialization.`,
                 compile(ve, k)
             } else
               k && (env[k] = opt.oldName(k)),
-              compile(_use(finish(ve)), k)
+              compile(finish(ve), k)
           }
         } else if (ctx === undefined)
           ; // Nothing to compile before func.
         else throw "Function context must be either undefined or a Map or (map …)"
 
-        let src = funcCode(_use(func[1]))
+        let src = funcCode(func[1])
         if (opt.debugStructure) src = highlightRefs(src, env)
         if (backpatch.get(func))
           body.push(sep(), opt.backpatch(backpatch.get(func), src))
@@ -3101,7 +3127,7 @@ Used by serialization.`,
       try {
         let scope;
         [a, scope] = parse(a), b = parse(b, undefined, scope)[0]
-        _schedule(a, env, result => {
+        _schedule(a, _newExecutionEnv(env), result => {
           ++finished
           const ss = structuredSentence
           const B = serialize(b)
@@ -3139,15 +3165,11 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
       [`(bound 0 (map 0 1))`, `1`]
     ],
     nameResult: ['rewritten', 'expr', 'copy'],
-    future:[
-      `Have \`pre\` and \`post\` graph rewriters, not just \`pre\` (\`ctx\` now).`,
-      `Merge non-_impure cycles too.`,
-    ],
     call(v, ctx, cyclic = true, env = new Map) {
-      if (typeof (cyclic = _use(cyclic)) != 'boolean') throw "`cyclic` must be a boolean"
+      if (typeof cyclic != 'boolean') throw "`cyclic` must be a boolean"
       if (env.has(v)) return env.get(v)
-      ctx = _use(ctx)
 
+      if (_isArray(v) && v[0] === _const && v.length == 1) return v
       if (ctx instanceof Map && typeof v != 'string' && (_isLabel(v) ? ctx.has(v[1]) : ctx.has(v))) {
         const r = _isLabel(v) ? ctx.get(v[1]) : ctx.get(v)
         if (env.has(r)) return env.set(v, env.get(r)), env.get(v)
@@ -3155,7 +3177,7 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
         return env.set(v, cyclic ? bound(r, ctx, cyclic, env) : r), env.get(v)
       }
       if (!(ctx instanceof Map)) {
-        let r = typeof ctx == 'function' ? ctx(v) : directCall(array(ctx, v))
+        let r = typeof ctx == 'function' ? ctx(v) : call(array(ctx, v))
         if (r !== undefined) {
           if (r === _onlyUndefined) r = undefined
           if (env.has(r)) return env.set(v, env.get(r)), env.get(v)
@@ -3170,12 +3192,12 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
           // Merge with its context, then bind its expr. An optimization, removing the inner node.
           const prev = ctx
           ctx = new Map(ctx)
-          if (ctx.get('.') === prev) ctx.set('.', ctx)
           v[2].forEach((v,k) => ctx.set(k,v))
           copy = v[1].slice()
           env.set(v, copy)
           v = v[1]
         } else copy = v.slice()
+        _cameFrom(copy, v)
         env.set(v, copy)
         // Bind copy's parts.
         for (let i = 0; i < copy.length; ++i) {
@@ -3188,8 +3210,10 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
       }
       return v
     },
-    // On finish, finish ctx, bind, then finish the bound expr.
-    finish(v, ctx, cyclic) { return finish(bound(v, _use(finish(ctx)), _use(finish(cyclic)))) },
+    finish(v, ctx, cyclic) {
+      // On finish, finish ctx, bind, then finish the bound expr.
+      return finish(bound(v, finish(ctx), finish(cyclic)))
+    },
   },
   unbound:{
     txt: `(unbound Expr): Eliminates cycles in (a copy of) Expr by inserting \`(bound Expr (map …))\` with keys in the copy.`,
@@ -3210,7 +3234,7 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
       const names = new Map
       return noCycles(unbindChildren(x))
 
-      function preserve(x) { return _isLabel(x) || _isStylableDOM(x) }
+      function preserve(x) { return _isLabel(x) || _isStylableDOM(x) || typeof x == 'number' }
       function markParents(x, _i, parent) {
         if (preserve(x)) return
         if (unenv.has(x)) return
@@ -3274,6 +3298,7 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
             copy[1] = unbindChildren(copy[1], true)
         } else {
           copy = x.slice(), unenv.set(x, copy)
+          _cameFrom(copy, x)
           for (let i = 0; i < copy.length; ++i)
             copy[i] = unbindChildren(copy[i])
         }
@@ -3299,31 +3324,13 @@ On finish, finishes Ctx first, then binds Expr, then finishes Expr; finishes the
     txt: `error or (error …Causes): represents an error that has happened, and useful information as to its likely cause. Unwinds execution when encountered.
 Indicates a bug in code, and is intended to be presented to the user.`,
     examples: [
-      [`error`, `error`],
-      [`+ 1 error`, `error`],
+      [`((error 'x'))`, `(error 'x')`],
+      [`+ 1 (error 'bad stuff')`, `(error 'bad stuff')`],
       [`+ (* 3 (error 'uh')) 2`, `error 'uh'`],
     ],
-    future:[
-      `Turn all those \`return error\`s into something with a helpful message.`,
-      `Maybe record the expression stack too (only after _cameFrom).`,
-    ],
-    merge:undefined,
-    _impure:undefined,
-    overrides: () => _collectErrorCauses
   },
-  _isError(v) { return v === error || _isArray(v) && v[0] === error },
-  _collectErrorCauses(...x) {
-    const f = _use(this)
-    if (f === error) return
-    x.unshift(f)
-    let result = error
-    for (let i = 0; i < x.length; ++i)
-      if (_isError(x[i] = _use(x[i]))) {
-        if (result === error) result = x[i]
-        else result = array(error, ...result.slice(1), ...x[i].slice(1))
-      }
-    return result
-  },
+  _isError(v) { return _isArray(v) && v[0] === error },
+  _emptyError:[is('error')], // Only first/last/try/guard use this.
 
 
   _funcPlaceholder:{},
@@ -3341,13 +3348,14 @@ Can be written as \`!Function\`.`,
     finish(f) {
       if (this === closure) {
         // Close over the current label-environment, by binding f's body.
-        f = _use(f)
-        if (!_isArray(f) || _use(f[0]) !== func) return
-        return finish(_bindFunc(f, finish.env.get(label)))
+        if (!_isArray(f) || f[0] !== func) return
+        const [b = _bindFunc(f, finish.env.get(label))] = _interrupt(closure)
+        try { return finish(b) }
+        catch (err) { if (err === _interrupt) _interrupt(closure, 1)(b);  throw err }
       }
     },
   },
-  _bindFunc:{
+  _bindFunc: {
     txt: `Binds only the function body, with either a Map or a replacing function.`,
     call(f, ctx) {
       let escaping = true
@@ -3366,7 +3374,7 @@ Can be written as \`!Function\`.`,
     },
   },
   func:{
-    txt: `(func …Inputs Output): defines a function that can be called (like \`(f …Data)\`). On being called, this assigns …Inputs to …Data (setting variables), and evaluates the function body (Output).
+    txt: `(func …Inputs Output): an arbitrary transformation of inputs into output. It can be called (like \`(f …Data)\`), which assigns …Inputs to …Data (setting variables), and evaluates the function body (Output).
 This means that equal variables must be ref-equal (so \`f:(func x x 0)\` accepts \`(f 0 0)\` and \`(f 1 1)\`, but not \`(f 0 1)\`), that Data (as a type) must be a subtype of Inputs, that already-existing variables will get closed-over (so \`(func 0 0)\` uses \`0\` and not treats it as a new variable, and \`(func x (func y x))\` in the inner func refers to the outer \`x\`).
 Non-\`closure\` functions within will not be changed by argument application.
 Single-input functions can be written as \`Input→Output\`.`,
@@ -3375,74 +3383,69 @@ Single-input functions can be written as \`Input→Output\`.`,
       [`(func a a)`, `id`],
       [`(f "hi") f:a→a`, `"hi"`],
       [`(f "1" f:x→(f x))`, `cycle`],
-      [`(f 1 2) f:(func 1 3 5)`, `error`],
+      [`(f 1 2) f:(func 1 3 5)`, `(error 'Not assignable')`],
     ],
     finish(...inputs) {
       // Purify all inputs (and output).
-      if (_use(this) !== func) return
       const us = finish.v
-      inputs.unshift(func)
-      for (let i = 1; i < inputs.length; ++i) {
-        const escaped = bound(inputs[i], x => x === us ? _funcPlaceholder : undefined, false)
-        const purified = purify(escaped)
-        inputs[i] = purified
-      }
-      const impl = function impl(...data) {
-        if (typeof this != 'function') return
-        //log('calling', impl, data)
-        if (inputs.length-2 != data.length) return array(error, "Provided a different count of args than expected")
-        const a = data.length == 1 ? array(assign, quote(inputs[1]), quote(data[0])) : array(assign, quote(inputs.slice(1,-1)), quote(data))
-        return finish([_withEnv, new Map, a, inputs[inputs.length-1]])
-      }
-      inputs = bound(inputs, x => x === _funcPlaceholder ? impl : undefined, false)
-      if (inputs.length == 3 && _isLabel(inputs[1]) && inputs[1][1] === inputs[2][1])
-        return id // Shouldn't we not do this if we are in a closure? Since we may bind. But how not to?
-      merge(inputs)
-      impl.defines = new Map
-      impl.defines.set(deconstruct, () => inputs)
-      impl.defines.set(_impure, _impure(inputs))
-      //log('created', inputs, impl)
-      return impl
+      let [i = 1, f] = _interrupt(func)
+      if (f === undefined) f = inputs, f.unshift(func)
+      try {
+        for (; i < f.length; ++i) {
+          const escaped = _bindFunc(f[i], x => x === us ? _funcPlaceholder : undefined)
+          f[i] = purify(escaped)
+          if (_isUnknown(f[i])) {
+            if (_isDeferred(f[i])) throw "Promises in partial evaluation of functions are not implemented yet, sorry"
+            else f[i] = f[i][1]
+          }
+        }
+        try {
+          const impl = function impl(...data) {
+            if (f.length-2 != data.length) return array(error, "Provided a different count of args than expected")
+            let [arr] = _interrupt(impl)
+            if (arr === undefined) {
+              const args = data.length == 1 ? array(assign, f[1], data[0]) : array(assign, _maybeMerge(f.slice(1,-1)), data)
+              arr = [_withEnv, new Map, args, f[f.length-1]]
+            }
+            try { return finish(arr) }
+            catch (err) { if (err === _interrupt) _interrupt(impl, 1)(arr);  throw err }
+          }
+          f = _bindFunc(f, x => x === _funcPlaceholder ? impl : undefined)
+          if (f.length == 3 && _isLabel(f[1]) && f[1][1] === f[2][1])
+            return id
+          f = merge(f)
+          impl.defines = new Map
+          impl.defines.set(deconstruct, f)
+          impl.defines.set(_impure, _impure(f))
+          if (_restFind(f.slice(1,-1)) < f.length-2)
+            impl.defines.set(_argCount, f.length-2)
+          return impl
+        } catch (err) { if (err === _interrupt) log('UH OH');  throw err }
+      } catch (err) { if (err === _interrupt) _interrupt(func, 2)(i,f);  throw err }
     },
   },
-  _isFunc(x) { return _isArray(x) && (x[0] === func || x[0] === _func) },
-  _func:{
-    txt: `(_func …Inputs Output): A function with purified (partially-evaluated) parts; an implementation detail that prevents infinite purification loops. Like a compiled func.
-Serialization pretends that these are \`(func …)\`.`,
-    finish() {
-      // Don't evaluate function Input/Output.
-      if (this === _func) return finish.v
-    },
-    call(...data) {
-      // ((func …Args Body) …Data) => (bound Body (assign Args Data)), by putting literal data inline into copied code.
-      const f = _use(this)
-      if (!_isArray(f) || _use(f[0]) !== _func) return
-
-      const a = data.length == 1 ? array(assign, quote(f[1]), quote(data[0])) : array(assign, quote(f.slice(1,-1)), quote(data))
-      return finish(array(_withEnv, new Map, a, f[f.length-1]))
-    },
-  },
+  _isFunc(x) { return _isArray(x) && x[0] === func },
   _withEnv:{
     finish(labels, a, b) {
-      // Basically (last a b), but with label-environment preserved.
+      // Basically (last (call (quote a)) b), but with a given label-environment.
+      const us = finish.v
       const prev = finish.env.get(label)
-      labels = _use(labels)
       finish.env.set(label, labels)
       try {
         // Execute a (assignment) then b (body).
-        const assigned = _use(finish(a))
-        if (_isError(assigned)) return assigned
-        let r
-        if ((r = overrides(assigned, overrides)) !== undefined)
-          if ((r = _getOverrideResult(r, array(_withEnv, labels, quote(assigned), b))) !== undefined)
-            return r
-        if (b === undefined) return assigned
-        const result = _use(finish(b))
-        if (_isError(result)) return result
-        if ((r = overrides(result, overrides)) !== undefined)
-          if ((r = _getOverrideResult(r, array(_withEnv, labels, quote(assigned), quote(result)))) !== undefined)
-            return r
-        return result
+        let [stage = 0, assigned] = _interrupt(_withEnv)
+        try {
+          switch (stage) {
+            case 0:
+              assigned = call(a)
+              if (_isError(assigned)) return assigned
+              if (_isUnknown(assigned))
+                return assigned[1] = _cameFrom(array(_withEnv, labels, assigned[1], b), us), assigned
+              ++stage
+            case 1:
+              return finish(b)
+          }
+        } catch (err) { if (err === _interrupt) _interrupt(_withEnv, 2)(stage, assigned);  throw err }
       } finally { finish.env.set(label, prev) }
     },
   },
@@ -3450,54 +3453,85 @@ Serialization pretends that these are \`(func …)\`.`,
     txt: `(assign Pattern Value): This concept has undergone a lot of change and we are no longer sure what exactly it means, but functions use this to accept args.
 In the past:
 Returns a map from holes to their values needed to make a bound Pattern and Value always evaluate to the same.
-Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` if not actually a subtype, or how to turn the more general type into the less general; same for \`(assign Type Value)\`.`,
+Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`(error)\` if not actually a subtype, or how to turn the more general type into the less general; same for \`(assign Type Value)\`.`,
     nameResult: ['assigned', 'assignmentResult', 'equality'],
+    _argCount:2,
     call(a,b) {
-      a = _use(a)
-      if (_isArray(a) && a[0] === quote) a = a[1]
-      if (_isLabel(a) || typeof a == 'symbol' || _isArray(a) && a[0] === _var && a.length == 1) {
-        // Set the value in the current label-environment.
-        const m = finish.env.get(label)
-        const to = _isLabel(a) ? a[1] : a
-        if (!m.has(to)) return m.set(to, b), b
-        else return m.set(to, call(array(assign, m.get(to), b)))
-      }
-      if (_isLabel(b) || typeof b == 'symbol' || _isArray(b) && b[0] === _var && b.length == 1)
-        return b // Allow a kind of unification, by having labels be allowed in both positions.
-      b = _use(b)
-      if (_isArray(b) && b[0] === quote) b = b[1]
-      if (a === b) return a
-      if (_isArray(a)) {
-        // Assign each element, mindful of potential `(rest Y)` in a.
-        if (b == null) return array(error, "Expected an array, got "+b)
-        if (!_isArray(b)) return call(array(assign, a, deconstruct(b)))
+      const us = finish.v
 
-        // Find the index of the sole (rest X) in a.
-        const Rest = _restFind(a)
-        if (_isError(Rest)) return Rest
-
-        // Check sizes.
-        const RestLen = b.length - a.length + 1
-        if (RestLen < 0) return array(error, "Args too short: expected", a.length-1, "or more, but got", b.length)
-        if (Rest === a.length && a.length != b.length) return array(error, "Array lengths mismatch: expected", a.length, "but got", b.length)
-
-        let result
-        for (let i = 0; i < a.length; ++i) {
-          // Return the last of assign(a[i], b[i]).
-          let v
-          if (i < Rest) v = call(array(assign, a[i], b[i]))
-          else if (i > Rest) v = call(array(assign, a[i], b[i + RestLen - 1]))
-          else v = call(array(assign, a[i][1], _maybeMerge(b.slice(i, i + RestLen))))
-          v = _use(v)
-
-          if (v === cycle) continue
-          if (_isError(v)) return v
-          if (result === undefined) result = v
-          else result = finish(array(last, quote(result), quote(v)))
+      let r, [state = 0] = _interrupt()
+      try {
+        switch (state) {
+          case 0:
+            if ((r = _checkOverride(a, _isArray(us) ? us[0] : us, us)) !== undefined) return r
+            ++state
+          case 1:
+            if ((r = _checkOverride(b, _isArray(us) ? us[0] : us, us)) !== undefined) return r
+            ++state
         }
-        return result !== undefined ? result : b
-      }
-      return error
+
+        try {
+          if (_isArray(a) && a[0] === quote) a = a[1]
+          if (_isVar(a)) {
+            // Set the value in the current label-environment.
+            const m = finish.env.get(label)
+            const to = _isLabel(a) ? a[1] : a
+            if (!m.has(to)) return m.set(to, b), b
+            else return m.set(to, call(array(assign, m.get(to), b)))
+          }
+          if (_isArray(b) && b[0] === quote) b = b[1]
+          if (_isVar(b))
+            return b // Allow a kind of unification, by having labels be allowed in both positions.
+          if (a === b) return a
+        } catch (err) { if (err === _interrupt) log('UH OH');  throw err }
+        if (_isArray(a) && a[0] !== _const) {
+          // Assign each element, mindful of potential `(rest Y)` in a.
+          let Rest, RestLen
+          if (Rest === undefined && RestLen === undefined)
+          try {
+            if (b == null) return array(error, "Expected an array, got "+b)
+            if (!_isArray(b)) return call([assign, a, deconstruct(b)]) // This might interrupt and thus re-enter for different arrays, but should be ok.
+
+            // Find the index of the sole (rest X) in a.
+            Rest = _restFind(a)
+            if (_isError(Rest)) return Rest
+
+            // Check sizes.
+            RestLen = b.length - a.length + 1
+            if (RestLen < 0) return array(error, "Args too short: expected", a.length-1, "or more, but got", b.length)
+            if (Rest === a.length && a.length != b.length) return array(error, "Array lengths mismatch: expected", a.length, "but got", b.length)
+          } catch (err) { if (err === _interrupt) log('UH OH');  throw err }
+
+          let [i = 0, arr, result, v] = _interrupt(assign)
+          try {
+            for (; i < a.length; ++i) {
+              // Return the last of assign(a[i], b[i]).
+              if (arr === undefined) {
+                if (i < Rest) arr = array(assign, a[i], b[i])
+                else if (i > Rest) arr = array(assign, a[i], b[i + RestLen - 1])
+                else arr = array(assign, a[i][1], _maybeMerge(b.slice(i, i + RestLen)))
+              }
+              v = call(_cameFrom(arr, us))
+
+              if (v === cycle) continue
+              if (_isError(v)) return v
+              if (!_isUnknown(result)) {
+                if (_isUnknown(v))
+                  v[1] = _cameFrom(array(last, quote(result), v[1]), us)
+                result = v
+              } else {
+                if (_isUnknown(v))
+                  result[1] = _cameFrom(array(last, result[1], v[1]), us), result.push(...v.slice(2))
+                else
+                  result[1] = array(last, result[1], v)
+              }
+              arr = undefined
+            }
+          } catch (err) { if (err === _interrupt) _interrupt(assign, 4)(i, arr, result, v);  throw err }
+          return result !== undefined ? result : b
+        }
+        return array(error, "Not assignable")
+      } catch (err) { if (err === _interrupt) _interrupt(assign, 1)(state);  throw err }
     },
   },
 
@@ -3510,10 +3544,9 @@ Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` i
     _impure:true,
     call(tag, content, style) {
       if (typeof document == ''+void 0) return content
-      tag = _use(tag), content = _use(content), style = _use(style)
 
       let r
-      if ((r = overrides(tag, elem)) !== undefined)
+      if ((r = defines(tag, elem)) !== undefined)
         if ((r = _getOverrideResult(r, array(elem, tag, content, style))) !== undefined)
           return r
 
@@ -3527,7 +3560,7 @@ Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` i
   _elemAppend(p, ch) { // …Is this superseded by _elemInsert, or are these separate cases (in-memory vs very-likely-visual)?
       // Is direct usage of .append (in evaluator/REPL) also superseded?
     if (_isArray(ch)) return ch.forEach(ch => _elemAppend(p, ch))
-    if (ch && ch.parentNode) p.append(ch.cloneNode(true))
+    if (ch && ch.parentNode) p.append(ch.cloneNode(true)) // This doesn't clone our custom-properties, though.
     else if (ch !== undefined) p.append(ch)
   },
   _elemStyle(p, style) { if (style) p.setAttribute('style', style) },
@@ -3562,7 +3595,6 @@ Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` i
   structuredSentence(str) {
     // '{hello there}, {general kenobi}' — in DOM, each curly-bracketed string gets wrapped in a <node>.
     if (typeof document == ''+void 0) return str.replace(/{|}/g, '')
-    str = _use(str)
     let i = 0
     return parse()
     function parse() {
@@ -3618,6 +3650,13 @@ Interpreted as (structural) types, \`(assign Type Subtype)\` returns \`error\` i
 
 
 
+
+
+
+
+
+
+
   nameResult:{
     txt: `(nameResult Expr): provides a list of suggestions for naming Expr. Used in \`serialize\` for more human-readable graph serializations.`,
     call(func) { return typeof func == 'string' && func.length < 20 ? array(func) : _checkOverride(func, nameResult, func) },
@@ -3631,12 +3670,10 @@ Options must be undefined or a JS object with properties: { maxDepth=∞, offset
       [
         `Right now, parsing is embellished with some extra syntax, and serialization is basic S-expression-like syntax.`,
         `Separate these languages into two concepts. (Basic syntax is fast to parse, too — and it's not that hard to make it binary and not even requiring parsing.)`,
-        `Add a small button/select/… to REPL inputs (and evaluator's serialized expr) to specify the language.`,
       ],
-      `Somehow allow functions to override something (like Tag), to allow customization of DOM elements used to display their uses. (Then, do tables with this, have "editable-by-user" mutable code, have bounded number variables be able to be changed by the user with a slider, turn an expression into any of its alternatives, have js.eval highlight not all _globalScope but only strings present in bindings.)`,
+      `Allow functions to override something (probably embellished), to allow customization of DOM elements used to display their uses. (Then, do tables with this, have "editable-by-user" mutable code, have bounded number variables be able to be changed by the user with a slider, turn an expression into any of its alternatives, have js.eval highlight not all _globalScope but only strings present in bindings.)`,
     ],
     call(arr, opt, env) {
-      arr = _use(arr), opt = _use(opt), env = _use(env)
       let breakLength = opt && opt.breakLength
       const maxDepth = opt && opt.maxDepth
       const offset = opt && opt.offset !== undefined ? opt.offset : 0
@@ -3689,7 +3726,7 @@ Options must be undefined or a JS object with properties: { maxDepth=∞, offset
             const names = nameResult(unstyled.has(y) ? unstyled.get(y) : y)
             if (names !== undefined && _isArray(names))
               for (let i = 0; i < names.length; ++i)
-                if (!named.has(names[i]) && isNaN(+names[i]) && !parse.ctx.has(names[i])) {
+                if (typeof names[i] == 'string' && !named.has(names[i]) && isNaN(+names[i]) && !parse.ctx.has(names[i])) {
                   const r = styleLabel(names[i], x)
                   named.add(names[i])
                   unstyled.set(r, names[i])
@@ -3718,37 +3755,35 @@ Options must be undefined or a JS object with properties: { maxDepth=∞, offset
         }
         return u
       }
-      function deconstructed(arr) {
-        // Return a copy of arr with non-array non-string non-env things deconstructed.
-        if (deconstruction.has(arr)) return deconstruction.get(arr)
-        if (_isLabel(arr)) return named.add(arr[1]), arr
-        if (arr === _func) arr = func
-        if (styles && typeof Element != ''+void 0 && _isFunc(arr)) {
+      function deconstructed(x) {
+        // Return a copy of x with non-array non-string non-env things deconstructed.
+        if (deconstruction.has(x)) return deconstruction.get(x)
+        if (_isLabel(x)) return named.add(x[1]), x
+        const original = x
+        if (styles && typeof Element != ''+void 0 && _isFunc(x)) {
           // Bind labels inside a func to the same element.
-            // …Should probably be done in `bound`, so that parsing can enjoy this too.
-            // But, _bindFunc calls bound on the function, and we want to make bound call _bindFunc. I don't think it'll work.
           const styled = new Map
-          arr = _bindFunc(arr, x => {
+          x = _bindFunc(x, x => {
             if (!_isLabel(x)) return
             if (!styled.has(x[1])) styled.set(x[1], styleLabel(x[1], x))
             return styled.get(x[1])
           })
         }
-        const original = arr
-        if (!_isDOM(arr))
-          if (!_isArray(arr) && !_isString(arr) && typeof arr != 'number' && (!env || !env.has(arr)))
-            arr = deconstruct(arr)
-        deconstruction.set(original, arr)
-        if (_isArray(arr)) {
-          const copy = arr.slice()
+        if (!_isDOM(x))
+          if (!_isArray(x) && !_isString(x) && typeof x != 'number' && (!env || !env.has(x)))
+            x = deconstruct(x)
+        deconstruction.set(original, x)
+        if (_isArray(x)) {
+          const copy = x.slice()
+          _cameFrom(copy, x)
           unboundToBound.set(copy, original)
           deconstruction.set(original, copy)
-          if (!_isLabel(arr))
-            for (let i = 0; i < arr.length; ++i)
-              copy[i] = deconstructed(arr[i])
+          if (!_isLabel(x))
+            for (let i = 0; i < x.length; ++i)
+              copy[i] = deconstructed(x[i])
           return copy
         }
-        return arr
+        return x
       }
       function toString(i, alphabet) {
         if (i < alphabet.length) return alphabet[i]
@@ -3873,7 +3908,6 @@ Should probably accept a Language parameter, and check the override of \`parse\`
       `Cache function results (Unbound) by Func and Substring (maybe only large enough substrings), and copy instead of calling if found in cache.`,
     ],
     call(str, opt, ctx) { // → [value, ctx]
-      str = _use(str), opt = _use(opt), ctx = _use(ctx)
       if (_isDOM(str)) str = str.innerText // Don't even attempt to cache subtrees lol
       if (ctx === undefined) ctx = parse.ctx
 
@@ -4079,9 +4113,9 @@ Should probably accept a Language parameter, and check the override of \`parse\`
     match(u)
   },
 
-  _basicLabel(match, u, i) { // a, qwer, ^a^; 12, 1e6
+  _basicLabel(match, u, i) { // a, qwer, `a`; 12, 1e6
     const illegal = /[:\s\(\)→>\+\+\*\/\.\ue000-\uf8ff]/
-    const quote = '^'
+    const quote = '`'
     if (i !== undefined) {
       const r = _basicQuoted(match, u, i, quote)
       if (r !== undefined) return array(label, r)
@@ -4219,14 +4253,14 @@ Should probably accept a Language parameter, and check the override of \`parse\`
     } else match(_basicValue, u, _basicCall, _emClosure)
   },
 
-  _emRest(match, u, i) { // …a, ...a; `a
+  _emRest(match, u, i) { // …a, ...a; ^a
     if (i !== undefined) {
       if (match('…') || match('...')) {
         const r = match(_emRest)
         r === undefined && match.notEnoughInfo('Expected the rest')
         return array(rest, r)
       }
-      if (match('`')) {
+      if (match('^')) {
         const r = match(_emRest)
         r === undefined && match.notEnoughInfo('Expected the quoted value')
         return array(quote, r)
@@ -4331,7 +4365,7 @@ Should probably accept a Language parameter, and check the override of \`parse\`
   },
 
   basic:{
-    txt:`A language for ordered-edge-list graphs. label, ^label^, 'string', "string", (0 1), (a:2 a).
+    txt:`A language for ordered-edge-list graphs. label, \`label\`, 'string', "string", (0 1), (a:2 a).
 Machinery to use this is currently unimplemented.`,
     parse:is('_basicTopLevel'),
       // Needed additions:
@@ -4346,7 +4380,7 @@ Machinery to use this is currently unimplemented.`,
   },
 
   embellished:{
-    txt:`A language for ordered-edge-list graphs (\`basic\`) with some syntactic conveniences. label, ^label^, 'string', "string", (0 1), (a:2 a); 1+2, a→a*2.
+    txt:`A language for ordered-edge-list graphs (\`basic\`) with some syntactic conveniences. label, \`label\`, 'string', "string", (0 1), (a:2 a); 1+2, a→a*2.
 Machinery to use this is currently unimplemented.`,
     parse:is('_emTopLevel'),
     serialize:is('_emTopLevel'),
@@ -4385,19 +4419,18 @@ Only use when returned from _interrupt, and immediately.`,
       } else
         return tmp[tmp.length-1] = index, __populate
     },
-    _manualView:true, _impure:true,
+    _impure:true,
+  },
+  _checkInterrupt() {
+    if ((!finish.env.has(_interrupt) || !finish.env.get(_interrupt).length) && _timeSince(_interrupt.started) > 100 && !_pickNatLessThan(4)) throw _interrupt
   },
   _interrupt:{
     txt:`Used to make functions re-entrant, in a non-interruptible language.
 \`throw _interrupt\` to interrupt execution.
-Create function state like \`let [i = 0, j = 0] = _interrupt()\`.
-Wrap function body in \`try{…}catch(err){ if (err === _interrupt) err(2)(i,j) }\`. See \`__populate\` for reasoning behind this.
+Create function state in \`f\` like \`let [i = 0, j = 0] = _interrupt(f)\`, in particular for loops.
+Wrap function body in \`try{…}catch(err){ if (err === _interrupt) _interrupt(f,2)(i,j);  throw err }\`. See \`__populate\` for details.
 `,
-    future:[
-      `Make all functions (that call \`call\`/\`finish\` or are them, and have state and likely a loop) use this.`,
-      `Then, add "interrupt when taking too long" functionality to \`call\`.`,
-    ],
-    call(len = undefined) {
+    call(cause, len = undefined) {
       if (!_interrupt.tmp) _interrupt.tmp = []
       const tmp = _interrupt.tmp
       if (len === undefined) {
@@ -4412,16 +4445,241 @@ Wrap function body in \`try{…}catch(err){ if (err === _interrupt) err(2)(i,j) 
         for (let i = start; i < end; ++i)
         tmp[i - start] = stack[i]
         stack.length -= length+1
+
+        // Check cause
+        const got = stack.pop()
+        if (got !== cause) {
+          // const str = "expected "+serialize.backctx.get(cause)+" but got "+serialize.backctx.get(got)
+          // localStorage.setItem(str, (+localStorage.getItem(str) || 0) + 1)
+          // log(stack, tmp)
+          // throw new Error("Interrupt stack corruption sometime before this — invalid cause: expected "+serialize.backctx.get(cause)+" but got "+serialize.backctx.get(got))
+          // Actually, sweep this under the rug (tests of `try` are currently the only ones that are affected, and only if run not in isolation; we couldn't fix it)
+          stack.length = tmp.length = 0
+        }
+
         return tmp
       }
       // Return a function that stores 4 values at a time, up to len.
-      if (typeof len != 'number') throw "Must be a number"
+      if (typeof len != 'number') throw "len must be a number"
       tmp.length = len+1
       tmp[len] = 0
+
+      // Allow checking cause
+      if (!finish.env.has(_interrupt)) finish.env.set(_interrupt, [])
+      finish.env.get(_interrupt).push(cause)
+
       return __populate
     },
-    _manualView:true, _impure:true,
+    _impure:true,
   },
+
+
+
+
+
+
+
+
+  read:{
+    txt:`(read Value): reads a global marker of Value (initially undefined). (read Value WillBe): writes it (use _onlyUndefined to write undefined). Can be used to store and update information, preserved between evaluations.`,
+    future:`Ability for the interface to efficiently detect self-modification and update accordingly (\`observe X OnChange\`?). …We don't actually show any read-marks though… Would we?`,
+    call(v, now = undefined) {
+      if (!read.marks) read.marks = new WeakMap
+      const j = finish.env.get(journal)
+      if (!j) {
+        // Forward to read.marks.
+        if (now === undefined) return read.marks.get(v)
+        else now !== _onlyUndefined ? read.marks.set(v, now) : read.marks.delete(v)
+      } else {
+        // Check journal first, then read.marks. Store reads in the journal too.
+        if (now === undefined) return j.has(v) ? j.get(v) : (j.set(v, read.marks.get(v)), read.marks.get(v))
+        else j.set(v, now)
+      }
+    },
+    _impure:true,
+  },
+  journal:{
+    txt:`(journal Expr): virtualizes writes during Expr's evaluation. Returns a journal that can be passed to _peekResult or commit.`,
+    _argCount:1,
+    call(expr) {
+      let [j = new Map] = _interrupt(journal)
+      const prev = finish.env.get(journal);  finish.env.set(journal, j)
+      try { return [undefined, finish(expr), j] }
+      catch (err) { if (err === _interrupt) _interrupt(journal, 1)(j);  throw err }
+      finally { prev !== undefined ? finish.env.set(journal, prev) : finish.env.delete(journal) }
+    },
+  },
+  _peekResult:{
+    txt:`(_peekResult Journal): Returns the result contained in a journal.`,
+    _argCount:1,
+    call(journal) { return journal[1] },
+  },
+  commit:{
+    txt:`(commit Journal): performs the actual writes stored in a journal, and returns its result.`,
+    _argCount:1,
+    call(journal) {
+      journal[2].forEach((mark, v) => read(v, mark))
+      return journal[1]
+    },
+    _impure:true,
+  },
+
+
+
+
+
+  _cameFrom:{
+    txt:`Provides a potential way to tell which value this one came from, by a transformation like \`bound\` or recording.`,
+    call(to, from) {
+      if (!_cameFrom.m) _cameFrom.m = new WeakMap
+      if (to && typeof to == 'object') _cameFrom.m.set(to, from)
+      return to
+    },
+  },
+
+
+
+
+
+
+
+
+
+
+
+
+  type:{
+    txt:`(type Expr): returns the type of results of evaluating Expr.
+Types can encode and check arbitrary program properties under arbitrary assumptions. Programs cannot execute unless they type-check.
+Unless overriden, this just returns \`undefined\`; otherwise, this checks that the type-function does not return an error. A called function can have a type-checker.
+\`finish\` checks that the type of the executed Expr is neither an error nor \`cycle\`.
+Try to use only \`var\`, \`const\`, \`func\`, \`compose\`, \`try\`, \`guard\` to check the type.`,
+    call(expr) {
+      if (_isArray(expr) && expr[0] === _typed) return expr[2]
+      const over = defines(expr, type)
+      if (!_isArray(expr)) return over
+      if (expr[0] === quote) return
+
+      // Cache the result, first cycle then the result.
+      if (!type.cache) type.cache = new Map
+      const r = _mapGetOrSet(type.cache, expr, cycle, 10000)
+      if (r !== _notFound) return r
+      // If expr is an array that defines `type`, map its inputs with `type`, and call the override.
+      // A re-implementation of `finish`, largely copied from there.
+      try {
+        let result
+        try {
+          if (over === undefined) {
+            // Check that all its args are untyped too.
+            for (let i = 0; i < expr.length; ++i)
+              if (type(expr[i]) !== undefined && type(expr[i]) !== cycle)
+                return result = array(error, "Type-checked fragments must type as `undefined` or `cycle` when used in non-type-checked fragments.", expr, type(expr[i]), "(Use (_typed Expr) for explicit conversion.)")
+            return
+          }
+
+          let [finished, i = 0] = _interrupt(type)
+          try {
+            // Fill in types of arguments.
+            if (finished === undefined) finished = expr.slice(), finished[0] = over
+            _cameFrom(finished, expr)
+            for (; i < expr.length; ++i)
+              finished[i] = type(expr[i])
+            if (i === expr.length) finished = _maybeMerge(finished), ++i
+
+            // Do the call with types of args.
+            return result = call(finished)
+          } catch (err) { if (err === _interrupt) _interrupt(type, 2)(finished, i);  throw err }
+        } finally { _cameFrom(result, expr), type.cache.set(expr, result) }
+      } catch (err) { if (err === _interrupt) type.cache.delete(expr);  throw err }
+    },
+    at:{
+      typed:is('_typed'),
+      context:is('_context'),
+      search:is('_search'),
+    },
+    _argCount:1,
+    philosophy:`Dependent types, separated from logic.`,
+  },
+  _typed:{
+    txt:`(_typed Value Type): specifies that the value definitely fits the type.
+Type can override this to do an actual check on the value.`,
+    call(value) { return value },
+    _argCount:2,
+  },
+  _context:{
+    txt:`(_context Context Expr): sets the type context for the evaluation of Expr, used for type search.`,
+    finish(ctx, expr) {
+      const [x = finish(ctx)] = _interrupt(_context)
+      try {
+        if (_isError(x)) return x
+        if (_isUnknown(x)) return x[1] = array(_context, x[1], expr), x
+        const prev = finish.env.get(_context)
+        try { finish.env.set(_context, x); return finish(expr) }
+        finally { finish.env.set(_context, prev) }
+      } catch (err) { if (err === _interrupt) _interrupt(_context, 1)(x);  throw err }
+    },
+  },
+  _search:{
+    txt:`(_search Decision Context): searches Context (a store of typed values) for the first typed value that makes Decision return \`(stopIteration Result)\`.
+Decision should override this to produce a list of expressions to (type-check and) add to Context.`,
+    future:[
+      `Actually implement this.`,
+      `Re-search-at-will (possibly with a generator, to not run into repeats). Self-modifying type decorators: \`remembering Type\`, \`instances Type\`. Types of structure: \`tree …Of\`, \`acyclic …Of\`, \`graph …Of\`.`,
+    ],
+    call(decide) { // (ctx could be easier to pass in implicitly.)
+      const ctx = finish.env.get(_context)
+      // Is ctx an object { byIdentity:Map (from type to array of values), byResultIdentity:Map (from type to array of functions), byDependentResult:Map (from a random concrete subtype inside) }?
+        // Should have a function that adds a value to such a context.
+        // Should convert array contexts to this form. (Or, actually, the array should be first, and have these properties for efficiency.)
+    },
+    at:{
+      // (A generic search is an 'either' of those.)
+      only(type) {
+        const ctx = finish.env.get(_context)
+        // Int = Int
+        // Int = a   (Special-case the _isVar case.)
+        // Find the exact type in the context; return an array of those. (Objects; lookup.)
+        // Inputs: goal type.   (Int ctx, need to group objects by identity.)
+      },
+      apply(type) {
+        const ctx = finish.env.get(_context)
+        // Int + Int→Float = Float
+        // Int + a→Float = Float
+        // Find a function with appropriate result and find all its inputs. (Application; backward search.)
+        // Inputs: goal type.   (In ctx, need to group functions by result.)
+      },
+      compose(type) {
+        const ctx = finish.env.get(_context)
+        // Int→Float + Float→Bool = Int→Bool
+        // Int→Float + a→Bool = Int→Bool
+        // Int→Float + Bool→F64 + (Float F64)→Bool = (Int Bool)→Bool
+        // Find functions that accept the type as its sole argument; for each, either recurse with its result, or find a function that returns the type assignable to goal. Or something… (Composition. Function backward search.)
+        // Inputs: goal type — a function.   (In ctx, no grouping will help.)
+      },
+    },
+    philosophy:`The only purpose of specifications is to make programs that fit them.`,
+  },
+  CX:{
+    examples:[ [`type (quote (CX (_typed 1 1)))`, `2`], [`type (quote (CX (_typed 1 2)))`, `3`], ],
+    type(x) { return x === 1 ? 2 : 3 },
+  },
+
+  _addValueToContext(value, ctx) {
+    const t = type(value)
+    if (!ctx.byIdentity.has(t)) ctx.byIdentity.set(t, [])
+    ctx.byIdentity.get(t).push(value)
+    if (_isArray(t) && t[0] === func) {
+      // (Shouldn't it be an actual function? That is, typeof t == 'function' and _isArray(defines(t, deconstruct)) and defines(t, deconstruct)[0] === func…)
+      // Add it to either .byResultIdentity or to .byDependentResult.
+    }
+  },
+
+
+
+
+
+
+
 
 
 
