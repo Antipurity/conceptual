@@ -2,96 +2,15 @@
 <head>
   <meta charset=utf-8>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>A PL REPL</title>
-  <style>
-    * {transition: all .2s ease, margin 0s; vertical-align: top; box-sizing: border-box}
-    body {
-      background-color:var(--background);
-      color:var(--main);
-      --background:white;
-      --highlight:royalblue;
-      --main:black;
-    }
-    body.dark {
-      --background:rgb(15,15,15);
-      --highlight:rgb(225, 110, 65);
-      --main:white;
-    }
-    :focus {outline:none; box-shadow:var(--highlight) 0 0 .1em .1em}
-    input[type=range]::-moz-focus-outer { border:0 }
-    .hover {box-shadow:var(--highlight) 0 0 .1em .1em}
-    bracket {color:saddlebrown}
-    string {color:darkgreen}
-    body.dark string {color: limegreen}
-    number {color:cornflowerblue}
-    known {font-weight:bold; cursor:pointer}
-    node {display:inline-block; font-family:monospace}
-    error {color:red; text-shadow:0 0 .5em var(--background)}
-    extracted {display:inline-block}
-    extracted.hover { background-color:var(--background); position:sticky; top:.3em; bottom:.3em; z-index:11 }
-
-    scrollHighlight { position:fixed; right:0; box-shadow:var(--highlight) 0 0 .2em .2em }
-
-    waiting {
-      display: block;
-      width: 1.5em;
-      height: 1.5em;
-      margin: .5em;
-      border-radius: 50%;
-      border: .2em solid var(--main);
-      border-color: transparent var(--main) transparent var(--main);
-      animation: waiting-dual-ring 1.2s cubic-bezier(.5,0,0,2.5) infinite, waiting-appears .5s forwards;
-    }
-    @keyframes waiting-dual-ring {
-      0% { transform: rotate(0deg) }
-      100% { transform: rotate(180deg) }
-    }
-    @keyframes waiting-appears {
-      0% { opacity: 0 }
-      100% { opacity: 1 }
-    }
-
-
-    .broken {border-left:1px solid mediumblue}
-    .broken>* {margin-left:1em; display:table; max-width:calc(100% - 1em)}
-    .broken>bracket {margin-left:0}
-    .code>* {display:table}
-    body>* {display:table; white-space:pre-wrap}
-
-    .code {display:block; font-family:monospace}
-    .replInputContainer>:first-child { color:red; float:left }
-    .replInputContainer>:last-child[contenteditable] { min-height:1.2em; min-width: 1.2em; width:100%; display:table-cell }
-
-    #Working { width:.5em; height:.5em; margin-top:.5em; margin-left:.5em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
-    #Working.yes { background-color:var(--highlight) }
-    button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:#4CAF50; color:var(--main) }
-    button:hover { background-color:#5CBF60 }
-    button:active { background-color:#3C9F40 }
-
-    table {border-spacing:0}
-    td {padding:0}
-
-    particle {
-      border-radius:50%;
-      width:.1em; height:.1em;
-      box-shadow:0 0 .3em .3em var(--highlight);
-      position:absolute;
-      animation: particle-disappears .5s forwards;
-    }
-    @keyframes particle-disappears {
-      0% { opacity: 0; transform: translate(0px, 0px) }
-      20% { opacity: 1 }
-      100% { opacity: 0; transform: translate(var(--x), var(--y)) }
-    }
-  </style>
+  <title>Perpetual beta</title>
 </head>
-<body>
+<body onerror="document.body.append(event)">
   <noscript>This requires JS to run, and a fairly modern browser.</noscript>
   <div style="position:sticky; left:0; bottom:0; z-index:10"
-    ><span id=Working title="Currently running 0 jobs."
+    ><span id=JobIndicator title="Currently running 0 jobs."
     ></span
     ><input id=Lightness type=checkbox title="Use dark theme?"
-    ><input id=CPU type=range min=.01 max=.99 step=.01 value=.99 style="margin:0" title="Debounce the interpreter loop to 99% CPU usage"
+    ><input id=CPU type=range min=.01 max=.99 step=.01 value=.99 style="margin:0" title="Debounce the interpreter loop to 99% CPU usage."
     ><script>(Lightness.oninput = () =>document.body.classList.toggle('dark', Lightness.checked, true))()</script></div>
-  <script src=self.js></script>
+  <script src=self2.js async></script>
 </body>
