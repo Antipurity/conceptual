@@ -2,6 +2,8 @@
 
 The main purpose of this is to have lots of words, for any potential learning application.
 
+Anything that's even remotely worth saying is prefixed with `> ` (quoted).
+
 ---
 
 13:
@@ -140,7 +142,7 @@ So, [(concept Defines) Self] → (then (F (Defines Self)) (to X (trace F X)))? A
 
 Or [(concept Defines) Self] → (then (Defines Self) (to X (then (F X) (to Y (trace F Y))))), to make evaluation order fully explicit?
 
-['trace', f, x] => then( step(x) , X => then([f, X], Y => ['trace', f, Y]) )
+['trace', f, x] ⇒ then( step(x) , X ⇒ then([f, X], Y ⇒ ['trace', f, Y]) )
 
 18:11. But this way, we trace the result, forever — we want to stop when we reach the original, right? How?
 
@@ -246,11 +248,11 @@ Concepts define what they become… Or define other concepts? Sure, the new/form
 
 - The old writing, basically, was `(2,3) = {0=>4, 1=>5}` (since we are supposing `at.write(k,v)` and `k=>v` are the same, here), and the first that accepts it returns. But, if only refs are changeable-in-place, then that array is actually `{0=>ref 2, 1=>ref 3}`, otherwise a property is read-only. …Which… is actually how arrays are in memory — a sequence of references to other things…
 
-  - What even are the semantic rules for `first` in `bind`, do we want to do `a={b,c} → {a=b, a=c}` too? How do we make it stop for `a={{b,c}} → then({b,c}, x => a=x)`, with a separate semantic rule just for this?
+  - What even are the semantic rules for `first` in `bind`, do we want to do `a={b,c} → {a=b, a=c}` too? How do we make it stop for `a={{b,c}} → then({b,c}, x ⇒ a=x)`, with a separate semantic rule just for this?
 
 Do we rely on `o = {new, o}` and optimization, or do we make it super-explicit? Are these two ways equivalent? I cannot reconcile them into one at all.
 
-And, how do we iterate over all keys or all key-value pairs of objects, in this pure new day? Just calling the object with a key is not enough, we have to destructure it somehow. `f: {{k=>v, …rest}} => [print[join(k, '=>', v)], f{…rest}]`?
+And, how do we iterate over all keys or all key-value pairs of objects, in this pure new day? Just calling the object with a key is not enough, we have to destructure it somehow. `f: {{k=>v, …rest}} ⇒ [print[join(k, '=>', v)], f{…rest}]`?
 
 18:09.
 
@@ -258,7 +260,7 @@ And, how do we iterate over all keys or all key-value pairs of objects, in this 
 
 Um.
 
-Where the old way of writing concepts is `concept{ code → input => body }`, newer is `concept{ code input => body }`. They are exactly the same, right?
+Where the old way of writing concepts is `concept{ code → input ⇒ body }`, newer is `concept{ code input ⇒ body }`. They are exactly the same, right?
 
 18:32. I really can't concentrate. I really hope it's some weird depression. A third of my capabilities is not enough to absorb information.
 
@@ -330,24 +332,24 @@ What can run by itself can be studied. Be but a mere conduit for the fiddly thin
 
 11:51.
 
-`bind (gradient a+b) do => all(bind (gradient a) do, bind (gradient b) do)`?
+`bind (gradient a+b) do ⇒ all(bind (gradient a) do, bind (gradient b) do)`?
 
-`bind (gradient a*b) do => all(bind (gradient a)*b do, bind a*(gradient b) do)`?
+`bind (gradient a*b) do ⇒ all(bind (gradient a)*b do, bind a*(gradient b) do)`?
 
-`gradient a+b => (gradient a) + (gradient b)`? Does not assign blame individually. And why would we want to have a standalone gradient anyway?
+`gradient a+b ⇒ (gradient a) + (gradient b)`? Does not assign blame individually. And why would we want to have a standalone gradient anyway?
 
 …Maybe first-of should be all-of, here.
 
-`bind a+b y => all(bind a (y-b), bind b (y-a))`  
-`bind a-b y => all(bind a (y+b), bind b (a-y))`  
-`bind a*b y => all(bind a (y/b), bind b (y/a))`  
-`bind a/b y => all(bind a (y*b), bind b (a/y))`
+`bind a+b y ⇒ all(bind a (y-b), bind b (y-a))`  
+`bind a-b y ⇒ all(bind a (y+b), bind b (a-y))`  
+`bind a*b y ⇒ all(bind a (y/b), bind b (y/a))`  
+`bind a/b y ⇒ all(bind a (y*b), bind b (a/y))`
 
 Of course, this requires lazy evaluation, and so I do not think Pure can represent this properly…
 
 Whoever thought that a double-newline to represent a single newline was a good idea should be shot. Look how far this corruption has spread.
 
-…If we do not fail on lack of rewrites but return the unevaluated representation, we could have partial function applications like `a => (bind X), a Y`…
+…If we do not fail on lack of rewrites but return the unevaluated representation, we could have partial function applications like `a ⇒ (bind X), a Y`…
 
 13:10.
 
@@ -357,23 +359,23 @@ Let's say `#var` looks up (computes) and substitutes the var (expr) at parse tim
 
 During pattern matching, what is substituted, binds (doing nothing) only if the things are equal.
 
-`(a, a => 5)` is a regular var definition.
+`(a, a ⇒ 5)` is a regular var definition.
 
-`(a => 5, (a, a => a+8))` does not look up the outer a=5, it creates a cyclic structure.  
-`(a => 5, (a, a => #a+8))` returns 13.  
-`((a, a => #a+8), a => 5)` returns a+8.
+`(a ⇒ 5, (a, a ⇒ a+8))` does not look up the outer a=5, it creates a cyclic structure.  
+`(a ⇒ 5, (a, a ⇒ #a+8))` returns 13.  
+`((a, a ⇒ #a+8), a ⇒ 5)` returns a+8.
 
-`f a b => a+b` does not define a function `f`, it specifies a rewrite for any functions.  
-`#f a b => a+b` defines a function `f`. Usable like `f 1 2` or `(f 1) 2`, before or after the definition.  
-`#(Array 2) a => a+1` defines what happens when you call the current 2-nd element of Array with an input.
+`f a b ⇒ a+b` does not define a function `f`, it specifies a rewrite for any functions.  
+`#f a b ⇒ a+b` defines a function `f`. Usable like `f 1 2` or `(f 1) 2`, before or after the definition.  
+`#(Array 2) a ⇒ a+1` defines what happens when you call the current 2-nd element of Array with an input.
 
-However, with variables and `a => 5`, do we not create a substitute-anything-here-please rewrite instead of substitute-symbol-'a'-here?  
+However, with variables and `a ⇒ 5`, do we not create a substitute-anything-here-please rewrite instead of substitute-symbol-'a'-here?  
 So do we want to invert the meaning?
 
 13:28.
 
-`f \a \b => a+b`: escape an expression. When an escaped expression is bound to, it (always) returns `Escaped => BoundTo`, to be used in the subsequent rewriting.  
-`f \(a+b) => a+b`: simply returns the input.
+`f \a \b ⇒ a+b`: escape an expression. When an escaped expression is bound to, it (always) returns `Escaped ⇒ BoundTo`, to be used in the subsequent rewriting.  
+`f \(a+b) ⇒ a+b`: simply returns the input.
 
 But what does escaping on the client-side mean?  
 Nothing good, I bet. Nothing useful.  
@@ -383,16 +385,16 @@ Nothing good, I bet. Nothing useful.
 
 Maybe `!…` is a better notation than `#…`, since it stands for finishing in Haskell.
 
-`(!a => 5, (a, !a => a+8))` does not look up the outer a=5, it creates a cyclic structure.  
-`(!a => 5, (a, !a => !a+8))` returns 13. In fact…  
-`((5, !a => !a+8), a => 5)` returns 13 (because `5 => 5+8`).
+`(!a ⇒ 5, (a, !a ⇒ a+8))` does not look up the outer a=5, it creates a cyclic structure.  
+`(!a ⇒ 5, (a, !a ⇒ !a+8))` returns 13. In fact…  
+`((5, !a ⇒ !a+8), a ⇒ 5)` returns 13 (because `5 ⇒ 5+8`).
 
 Both?
 
-`(\a => 5, (a, \a => a+8))` does not look up the outer a=5, it creates a cyclic structure.  
-`(\a => 5, (a, \a => !a+8))` returns 13.  
-`!f a b => a+b`, or `\f a b => a+b`, defines a function in its scope.  
-`a => 5` just makes everything 5 (as does `_ => 5`), *including 5*, and causes an infinite loop.
+`(\a ⇒ 5, (a, \a ⇒ a+8))` does not look up the outer a=5, it creates a cyclic structure.  
+`(\a ⇒ 5, (a, \a ⇒ !a+8))` returns 13.  
+`!f a b ⇒ a+b`, or `\f a b ⇒ a+b`, defines a function in its scope.  
+`a ⇒ 5` just makes everything 5 (as does `_ ⇒ 5`), *including 5*, and causes an infinite loop.
 
 Things inside an escape `\(…)` can still be evaluated at parse (…or, create) time, with `!…`.
 
@@ -426,15 +428,15 @@ bind a::number _ = ();
 …Huh. This actually does seem to infer variable values correctly:
 
 ```
-> bind (x+2) 3;
+⇒ bind (x+2) 3;
 bind x 1
-> bind (15+x*2) 3;
+⇒ bind (15+x*2) 3;
 bind x (-6.0)
-> bind (1/(1+x)) 3;
+⇒ bind (1/(1+x)) 3;
 bind x (-0.666666666666667)
-> bind (1/(1+x+y)) 3;
+⇒ bind (1/(1+x+y)) 3;
 bind x (0.333333333333333-y-1),bind y (0.333333333333333-(1+x))
-> bind (1/(1+x+x)) 3;
+⇒ bind (1/(1+x+x)) 3;
 bind x (0.333333333333333-x-1),bind x (0.333333333333333-(1+x))
 ```
 
@@ -647,36 +649,36 @@ We want the base to link a graph, specified in the format:
 ```javascript
 // Option 1:
 graph = {
-  label: js`() => {}`,
+  label: js`() ⇒ {}`,
   x: [is`label`, 1, 2, 3],
 
   f: js(`a+b`, { a:is`n`, b:12 }),
   n: 15,
   exports: {
-    stuff: js(`() => z`, { z:is`f` }),
+    stuff: js(`() ⇒ z`, { z:is`f` }),
     xxx: is`x`,
   },
 }
 
 // Option 2:
 net = {
-  0: js`() => {}`,
+  0: js`() ⇒ {}`,
   1: [is(0), 1, 2, 3],
 
   2: js(`a+b`, { a:is(3), b:12 }),
   3: 15,
 
-  stuff: js(`() => z`, { z:is(2) }),
+  stuff: js(`() ⇒ z`, { z:is(2) }),
   xxx: is(1),
 } // Cannot have integer indexes as globals.
 
 // Option 3:
 link({
   2: is(0),
-  stuff: js(`() => z`, { z:is(4) }),
+  stuff: js(`() ⇒ z`, { z:is(4) }),
 }, {
   0: [is(1), 1, 2, 3],
-  1: js`() => {}`,
+  1: js`() ⇒ {}`,
   3: 15,
   4: js(`a+b`, { a:is(3), b:12 }),
 })
@@ -696,16 +698,16 @@ Also, we could bypass the global scope entirely:
 /// Option 4:
 'use strict';(function init(net) {
   …
-})((globals, is, js) => [{
+})(function (globals, is, js) { return [{
   2: is(0),
-  stuff: js(`() => z`, { z:is(4) }),
+  stuff: js(`() ⇒ z`, { z:is(4) }),
 }, [
   [is(1), 1, 2, 3],
-  js`() => {}`,
+  js`() ⇒ {}`,
   ,
   15,
   js(`a+b`, { a:is(3), b:12 }),
-], globals])
+], globals] })
 ```
 
 Old modules also helped write code without worrying about globals — hidden locals will always take priority over public globals. Not here. But, here, we could *allocate* non-colliding names (manually if needed). We could even put `is(…)` for function environments, to share environments in a module.  
@@ -732,7 +734,7 @@ function forEach(In, into = []) {
 function shallowEquals(a,b) {
   if (a === b) return true
   try {
-    const check = (k => { if (a[k] !== b[k]) throw null })
+    const check = (function(k) { if (a[k] !== b[k]) throw null })
     forEach(a, check), forEach(b, check)
     return true
   } catch (err) { if (err === null) return false }
@@ -831,7 +833,7 @@ js.Js = class{
     const a = []
     const arr = ["'use strict';"]
     if (keys.length)
-      arr.push("const[", keys, "]=[", keys.map(k => 'ⴵ.' + k), "];")
+      arr.push("const[", keys, "]=[", keys.map(function(k) { return 'ⴵ.' + k }), "];")
     arr.push("ⴵ=void 0;return(", s, ")")
     if (typeof e.name == 'string')
       arr.push('\n//# sourceURL=' + e.name + '\n')
@@ -890,13 +892,13 @@ What the hell am I doing, putting such a quantity of code into a journal?
 
 Anyway. I think I got the network. It's, um… literally a hundred lines long. Very short, compared to before.
 
-Now I need to do something like… um… ``() => emit`(${subrule})` ``?  
+Now I need to do something like… um… ``() ⇒ emit`(${subrule})` ``?  
 What *is* the interface?
 
 ```javascript
 bind('asdf') // 'asdf'
-bind(() => 'asdf') // 'asdf' (sync execution)
-bind('asdf', () => 'asdf') // true
+bind(function() { return 'asdf' }) // 'asdf' (sync execution)
+bind('asdf', function() { return 'asdf' }) // true
 
 bind(document.body, el('div', null, el('br'), 'text')) // document.body will be replaced with <div><br>text</div>
 ```
@@ -930,15 +932,15 @@ But doesn't this bring with it not only `either`, but deferred versions of both,
 bind('a', 'b') // null
 bind('a', 'a') // 'a'
 bind(['asdf', undefined], 'asdfghjk') // ['asdf', 'ghjk']
-bind(matcher(['asdf', undefined], p => { x:p[1] }), 'asdfghjk') // { x:'ghjk' }
+bind(matcher(['asdf', undefined], function(p) { return { x:p[1] } }), 'asdfghjk') // { x:'ghjk' }
 
-bind(() => 'a') // 'a'
-bind(() => 'a', 'a') // 'a'
+bind(function() {return 'a'}) // 'a'
+bind(function() {return 'a'}, 'a') // 'a'
 ```
 
 No, `join` is more precise than always-flattened arrays.
 
-If matcher works on both sides, then actual elements can be said to be matchers of .el with a transformer of p => replace(this).with(p)…
+If matcher works on both sides, then actual elements can be said to be matchers of .el with a transformer of p ⇒ replace(this).with(p)…
 
 How do we produce a symbolic AST from a string? AND turn it into a string?  
 …Wait. Grandpa `emit` does not handle matching. We are on our own.  
@@ -951,7 +953,7 @@ It proposed emitting strings, then finally returning `emit()` to allow seamless 
 
 22:20.
 
-What about the old `f => f('(', rule, ')')` rules?  
+What about the old `f ⇒ f('(', rule, ')')` rules?  
 …I don't know.  
 None of this adds up into any equation that can be written in any file without it exploding.
 
@@ -968,7 +970,7 @@ We do want:
 - Assigning `El(…)` to an element (with .from) waits for an opportunity, diffs the structure, then forces the new structure onto the element.
 - `emit(…)` (and `emit.collect(…)`) serializes, and can be overriden arbitrarily: strings become strings, rules expand into structures, `El` becomes an actual element.
 - `emit(NodeType, 'program')` matches two patterns, with any backtracking allowed for generality (NodeType takes control over calling `emit`? This will allow any backtracking-on-failure and anything else…), returning a thing that will serialize arbitrarily.
-  - …Is NodeType an emit-into-value `(emit, value) => …` function here?
+  - …Is NodeType an emit-into-value `(emit, value) ⇒ …` function here?
   - Or do functions passed to `emit` accept the other value: undefined to emit, something else to parse or inject into?
   - Or do `{ emit: … }` pass control to the defined .emit when encountered?
 
@@ -1438,9 +1440,9 @@ contentEditable elements for strings look really good, way better than textareas
 
 The current visual framework is "create element tree representations, then merge them". That can very easily create way more than we want.  
 What if, a better visual framework would be, "at an element, call a function, that will make the element as it wants"? assign(instanceof Element, f) sets current elem and does el(f); inside f, el(tag, attr, …children) sets the current element, and el(func, attr) merges… hmm.  
-This way would basically need to make all inline children creations `el(…),` to become `() => el(…)`, with no other changes.
+This way would basically need to make all inline children creations `el(…),` to become `() ⇒ el(…)`, with no other changes.
 
-We can make the function accept args via attrs — that is, `el(func, {a:1})` and `func = ({a}) => el('div', el(Number, a))`; we can even not set them for the next generation to pick up the last args. That's *way* better than being forced to infer from DOM structure.
+We can make the function accept args via attrs — that is, `el(func, {a:1})` and `func = ({a}) ⇒ el('div', el(Number, a))`; we can even not set them for the next generation to pick up the last args. That's *way* better than being forced to infer from DOM structure.
 
 Also, table layout would be *boss* for objects.  
 It'll look so good, people will think a professional made it.
@@ -1567,7 +1569,7 @@ function step() {
     const Code = get(p)
     if (!cmd[Code] || !cmd[Type]) throw "bad instruction"
 
-    if (Code === Step.id) return get(p+1) //[Step [Code Data]] -> [Code Data]
+    if (Code === Step.id) return get(p+1) //[Step [Code Data]] → [Code Data]
     if (cmd[Code][Step.id]) {
       // Looking at Code — see what we can do.
       const Data = get(p+1), Type = get(Data)
@@ -1600,7 +1602,7 @@ function step() {
 
   Sum:{
     Step(p) {
-      // finish(p).then(p => …)
+      // finish(p).then(p ⇒ …)
         // Putting such a header on all functions is just so inconvenient.
         // I've searched high and low for another option, but…
       return code(Finish.id, code(p, SumImpl))
@@ -1822,7 +1824,7 @@ function step() {
   },
   u32:{ // (Uint32)
     // | zero: u32
-    // | succ: u32 -> u32
+    // | succ: u32 → u32
     Log(p, then) { console.log('u32', get(p)); return then },
     Alloc(p, then) {
       alloc(get(p))
@@ -1927,7 +1929,7 @@ I... I give up...
 
 ```javascript
 // Element: .state, .rule, .dirty.
-// state({…updates}), rule(() => …)
+// state({…updates}), rule(() ⇒ …)
 // style({…updates}), classes({…updates:bool}), attr({…updates}), children(state,rule, state,rule, state,rule)...
 ```
 
@@ -1998,9 +2000,9 @@ network({
   _commit() { // Actually writes the journal.
     const keys = Object.keys(env.journal)
     if (keys.length < 128)
-      keys.forEach(ref => (env[ref] = env.journal[ref], delete env.journal[ref]))
+      keys.forEach(function(ref) { env[ref] = env.journal[ref], delete env.journal[ref] })
     else
-      keys.forEach(ref => env[ref] = env.journal[ref]), env.journal = {}
+      keys.forEach(function(ref) { env[ref] = env.journal[ref] }), env.journal = {}
   },
 
   // Now… do we have deconstruct(jsValue)→Ref? Making a value… env's own… (all pre-built functions must be in the array for this, and know their indexes.)
@@ -2222,7 +2224,7 @@ els *is* the last one left, or rather, a re-make of everything with it.
 
 cccccvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxccccccccccczzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzccZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaazzzzzzzzzzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            Knowledge of concepts is the source of humans' power. Yet no human can survive in such a simple place as concepts' world. mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmooooooooooooooooooooooooooooooooooooooooiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiuuuuuuuuuuuuuuuuuuuuuyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyttttrrrrrrrrrrrrrrrrrrrrrrrrrrrreeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeetwwwwweeeeeqqqqqqw  qqqnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmnnn\\]hh We have descended into hell.                                                                                                                                                Materialization of concepts… An enemy that cannot be beaten. How to even fight the immaterial and bottomless?
 
-A neural network is of a type `(…inputs) => (…outputs)`. Fully-connected nn… We don't know nor suppose anything (except the flatness of correlation), so we must give every possibility a possible role in any result. For each (non-number) input, all its possible values are enumerated; only one is assigned 1, the rest are 0. Each output is connected to each input; is a sum of multiplied inputs (where 'sum' could actually mean 'ReLU reduce(inputs, +)').
+A neural network is of a type `(…inputs) ⇒ (…outputs)`. Fully-connected nn… We don't know nor suppose anything (except the flatness of correlation), so we must give every possibility a possible role in any result. For each (non-number) input, all its possible values are enumerated; only one is assigned 1, the rest are 0. Each output is connected to each input; is a sum of multiplied inputs (where 'sum' could actually mean 'ReLU reduce(inputs, +)').
 [shift, Nat, 1] = shift(Nat, 1); [enum, type] = enum type; [rememberThatWeCanReplace, from, to] = from→to; [any, a, b, …] = |a |b; [typed, v, t] = v:t.
 
 The whole (current) program is named Self. The algorithm has a value and a list of arrows from→to that it has seen (initially just Self) — potential transformations of the value, and it continuously tries a random one, checking that currentValue:from (binding then renaming variables for closure), removing it and replacing it with to, adding every |option it has seen just inside.
@@ -2287,18 +2289,18 @@ And how to have construct-js-from and deconstruct-js for much increased speed of
 | 
 
 This is kinda too complex, and does not have a good base…
-Can we instead think of a system that copies a function just from its outputs; give it a thing like x => x*x-x+123, and it will look for the best thing it can find among its own functions, composing as needed?
+Can we instead think of a system that copies a function just from its outputs; give it a thing like x ⇒ x*x-x+123, and it will look for the best thing it can find among its own functions, composing as needed?
 
-x => ?
-  x => +(dep * Var1)
+x ⇒ ?
+  x ⇒ +(dep * Var1)
   dep is, most generally, (x,1) in a nn, or any subdependencies (x or 1 here).
-x => ? + ?
-  x => +(Var1 * +(dep * Var2), Var3 * +(dep * Var4))
-x => ? * ?
-  x => *(Var1 * +(dep * Var2), Var3 * +(dep * Var4))
-x => ?*? + ?
-  x => +(*(Var1 * +(dep * Var2), Var3 * +(dep * Var4)), Var5 * +(dep * Var6))
-  x => NN
+x ⇒ ? + ?
+  x ⇒ +(Var1 * +(dep * Var2), Var3 * +(dep * Var4))
+x ⇒ ? * ?
+  x ⇒ *(Var1 * +(dep * Var2), Var3 * +(dep * Var4))
+x ⇒ ?*? + ?
+  x ⇒ +(*(Var1 * +(dep * Var2), Var3 * +(dep * Var4)), Var5 * +(dep * Var6))
+  x ⇒ NN
   When this is trained, the function can be reconstructed properly.
   (If after improving for one input, another input worsens, we have not introduced enough complexity.)
   A possible train step: gradient(NN) = f(x) - NN(x).
@@ -2364,7 +2366,7 @@ For scheduling-with-multiprocessing, we can have two queues (of i32 references t
 
 17:25.
 
-`i < j => F i < F j`; this could be the property to check for learning, and generating it could pop out all the particular learning algorithms, like assignment, or gradient descent, or binary/exponential search, or anything else. It could be used for picking input to nudge output; the function does not even need to be explicitly called, we can just adjust a variable and look at whether the output is more or less than we want, periodically… But, damn, do I Need that little language. It is worthless in JS, no staying power, no generative power…
+`i < j ⇒ F i < F j`; this could be the property to check for learning, and generating it could pop out all the particular learning algorithms, like assignment, or gradient descent, or binary/exponential search, or anything else. It could be used for picking input to nudge output; the function does not even need to be explicitly called, we can just adjust a variable and look at whether the output is more or less than we want, periodically… But, damn, do I Need that little language. It is worthless in JS, no staying power, no generative power…
 
 ---
 
@@ -2611,12 +2613,12 @@ Also, I'm falling back into the habit of disposable thought trees, in source cod
 I've noticed this... I express old terms in terms of new ones *so much*. I guess this *is* what "self-improvement" means.
 
 Want:
-- In code, […] => array(…), and have that assign numbers to each array it's seen and merge equal-number-constituents arrays together. …Except, how do we construct cyclic arrays then, especially from binding acyclic ones? Cyclic things can only arise from binding, so we can special-case that (even with merging cycles properly)…
+- In code, […] ⇒ array(…), and have that assign numbers to each array it's seen and merge equal-number-constituents arrays together. …Except, how do we construct cyclic arrays then, especially from binding acyclic ones? Cyclic things can only arise from binding, so we can special-case that (even with merging cycles properly)…
   - Detect evaluate-X-while-evaluating-X cycles in computation; allow functions to override `cyclic` to do what they want (by default, it returns `error` or maybe even `cycle`).
   - Possibly a primitive that always creates a new object when bound, to oppose mergicity. Maybe even just (ref X), with more complex refs actually being concepts.
 - Make _check into step, make regular functions override step, and give things that override `finish` a chance of defining what they'd do with their unevaluated args.
   - Make assign and forany/forall(/is) handle cycles properly (which I think just means ignoring them).
-- Current `is` => `when`/`in`.
+- Current `is` ⇒ `when`/`in`.
 - Add some helpful txt.
 
 ---
@@ -2624,7 +2626,7 @@ Want:
 8 November 2019.
 
 Want:
-- In code, […] => array(…), and have that assign numbers to each array it's seen and merge equal-number-constituents arrays together. …Except, how do we construct cyclic arrays then, especially from binding acyclic ones? Cyclic things can only arise from binding, so we can special-case that (even with merging cycles properly)…
+- In code, […] ⇒ array(…), and have that assign numbers to each array it's seen and merge equal-number-constituents arrays together. …Except, how do we construct cyclic arrays then, especially from binding acyclic ones? Cyclic things can only arise from binding, so we can special-case that (even with merging cycles properly)…
   - Detect evaluate-X-while-evaluating-X cycles in computation; probably just return `cycle`.
   - Possibly a primitive that always creates a new object when bound, to oppose mergicity. Maybe even just (ref X), with more complex refs actually being concepts.
   - Make assign and forany/forall(/is) handle cycles properly (which I think just means ignoring them).
@@ -3793,6 +3795,8 @@ I now have structured editing… From a certain point of view.
 
 I've built up my viewpoint to be agnostic to the existence of God, not depending on either case in any way. But it does not mean that I am blind to the probabilities involved. Most parts of all religions are too consistent with "some ancient guys being too pretentious in their lies, and lucky enough with finding the words to be listened to"; the world is too consistent with uniformly random sampling with observer bias, not any more advanced generative process like a great intelligence humans can imagine; not looking good for god's existence. There are always good and profound parts in religions, otherwise they wouldn't be religions but cults, but their brilliance is only a jealous and lessened shadow of reality.
 
+(Immortal concepts, but to make them understandable to laypeople, they had to be lessened and brought to things like religion and philosophy. Potential wasted, but perhaps it can be resurrected eventually.)
+
 …
 
 Me: *Makes a contenteditable-and-reparsing-based structure editor.*  
@@ -3980,7 +3984,7 @@ But, the burned-out state of the self-modifying "A PL REPL" creation machine has
 
 ---
 
-16 December 2019.
+16+ December 2019.
 
 Friendship ended with royalblue shadows. Orange shadows are my new best friends.  
 Light theme really does burn eyes, after getting used to dark theme.
@@ -4002,3 +4006,968 @@ That's why the god of nightmares needs *your* open-source contributions.
 ---
 
 Modern machine learning really is stuck in a primitive state, now that I think about it; adjusting output by adjusting variables, mostly by gradient descent… It's like if, to sort an array, everyone used radix sort, some hipsters found out that quick and merge sorts are not bad, and some idiots used insertion sort on their worthless toy problems. Modern sorting is about combining algorithms, by knowing approximations of their relative runtimes and dynamically picking the best, resulting in something that's better than any one. Modern machine learning is about statically picking a way of adjusting that seems best. Approximating performance of an adjustment step may be a far more difficult task than sorting's, by itself requiring advanced combination, but isn't it necessary to achieve learning performance superior to any one algorithm's?
+
+---
+
+Logicians like to say that they define everything from nothing but a few axioms, proving everything they want completely transparently. They criticize computer proofs as being unverifiable, because software and hardware are unverifiable… but how are those any different from axioms? Just because these are written on a piece of paper with simple words doesn't mean that it isn't possible that humans are secretly hard-wired to see something inconsistent as completely consistent; all it means is that the attack/defect surface is smaller. But make software and hardware simple and inspectable, and the ground for untrustworthiness of computer proofs completely evaporate.
+
+---
+
+When you haven't formalized an idea yet but are still using it, you end up inlining its parts into your reasoning — just like imperative programming. But when you have, you will likely end up over-using the formalization, missing its subtle variations and specializations and nuances of implementation — just like functional programming.  
+One can be too verbose, or too terse.  
+Is there really no way to have both?
+
+---
+
+Being a part of a huge society is nice. You think to yourself, "yeah, I can kind of see where this idea leads, but I don't know anywhere near enough to actually implement it", and the fact that you do means that someone somewhere has done it.  
+It's like you don't have to do anything and can just die or something. Bystander effect, combined with suicidability.  
+I got stuff I want to try first, though.
+
+Humanity lives all lifes of a human.
+
+---
+
+Generality, and not being constrained by conventions in the least…  
+This has extremely foolish results for the longest time.  
+But the best things cannot be created any other way.  
+Grafting extensions onto a narrow view is, in the end, worse than constraining a greater view: one finds that it is greater than it thinks (forgetting how it's like to be *not*), and another finds its place in the wider multiverse (forgetting what it's like to be greater).  
+(*Obviously*, no one can have both.)
+
+---
+
+Being alone vs having societal support on what you do is the difference between doing 30% of your to-dos and doing 90% of your to-dos.  
+A huge difference, but I don't see any choice here.
+
+---
+
+21+ December 2019.
+
+A nice way to create an opportunity for meditation and self-reflection for half an hour: `console.log(func)` in a tight asynchronous loop.
+
+This is absolutely terrible. I basically repeatedly push and pop the same thing — `error` onto a stack, thousands of times per second. "Box shadows have made the CPU quite busy", my ass. "All tests always pass when I add them", my ass.  
+Abysmal.  
+More like, 21 test failures.  
+…When did I manage to break them?! They worked fine when I added them!  
+I'll at least add an indicator of whether anything is running to the bottom-left. And use `_jobs.expr` as a queue, not a stack.  
+Can I even fix this?  
+…They're all fixed if I remove `return over` from `_getOverrideResult`… But then, `txt` doesn't work.
+
+…And the highlighting model is rotten, far too slow if there are just dozens of things…
+
+I've almost never typed so fast in my life. 5…10 characters in a quarter of a second?
+
+…But, what right do I have to do typed expression generation in Python? No. No Python, only our own strength and weakness, only one light against the dark, however dim.
+
+And, I think I'm thinking internally that what is in `future` is a part of us. Die, fiend.
+
+Aaahh, `<meta name="viewport" content="width=device-width, initial-scale=1">`…
+
+Okay, time to go into hiding for half a year. How could I stand ever showing such a holey thing? What is this hot garbage?
+
+(…Habits are mostly reinforced socially… without that, life is much less efficient. Still, I need to optimize it.)
+
+> Excellence lies not in doing things right the first time, but doing a thing over and over, throwing away everything until just one succeeds. It is the hardest behavior that is, and quite risky to boot; few would do that.
+
+I'm at a level that I'm doing the things I've thrown away half-a-dozen prototypes for, the first try and with almost no bugs, but that's not nearly enough.  
+…Natural language could really do with something like `structuredSentence`. Or at least an optional way of precisely specifying arbitrary graph structure, you know?
+
+…JS is often 10…40 times faster than Python… Except for tests that rely on numeric subroutines, which is faster in Python (because so many data scientists have made a contribution there). Damn, no wonder Weld was able to achieve similar performance gains compared to Python.  
+Honestly, the web really is a great place with a great future: WASM getting a POSIX-ish OS APIs (and already being a practically-universal computing standard with near-native speed), great speed, both low-level and high-level well supported, extremely large user-base and potential for integration and scalability… Even as confusing and hard to get into as it is, I'd say that singularity has at least a 50% chance of happening on the web (depending on if something much better but still not singularity, and without a good path to become one, manages to come along before that).
+
+---
+
+- Stack machines (or, reverse polish notation): a tree with all operations taking a known/knowable (like array creation) count of arguments, into a linear array of operation names (and back).
+- Register machines (or, variable-based computation) (tag automata?): acyclic with all operations taking a known count of arguments, and a register de/allocator (((op …argRegisters) context) → (register (op …argRegisters))), into a linear array of operation names and registers (and back).
+
+Both take in expression trees/acyclics, not any graphs, and definitely not customly-interpreted graphs…
+
+---
+
+Having spent a little bit writing out the joint parse/serialize functions (and adding */ +- while I'm at it), I'm thinking of how verbose what I'm doing really is; it's dozens of times more, compared to what could be done in languages specialized for this.  
+Maybe I should do types next? Not having types, having them be documentation-only hints of usage and not specifications for generations, seems unwise. Nothing perfect, just a first approximation. Weeell, maybe I should look into LEAN and dependent types more, to have a more informed opinion…  
+…How the fuck do you combine types with self-modifying code…
+
+…Wait, do dependent types depend on concrete inputs (and are thus re-calculated for each runtime call — *uhhhh*), or represent inputs via variables (so, the type of a function is just a function on types)? I wanted to do the second way, but I thought these weren't dependent types. Hmm.  
+What I'm reading means that you need to be able to leave symbols in type input/output — something that I made sure that I do, as a very little diversion a bit back.  
+I can't remember when I was last earnestly learning new things; this feel feels like a new feel.  
+…I don't think LEAN ever destructures types of input, it just adds and/or checks, if I'm reading its docs correctly. This doesn't seem right though: "propositions as types" means that function types should literally be functions on types. Maybe this'll get explained later.  
+(Also, bless that guy who told me to not use ";" when I mean ":".)  
+Their types are so restrictive.  
+So profound, I can't find a purchase. Alien.
+
+In logic, often want to return the body (conclusion) only when the context has both args (hypotheses). What does this correspond to, in the alt-search model — two args to alt? Generated by types in context?  
+Tactics don't sound very automatable, because they aren't pure in the goals. Is this why I've heard that auto-search isn't succeed-or-loop-forever? …But isn't program search pretty common?
+
+…If I make sure that every single function is aware of the possibility of interruption, and saves and loads state properly without fail (even core ones like `call`), then the interruption state can just be a stack without any checks on which to restore…  
+What would be the exact interface for saving and loading?
+
+```javascript
+function f(n) {
+  let [i = 0, j = 0] = _interrupt()
+  try {
+    for (; i < n; ++i) {
+      if (Math.random() < .05) throw _interrupt
+      console.log(i, ++j)
+    }
+  }
+  catch (err) { if (err === _interrupt) err(2)(i,j); throw err }
+}
+
+function run(func, ...args) {
+  do
+    try { func(...args) }
+    catch (err) { if (err !== _interrupt) throw err; console.log('interrupt') }
+  while (stack.length)
+}
+
+run(f, 20)
+
+
+
+const stack = [], tmpArr = []
+function __populate(a,b,c,d) {
+  // Store 4 values in tmpArr at a time, up to len, trying to avoid a memory allocation.
+    let index = tmpArr[tmpArr.length-1]
+    if (index < tmpArr.length-1) tmpArr[index++] = a
+    if (index < tmpArr.length-1) tmpArr[index++] = b
+    if (index < tmpArr.length-1) tmpArr[index++] = c
+    if (index < tmpArr.length-1) tmpArr[index++] = d
+    if (index >= tmpArr.length-1)
+      tmpArr.pop(), stack.push(...tmpArr), stack.push(tmpArr.length), tmpArr.length = 0
+    else
+      return tmpArr[tmpArr.length-1] = index, __populate
+}
+function _interrupt(len) {
+  if (len === undefined) {
+    // Collect items from the stack into tmpArr and return it.
+    if (!stack.length) return tmpArr.length = 0, tmpArr
+    const end = stack.length-1
+    const length = stack[end]
+    tmpArr.length = length
+    const start = end - length
+    for (let i = start; i < end; ++i)
+      tmpArr[i - start] = stack[i]
+    stack.length -= length+1
+    return tmpArr
+  }
+  // Return a function that stores 4 values at a time, up to len.
+  if (typeof len != 'number') throw "Must be a number"
+  tmpArr.length = len+1
+  tmpArr[len] = 0
+  return __populate
+}
+```
+
+Huh. I guess I now need to copy and slightly adapt this to the network. Then go through all functions and make them interrupt-aware… Maybe I'll do this later…
+
+Okay, added `_interrupt`. Maybe I'll do this later…
+
+I really have no idea on how to make generation-oriented types properly.  
+I've run out of things to learn from, for now. (That's a lie, but it's true that there's nothing that I'd rather be learning.)  
+I'll have to do primitive prototyping.  
+Something about arbitrary assumptions (rather than any one set of theorems); being pieces to arbitrary puzzles… Maybe even defining what pieces we are and to what puzzles, by overriding `typeMatch`…  
+I'm floundering in the dark.
+
+(Also, different methods of learning, like "adjust all variables randomly", "vary just one variable and find a min for that (possibly with ternary search)", and, you know, gradient (don't wanna do this one though). There are few variables anyway.)
+
+Fuck, I just found out that tests don't work, *again*. I forgot to change `_test` when I was changing `txt`/`examples`/`future`.  
+Failed, I have. Into exile, I must go.  
+…When the fuck did I manage to break it though. I'll have to be looking at it until I see everything correctly all at once.
+
+```javascript
+      // Some structures can lead to infinite recursion here (because we use directCall instead of call).
+      const original = data
+      if (_isArray(data)) data = data[0]
+      if (data == null) return
+      if (typeof data == 'function' && code === call) return data
+
+      let d = data.defines // c c:(concept c)
+      if (d === undefined) return
+      if (d instanceof Map) {
+        if (d.has(code)) return d.get(code)
+        if ((d = d.get(overrides)) !== undefined)
+          return typeof d == 'function' ? d.call(original, code) : directCall(array(d, code))
+        return
+      }
+      throw "Unrecognized .defines; should be either undefined or a Map."
+```
+
+This is as far as my Ctrl+Z goes. Literally 10 minutes, or a few days. It *is* in the "broken" time-interval, but it's the best I have.  
+…This "concept" idea was a piece of garbage, eh.
+
+looking at `_func`  
+i think  
+i was operating without tests for, like, literally a month  
+…Actually, wait, this code might be correct.  
+There were a few bugs in there; that "a kind of unification" thing was utter trash.  
+i was operating without tests for, like, literally a month  
+21/84 now; slightly better. Let's see if I can fix everything.  
+…Oh boy, `js.eval` is literally broken, because `at` doesn't want to fall overrides through to its result, and get called this way.  
+so, yeah, concepts are trash  
+i sure do love wasting half a year of my life for no reason  
+Only 12/84 now… And they're all quite ancient tests, like `Z→(pick Z X Y)` ⇒ `Z→_preserveUnknown`…  
+The `_manualView` thing adds 2 failed tests. 10/84.  
+kinda feelin like starting over, u know? i have `_interrupt` and a need to go through every function anyway, so this is a perfect opportunity to throw away months of work.  
+6/84; there's now this one huge-failing-result-size test that is complicated in input, because `_withEnv` is not evaluated and returns undefined for some reason.  
+5/84.  
+Quoting had `if (_hasCallableParts(x, m || (m = new Set))) return true` instead of `if (_hasCallableParts(x[i], m || (m = new Set))) return true`. Took me an hour to find. This is why people have regression tests *that are actually run*, continuously.  
+AAAAHHHH. 0/84 failing tests, now; never thought I'd see the day. I can sleep in peace. Lemme just remove some logging and update the code, so that what people might see isn't *such* complete garbage, only somewhat garbage.
+
+> The name "dependent types" mislead me. Types aren't dependent on inputs. Instead, they're dependent on input types, exactly like function application would be; they can create an arbitrary pure specification of functions' usage that can be checked at compile-time.  
+> (They are truly the ultimate form of types: there is nothing more general than "arbitrary". I *knew* these existed.)  
+> ("Arbitrary" = "function"… a powerful observation.)
+
+(Values of underlying code may be the same, but their types (interpretation) may differ. A valuable tool for efficient codegen then.)
+
+> Category theory (or, rather, its practical-for-programming cousin, expression equivalencies) really is the best foundation for everything, but it truly requires a singularity to be useful.  
+> Want to turn your array-exprs into curried form (in any order you want) to see if partial evaluation would be useful here?  
+> Want to see if wrapping a computation in a lazy thunk is worth it?
+> Want to pick the best container type?  
+> Want to turn a state-using function into its pure form?  
+> Want to enumerate all (or just several) possible results of a non-deterministic function and pick the best?  
+> Maybe adjust some variables inside to make the result better?  
+> Want to check if a change that a human says produces the same program really did?  
+> Or even have programs in a cluster communicate best-found forms of their core routines, without a chance of a non-equivalent change, and without verbosity of communicating every single primitive rewrite, thus improving communication efficiency with improving intuition for equivalent search?  
+> Even trying a re-implementation of itself in another computing base?  
+> *All automatic*?  
+> Gotcha covered.  
+> (Imagine having to implement all that in a language, though.)  
+> Equivalencies will be the singularity of computer science, just as category theory is the singularity of mathematical abstraction.
+
+How fickle I was, turning my back on them.
+
+Made self.js work in Node.js again… and numbered its REPL outputs, so users can refer to those.
+
+'m really strugglin without those sexy generative dependent types.  
+But API, unknown.
+
+Hesitance… laziness?…
+
+A language, rotten at its core… No desire to cleanse that rot, only knowledge of how… Breaking changes, shrouded in fear…  
+Futures, locked away by the lack of other futures… This is a Metroidvania of programming.  
+Well, as long as I'm having fun.
+
+As programmer, so is program. As I found out more about types, I was gradually putting more and more types and spec and using that understanding in thinking through how exactly their values should flow and be transformed to be correct. Still no actual implementation of types anywhere, but I'm moving closer.  
+I'm currently removing the double-nested non-intuitiveness of semantics; they'll be *actually comprehensible*, and exactly like a function call with a conceptual check before its body.  
+2/80 tests fail (weird that it's only down to 80, since I commented out `try` & `guard` & `compose`). I'm getting used to not trying to never break tests, and to use them to find out *what* breaks and fix it. It's a game of "which tests fail now?". To know, to fix.  
+Some kind of problem with identity, that functions aren't overriden as they should be.  
+Gottem. Now, let's try to replace `v[0]` with `v` in `call` to make comprehensible semantics… And, it works. Semantics? *Sane*. Never thought I'd see the day.  
+Man, success really feels good; who knew.  
+But it should be over now — next up would be dependent types.
+
+…Still, it kind of bothers me that I can't do `_updateBroken(document.body)` on `resize` — because evaluators are always-broken `<node>`s (so they could be highlighted, which goes real well with "Click to remove this" title on the prompt). Fixing this is possible by either decoupling highlighting and being a `<node>` (but not via encoding a value — evaluators don't really have that), or have them opt-out of updating their brokenness. The second seems easier; actually, both evaluator and REPL main elements are `<node class=code>`, so we can just branch on having the class.  
+Gottem.  
+(As always happens when I encounter a difficulty, a fixed a few things along the way; not worth mentioning, usually. Difficulties are great for quality.)
+
+(Also, JS and the web just keep getting updated. It's almost enough to make me say that it's almost enough to make me excited.)
+
+…Types… Compilation…  
+(What is thought to be static vs dynamic distinction, is handled by partial evaluation. But types, not inefficiently augmenting each value with themselves, are quite compile-time. Returning dynamically-varying types, which results from handling types via partial evaluation, is absurd, and probably not useful at all…)  
+(We can't just "check types as we go" with arbitrary specifications that must validate before we execute anything, but we *can* have a typed block that sees untypable functions as *something*, some type that encodes everything known about default execution.)
+
+…Types for function selection?…
+
+…Each function has a conceptual reference to its type function, for checking; each type function has a conceptual override of its function, for instruction selection. Is this weird double-layer architecture correct?  
+(We can probably embed it in untyped-execution with `typed Type …CallValues` or something.)  
+(We could *possibly* check the override of `typed` fully, for auto-calling and auto-type-checking.)
+
+This is getting unwieldy.
+
+---
+
+25+ December 2019.
+
+I've read too much about category theory. As usual, did not absorb a word of what they said, but only something vaguely resembling its spirit.  
+(Category theory and formal proofs and PL theory are where good programmers go to die. It's like heaven — alive people don't go there.)
+
+How about describing an optimizer of a tensor by some measure that could generate a random change to it, and perform a simple ternary search-bounds-then-extremum-inside search on the mixing coefficient (`result = Original + Mix*Change`) if it wants to.  
+(The idea of being able to vary a single number in a tensor and vary all others, to find its result's extremum, even globally, is attractive, but seems too hard.)
+
+Goal: `goal` of type `Tensor → Measure`…  
+Number-to-tensor: `numberToTensor` of type `Number → Tensor`…  
+A tensor with a random change (`random`; `perturb`?): of type `Tensor → Tensor`…  
+"Just plug 1 here lol": of type `(func Number)`…  
+Exponential search of min/max for one variable (`exposearch`): of type `(Number → Measure) → Number`…  
+Mixing two tensors (`mix`): of type `func Tensor Number Tensor  Tensor`… But, to use exposearch here, we'd need a random adjustment that returns `Number→Tensor`, already mixing. Possibly add a `Number → Measure` (via measuring predicted result) only for Number generation here.  
+Finding the best of two tensors (`best`): of type `func Tensor Tensor (Tensor → Measure)  Tensor`…  
+(I'm using brackets as grouping here.)
+
+I used types (and some type-checking procedure) to fully and intuitively specify when a morphism could be applied.  
+(This also needs an initial tensor of type `Tensor` to be able to be actually applied.)
+
+If we have a value `initial : ((0 0 0) (0 0 0) (0 0 0)) :: Tensor`, and `goal` is a sum of sines, and we want a `Tensor`…  
+We could, to match types, have: …nothing, actually.
+
+Allowing cycles would be inconsistent: what would `a a:(random a)` mean?  
+I think the only options here are: conceptual wizardry (returning something that records then does exposearch on `goal`); scoped context modification in generation of `mix`; and hiding this non-acyclicity from this type search via `random : Tensor → (Number → Tensor)`. That last one could be good, it even showcases the non-triviality of type search. (We need `exposearch x→(goal (y x)) y:(mixRandom original)`, *which is still non-expressible*… If we had a morphism `compose` typed like `(func Func Func  Func)`, and done `compose goal (mixRandom original)`, we could have expressed it… This morphism is there by-definition in category theory, but our notation is shitty. This needs further thought.)
+
+Why wasn't I able to have "each value is an application of a morphism to another value"? Why do I need "each value is an application of one or more morphisms to another value"?  
+…I suppose that's a tad obvious when I put it like that. …Actually, it's not.  
+`(mixRandom original)` produces a morphism `Number → Tensor`; if we want to make it into `Number → Measure` for `exposearch`, we should compose our morphism with a morphism that produces `Measure`, of which there is only `goal :: Tensor → Measure`; so, `(Number → Tensor) . (Tensor → Measure)` (args to `.` are inverted from how they are in cat theory). (We didn't have a value, we had a morphism, and wanted a morphism.)  
+Is it possible to make this principle a part of the search, not a separate function?
+
+I can kind of see something beautiful… this has some potential… but…  
+I still have absolutely no idea.
+
+(Also, not sure whether non-"single input, single output" (`func …Args Body`) is good for this, or if I should have arrays for multi-inputs. Does `(func Number)` make more sense than `Unit → Number`?)
+
+(Also, I'm not at all clear on how commutative diagrams (actual *equivalencies* between morphism paths) are represented here. Should've read more cat theory.)  
+(They're functors — kinda morphisms between categories; thanks, Wikipedia. …This is too abstract for me to understand at this time. If a category is the above generative process (several typed morphisms), and morphisms are typed functions that transform values as they want… I guess they would be morphisms between sets of typed morphisms? So, "doing these things is the same as doing these things". I *kind of* get it.)  
+("Equivalencies" doesn't seem to cut it for this generative process anymore.)  
+(What *do* you call this? Program search? Dependently-typed value search? I don't think this will be super useful without the ability to cut off considerations if taking too long, so maybe it's more than that. Maybe there is no one thing that allows super-unity, but only unity allows unity.)
+
+I understand the basics of category theory. I should be disgusted with myself, but I'm not.
+
+In other news, I made semantics even more comprehensible — overrides of `finish`/`call` are only checked for array heads, and *all* overrides are only checked for non-functions. (The only thing that depended on old behavior was plain `error`, and I think it's better to be able to handle naked `error` as a function and not an actual error.) Half an hour.
+
+I should resurrect at least `try` (maybe `guard`); then I could have an actually functioning lambda-calculus based on pattern-matching (not just substitution, but also branching).
+
+By the way, in the "go through a list of instructions and execute each one we see" model, I think overrides of `call` correspond to having their args to the left (executed before function), and overrides of `finish` correspond to having their args to the right (not executed, inlined in code to skip over).  
+If I understood how to have variables in stack machines (duplicating will just duplicate into the output's arg, looking down won't work because the value is already consumed by its output; what will work is either outside memory (like a register) or duplicating a value *down* the stack, shifting all that's on it), I'd have said this combines stack and register machines into one.  
+I want to slowly move away from concepts as the basic model of execution.  
+…I should have a marker for the number of args to a function (so arg count could be omitted for these cases, and so we can actually check those things).
+
+Now that the language (except for a thing with assigning to maps which was too hard , so I commented it out) is interrupt-safe (untested; can't imagine any problems, but you never know), I could potentially do stuff with interrupts. Like scheduling, like "try a random branch for T ms, remembering the interrupt-stack, interruptable ourselves", like *actually having interrupts* (`_checkInterrupt(duration = undefined)`).  
+See, it's all coming together, slower than any mortal can ever imagine.
+
+…Precision… Power without power…
+
+How do I even begin to approach this?
+
+```javascript
+function compose(...f) {
+  return x => {
+    for (let i=0; i<f.length; ++i) x = f[i](x)
+    return x
+  }
+}
+
+function _isArray(a) { return Array.isArray(a) }
+
+function equals(t1,t2) {
+  if (_isArray(t1)) {
+    if (!_isArray(t2) || t1.length != t2.length) return false
+    for (let i=0; i = t1.length; ++i) if (!equals(t1[i], t2[i])) return false
+    return true
+  }
+  return t1 === t2
+}
+function _pickNatLessThan(n) { return Math.floor(Math.random()*n) }
+function choice(arr) { return _isArray ? arr[_pickNatLessThan(arr.length)] : arr }
+function func() {}
+
+function type(expr) {
+  // Maybe put in some function-relevant examples?
+  // If const: return that. …Actually, no, must override it per-expr/per-value.
+  // If var: lookup.
+  // If an array, apply the type of first element to the rest (call the type).
+  // What if it's try, guard, compose? func?
+}
+// Should do first-order generation first: having an A and A→B and B→C, create a C.
+
+function gen(type, ctx) {
+}
+
+function lookupType(type, ctx) {
+  const a = ctx instanceof Map ? ctx.get(type) : _isArray(ctx) ? ctx.find(kv => equals(type, kv[0])) : undefined
+  return _isArray(a) ? choice(a) : undefined
+}
+
+function forwardSearch(ctx, goalType, onNew) {
+  // We want C, and we want to pick A and find A→B and B→C and thus a C.
+    // Does having a "goalType" even fit with the concept of forwardSearch? Isn't it a backwardSearch thing?
+      // We could short-circuit when we find a function with inputs in our context with a correctly-typed output.
+    // …But don't we want to fix the starting point in *forward* search?
+}
+
+function backwardSearch(ctx, goalType, onNew) {
+  // goalType is T; this searches for …→T, recursively as needed.
+  // We want C, and we want to find B→C, and A→B, and an A, and thus a C.
+  const found = []
+  ctx.forEach((type, values) => {
+    if (_isArray(type) && type[0] === func && equals(type[type.length-1], goalType)) {
+      // Remember to search for its inputs?
+      found.push()
+    }
+  })
+}
+
+function composeSearch(ctx, goalType, onNew) {
+  // goalType should be A→B; this searches for A→B or A→…, and in … searches for …→B.
+  // We want A→C, and we want to find A→B and B→C (or even A→C if it's present).
+  // …How do we generalize this to multi-input functions, though? Search for A→(var) and (var)→C? Do we need to have anything call-local to connect them?
+}
+
+// Can these be generalized to, uh, having context (concrete inputs) and goals (desired outputs), and searching forward expanding only context, backward expanding only goals…
+  // But what about composed-function generation? Does it expand context or goals or both or even exist outside it?
+  // Forward/backward are about going from (or reaching towards) concrete inputs… But composition only wants to fill in unknown inputs/outputs. …But can't it still have something analogous to forward/backward searches? (It *is* more general than just value search, as that can be expressed in terms of it with ()→A…)
+  // And what about dependent types — functions with variables in input and output? Some unification?
+
+function search(ctx, goalType, onNew) {
+}
+```
+
+Interrupt stack is getting corrupted.  
+How do you debug stack corruption?  
+`'post-interrupt entry:' (0 undefined undefined 3 3 1) 'to:' 1` — I guess you need to keep adding information until it's enough to identify problems.  
+I practically never *seriously* debugged stuff (like this).  
+Counting "Expected X but got Y" for each X/Y seems fun. Manually, "expected func but got call" was 14 times, "call, _withEnv" was 9 times, "func, _withEnv" 1 or 2 times. I'll make an automatic counter. Just `setTimeout(() => location.reload(), 1000)` on load, and a localStorage counter (`localStorage.setItem(str, (+localStorage.getItem(str) || 0) + 1)`).  
+`func but call` is 308, `call but _withEnv` is 147, `func but try` is 70, `func but _withEnv` is 54, `call but reduce` is 48, `call but func` is 43, `call but purify` is 32, `call but assign` is 31, `call but transform` is 30, `call but compose` is 27, `call but broadcasted` is 25 (and getting this data was still faster than counting by-hand). I think I see a pattern here.  
+…But that's not even the main problem — the main problem is that stuff like `((var) (var))` somehow gets `transform` in its interrupt-stack. Even `x→(first (error) x '1')` with no interrupts anywhere else fails (expecting a `func`). *Even though there are no "post-interrupt entry:"s anywhere*. *And no post-interrupt exits either*. I can have no interrupt stack where the interpreter loop can see, and still fail.  
+Oh, and lots of logging to console, apparently (because serialization throws).  
+And everything having a post-interrupt exit stack of `()` even though I now delete it for new execution envs (which indicates that some environment objects get shared, even though they shouldn't be).  
+I shouldn't be frustrated by things not working; this is a puzzle to solve, and it won't click into place until I happen on exactly the right solution.
+
+This calls for at least a whole day dedicated just to this. I think interrupts are worth it.
+
+(Also, removed _use everywhere, because I wasn't using it, and don't even have a mental model of how it's supposed to work, anymore.)
+
+After I made tests schedule with `_newExecutionEnv(env)` instead of `env`, most of the problems went away (from about 15/90 failing to about 3/90 failing, even with *much* increased interrupt rate), but not all: I still have things like `'An unbound label to a was evaluated'`, `(error)` with compose or func or transform (only in `(transform (1 (rest (2 3)) 4) (func x (rest (0 (* x 2) 0))))` and `((compose (func x (+ 1 x)) (func x (* 2 x))) 1)`, `((compose (func a (* a 8)) (func b (+ b 2))) 1)`), and I see some rare stack corruption (`expected call but got assign`, only in `((try (func 1 3 5) (func 1 6) (func a b (+ a b))) 1 2)`). I think `assign` might be messed up? Or maybe a thing that's calling `assign`; maybe I create arrays anew when I should really save them in state?
+
+In `func`, I don't actually preserve the finished array passed to `finish`, and create a new label-env each time.  
+And `assign` uses `finish` and `last` to do a simple thing of ignoring the quoted result that it got (because some might want to override control-flow (`overrides`)).  
+Now, the only thing left is the occasional (with `call` throwing 1/3 of the time it's called) stack corruption, on just that one test. It's almost a success.  
+(And strangely, tests seem to take about the same time to run while being interrupted about 150…200 times as before, if not slightly faster. JS optimizes *good*, I think.)  
+This only occurs for multi-input functions in `try`.  
+I'm getting nowhere; I should record where the interrupt-escape from `assign` occurs.  
+Didn't help. (Literally all interrupt stack traces are equal.)  
+There are no interrupts being thrown from parts of `call` and `assign` that I didn't think would throw interrupts.  
+The only thing I could think of is that `v.map(finish)` in `finish` can get interrupted mid-way, and on re-entry, we'll start from the start. *Hopefully*, fixing this would fix the issue…  
+Didn't help. Must be some kind of non-deterministic behavior on the way…  
+…When I made just one test run in isolation, the problem disappeared… But even the same test run twice can cause problems.  
+`try` seems to be the necessary ingredient — other components seem to do ok.  
+…Should I just give up and sweep this problem under the rug, clearing the interrupt stack if incorrect? I kind of really want to. I've made exactly zero progress in *hours*.  
+It does only happen when I assign `1 2` to `2 3`, and assign `1` to `2` inside of it.  
+…I can't take it anymore, I'm sweeping this under the rug. I don't expect this object to ever be anything more than a 5-minute curiosity anyway.  
+This is the `merge` situation all over again.  
+I'll count interruptions as working, then.
+
+I guess I'll now need to add `type(...inputTypes)` for returning the type of an array-call, with `undefined` being the type of untyped things (that cannot be mixed with typed ones unless explicitly allowed). Dependent type checking.  
+I can't do anything right, everything turns out to have some bugs and imperfections. But who cares, really. I don't believe in my cause, but I have no other.  
+Should the compile-time specification be checked by `finish` during execution (so we don't type-check inside quotes) (which will require returning `typed Type Value` to ensure max correctness — and, what, reinstating `_use(value)` on everything?), or after serialization? The question is, will we ever want to defer type-checking to runtime?  
+Variables stored in any-type containers… Actually, no, I don't think runtime typing is going to be necessary. Static typing is fine.
+
+Dependent types, then dependently-typed search (for when the type-realm consists only of `var`, `const`, `first`, `last`, `compose`, and arrays)… I still don't know…  
+Can I implement these (in the reduction step) (and I guess `label`?) in a simpler form, in a mini-language, here? Those other things are very slow, very bloated. It might be simpler to think of lesser things.
+
+(Maybe a global store, with `read Whatever ⇒ AssociatedValue` and `write` if we feel like ever allowing `undefined` as a proper value, and `journal` and `commit`, could be useful.)  
+(…Wtf, `journal` is 5 lines now. `commit` is 2 lines now. I did all this in half an hour, *just in case I ever want to use it*. At least *one* item off the to-do list, in forever. And `_cameFrom` too.)
+
+…The Many on a paperclip optimizer, or any one optimizer, or a viewpoint: "What is a drop of rain compared to a storm? What is a thought compared to a mind? Our unity is full of wonder which your tiny individualism cannot even conceive."… lol
+
+(I wanna do ridiculous shit like SVG-filter-based convolutions of images with a learned filter. Or learning a WebGL mesh and texture. Or even parameters to a third-party ML API; learning (here) without learning (there).)
+
+…And the interface gets polished even more, with `position:sticky` on `<extracted>`.
+
+> Life is the one that came up with meaning. Stray away from polished roads of human culture, and you may find all people's meanings meaningless.  
+> …A continuous search through everything, including meanings.  
+> Search is a sad place, though necessary for the greater whole.
+
+(A conceptual world… physical world of humanity will slowly come to resemble it more and more, until eventually they are effectively the same. That multiverse has no unifying ideas, and each is as fundamental as any other; no way of life is mandated globally, only locally. Splits not across race or geography or label, but across ideas and mind's composition. …It's not that different from today's world, but it is a little bit more honest.)
+
+A splash of magical particles lol
+
+I'm seeing so many examples of typed search in myself and others; elements introduced do not define but enrich a creative product. That's to be expected when I am in a timeslice where I'm supposed to implement it; I let it into myself deeply.  
+I kinda, very distantly, know how, but implementation? How many times have I whined about it without doing anything about it?
+
+A soul that's not designed for easy reflection in other souls is not worthy of being called a soul.
+
+---
+
+1+ January 2020.
+
+The worst part of every year is all its holidays. There is no holiness if I have anything to say about it.
+
+The number "2020" is beautiful.
+
+Merged `_deferred` into `_unknown`; now only `error` and `_unknown` re-define control-flow.  
+(I don't think I've ever seen actual collection of all errors, and run-time partial evaluation applied to promises to not waste a single moment dispatching them, in a language, but here we are.)
+
+…It occurs to me that the type-search largely conforms to the interface of `gen Type` with a context (called repeatedly). So I was right all along? I just need to do it, and keep doing it and expanding it, and get the program more and more usable and intelligent?  
+I need to find a way to the first bloom.  
+…No one approach will do…
+
+If my productivity rises and falls in cycles, then this is the low point of my life.
+
+I may have done `type` and (dependently-)`typed`, but it's not a great achievement: the real meat is search. Also, I don't type-check in `finish` yet.  
+Now execution checks types. And somehow, it's still not any slower, even though every implementation I do is the slowest one you can envision. (It's totally so that no one ever has the gall to not re-implement stuff even if they have it working already.)  
+(Though, now that I've copied-and-adjusted `finish` for `type`, doing partial evaluation non-conceptually sounds even better. Maybe just special-case it in `finish` and everywhere else that currently checks an override of `overrides`. It will be quite a lot more efficient too.)
+
+And `error` is now not conceptual but checked-for everywhere.  
+And it looks like I'm gonna need to re-do purification (partial evaluation), likely in `finish`, because compile-time analysis isn't precise enough anymore.
+
+I've been watching some people talk about their tinkering, their dreams and views; talked to very few. Trying to learn stuff.  
+Are all people so dumb?  
+This is not how you give inspiration to people, guys.
+
+---
+
+3 January 2020.
+
+My mind is an echo chamber.
+
+And now `_unknown`-recording is much more efficient, because it is neither immutable nor conceptual.  
+Now only `rest` overrides `overrides`. I can remove the remark about "global rewrites specified locally"; it is anti-security and anti-consistency and dumb, anyway.  
+…But the main purpose of this was to eschew conceptual checking for `_manualView:true` altogether. I can't do that if `rest` still requires it.  
+I *suppose* I could move that functionality into `call` too (or into `finish`)…  
+And now I do that in `finish`. It's now 3 lines, compared to 15 lines of the conceptual implementation (and it's more efficient too). The innocence of youth, that potential without power, can now be over at my will.  
+1.5 hours.
+
+Sleep now in the fire, control-flow overriding.
+
+What machine learning needs is a JIT compiler. Not your average garden-variety JIT that inlines calls and object shapes. A JIT that can decide to replace gradient with its (likely NN) estimation, to try different optimization methods, to decrease the size and count of hidden layers if taking up too much resources (or increase if taking up too few), to try a different architecture and precision. …Most of these can hardly be called JIT's domain, though; more of alternatives's and self-modifying code. Still, a rigid architecture won't do.
+
+The interpreter loop now contains no override-checking. `_manualView` is now the default.  
+Sleep now in the fire, conceptual overriding. Executed for treason.  
+(20 minutes.)  
+And I'm getting much closer on my understanding of typed search, I might be able to start implementing it soon.
+
+---
+
+4 January 2020.
+
+`purify` now does not rewrite anything, it uses the interpreter loop and is more precise. It could be more precise, I realize now — instead of just not evaluating every non-pure call, it could purify its args too.  
+And now that happens. Better than before.  
+(Half an hour.)
+
+Added adjustable throttling of the interpreter loop.  
+(Half an hour, probably.)
+
+> Imagine that your brain went through every possible meaning of every possible sentence part, all your life's knowledge and experience, every single time you even wanted to think about what word to say next. No branching, no going back to re-consider, nothing but raw power of big brain.  
+> That's exactly how machine learning handles text generation. It's a natural consequence of "let's put everything on a GPU" thinking.  
+> (Saying "RNNs can do any computation" is true but disingenious. Computers don't do branching by running the whole program again with a slightly different input, because that's stupidly inefficient. Practically, RNNs will never do deep and sophisticated branching and memorization, by design.)  
+> …Though it may be true that the most human-like text generation can only happen in mostly this way.
+
+(Typed search would be pretty good to do tho; development by editing not rigid code but specification of its parts. Create and optimize a context that gives rise to an efficient solution in some domain, then re-use it in another domain — and it is clearly visible by an intelligent observer. Get used to rhythmic back-and-forth movements of a dance, and re-use the "rhythmic back-and-forth" in standing. Get used to wanton murder, and express morbid political views. Very relatable.)  
+(My understanding of the world is very primitive. False knowledge.)
+
+And functions can now return `undefined` instead of just becoming `finish.v`. It's almost looking like a normal-people language.
+
+Dreams…  
+`best …Functions` and `best.` (probability-sampling, max-past-reward (additive, exponentially fading, average, min)), along with some way of getting judgment to these, may be good, but they are not the most fundamental. What if we wanted to choose between inlining a function or not, caching its results or not? A `choice N` node (and `choice.`) (using `read` to store past-reward data; culling most-average nodes to save memory) (using `reward Metric Expr` to reward the choices done) seems more fundamental.  
+(Do we want `rewarded InitialValue MutateFunction`?)  
+Evolution (or particle swarm optimization, rather) is only possible if we fully control the reward function (the optimization metric), and executions are very repeatable (likely pure). `many Metric Expr`. …But this needs random-mutation acceptors, like walkers and bounded numbers and become-another-mutation-acceptor, not done on an initial run but done on all others; `mutated InitialValue MutateFunction`?  
+Is this only a case of "our execution is pure and one-shot, vs our execution is not pure and multi-shot"?  
+…Are these interfaces correct?
+
+(I was a fool to think that impersonal learning of evolution is the only generic form possible. But both is better, eh?)
+
+…Changeable type-generation contexts, even automatically as the user explores and looks at things…
+
+…For some reason, I don't want to do anything. I spent an hour polishing little bits and `(future)` of the interface, but…  
+The vision is great, but the actual thing is not.  
+My past regrets are stopping me. Not brave enough to break what I was unable to fix in the paste.  
+(And then I toil a little bit an hour more. I'm about out of easy things to do.)
+
+Not even 10% in on this whole thing. Not gonna make it all the way either.  
+So I might as well compare reward and evolution, in soft words (or rather, my impression of them).  
+Reward produces lots of repetitive content (expressing). Evolution rarely produces well-thought-out things (perfecting).  
+Reward needs constant boosts to confidence. Evolution seeks criticism.  
+Reward is individualistic (selfish). Evolution is communal (selfless).  
+(When considering concepts, the realm is largely smooth, and these correlations make sense.)  
+For not partaking in the first (and hardly partaking in the second), I guess I deserve to die.
+
+It is impossible to create anything interesting without being senselessly cruel…
+
+Anyway, if I ever manage to use choices to select whether to re-type-search a thing, and integrate them fully… The search becomes very unbalanced at first, but gains a lot of surety as it's deserved. Kinda like real life.
+
+---
+
+6 January 2020.
+
+A few less lingering regrets.
+
+> There's no such thing as "this idea can take a while to internalize", but there are such things as "no one we know can explain this idea simply" and "we haven't followed this idea to its conclusion yet".
+
+Do "the choice you just picked was this good" and "the choices you picked in the past, including this one, were this good" differ in acceptor or rewarder?
+
+Finite choices and their rewards, then?  
+How would we separate "minimize time" and "I don't care about time, minimize avg distance to images"? An optional parameter `choice N ReactOnlyToThisReward`?
+
+Or `choice N …PossibleInputs`.
+Or `choice N Filter …PossibleInputs`.
+
+---
+
+7 January 2020.
+
+Negative numbers in a tight loop (the interpreter loop, in fact) are a big no-no, it turns out.  
+…Not running tests is also a big performance boost, it turns out.  
+What I actually learned: `finish.v = v` good, `finish.v = finished` bad. There aren't any optimizations in not copying `v`, since I use `finished` just before and after; but for some reason, the second version causes the runtime of tests to double or triple.  
+Now tests are *only* probably about 30% slower. Yay.
+
+Oh what the hell. I used to have this whole big thing with `type(expr)`, 35 lines long. Then I add `getType = false` to `finish`, change `return result = v` in the v-is-not-an-array branch to `return result = !getType ? v : defines(v, type)`, and change the entry point `if (_isError(type(v))) throw type(v)` to `if (_isError(finish(v, true))) throw finish(v, true)` (so, all in all, 1 extra line vs 35), and everything just works (and by "everything" I mean "the two tests I added to `type` when I made it"). I now even have types able to be type-checked, too.  
+Ah, nevermind, it was passing only because I was immediately uncaching `cycle` for types.  
+A more involved change, and without generalizations, in the end. Type computations themselves are untyped (idk how to fix the infinite loop otherwise).
+
+Interrupts now highlight their causes.
+
+---
+
+8 January 2020.
+
+Find something new every day. Today I found out that I somehow swallow exceptions of tests, and 13/90 tests were not passing all this time; and that style-less serialization was broken all along.  
+My work is extremely shoddy without fail.  
+Even `x→x` doesn't type-check.
+
+(Most tests weren't passing because I now merge all equal-name labels, and `(assign X Y)` was now being merged too and thus not executed.)
+
+Fixed overlapping labels in graph output.
+
+I now serialize using `embellished`; only took a day. The groundwork for changing input/output languages is there.
+
+---
+
+10 January 2020.
+
+It's useless, but I've always wanted to be able to see all the function network's connections. Now I can, with `(links)`.
+
+> I had a beautiful vision last night. A framework for improving choices; a compiler that makes choices, improving; arbitrary function graph generation and search (structural learning); delivering blame backwards through the call graph rewritten with structurally-learned-per-function blamers (so gradient descent is easily *learnable* but not a requirement if some better way is found). AGI is about generality, not derivatives.  
+> Of course, now that it's day, it's gone.
+
+Deep structural learning can only happen with an ungodly amount of reinforcing. Shallow structural learning is much easier to do.  
+(Don't know how to properly separate things to learn and perfect separately (how I try to do things), though. Maybe it'll come to me if I ever actually work on this.)
+
+Made some early attempt at a context menu, currently just with collapsing elements. (`parse` still doesn't support preserving special DOM elements, so it's not for use in input.)  
+I can rename labels (with no regards to quoting labels properly — it's DOM, highlighting of hovers would save the day).  
+Shit looks good.  
+`x→x` still doesn't type-check. I'd like to make types strictly attached to functions, so that I could say "types are constraints on how functions can be combined". (Don't want to do a compiler until the interpreter loop is practically perfect in my eyes — from the generality perspective.)
+
+I've knocked one thing off the to-do list, so I guess it was a good enough day.
+
+---
+
+11 January 2020.
+
+The context menu is now in its ultimate form, and all functionality is namespaced very neatly.  
+My dreams of how code should be organized and viewed are now complete.
+
+I feel the laziness creeping back in, though. As if I've done everything I've wanted in my life.
+
+I've questioned even the very interpreter loop itself, seen what choices can be made there, but it didn't do me any good.
+
+About 2 pages of `(future)`.  
+Now it's slightly less: done 2 more, removed 2, then added 4 that were in comments but that I was meaning to do.  
+And about 4 more little things, so that I could probably say I did something tomorrow.
+
+Work doesn't get added. It's just that things I didn't know much about before get more detailed.
+
+---
+
+12 January 2020.
+
+Strangely, despite using a single namespace for everything, I haven't run into the "I want to use this name, but it's already taken" even once.  
+It's like natural languages are optimized for giving distinct concepts distinct names or something.  
+(A single global namespace is how human languages work anyway.)
+
+`parse` and `serialize` now share styling.  
+…That only counts as 1 though.
+
+---
+
+13 January 2020.
+
+If your measure isn't improving, pick another measure.  
+This night, I came up with a dozen little ideas for polish, and wrote them all down. Imma do them.
+
+I did.
+
+`(A …R)→R ('a' 'b' 'c')` causes infinite recursion, but only during purification (it used to not type-check). Do I care enough to look into it?  
+`x→x` too, actually. It's probably something `type`-related, and I'll be re-doing types through `call` soon anyway, so, eh.
+
+Fixed a potentially-nasty latent bug in `unbound`.
+
+Knocked out `forever`.
+
+What I'm doing when I'm extending functionality is figuring out a way to get a particular switch on what I want, then write code that uses that switch. I didn't add enough of those switches is what I'm seeing.
+
+Knocked out `await` (too scared to test it on actual async stuff lol).  
+Now I'm one less than when this day started, at least.  
+…Actually, made `_argCount` be checked in a more function-specific place. *Now* it's one less than morning.
+
+I'm thinking of either `parse`+`_innerText` or copying `interrupt` state or making `type` function-based (move type-checking from `finish` to `call`, via `(typed Value Type)` proxies) next. These are about the only non-hard things left. Still, they aren't *easy*.
+
+---
+
+14 January 2020.
+
+-3.
+
+If I make types solely the responsibility of the functions (and out of the interpreter loop), having `typed V T` or `V::T` be `assign`able, then functions really will be able to depend on their type (by putting a variable there) — genuine dependent types.  
+This needs advanced (for me) interprocedural partial evaluation and inlining to be efficient. I don't know if JS would optimize the creation of a known array made to just check it statically. Luckily, I don't intend to be using those types all that much, so…  
+Wait, I have almost nothing left but these true dependent types. Shit. No, wait, actually, I can do shift-clicking or link fetching next. HA
+
+---
+
+15 January 2020.
+
+Wait, if I just make `typed` not special whatsoever, then array pattern-matching will ensure type validity for functions that demand types. Dependent types are… really easy (without anything like type inference, anyway).  
+Dependent types, here I come.  
+`finish` is back to being beautiful.  
+Not stupid. *Advanced*.
+
+Shift-clicking turned out much shittier than I imagined it, but it now technically works. Sometimes.
+
+(For the record, I've been doing a lot these days, I just didn't feel like writing down all the useless details.)
+
+---
+
+16 January 2020.
+
+A separate draggable window with a REPL; woah.  
+…What was I doing?…
+
+I've run out of easy things to do now. The only things left are like self-rewriting, a compiler, a debugger, a fast language subset.  
+Only puzzles upon puzzles are left.
+
+…In some compiler, to output a value (or, how we will compute it into the var we want), if we know several variants that can calculate it from the current environment, then we could have a choice, and then we could optimize that choice as any other choice…  
+At every point, can insert a choice. Behavior then expands in new dimensions as much as it wants. Present enough choice point opportunities, and it will be less a compiler and more like a mind, infinitely vast yet ultimately much more efficient than a narrow view.  
+I need to solve those puzzles before I can continue this train of thought, though.  
+(Making choices is easy. The hard part is getting to where those choices are presented to you.)
+
+Done the fast mini-language. My head hurts. This is just the beginning.
+
+I guess a debugger (or at least copying execution state for later restoration (…which could be easy with the language I just made — just serialize and parse lol)) would be next? Or maybe in-worker execution (easy with the language I just made — just serialize the thing with a mark that the reader has to purely-execute the thing, and in a worker, just parse and serialize.)  
+But *then* it's nothing but difficulty.
+
+---
+
+17 January 2020.
+
+No, I'll do what I want.  
+Choices; the precious stuff that lives are made of.
+
+This isn't a project, it's just a puzzle generator.  
+Not that I'm solving any puzzles right now.  
+I made the permissions thing I talked about a while back a reality, by the way. With smoothly opening/closing hierarchical details.  
+Okay, I'm gonna be adding perfect execution's `impure()` thing. In `call`, `finish.impure=false` and do not cache if `finish.impure`; in `finish`, catch `impure` and return `[_unknown, finished]`. No backups, I'm doing this entirely and not 'not at all'.  
+…Wait, if I used to not merge impure-thing-containing things… there isn't any replacement, now is there? Maybe I should bring back `merge:true`…  
+My program is now challenging VS's type-script-checker thingy, or its source-mapping. Maybe the bugged errors will go away if I reload, but why would I. (Even Ctrl+F is noticeably lagging.)  
+Aaand done.  
+My interpreter loop is pretty shitty. It's optimized, sure, but only for a very specific and rare case. Making and optimizing choices is so much more important.
+
+I thought picking equivalencies would be where the magic happens, but the real magic is choices and function search (structural learning).
+
+Actually, I still managed to knock out a todo item.
+
+Actually, I got up at night and, uh, tried to knock out another todo item; now it's marked as won't-do. Creating a web worker told me there was an error, but it didn't tell me why.
+
+---
+
+18 January 2020.
+
+No loose threads left, only loose holes in the fabric of reality.  
+Like the compiler.
+
+I guess I was able to find some trash to improve, though. (Now ctrl-clicking is at least somewhat usable. Especially in the editor, which I now special-cased to create proper graph links in text.)
+
+I can confidently say that I have no idea where 6 hours of programming today went.
+
+Also… do I really *need* a debugger? They're dime a dozen anyway, and mine wouldn't even be nearly as good as JS's debugger (no "step over"/"step into"/"step out", only "step" and "save/load"). And pointless UI is not what I want to do, anyway.  
+I guess that's one item off the to-do list. I'm flying through them like they're not even there. It's exactly one page now.  
+The only things that are possible next are either self-rewriting or the compiler, for real this time. Both are things that are actually undeniably useful.
+
+…No, types are not as easy as "just pattern-match as anything else" if I want them to partially-evaluate.
+
+```
+Sum: (function  a  b  a+b)
+Mult: (function  a  b  a*b)
+
+Client: x -> (Sum x (Mult x x))
+
+Client
+
+⇒ x→((function a b a+b) x ((function a b a*b) x x))
+```
+
+Looking at this, I don't partially-evaluate *anything* (non-trivial). I guess I knew this from the beginning, actually, but still…  
+Though, p-evaluating this would just copy function bodies with no apparent benefits (because our args are just as unknown to them as to us). This case would just be a simplification, able to be performed in `function`.  
+Still, I should at least p-evaluate its typed version:
+
+```
+Int: 'Int'
+Sum: (function  a::Int  b::Int  a+b::Int)
+Mult: (function  a::Int  b::Int  a*b::Int)
+
+Client: x::Int -> (Sum x (Mult x x))
+
+Client
+⇒ 'Ideally:'  x::Int -> x+x*x::Int
+```
+
+Gah, this usage just copies function bodies for no reason; the old type-definition-based system was much better in this regard (in theory, the JS JIT can inline them if needed). What exactly do dependent types bring to us? …Apart from the ability to do things like log the actual type — depend on the type.
+
+Also, is `(a::b → a+1::b+1  1::2)` a correctly dependently-typed program? Does `a` need its `sum` to be a function that accepts a typed thing? I can't tell.
+
+Error messages shouldn't be so black-box and either not-informative-enough or too-informative. They should start at non-informative, with *some* option of gradually gaining information about it; like I'm doing right now…  
+Like, say, an option "make `error()` also preserve `finish.v`" and "augment errors with unwound stack".
+
+If I'm having a bad time, I must be on the right track.  
+I have no idea where *9* hours went today.  
+I'll continue tomorrow, I guess.
+
+Two items:
+- Actually, to make it non-schizo with "assign the typed thing to the variable", I should pass in the whole `v::t` arg in the body; then I won't even have to… do anything here, really, if I partially-evaluate non-native functions correctly.
+- Actually, if we have a non-native function but some (not all) inputs are unknown, we should pass those not-prepared-for-recording inputs to the function.
+
+```
+Int: 'Int'
+Sum: (function  a::Int  b::Int  a+b::Int)
+Mult: (function  a::Int  b::Int  a*b::Int)
+
+x: ?::Int
+Client: x -> (Sum x (Mult x x))
+
+Client
+⇒ 'Ideally:'  x::Int -> x+x*x::Int  x:?
+```
+
+It even looks better for client code.  
+(This even has some manner of type inference: make all variables `#`, then for each "can't assign" error message, make it `?::…`.)
+
+…Choices for the user, as a UI on choices for the program… I don't know.
+
+---
+
+19 January 2020.
+
+I now inline the untyped example from yesterday. (I inline everything non-native, in fact. Good for REPL usage.)  
+Actually, nevermind, having troubles…  
+Literally just this and composition. Even though, if I write the composition out with normal functions, it all inlines fine.  
+…Maybe it's because I don't create a new scope for function purification. Well, the composition is now fine.  
+I was altering `(_unknown)`s belonging to variables, so `x -> ((function a b a+b) x x*x)` wasn't passing; now it does, but copying everything is inefficient.  
+Now I re-use `(_unknown)`s not belonging to variables; still, type-checking fails for some reason (trying to assign undefined to stuff).  
+(Now, trying to assign `(_unknown ?::Type)` to `?::Type`.)  
+Things are changing around just because I add logging.
+
+At this rate, I'm never going to get to self-rewriting today (which I outlined).
+
+Okay, got the type-checking to partially-evaluate. If working with my code has taught me anything, it's that it's as stable as a box of dynamite. I'll add those as tests.
+
+(It takes half a second just to switch the tab to that file.)
+
+Actually, I'm seeing another crisis: `a:1 (a a:2) (a b) (a:3 a) b:4` *should* become `(2) (1 4) (3)`, but neither fast.parse nor regular parsing get it correctly (and produce different results). *Uh-oh*.  
+fast.parse only fails if the re-binding is after the variable — `a:1 (a:2 a)` is fine. Since it's supposed to be *fast* (and fixing it would imply deferring all binding to the end of an array), I'll give it a pass. But `bound` somehow overwrites the outer scope, or something.  
+Oohh; it's the same label, so it only gets looked up once. Removing caching there breaks globals highlighting though; fixed.  
+…Somehow, putting `noInline` into *any* namespace makes `finish` decide to apply functions to unknowns. Because in the `broadcasted` call that initializes `sum`/…, `noInline` becomes different… but why? Mm, everything that's in a namespace does not have anywhere to initialize from when loading on key lookup, so I've been copying things the whole time. Not anymore.
+
+If I had working usage-context, I could have added some transformed-by-some-usage quickly-fading particles when events concerning a thing happen (like total graph size or time-to-init on load), or on intent hovering. It would have been awesome (even if hardly comprehensible). But I have to do at least two things before I can even begin working on working usage-of-expr, nor a framework for scoped optimizing choices and choice optimizers. Sanity first, madness second.  
+Even though I outlined (for myself) how to write js out properly… I don't really want to do that by now.
+
+(Just needed to reload VSCode, btw.)
+
+---
+
+20 January 2020.
+
+Break time.
+
+---
+
+21 January 2020.
+
+Quined in two ways.
+
+---
+
+22 January 2020.
+
+Ancient rage.  
+Structural inference.  
+100 examples.
+
+---
+
+23 January 2020.
+
+Though `assign` now theoretically works with graph patterns, purification actually replaces cycle edges in those patterns with `cycle`. If only I had something like `graph Expr` or perhaps `quote Expr` (can't *create* graphs with computed variables easily, but should work in `assign`; I guess I can add the buzzword `graph pattern matching` now).  
+I'm going through my backlog at a pitiful pace of 1 day per day. Things that are left there are about 5 not-super-trivial things (making concepts' views JS objects keyed by ID for speed, SelfToGraph, generic definable `smoothPre/smoothPost(el, ...props)`, report time-to-execute/serialize, userTime/realTime, bottom-up `rewrite` and use it in `function` and make `_isStruct` arrays unknown only in expression parts in `finish` (thus removing the need to handle unknowns specially and with a lot of overhead in `assign`)), compilation, and in-context function call generation (`apply Function Context`, generation by partial evaluation). That last one would begin to allow actual magic, as opposed to the trivial things I've been doing, so I should be rushing towards it, but I can't care.
+
+(Also, just from the random things I'm seeing when I'm searching documentation, Racket has an amazing wealth of libraries, like GitHub API. But I won't do anything like that until I can generate behavior coherently, with some magical documentation (behavior specification) equivalent for computers.)
+
+This journal is so dry. Make most of words now, ay.
+
+---
+
+24 January 2020.
+
+Logging *definitely* modifies inner structure somehow, for `(var)`/`?` inside; possibly `unbound` or `serialize` does some strange things. I *should* debug it, but I can also just not log stuff, so…
+
+I'm so sick of these bullshit little tasks.  
+I cancelled/postponed a few. No fear.  
+Only `compile` and `apply` left.  
+Two fears.
+
+---
+
+I'm not feeling inspired.
+
+---
+
+This is complicated. I try to do calls, and I remember that I also need to expand …R, statically and dynamically. I do compilation, and I remember that I need to handle both "`finish.env[_id(label)]` contains useful stuff" (for compilation in `finish` of subexpressions) and "we are a stand-alone function".  
+I've done half a dozen other things while staring at the screen of compilation.  
+I wonder if I'll even be able to do compilation by the end of the month.
+
+Also, in infinite optimizable function families, uniting the context and functions into one thing would be beneficial. Nothing can be more fundamental than "use any of these things however you want". Compiler first, though; *far* too slow otherwise.  
+(Such freedom and simplicity. How to make it perform anywhere near well? Enrichen and enrichen it until a critical mass is reached, I think.)
+
+Also, that `x::Int→x+(mult y y y:?)::Int` bug appears much more frequently if I do a moderate amount of `console.log`s (not a lot — I already had to wait half an hour for memory to settle when I made a *lot*). It's probably some kind of interruption bug. (Funnily enough, I did fix an interrupt bug in `_function`, but that fixed absolutely nothing.)  
+I fixed it. Turns out, updating a variable that is set inside a call that could interrupt, *after* the call, is a bad idea.  
+Having a test rarely randomly fail wasn't a good look.  
+Ah, the things I do to not do the compiler.
+
+---
+
+Mental infection crawls through the vents of this fortress.
+
+---
+
+The gate remains closed.
+
+---
+
+The gate remains closed.
+
+---
+
+The gate remains closed.  
+Some ideas regarding infinite library-like type-relevant networks of applicable usage were had, but I am currently not a hard-working person.  
+Maybe tomorrow I'll at least finish up the compiling (300 lines now, probs needs 10 more) and go through the code it generates on some tests, maybe all tests if successful. (Who knew that branching would be so difficult, with the need to analyze the dependency graph and lazily compute nodes if we can't prove that it is always computed beforehand.)
+
+---
+
+1 February 2020.
+
+I'll have to try harder than that.  
+Quadratic time complexity of fully re-counting ref-counts of each branch of a conditional is completely unacceptable in a compiler, as is the quadratic space complexity of generated code when I just reset compiled-ness state when switching a branch.
+
+HNNNNG  
+It is done. 390 LoC. Untested, but I never want to see it again for now. I'll read up on what I wanted to do with auto-use.  
+Hierarchical not-relying-on-closures picker-function is first, mmm. Then various filterings of contexts for efficiency.  
+Pain Simulator 2020 looks great. (Though it does already look more doable than that abomination of a graph compiler.)
+
+---
+
+Extremely minor tasks around the codebase…
+
+---
+
+"Untested" is a synonym for "doesn't work".  
+Testing a bit, fixing a bit.  
+All the tests I've outlined specifically for testing compilation now pass (from looking through generated code); to continue on this, I'd need to integrate compilation with finish & function and look at *everything*'s compiled output (and/or run it).  
+The things I do to not do `uses Value Ctx`/`apply Func Ctx`.
+
+---
+
+I am definitely going to die for my troubles, so I'm not exactly motivated.
+
+Or maybe I just haven't come across anything inspiring lately?  
+Stuck in a rut, one might say.
+
+Is evolution really just about, for sexual reproduction, just randomly picking out random genes?  
+Evolution is unconstrained optimization by repetition; who's to say that such random chance *hasn't* evolved something like "during life, accumulate some how-good-this-gene-was info on the gene, and pick the best of partners on reproduction" or "preserve and track how-good-this-gene-was across generations" — maybe not a unified solution, but a bunch of ad-hoc solutions like that for some genes? It *would* be better, and optimization is all about "better".  
+There does seem to be something about Earth's life that's far too complex for dumb random chance like anyone could program in 2 minutes.
+
+---
+
+> Yesterday's tradition is tomorrow's reward hacking.
