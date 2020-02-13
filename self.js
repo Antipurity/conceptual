@@ -790,7 +790,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   Browser:{
     txt:`A REPL interface.
 Supported browsers: modern Chrome and Firefox.`,
-    style:`body * {transition: all .2s, margin 0s, padding 0s; vertical-align: top; box-sizing: border-box; animation: fadein .2s}
+    style:`body * {transition: all .2s, margin 0s, padding 0s; vertical-align: top; box-sizing: border-box; animation: fadein .2s; font-family: monospace}
 
 @keyframes fadein { from {opacity:0} }
 
