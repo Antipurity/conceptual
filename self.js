@@ -111,7 +111,7 @@ __base({
       `conceptualNetwork`,
       `perpetualBeta`,
     ],
-    call(net, lines) {
+    call(net, lines, into) {
       if (!net || 'v' in finish) throw "Do not call Initialize manually."
       if ('→'.charCodeAt() !== 8594) throw "Unicode data got garbled."
       if (defines(examples, txt).indexOf('\n ') >= 0) throw "Depth got added to strings."
@@ -127,7 +127,6 @@ __base({
       ctx.set(label('_globalScope'), net) // Deconstructions are very ugly otherwise.
       const backctx = _invertBindingContext(ctx)
       parse.ctx = ctx
-      ctx.forEach(v => _isArray(v) && _maybeMerge(v))
       Self[defines.key][_id(lookup)] = net
 
       // Fill globals' id-to-key mapping for deconstruction of concepts.
@@ -177,7 +176,7 @@ __base({
         if (this.process)
           NodeJS(), ok = true
         if (this.document)
-          Browser(), ok = true
+          Browser(into), ok = true
         if (this.browser)
           Extension(), ok = true
       }
@@ -242,8 +241,8 @@ __base({
     txt:`A namespace for some very primitive numeric-computation-related functionality.`,
     future:[
       `Zero-overhead typed numeric operations (on i32/i64/f32/f64; const.… and +-*/ and some mathy stuff), compiling to Wasm and WebGL.`,
-      `(Dense dims dtype data strides) for tensors.`,
-      `Have a named-dimension decorator that re-orders arrays for broadcasted operations as necessary.`,
+      `(Dense dims data dtype strides) for dense mostly-numeric tensors.`,
+      `Have a named-dimension decorator that re-orders dimensions for broadcasted operations as necessary.`,
     ],
     lookup:{
       reduce:__is(`reduce`),
@@ -278,6 +277,7 @@ __base({
       REPL:__is(`REPL`),
       evaluator:__is(`evaluator`),
       contextMenu:__is(`contextMenu`),
+      hierarchy:__is(`hierarchy`),
       button:__is(`button`),
       files:__is(`files`),
       url:__is(`url`),
@@ -424,11 +424,11 @@ Evaluates as much as is possible, so manual pre-calculations of any kind are nev
         `1`,
       ],
       [
-        `(purify (quote x) x:(sum 1 2))`,
+        `(purify (quote x) x=(sum 1 2))`,
         `3`,
       ],
       [
-        `(purify (quote x) x:(randomNat 5))`,
+        `(purify (quote x) x=(randomNat 5))`,
         `(_unknown (randomNat 5))`,
       ],
     ],
@@ -450,7 +450,7 @@ Evaluates as much as is possible, so manual pre-calculations of any kind are nev
         if (!_isUnknown(r) || !_isDeferred(r)) return r
         else return r[1] = array(purify, r[1]), r
       }
-      catch (err) { if (err !== interrupt) return [_unknown, jsRejected(err)]; else throw err }
+      catch (err) { if (err !== interrupt) return _unknown(jsRejected(err)); else throw err }
       finally { finish.pure = prev }
     },
   },
@@ -644,6 +644,12 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   broadcasted:{
     txt:`\`(broadcasted Function)\`: creates a function that is broadcasted over array arguments (\`((broadcasted Func) …Args)\`). No array inputs means just applying Function; having array inputs means returning an array of applying \`(broadcasted Function)\` to each element, with the same index for all arguments, using the last element if out-of-bounds for an argument, and non-array inputs treated as arrays of length 1.`,
+    examples:[
+      [
+        `1.2345*(1e0 1e-10 1e-20 1e-30 1e-40 1e-50)+1`,
+        `2.2344999999999997 1.00000000012345 1`,
+      ],
+    ],
     argCount:1,
     call(f) {
       if (typeof f != 'function') error("Expected a function")
@@ -794,8 +800,7 @@ Supported browsers: modern Chrome and Firefox.`,
 
 @keyframes fadein { from {opacity:0} }
 
-html { scroll-behavior:smooth }
-body {
+.into {
   background-color:var(--background);
   color:var(--main);
   caret-color:var(--main);
@@ -803,11 +808,13 @@ body {
   --highlight:royalblue;
   --main:black;
 }
-body.dark {
+.into.dark {
   --background:rgb(15,15,15);
   --highlight:rgb(225, 110, 65);
   --main:white;
 }
+.into>* {display:table; white-space:pre-wrap}
+
 :focus {outline:none; box-shadow:var(--highlight) 0 0 .1em .1em}
 input[type=range]::-moz-focus-outer { border:0 }
 .hover {box-shadow:var(--highlight) 0 0 .1em .1em}
@@ -815,7 +822,7 @@ input[type=range]::-moz-focus-outer { border:0 }
 bracket {color:saddlebrown}
 string {color:darkgreen; display:inline-block}
 string>string { filter:brightness(150%) }
-body.dark string {color: limegreen}
+.into.dark string {color: limegreen}
 number {color:cornflowerblue}
 known, prompt {font-weight:bold; cursor:pointer}
 node {display:inline-block; font-family:monospace}
@@ -851,7 +858,6 @@ waiting {
 .broken>:not(extracted) { display:table; max-width:100%}
 .broken>bracket {margin-left:-1em}
 .code>* {display:block}
-body>* {display:table; white-space:pre-wrap}
 
 node.code {display:table; font-family:monospace}
 .replInputContainer { display:table }
@@ -913,16 +919,19 @@ iframe { width:100%; height:100% }
 
 details { padding-left: 1em }
 summary { margin-left: -1em }
-details>:not(summary) { display:block }
+details>:not(summary) { display:block; margin-top:1em; border-bottom:1px solid black }
 details>div>:not(:first-child) { max-width:75vw }
 details { display:table; overflow:hidden }
 details>div { display:table-row }
 details>div>* { display:table-cell }
 
 time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:hidden }
-.hover>time-report, time-report:hover { opacity:1; visibility:visible }`,
+.hover>time-report, time-report:hover { opacity:1; visibility:visible }
+
+.removed { margin:0 }`,
     call(into = document.body) {
       Self.into = into
+      into.classList.add('into')
       serialize.displayed = serialize.dom
       const passive = {passive:true}, passiveCapture = {passive:true, capture:true}
 
@@ -934,7 +943,8 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // Create a REPL.
       const env = finish.env = _newExecutionEnv()
-      into.insertBefore(finish.env[_id(log)] = elem(REPL, [fancy, new Map(parse.ctx)]), into.firstChild)
+      const repl = finish.env[_id(log)] = elem(REPL, [fancy, new Map(parse.ctx)])
+      into.insertBefore(repl, into.firstChild)
       document.querySelector('[contenteditable]').focus()
 
       // If our URL has `#…` at the end, parse and evaluate that command.
@@ -952,7 +962,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
           const el = evt.target.parentNode
           const pre = _smoothHeightPre(el)
           el.style.height = pre + 'px'
-          const smooth = () => (el.removeEventListener('toggle', smooth), _smoothHeightPost(el, pre))
+          const smooth = () => (el.removeEventListener('toggle', smooth), _updateBroken(el), _smoothHeightPost(el, pre))
           el.addEventListener('toggle', smooth)
         }
         if (evt.detail !== 3) return
@@ -966,11 +976,20 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       }
       _listen('contextmenu', evt => openMenu(evt))
       _listen('click', evt => !evt.shiftKey && !evt.ctrlKey && !evt.altKey && evt.target.tagName === 'KNOWN' && openMenu(evt))
-      let contextMenuId
-      _listen('pointerdown', evt => contextMenuId = setTimeout(openMenu, 1000, evt, getSelection().rangeCount && getSelection().getRangeAt(0)), passiveCapture)
-      _listen('pointermove', evt => clearTimeout(contextMenuId), passiveCapture)
-      _listen('pointerup', evt => clearTimeout(contextMenuId), passiveCapture)
-      _listen('pointercancel', evt => clearTimeout(contextMenuId), passiveCapture)
+      let contextMenuId, pointerId = null, startX, startY
+      _listen('pointerdown', evt => {
+        contextMenuId = setTimeout(openMenu, 1000, evt, getSelection().rangeCount && getSelection().getRangeAt(0))
+        pointerId = evt.pointerId, startX = evt.clientX, startY = evt.clientY
+      }, passiveCapture)
+      function cancelContextMenu(evt) {
+        if (contextMenuId == null) return
+        const dx = evt.clientX - startX, dy = evt.clientY - startY
+        if (evt.type === 'pointercancel' || evt.type === 'pointerup' || evt.pointerId != pointerId || (dx*dx + dy*dy) > 25)
+          clearTimeout(contextMenuId), contextMenuId = null
+      }
+      _listen('pointermove', cancelContextMenu, passiveCapture)
+      _listen('pointerup', cancelContextMenu, passiveCapture)
+      _listen('pointercancel', cancelContextMenu, passiveCapture)
 
       // Close not-containing-target <context-menu>s on a click elsewhere.
       const closeMenus = evt => !_isEditable(evt.target) && [...document.querySelectorAll('context-menu')].filter(el => !el.contains(evt.target)).forEach(elemRemove)
@@ -984,22 +1003,28 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       let width = innerWidth
       _listen('resize', _throttled(() => width !== innerWidth ? _updateBroken(into) : (width = innerWidth), .1), passive)
 
-      // If scrolled to (near) end, make sure that transitions preserve that scroll.
-      if (typeof scrollMaxY != ''+void 0) {
-        let atEnd = false
-        _listen('transitionstart', () => (atEnd && scrollTo(scrollX, scrollMaxY, atEnd = false), atEnd = atEnd || scrollY && scrollY >= scrollMaxY - 10), passive)
-        _listen('transitionend', () => atEnd && scrollTo(scrollX, scrollMaxY, atEnd = false), passive)
-      }
-
+      // If scrolled to near end, make sure that transitions preserve that scroll.
       // On transition end, remove .style.height (for _smoothHeightPost/elemInsert).
+      let atEnd = false
+      _listen('transitionstart', evt => {
+        if (evt.propertyName !== 'height' || evt.target.tagName === 'SCROLL-HIGHLIGHT') return
+        const el = repl.lastChild.previousSibling, top = el.getBoundingClientRect().top
+        const d = document.documentElement, max = d.scrollHeight - d.clientHeight
+        atEnd && scrollTo(scrollX, max, atEnd = false)
+        atEnd = atEnd || scrollY && top <= innerHeight - 10
+      }, passive)
       _listen('transitionend', evt => {
-        evt.propertyName === 'height' && evt.target.tagName !== 'SCROLL-HIGHLIGHT' && evt.target.style.removeProperty('height')
+        if (evt.target.tagName === 'SCROLL-HIGHLIGHT') return
+        evt.target.style.removeProperty('height')
         _clearStyle(evt.target)
+        if (evt.propertyName !== 'height') return
+        const d = document.documentElement, max = d.scrollHeight - d.clientHeight
+        atEnd && scrollTo(scrollX, max, atEnd = false)
       }, passive)
 
       // On .ctrlKey pointerdown on a value, insert a <collapsed> reference to it into selection if editable.
         // This is also accessible via contextMenu.
-        _listen('pointerdown', evt => {
+      _listen('pointerdown', evt => {
         if (!evt.ctrlKey || evt.shiftKey || evt.altKey) return
         if (!getSelection().rangeCount) return
         const el = _closestNodeParent(evt.target), r = getSelection().getRangeAt(0)
@@ -1139,7 +1164,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
     call() {
       let ctx = parse.ctx, env = finish.env = _newExecutionEnv(finish.env)
       _test(env)
-      console.log('ctrl-D or .exit to exit, (txt) for all functionality. a, `a`, "s", (0 1), (a:2 a).')
+      console.log('ctrl-D or .exit to exit, (txt) for all functionality. a, `a`, "s", (0 1), (a=2 a).')
       const repl = require('repl')
       const prompt = '> ', coloredPrompt = _colored(prompt, 31) // red
       const out = process.stdout
@@ -1167,7 +1192,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
               if (!ctx.has(name))
                 (ctx = new Map(ctx)).set(name, quote(result))
 
-              then(null, _colored(name, 33) + ': ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2)})) // brown
+              then(null, _colored(name, 33) + ' = ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
             })
           } catch (err) {
             if (_isArray(err) && err[0] === 'give more') then(new repl.Recoverable(err))
@@ -1176,7 +1201,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         },
         writer: id,
         completer: cmd => {
-          const arr = /[^`:\s\[\]]+$/.exec(cmd)
+          const arr = /[^`=\s\[\]]+$/.exec(cmd)
           const begins = arr ? arr[0] : ''
           const matches = []
           ctx.forEach((_v,k) => k.slice(0, begins.length) === begins && matches.push(k))
@@ -1266,18 +1291,18 @@ Remember to quote the link unless you want to evaluate the insides.`,
     range.setEnd(range.endContainer, range.endOffset-1)
   },
 
-  permissionsElem:{
-    txt:`Build a namespace hierarchy of globals that \`expr\` is bound to.`,
-    call(expr, summary = id, topLevel) {
-      const uses = new Set, seen = new Set
-      mark(expr), seen.clear()
-      const globals = new Map
-      uses.forEach(x => lookup.parents.has(x) && uses.add(lookup.parents.get(x)))
-      if (topLevel) uses.delete(topLevel)
-      parse.ctx.forEach(x => uses.has(x) && globals.set(x, null)) // Make globals appear in source-code order.
-      uses.clear()
+  hierarchy:{
+    txt:`Turns a map from globals into a namespace-based hierarchy.`,
+    call(m, topLevel, lang = basic, binds) {
+      if (!(m instanceof Map)) error("Expected a map, got", m)
+      const globals = new Map // From globals to their elems.
+      m.forEach((v,x) => globals.set(x, null))
+      let p // Add unmentioned namespace-parent globals too.
+      globals.forEach((our, x) => (p = lookup.parents.get(x)) && !globals.has(p) && globals.set(p, null))
       const result = !topLevel ? elem('details', elem('summary', 'Binds to:')) : elemFor(topLevel)
-      globals.forEach((our, x) => {
+      parse.ctx.forEach(x => { // Make globals appear in source-code order.
+        if (topLevel && x === topLevel || !globals.has(x)) return
+        let our = globals.get(x)
         if (!our) globals.set(x, our = elemFor(x))
         const p = lookup.parents.get(x)
         if (!p) return result.append(our)
@@ -1288,23 +1313,14 @@ Remember to quote the link unless you want to evaluate the insides.`,
       for (let ch = result.firstChild.nextSibling; ch; ch = ch.nextSibling)
         ch.replaceWith(ch = purgeChildless(ch))
       if (result.childNodes.length == 1) result.append(elem('div', 'nothing'))
-      elemValue(result, expr)
       result.open = true
       return result
 
-      function mark(x) {
-        if (seen.has(x)) return; else seen.add(x)
-        if (_invertBindingContext(parse.ctx).has(x) && typeof x != 'boolean' && typeof x != 'string' && x != null) return uses.add(x)
-        if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x, false))
-        else if (x instanceof Map) x.forEach((v,k) => (mark(k), mark(v)))
-        else if (_isArray(x)) x.forEach(mark)
-        else if (x && !x[defines.key] && typeof x == 'object')
-          Object.keys(x).forEach(k => mark(x[k]))
-        else if (x && x[defines.key]) mark(x[defines.key])
-      }
       function elemFor(x) {
         const el = elem('details')
-        el.append(elem('summary', summary(serialize(x, basic, undefined, serialize.displayed), x)))
+        const xEl = serialize(x, lang, binds, serialize.displayed)
+        const v = m.get(x)
+        el.append(elem('summary', v === undefined ? xEl : [xEl, ':  ', serialize(v, lang, binds, serialize.displayed)]))
         elemValue(el, x)
         return _isArray(x) || defines(x, permissionsElem) === undefined || topLevel ? el : defines(x, permissionsElem)(el)
       }
@@ -1320,9 +1336,34 @@ Remember to quote the link unless you want to evaluate the insides.`,
     },
   },
 
+  permissionsElem:{
+    txt:`Build a namespace hierarchy of globals that \`expr\` is bound to.`,
+    call(expr, summary = id, topLevel) {
+      const uses = new Set, seen = new Set
+      mark(expr), seen.clear()
+      uses.forEach(x => lookup.parents.has(x) && uses.add(lookup.parents.get(x)))
+      if (topLevel) uses.delete(topLevel)
+      const m = new Map
+      uses.forEach(x => m.set(x, summary()))
+      return hierarchy(m, topLevel)
+
+      function mark(x) {
+        if (seen.has(x)) return; else seen.add(x)
+        if (_invertBindingContext(parse.ctx).has(x) && typeof x != 'boolean' && typeof x != 'string' && x != null) return uses.add(x)
+        if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x, false))
+        else if (x instanceof Map) x.forEach((v,k) => (mark(k), mark(v)))
+        else if (_isArray(x)) x.forEach(mark)
+        else if (x && !x[defines.key] && typeof x == 'object')
+          Object.keys(x).forEach(k => mark(x[k]))
+        else if (x && x[defines.key]) mark(x[defines.key])
+      }
+    },
+  },
+
   stringToDoc:{
     txt:`Parse text in \`...\` to style it as fancy, and treat other strings as \`structuredSentence\`s.`,
     call(s) {
+      if (typeof s != 'string') return s
       let arr = s.split('`')
       for (let i = 0; i < arr.length; ++i)
         if (i & 1)
@@ -1330,7 +1371,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
         else
           arr[i] = arr[i].split('\n').map(structuredSentence), arr[i].forEach(el => el.classList.add('text')), interleave(arr[i], '\n')
       return arr
-      function interleave(arr, item) {
+      function interleave(arr, item) { // Quadratic in time.
         for (let i = 1; i < arr.length; ++i) arr.splice(i++, 0, item)
       }
     },
@@ -1406,7 +1447,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
         },
         col.special = (original, copy) => copy.onclick = original.onclick
       else {
-        impure()
+        start.isConnected && impure()
         const parent = start.parentNode, pre = parent && _smoothHeightPre(parent)
         let nextCol = end !== undefined ? end : start.nextSibling
         const d = elem('hidden')
@@ -1442,23 +1483,28 @@ Remember to quote the link unless you want to evaluate the insides.`,
     },
   },
 
-  button:{
-    txt:`\`(button OnClick)\`: Returns a button that calls a function(s) on click (with no arguments). Overridable.`,
-    call(f) {
-      const backctx = _invertBindingContext(parse.ctx)
-      let name = backctx.has(f) ? backctx.get(f) : f && f.name || 'Click'
-      if (typeof defines(f, button) == 'function') return defines(f, button)(f)
-      if (f instanceof Node) return f
-      if (typeof f != 'function') error("Cannot call not-a-function:", f)
-
-      if (typeof name == 'string')
-        name = name.replace(/[A-Z]/g, s => ' '+s.toLowerCase()),
-        name = name[0].toUpperCase() + name.slice(1)
-
-      const el = elem('button')
-      el.onclick = () => f()
-      el.append(name)
-      return el
+  log:{
+    txt:`\`(log …Values)\`: For debugging; logs to the current DOM node or console.`,
+    call(...x) {
+      log.did = true, impure.impure = true
+      try {
+        let str
+        const into = finish.env[_id(log)]
+        if (x.length != 1 || !_isStylableDOM(x[0]))
+          str = serialize(x.length > 1 ? x : x[0], _langAt(into), _bindingsAt(into), serialize.displayed)
+        else str = x[0]
+        if (into) {
+          const pre = _smoothHeightPre(into.parentNode)
+          if (typeof str == 'string') str = document.createTextNode(str)
+          into.parentNode.insertBefore(str, into)
+          _updateBroken(into.parentNode)
+          _smoothHeightPost(into.parentNode, pre)
+        } else
+          console.log(str)
+        if (x.length == 1) return x[0]
+      } catch (err) { if (err !== impure) console.log(err), console.log(...x) }
+      finally { impure.impure = false }
+      // log.did (for not erasing parts of a log in a terminal in NodeJS)
     },
   },
 
@@ -1541,7 +1587,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       if (v !== undefined) {
         const backctx = _invertBindingContext(parse.ctx)
         if (backctx.has(v)) {
-          // Display the namespace (if any) (even if the property name does not match) and the global.
+          // Display the owner namespace (if any) (even if the property name does not match) and the global.
           const global = serialize(v, fancy, undefined, serialize.displayed), p = lookup.parents.get(v) || Self
           d.append(p ? elem('div', [elem('unimportant', [serialize(p, fancy, undefined, serialize.displayed), '.']), global]) : global)
         } else if (typeof v == 'number' && isFinite(v) && el && v === +el.textContent && _isEditable(el)) {
@@ -1602,13 +1648,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
             elemCollapse(() => serialize(_read.marks.get(v), fancy, undefined, serialize.displayed))
           ]))
 
-        // A full deconstruction.
-        if (!_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
-          d.append(elem('div', [
-            elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
-            elemCollapse(() => serialize(deconstruct(v, false), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
-          ]))
-
         // For globals only:
         if (backctx.has(v)) {
           // A table for lookups.
@@ -1624,8 +1663,9 @@ Remember to quote the link unless you want to evaluate the insides.`,
             let a
             if (v !== Self) a = lookup(v).map(k => [k, lookup(v, k)])
             else a = [...backctx].filter(([v,k]) => v && v !== true && k[0] !== '_' && !lookup.parents.has(v)).map(([v,k])=>[k,v])
-              // For Self, only display public functionality without lookup.parents.
-              d.append(elem('table', a.length <= 16 ? a.map(row) : [a.slice(0,16).map(row), elemCollapse(() => a.slice(16).map(row))]))
+            // For Self, only display public functionality without lookup.parents.
+            d.append(elemValue(elem('unimportant', 'Namespace for:'), lookup))
+            d.append(elem('table', a.length <= 16 ? a.map(row) : [a.slice(0,16).map(row), elemCollapse(() => a.slice(16).map(row))]))
           }
 
           // A list of back-refs.
@@ -1640,6 +1680,13 @@ Remember to quote the link unless you want to evaluate the insides.`,
               elemCollapse(() => serialize(Refd, fancy, undefined, serialize.displayed))
             ]))
         }
+
+        // A full deconstruction.
+        if (backctx.has(v) || !_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
+          d.append(elem('div', [
+            elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
+            elemCollapse(() => serialize(deconstruct(v, false), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
+          ]))
 
         // Definitions of `describe`.
         const r = !_isArray(v) && defines(v, describe)
@@ -1701,7 +1748,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
         menu.append(result)
       }
 
-      // This should use `Uses` and have a context of el-and-range-to-functions.
+      // This should use `Usage` and have a context of el-and-range-to-functions.
         // Maybe also have `elemUse(ctx, ...values)` for displaying purified results neatly?
       if (range && v !== undefined && _isEditable(range.commonAncestorContainer)) // Link to this
         menu.append(button(function linkToThis() { insertLinkTo(range, el) }))
@@ -1759,26 +1806,18 @@ Remember to quote the link unless you want to evaluate the insides.`,
     },
   },
 
-  url:{
-    txt:`Creates a URL element.`,
-    elem(tag, href) {
-      if (typeof href != 'string') throw "Must be a string"
-      if (tag !== url || typeof document == ''+void 0) return href
-      const el = elem('a', href)
-      elemValue(el, array(elem, url, href))
-      el.href = href
-      return el
-    },
-  },
-
   evaluator:{
-    txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.`,
+    txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
+When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
     elem(tag, expr, then) {
       if (tag !== evaluator || typeof document == ''+void 0) return
       impure()
       const into = finish.env[_id(log)]
 
-      let result = _notFound
+      if (!evaluator.none) evaluator.none = Symbol('none')
+      let result = evaluator.none
+      const binds = _bindingsAt(into)
+      let bindAs = null, prevBinding = evaluator.none
 
       const el = elem('div')
       el.classList.add('code')
@@ -1786,7 +1825,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       const query = elem('span')
       query.classList.add('replInputContainer')
       query.append(prompt)
-      query.append(serialize(expr, _langAt(into), _bindingsAt(into), serialize.displayed))
+      query.append(serialize(expr, _langAt(into), binds, serialize.displayed))
       const waiting = elem('waiting')
       el.append(query)
       el.append(waiting)
@@ -1795,50 +1834,85 @@ Remember to quote the link unless you want to evaluate the insides.`,
       const env = _newExecutionEnv(finish.env)
       env[_id(log)] = waiting
       const start = _timeSince()
-      let ID = _schedule(expr, env, r => {
+      if (_isArray(expr) && expr[0] === _extracted && expr.length == 3 && (_isLabel(expr[1]) || _invertBindingContext(binds).has(expr[1])))
+        bindAs = _isLabel(expr[1]) ? expr[1] : label(_invertBindingContext(binds).get(expr[1])), expr = expr[2]
+      let ID = _schedule(expr, env, r => { // Got the result.
         ID = null
         const end = _timeSince(), real = _timeSince(start)
-        if (_bindingsAt(into)) {
-          const CurrentUses = _bindingsAt(into).get(label('CurrentUses'))
-          if (_isArray(CurrentUses) && CurrentUses[0] === either && !_wasMerged(CurrentUses))
-            result = r, CurrentUses.push(result)
+
+        if (binds) { // Add result to bindings or CurrentUsage.
+          if (_isLabel(bindAs)) {
+            const L = label(bindAs[1])
+            const q = quote(r)
+            if (binds.has(L))
+              prevBinding = !parse.ctx.has(L) || parse.ctx.get(L) === q ? binds.get(L) : parse.ctx.get(L)
+            binds.set(L, q)
+            _invertBindingContext(binds, true)
+            r = [_extracted, !_isArray(q) ? L : q, !_isArray(q) ? q : q === r ? q.slice() : r]
+          } else if (!(r instanceof Error) && !_isError(r) && r != null) {
+            const CurrentUsage = binds.get(label('CurrentUsage'))
+            if (r !== CurrentUsage && _isArray(CurrentUsage) && CurrentUsage[0] === either && !_wasMerged(CurrentUsage))
+              result = r, _addUsage(CurrentUsage, result)
+          }
         }
-        finish.env = env
+
+        const pre = _smoothHeightPre(el)
+        waiting.remove()
+        // Merge `_updateBroken` of both logged children into one.
         _updateBroken(el)
-        log(serialize(r, _langAt(into), _bindingsAt(into), serialize.displayed))
+        finish.env = env
+        // Display the result.
+        el.append(serialize(r, _langAt(into), binds, serialize.displayed))
+
+        // Display the report on the time taken.
         const user = env[_id(userTime)], report = _timeSince(end)
-        log(elem('time-report', [
+        el.append(elem('time-report', [
+          // These two logs update the parent's height twice. What gives?
+            // Should we insert ourselves?
           elemValue(elem('span', 'user'), userTime),
           elem('space', ' '),
-          elem('number', user < 1000 ? user.toFixed(0) : (user/1000).toFixed(2)),
-          user < 1000 ? 'ms' : 's',
+          _formatNumber(user),
           ', ',
           elemValue(elem('span', 'real'), realTime),
           elem('space', ' '),
-          elem('number', real < 1000 ? real.toFixed(0) : (real/1000).toFixed(2)),
-          real < 1000 ? 'ms' : 's',
+          _formatNumber(real),
           ', ',
           elemValue(elem('span', 'report'), serialize),
           elem('space', ' '),
-          elem('number', report < 1000 ? report.toFixed(0) : (report/1000).toFixed(2)),
-          report < 1000 ? 'ms' : 's',
+          _formatNumber(report),
         ]))
-        waiting.remove()
+        _smoothHeightPost(el, pre)
       })
       prompt.title = 'Click to remove this.'
-      prompt.onclick = () => {
+      prompt.onclick = () => { // Remove the evaluator.
         _getOuterWindow(el) && _getOuterWindow(el).firstChild === el && _restoreWindow(_getOuterWindow(el))
         ID != null && _cancel(ID)
         then ? el.replaceWith(then) : elemRemove(el)
-        if (_bindingsAt(into)) {
-          const CurrentUses = _bindingsAt(into).get(label('CurrentUses'))
-          if (_isArray(CurrentUses) && CurrentUses[0] === either && !_wasMerged(CurrentUses))
-            if (result !== _notFound) CurrentUses.splice(CurrentUses.indexOf(result), 1)
+
+        if (binds) { // Delete result from bindings or CurrentUsage.
+          const r = result
+          if (_isLabel(bindAs)) {
+            const L = label(bindAs[1])
+            if (prevBinding !== evaluator.none) binds.set(L, prevBinding)
+            else binds.delete(L)
+            _invertBindingContext(binds, true)
+          } else if (r !== evaluator.none) {
+            const CurrentUsage = binds.get(label('CurrentUsage'))
+            if (r !== CurrentUsage && _isArray(CurrentUsage) && CurrentUsage[0] === either && !_wasMerged(CurrentUsage))
+              _removeUsage(CurrentUsage, r)
+          }
         }
       }
-      elemValue(el, concept(new Map()))
+      elemValue(el, array(elem, evaluator, expr, then))
       return el
     },
+  },
+
+  _formatNumber(x) {
+    return [
+      elem('number', x < 1 ? x.toPrecision(6).replace(/\.?0+$/, '') : x < 10 ? x.toPrecision(3).replace(/\.?0+$/, '') : x < 1000 ? ''+(x|0) : (x/1000).toFixed(1)),
+      x < 1000 ? 'ms' : 's',
+    ]
   },
 
   _getOuterREPL(el) { return !el ? null : el.isREPL ? el : _getOuterREPL(el.parentNode) },
@@ -1868,14 +1942,13 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   REPL:{
     txt:`\`(elem REPL (Language Bindings))\`: Creates a visual REPL instance (read-evaluate-print loop).`,
-    future:`Allow changing the (delta of) binding context, by a context-action of an evaluator ("Bind to this as…").`,
     elem(tag, arr) {
       if (tag !== REPL || typeof document == ''+void 0) return
       const lang = arr && arr[0] || fancy, ctx = arr && arr[1] || new Map(parse.ctx)
       if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
       if (!(ctx instanceof Map)) throw "Invalid binding context"
       impure()
-      ctx.set(label('CurrentUses'), [either]), _invertBindingContext(ctx, true)
+      _invertBindingContext(ctx, true)
 
       const env = _newExecutionEnv(finish.env)
 
@@ -1895,35 +1968,38 @@ Remember to quote the link unless you want to evaluate the insides.`,
         const pre = _smoothHeightPre(pureOutput)
         if (pureOutput.firstChild) {
           for (let ch = pureOutput.firstChild; ch && ch.nextSibling; ch = ch.nextSibling)
-            if (!ch.removed) {
+            if (!ch.removed)
               elemRemove(ch, true, true, false)
-            }
         }
         if (ID !== undefined) _cancel(ID), waiting.remove(), ID = undefined, waiting = undefined
         let promise
         if (!justClear) promise = new Promise(then => {
           const e = _newExecutionEnv(env)
           e[_id(log)] = pureOutput.lastChild, finish.env = e
+          const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
+          if (bindAs) expr = expr[2]
           ID = _schedule([purify, array(quote, expr)], e, result => {
             if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
               result = result[1] // Display errors too.
             purified = result
+            if (bindAs) result = [_extracted, bindAs, result]
+
             const pre = _smoothHeightPre(pureOutput)
             try {
               ID = undefined, waiting && waiting.remove(), waiting = undefined
               if (!_isUnknown(result)) {
-                log(serialize(result, lang, ctx, serialize.displayed))
+                elemInsert(pureOutput, serialize(result, lang, ctx, serialize.displayed), pureOutput.lastChild)
               } else {
                 const el = elem('button', 'Evaluate')
                 elemValue(el, result)
                 el.onclick = evaluate
-                log(el)
+                pureOutput.insertBefore(el, pureOutput.lastChild)
               }
             } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
-          }), waiting = elem('waiting')
-          pureOutput.insertBefore(waiting, pureOutput.lastChild)
+          })
+          pureOutput.insertBefore(waiting = elem('waiting'), pureOutput.lastChild)
+          _smoothHeightPost(pureOutput, pre)
         })
-        _smoothHeightPost(pureOutput, pre)
         return promise
       }, .1)
 
@@ -1978,7 +2054,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       }, 1)
       let height
       replInput.addEventListener('input', evt => {
-        if (height) height = _smoothHeightPost(replInput, height)
+        if (height) _smoothHeightPost(replInput, height).then(h => height = h)
         else height = _smoothHeightPre(replInput)
       })
       replInput.onkeydown = evt => {
@@ -2065,6 +2141,52 @@ Remember to quote the link unless you want to evaluate the insides.`,
         to.forEach(ch => el.appendChild(ch))
         _smoothHeightPost(el, pre)
       }
+    },
+  },
+
+  button:{
+    txt:`\`(button OnClick)\`: Returns a button that calls a function(s) on click (with no arguments). Overridable.`,
+    call(f) {
+      const backctx = _invertBindingContext(parse.ctx)
+      let name = backctx.has(f) ? backctx.get(f) : f && f.name || 'Click'
+      if (typeof defines(f, button) == 'function') return defines(f, button)(f)
+      if (f instanceof Node) return f
+      if (typeof f != 'function') error("Cannot call not-a-function:", f)
+
+      if (typeof name == 'string')
+        name = name.replace(/[A-Z]/g, s => ' '+s.toLowerCase()),
+        name = name[0].toUpperCase() + name.slice(1)
+
+      const el = elem('button')
+      el.onclick = () => f()
+      el.append(name)
+      return el
+    },
+  },
+
+  files:{
+    txt:`\`(elem files StringMap)\`: an element for downloading files.`,
+    elem(tag, content, name = 'Files:') {
+      if (tag != files) error('...')
+      const el = elem('details', elem('summary', name))
+      if (content instanceof Map)
+        content.forEach((value, name) => _appendFile(el, name, value) )
+      else if (typeof content == 'object' && !content[defines.key])
+        Object.keys(content).forEach(k => _appendFile(el, k, content[k]))
+      el.open = true
+      return el
+    },
+  },
+
+  url:{
+    txt:`Creates a URL element.`,
+    elem(tag, href) {
+      if (typeof href != 'string') throw "Must be a string"
+      if (tag !== url || typeof document == ''+void 0) return href
+      const el = elem('a', href)
+      elemValue(el, array(elem, url, href))
+      el.href = href
+      return el
     },
   },
 
@@ -2174,26 +2296,28 @@ Return stopIteration to stop iteration.`,
     },
   },
 
-  _smoothHeightPre(el) { return el instanceof Element && el.offsetHeight || 0 },
-
   _reflow() {
     if (_reflow.p) return _reflow.p
     return _reflow.p = Promise.resolve().then(() => (_reflow.p = null, document.body.offsetWidth))
   },
+
+  _smoothHeightPre(el) { return el instanceof Element && el.offsetHeight || 0 },
 
   _smoothHeightPost:{
     txt:`Since height:auto does not transition by default (because it's too laggy for non-trivial layouts), we explicitly help it (because we don't care).
 Call this with the result of _smoothHeightPre to transition smoothly.`,
     call(el, pre) {
       if (!(el instanceof Element)) return
-      impure()
+      el.isConnected && impure()
       el.style.removeProperty('height')
-      const post = _smoothHeightPre(el)
-      if (pre !== post) {
-        el.style.height = pre + 'px'
-        _reflow().then(() => el.style.height = post + 'px')
-      }
-      return post
+      return _reflow().then(() => {
+        const post = _smoothHeightPre(el)
+        if (pre !== post) {
+          el.style.height = pre + 'px'
+          _reflow().then(() => el.style.height = post + 'px')
+        }
+        return post
+      })
     },
   },
 
@@ -2227,7 +2351,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
 
       if (particles) {
         const r1 = el.getBoundingClientRect(), r2 = document.documentElement.getBoundingClientRect()
-        _particles(r1.left - r2.left, r1.top - r2.top, r1.width, r1.height)
+        _reflow().then(() => _particles(r1.left - r2.left, r1.top - r2.top, r1.width, r1.height))
       }
 
       let height, dur, from, pre
@@ -2235,25 +2359,31 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       dur = parseFloat(style.transitionDuration)*1000 || 0
       if (doHeight) {
         ({height} = style)
+        if (height === undefined) height = el.offsetHeight
         from = el.parentNode
         pre = _smoothHeightPre(from)
       }
 
       if (absolutize) {
         const x = el.offsetLeft, y = el.offsetTop
-        el.style.position = 'absolute'
-        el.style.left = x + 'px'
-        el.style.top = y + 'px'
+        _reflow().then(() => {
+          el.style.position = 'absolute'
+          el.style.left = x + 'px'
+          el.style.top = y + 'px'
+        })
       }
 
-      if (dur) {
-        if (doHeight) el.style.height = height
-        el.style.opacity = 0, el.style.pointerEvents = 'none'
-        if (doHeight)
-          _reflow().then(() => el.style.height = 0)
-        setTimeout(el => el.remove(), dur, el)
-      } else el.remove()
-      if (doHeight) _smoothHeightPost(from, pre)
+      _reflow().then(() => {
+        if (dur) {
+          el.classList.add('removed')
+          if (doHeight) el.style.height = height
+          el.style.opacity = 0, el.style.pointerEvents = 'none'
+          if (doHeight)
+            _reflow().then(() => el.style.height = 0)
+          setTimeout(el => el.remove(), dur, el)
+        } else el.remove()
+        if (doHeight) _smoothHeightPost(from, pre)
+      })
       return el
     },
   },
@@ -2300,7 +2430,7 @@ Return a promise to measure non-sync time.`,
         const target = typeof cpu == 'number' ? cpu : cpu()
         let requiredRest = target === .5 ? lastDur : lastDur/target - lastDur
         if (scheduledId) clearTimeout(scheduledId), requiredRest -= _timeSince(scheduledTime)
-        else requiredRest -= _timeSince(lastRun), lastRun = _timeSince()
+        else requiredRest -= Math.min(_timeSince(lastRun), 2000), lastRun = _timeSince()
         if (requiredRest > 2)
           scheduledId == null && (scheduledTime = _timeSince()), scheduledId = setTimeout(runThrottled, Math.max(0, requiredRest))
         else runThrottled(), scheduledTime = _timeSince()
@@ -2331,15 +2461,15 @@ Return a promise to measure non-sync time.`,
 Unlike a label, this returns itself when evaluated without having been assigned.`,
     examples:[
       [
-        `a a a:(var)`,
-        `a a a:(var)`,
+        `a a a=(var)`,
+        `a a a=(var)`,
       ],
       [
         `(var) (var)`,
         `(var) (var)`,
       ],
       [
-        `(a→a 5) a:(var)`,
+        `(a→a 5) a=(var)`,
         `5`,
       ],
     ],
@@ -2363,19 +2493,19 @@ Unlike a label, this returns itself when evaluated without having been assigned.
     txt:`\`(const)\`: A new unique object with no inner structure, only good for ref-equality checks.`,
     examples:[
       [
-        `(a a a:(const))`,
-        `(a a a:(const))`,
+        `(a a a=(const))`,
+        `(a a a=(const))`,
       ],
       [
         `((const) (const))`,
         `((const) (const))`,
       ],
       [
-        `(a→a a) a:(const)`,
+        `(a→a a) a=(const)`,
         `(const)`,
       ],
       [
-        `(a→a 5) a:(const)`,
+        `(a→a 5) a=(const)`,
         `error (const) 'cannot be assigned' 5`,
       ],
     ],
@@ -2389,31 +2519,6 @@ Unlike a label, this returns itself when evaluated without having been assigned.
   const:__is(`_const`),
 
   _isVar(x) { return _isLabel(x) || _isArray(x) && x[0] === _var && x.length == 1 },
-
-  log:{
-    txt:`\`(log …Values)\`: For debugging; logs to the current DOM node or console.`,
-    call(...x) {
-      log.did = true, impure.impure = true
-      try {
-        let str
-        const into = finish.env[_id(log)]
-        if (x.length != 1 || !_isStylableDOM(x[0]))
-          str = serialize(x.length > 1 ? x : x[0], _langAt(into), _bindingsAt(into), serialize.displayed)
-        else str = x[0]
-        if (into) {
-          const pre = _smoothHeightPre(into.parentNode)
-          if (typeof str == 'string') str = document.createTextNode(str)
-          into.parentNode.insertBefore(str, into)
-          _updateBroken(into.parentNode)
-          _smoothHeightPost(into.parentNode, pre)
-        } else
-          console.log(str)
-        if (x.length == 1) return x[0]
-      } catch (err) { if (err !== impure) console.log(err), console.log(...x) }
-      finally { impure.impure = false }
-      // log.did (for not erasing parts of a log in a terminal in NodeJS)
-    },
-  },
 
   _updateBroken:{
     txt:`Ensure that e either contains no soft line breaks directly inside of it, or its every child is on its own line (CSS class .broken).
@@ -2440,15 +2545,15 @@ Quite expensive.`,
         // Not nearly as accurate as removing .broken would have been (with tables in particular), but much faster.
           // So we special-case the <table>-inside case lol
           // Structural learning at its finest
-      let sum = 0, max = 0
+      let Sum = 0, max = 0
       for (let ch = e.firstChild; ch; ch = ch.nextSibling) {
         const w = _updateBroken.widths.has(ch) ? _updateBroken.widths.get(ch) : ch.offsetWidth || 0
-        sum += w, max = Math.max(max, w)
+        Sum += w, max = Math.max(max, w)
       }
-      if ((sum > parentWidth) !== e.classList.contains('broken')) {
+      if ((Sum > parentWidth) !== e.classList.contains('broken')) {
         // Set class async and calc+remember the new width ourselves, to not pay the enormous reflow-per-node cost.
         _updateBroken.widths.set(e, max + 16)
-        Promise.resolve().then(() => e.classList.toggle('broken', sum > parentWidth))
+        Promise.resolve().then(() => e.classList.toggle('broken', Sum > parentWidth))
       }
     },
   },
@@ -2457,9 +2562,9 @@ Quite expensive.`,
     const seen = new Set
     parse.ctx.forEach((v,k) => {
       if (typeof v == 'string') return
-      if (seen.has(v)) return; else seen.add(v)
       if (onlyPublic && k[1][0] === '_') return
       if (onlyTopLevel && lookup.parents.has(v)) return
+      if (seen.has(v)) return; else seen.add(v)
       if (defines(v, x) !== undefined) f(v, defines(v, x))
     })
   },
@@ -2482,11 +2587,16 @@ Quite expensive.`,
     txt:`\`(docs)\`: returns a hierarchical documentation elem.`,
     merge:__is(`true`),
     call() {
+      if (call.cache.has(array(docs))) return call.cache.get(array(docs))
       const net = defines(Self, lookup)
-      const publics = Object.keys(net).filter(k => k[0] !== '_').map(k => net[k])
-      const summary = (name, v) => typeof defines(v, txt) != 'string' ? name : [name, ':  ', elemValue(elem('div', stringToDoc(defines(v, txt))), [])]
-      const el = permissionsElem(publics, summary, Self)
-      call.impure = false
+      const m = new Map
+      Object.keys(net).forEach(k => {
+        if (net[k] == null || typeof net[k] == 'boolean' || _isArray(net[k])) return
+        const t = defines(net[k], txt)
+        return k[0] !== '_' && m.set(net[k], t && elem('div', stringToDoc(t)))
+      })
+      const el = elem('div', hierarchy(m, Self))
+      call.cache.set(array(docs), el)
       return el
     },
   },
@@ -2514,20 +2624,22 @@ All these are automatically tested to be correct at launch.`,
     merge:__is(`true`),
     call(f) {
       if (_isArray(f)) error("Can only view examples of simple functions, not", f)
+      const L = _langAt(), B = _bindingsAt()
       const transform = r => {
         if (!_isArray(r)) return
         return r.map(a => {
           if (typeof a == 'string') return elem('div', stringToDoc(a))
-          const from = parse(a[0])[0]
+          if (!_isArray(a)) throw "Examples must be arrays or comments"
+          const from = !a[2] ? parse(a[0])[0] : parse(a[0], fancy, undefined, parse.dom)[1]
           const to = a[1] ? parse(a[1])[0] : elemCollapse(() => elem(evaluator, from, to))
-          return [from, elem('span', '⇒'), to]
+          return elem('div', [serialize(from, L, B, serialize.displayed), elem('span', '\n⇒ '), serialize(to, L, B, serialize.displayed)])
         })
       }
       if (f !== undefined) return transform(defines(f, examples))
       const result = new Map
       _forEachGlobalDefining(examples, (v, r) => result.set(v, transform(r)), true)
       call.impure = false
-      return result
+      return hierarchy(result, elem('span', 'Code examples:'))
     },
   },
 
@@ -2538,7 +2650,7 @@ All these are automatically tested to be correct at launch.`,
       `todo`,
     ],
     merge:__is(`true`),
-    philosophy:`Through difficulty, strength is gained.`,
+    philosophy:`Through heedless difficulty, strength is gained.`,
     call(f) {
       if (_isArray(f)) error("Can only view futures of simple functions, not", f)
       if (f !== undefined) return defines(f, future)
@@ -2557,7 +2669,7 @@ All these are automatically tested to be correct at launch.`,
         [
           `— What exists can be optimized, but what doesn't exist cannot. Premature optimization is evil. Ideas in a human mind are very likely not what they claim they are to the rest of the mind, so it is extremely likely that you'll end up optimizing a valid idea out of existence. (Learning to make labels and implementations agree can help, but is still not a guarantee. Nothing is.)`,
           `— In the end, the best and most capable thing always wins. Might as well try to do as much as possible correctly from the start. (Design for generality first, and derive optimized versions as special cases.)`,
-          `— Don't care about all the nice features, care about the cores that allow them. Making choices once presented is easy, it is getting to them that is the hard part. (Don't learn; master.)`,
+          `— Don't care about all the nice features, care about the cores that allow them. Making choices once presented is easy, it is getting to them that is the hard part. (Don't learn; master. Use documentation, not tutorials and books.)`,
           `— There are no false trails and things that are so for no reason, and everything can be pursued to its underlying powerful idea(s), leaving an implementation in your personality or a program (or a story or whatever) you've intertwined it with, in the process. No truths nor lies, only evidence you've seen and what you've made of it. Effects and their reasons are intrinsically linked, and metaphors are not meaningless wordplay. (In particular, the only true god of humans is an extremely correct implementation/explanation of their intelligence, and some of physics.) (Believe in yourself.)`,
           `— No idea by itself, no matter how real and underlying and powerful and pure, can compete against multiple ideas that come together. Blind paperclip maximizers, one-trick pony philosophers and idea-people may struggle as hard as they want, but they will fail against life's unity; saying that a thing that can do everything *will* do everything is just inexperience — do not fall into this trap of infinite generality. (Design for unity, not dominance of a paradigm. Build on top of a popular thing. Do not split across many projects; it's not a sprint, it's a marathon.)`,
           `— A worthwhile mind's most fundamental concepts are basic concepts of a very high-level programming language too. By now, there are no significant holes left in that view, and someone just needs to put together a myriad pieces properly. Communication by a single word with all the meaning, interconnectedness into a global network of all knowledge, eternal improvement and learning, multiple bodies for one mind and multiple minds for one body, reproduction, life after and in death, planning, imagination, logic, emotions — all implemented and practically perfected somewhere in the world, often with its own set of programming languages and frameworks. Finding all these to unite is how humanity would *begin* to create AI: a convenient-to-use singularity is the only first step possible. The picture is about precise enough already, and top-down is very slowly starting to meet the bottom-up.
@@ -2573,7 +2685,7 @@ All these are automatically tested to be correct at launch.`,
         `Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about AI that's not in I, it's just somewhat more clear and efficient.`,
         `AI is usually considered as either slave or master (or transitioning to one of those). That's wrong. Intelligence is total generality, able to include everything, and including everything found useful. Both humans and AI can understand and propose with both words and actions, and consider a problem from every point of view`,
       ],
-      `Believing in lies… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality.`,
+      `Believing in lies… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
       `All known heavens are little more than metaphors for death from trying to fly too close to the sun. But with a huge amount of effort, that could change: they could be metaphors for a heaven that actually succeeds at existing.`,
       `Did you ever hear the tragedy of Darth Plagueis the Wise?
@@ -2581,6 +2693,8 @@ I thought not. It's not a story the Jedi would tell you. It's a Sith legend. Dar
 The Dark Side of the Force is a pathway to many abilities some consider to be… unnatural.
 He became so powerful, the only thing he was afraid of was losing his power, which eventually, of cource, he did. Unfortunately, he taught his apprentice everything he knew, then his apprentice murdered him in his sleep. Ironic. He could save others from death… but not himself.`,
       `The picked governance form is a reflection of how much the people can be trusted to run a country. Here, forms are either monarchy, anarchy (rule of the smartest guy/s, trusting no one), democracy (rule of majority over minority), consensus (overrule by minority of majority — unachievable today except in small groups beyond which human instinct doesn't scale).`,
+      `An idea isn't good unless it's been refactored and rethought five times.`,
+      `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
     ],
   },
 
@@ -2699,7 +2813,7 @@ Examples: \`(delay 1)+(delay 2)\` eventually returns \`3\`. \`(delay 1)*(delay 3
             return v
         }
       } catch (err) { if (err === interrupt) interrupt(race, 3)(i, exprs, promises);  throw err }
-      return i = [_unknown, merge(exprs)], i.push(...promises), i
+      return i = _unknown(merge(exprs)), i.push(...promises), i
     },
   },
 
@@ -3000,15 +3114,15 @@ Don't ever re-use the same env in _schedule, use this instead.`,
     txt:`\`a|b|c\` or \`(try …Functions)\`: returns a function that tries to call functions in order, returning the first non-error result or error.`,
     examples:[
       [
-        `(f 1) f:(try 0->5 1->10 2->15)`,
+        `(f 1) f=(try 0->5 1->10 2->15)`,
         `10`,
       ],
       [
-        `(f 1 2) f:(try (function 2 3 4) (function a b 3))`,
+        `(f 1 2) f=(try (function 2 3 4) (function a b 3))`,
         `3`,
       ],
       [
-        `(f 1 2) f:(try (function 1 3 5) (function 1 6) (function a b (sum a b)))`,
+        `(f 1 2) f=(try (function 1 3 5) (function 1 6) (function a b (sum a b)))`,
         `3`,
       ],
     ],
@@ -3049,11 +3163,11 @@ Don't ever re-use the same env in _schedule, use this instead.`,
     txt:`\`(compose …Functions)\`: returns a function that composes functions left-to-right, passing the output of each function to the next one.`,
     examples:[
       [
-        `(f 1) f:(compose a→(mult a 8) b→(sum b 2))`,
+        `(f 1) f=(compose a→(mult a 8) b→(sum b 2))`,
         `10`,
       ],
       [
-        `((compose f g) 1) f:x→(sum 1 x) g:x→(mult 2 x)`,
+        `((compose f g) 1) f=x→(sum 1 x) g=x→(mult 2 x)`,
         `4`,
       ],
       [
@@ -3123,15 +3237,15 @@ When in an array that is assigned to, collects the rest of arguments into an arr
         `R→(rest R)`,
       ],
       [
-        `(f ("a" "b" "c")) f:(A …R)→R`,
+        `(f ("a" "b" "c")) f=(A …R)→R`,
         `("b" "c")`,
       ],
       [
-        `(f ("a" "b" "c")) f:(A (rest R))→R`,
+        `(f ("a" "b" "c")) f=(A (rest R))→R`,
         `("b" "c")`,
       ],
       [
-        `(f ("a" "b" "c")) f:((rest R) Z)→R`,
+        `(f ("a" "b" "c")) f=((rest R) Z)→R`,
         `("a" "b")`,
       ],
       [
@@ -3193,8 +3307,8 @@ When in an array that is assigned to, collects the rest of arguments into an arr
       ],
       `It stages optimal code:`,
       [
-        `x->[if x 1::Int 2::Int] Int:'Int'`,
-        `x→(if x 1 2)::'Int'`,
+        `x->[if x 1:Int 2:Int] Int='Int'`,
+        `x→(if x 1 2):'Int'`,
       ],
       [
         `(x y)->[if x x+1 y+1]`,
@@ -3211,10 +3325,10 @@ When in an array that is assigned to, collects the rest of arguments into an arr
             // Finish a and b too so that we know what to expect.
             if (state === 0 && finish.pure)
               try { A = finish(a), state = 1 }
-              catch (err) { if (err !== interrupt) A = [_unknown, jsRejected(err)], state = 1; else throw err }
+              catch (err) { if (err !== interrupt) A = _unknown(jsRejected(err)), state = 1; else throw err }
             if (state === 1 && finish.pure)
               try { B = finish(b), state = 2 }
-              catch (err) { if (err !== interrupt) B = [_unknown, jsRejected(err)], state = 2; else throw err }
+              catch (err) { if (err !== interrupt) B = _unknown(jsRejected(err)), state = 2; else throw err }
             if (_isUnknown(A)) v.push(...A.slice(2)), A = A[1]
             if (_isUnknown(B)) v.push(...B.slice(2)), B = B[1]
             if (A === B && state === 2) // (if A B B) => A,B
@@ -3326,7 +3440,7 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
 
   _assignVarsIn(x) {
     if (!_hasCycles.env) _hasCycles.env = new Set, _hasCycles.inside = false
-    if (_isVar(x)) return _assign(x, [_unknown, x])
+    if (_isVar(x)) return _assign(x, _unknown(x))
     if (!_isArray(x)) return
     const inside = _hasCycles.inside
     _hasCycles.inside = true
@@ -3348,7 +3462,7 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
         `"x"`,
       ],
       [
-        `(a (string a) a:1)`,
+        `(a (string a) a=1)`,
         `(1 "1")`,
       ],
       [
@@ -3360,15 +3474,15 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
         `"sum is 3"`,
       ],
       // [
-      //   `(f "hello there") f:(string "hello" R)→R`,
+      //   `(f "hello there") f=(string "hello" R)→R`,
       //   `" there"`,
       // ],
       // [
-      //   `(f "hello there") f:(string R "there")→R`,
+      //   `(f "hello there") f=(string R "there")→R`,
       //   `"hello "`,
       // ],
       // [
-      //   `(f "yZZZZxz") f:(string "y" R "xz")→R`,
+      //   `(f "yZZZZxz") f=(string "y" R "xz")→R`,
       //   `"ZZZZ"`,
       // ],
     ],
@@ -3414,19 +3528,19 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
 Evaluating an unbound label results in \`(error)\`; evaluating a bound label results in its value, in the current function call.`,
     argCount:1,
     examples:[
-      `\`a a:1\`:`,
       [
-        `a a:1`,
+        `a a=1`,
         `1`,
+        true
       ],
-      `\`a a 1 a a a:0\`:`,
       [
-        `a a 1 a a a:0`,
+        `a a 1 a a a=0`,
         `0 0 1 0 0`,
+        true
       ],
       [
-        `a a:(0 (a) a)`,
-        `a a:(0 (a) a)`,
+        `a a=(0 (a) a)`,
+        `a a=(0 (a) a)`,
       ],
       [
         `x→(sum \`x\` 1)`,
@@ -3444,7 +3558,7 @@ Evaluating an unbound label results in \`(error)\`; evaluating a bound label res
 
   _isLabel(v) { return _isArray(v) && v[0] === label && typeof v[1] == 'string' && v.length == 2 },
 
-  _promiseToDeferred(p) { const u = [_unknown, p]; u.push(p); return p },
+  _promiseToDeferred(p) { const u = _unknown(p); u.push(p); return p },
 
   _unknown:{
     txt:`\`(_unknown Expr)\`: denotes that Expr is dependent on unknown factors and cannot be evaluated now, so it has to be deferred.
@@ -3452,17 +3566,12 @@ Unlike all other arrays, arrays with this as the head are mutable.
 Unbound variables are unknown.
 The internal mechanism for \`purify\` and recording and using the continuation of JS promises.
 Check _isUnknown to materialize the inner structure but only on demand.`,
-    examples:[
-      [
-        `(_unknown 1)`,
-        `(_unknown 1)`,
-      ],
-      [
-        `a→(_unknown a)`,
-        `id`,
-      ],
-    ],
-    argCount:2,
+    argCount:1,
+    call(x) {
+      const a = _allocArray()
+      if (!_isUnknown(x)) return a.push(_unknown, x), a
+      return a.push(...x), a
+    },
   },
 
   _isUnknown(v) { return _isArray(v) && v[0] === _unknown },
@@ -3846,11 +3955,11 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
     txt:`Instead of never returning, pure infinite computations return \`cycle\` (and prevent caching until that node is fully returned from).`,
     examples:[
       [
-        `f 1 f:1→(f 1)`,
+        `f 1 f=1→(f 1)`,
         `cycle`,
       ],
       [
-        `a a:(a)`,
+        `a a=(a)`,
         `(cycle)`,
       ],
     ],
@@ -3861,7 +3970,7 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
 Unless the computed code defines \`finish\`, this provides eager override-checking semantics: finishes all dependencies before \`call\`ing or constructing Expr.
 
 \`finish\` proceeds top-down, from what is needed to primitives; \`call\` proceeds bottom-up, making what is needed from primitives.
-Each graph node will be evaluated only once during a function call, so graph bindings (\`… a:(…)\`) play the role of variables.
+Each graph node will be evaluated only once during a function call, so graph bindings (\`… a=(…)\`) play the role of variables.
 Cyclic computations return \`cycle\` from the cyclic attempt.
 
 Code (array head) that defines neither \`finish\` nor \`call\` creates structures.
@@ -3871,14 +3980,15 @@ Cyclic structures construct a graph.`,
     nameResult:[
       `finished`,
     ],
-    buzzwords:`inlining, interpreted, homoiconic`,
+    buzzwords:`inlining, interpreted`,
     examples:[
       `Aggressive inlining:`,
       [
-        `SumSum: (function  a  b  a+b+b)
-  Mult: (function  a  b  a*b)
+        `SumSum = (function  a  b  a+b+b)
+  Mult = (function  a  b  a*b)
   x -> (SumSum x (Mult x x))`,
-        `x→[x+a+a] a:x*x`,
+        `x→[x+a+a] a=x*x`,
+        true
       ],
       `No inlining if no extra info:`,
       [
@@ -3902,8 +4012,9 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
 
       // Cache, so that a common object is a variable, evaluated only once.
       const m = finish.env[_id(label)]
-      if (m.has(v)) return !_isUnknown(m.get(v)) ? m.get(v) : m.get(v).slice()
-      if (finish.inFunction === 1 && _isVar(v)) return m.set(v, [_unknown, v]), m.get(v)
+      if (m.has(v)) return !_isUnknown(m.get(v)) ? m.get(v) : _unknown(m.get(v))
+      if (finish.inFunction === 1 && _isVar(v))
+        return m.set(v, _unknown(v)), m.get(v)
       m.set(v, cycle)
 
       try {
@@ -3943,7 +4054,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
               _checkInterrupt(v)
               try {
                 return finish.v = v, result = defines(code, finish).call(...finished)
-              } catch (err) { if (err === impure) return result = [_unknown, finished];  throw err }
+              } catch (err) { if (err === impure) return result = _unknown(finished);  throw err }
             }
           }
 
@@ -3956,7 +4067,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
             let r
             try {
               r = i > 0 ? (finished[i] = finish(v)) : v
-            } catch (err) { if (err === impure) r = [_unknown, finished]; else throw err }
+            } catch (err) { if (err === impure) r = _unknown(finished); else throw err }
             if (_isPromise(r)) r = _promiseToDeferred(r)
 
             if (_isUnknown(r) && !_isDeferred(record)) record = !wasVar ? r : true
@@ -3986,7 +4097,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
 
           // Record the call.
           _cameFrom(finished, v)
-          if (!record || record === true) record = [_unknown, finished]
+          if (!record || record === true) record = _unknown(finished)
           for (let k = 0; k < finished.length; ++k) {
             const v = finished[k]
             if (!_isUnknown(v)) finished[k] = quote(v)
@@ -3997,7 +4108,8 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
         finally {
           --finish.depth
           finished && finish.code.delete(finished[0])
-          if (result !== interrupt && result !== _notFound) _cache(m, v, result)
+          if (result !== interrupt && result !== _notFound)
+            _cache(m, !_isUnknown(v) ? v : _unknown(v), result)
           if (_isPromise(result))
             return !_awaitable(v) && error("Make", finished[0], "define", _await, "as true"), _promiseToDeferred(result)
         }
@@ -4032,7 +4144,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
 
   call:{
     txt:`\`(call (…Values))\`: Applies the first value (the function) to the rest of values. Evaluates the array of function then its arguments, assuming its parts are already evaluated.
-Overriding this allows function application. In fact, \`F:(function …)\` is the same as \`(concept (map call F))\`.
+Overriding this allows function application. In fact, \`F=(function …)\` is the same as \`(concept (map call F))\`.
 Caches results of pure functions.`,
     nameResult:[
       `result`,
@@ -4171,7 +4283,6 @@ Views and non-_unknown arrays are considered immutable.`,
     txt:`\`(map Key Value Key Value …Rest)\`: a key-value store.
 The array-representation of a JS Map.
 Read keys with \`lookup\`.`,
-    merge:__is(`true`),
     call(...kv) {
       // Construct a Map.
       const m = new Map
@@ -4187,9 +4298,8 @@ Read keys with \`lookup\`.`,
   deconstruct:{
     txt:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
     call(v, allowPath = true) {
-      const vv = _view(v) // Define `deconstruct` on a created-from-expr value (like in `function`).
-      if (vv && vv[_id(deconstruct)]) return vv[_id(deconstruct)]
-      else if (_isArray(v)) return quote(v)
+      if (defines(v, deconstruct)) return defines(v, deconstruct)
+      else if (_isArray(v)) return quote(v.slice())
 
       if (allowPath && lookup.parents.has(v)) {
         const p = lookup.parents.get(v)
@@ -4648,7 +4758,7 @@ Somewhat usable in a REPL.`,
 
   bound:{
     txt:`Finishing \`(bound Bindings Expr)\`: When called, returns a copy-where-needed of \`Expr\` with all keys bound to values in \`Bindings\`, as if copying then changing in-place. When evaluated, also evaluates the result.
-Can be written as \`key:value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
+Can be written as \`key=value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
     examples:[
       [
         `(bound (map ^a 1) a)`,
@@ -4658,10 +4768,11 @@ Can be written as \`key:value\` in an array to bind its elements. Can be used to
         `(bound (map 0 1) 0)`,
         `1`,
       ],
-      `Inner contexts are always bound first, as in \`a:1 (a a:2) (a b) (a:3 a) b:4\`:`,
+      `Inner contexts are always bound first:`,
       [
-        `a:1 (a a:2) (a b) (a:3 a) b:4`,
+        `a=1 (a a=2) (a b) (a=3 a) b=4`,
         `(2) (1 4) (3)`,
+        true
       ],
     ],
     nameResult:[
@@ -4891,7 +5002,8 @@ Can be written as \`key:value\` in an array to bind its elements. Can be used to
       function noCycles(x) {
         // Throw if x has cycles.
         if (!noCycles.s) noCycles.s = new Set
-        if (noCycles.s.has(x)) throw "Cycles"
+        if (unenv.has(x)) return x
+        if (noCycles.s.has(x)) throw console.trace(x), "Cycles"
         noCycles.s.add(x)
         if (x instanceof Map) x.forEach(v => v !== x && noCycles(v))
         if (_isArray(x)) x.forEach(noCycles)
@@ -4982,7 +5094,8 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   closure:{
     txt:`\`!Function\` or \`(closure Function)\`: makes Function into a closure — names existing in a containing function will be bound by the outer function when a closure is created.
-With binding, the actual definition can be outside of the function (particularly if equal-structure closures in different functions are merged) (even though the interface copies closure definitions into each serialized-to-DOM case), so actually separating closures semantically is required. \`var\` can be used to highlight the same variable on parsing.
+With binding, all syntax information is erased, and the actual definition can be outside of the function (particularly if equal-structure closures in different functions are merged) (even though the UI copies closure definitions into each serialized-to-DOM case), so separating closures semantically is required.
+\`var\` can be used to highlight the same variable on parsing.
 Uses \`bound\`, and partially-evaluates the result before returning.`,
     examples:[
       [
@@ -5010,7 +5123,7 @@ Uses \`bound\`, and partially-evaluates the result before returning.`,
         }
       })] = interrupt(closure)
       try {
-        const r = !trivial ? finish(b) : [_unknown, array(closure, deconstruct(finish(b), false))]
+        const r = !trivial ? finish(b) : _unknown(array(closure, deconstruct(finish(b), false)))
         return r
       }
       catch (err) { if (err === interrupt) interrupt(closure, 2)(trivial, b);  throw err }
@@ -5019,7 +5132,7 @@ Uses \`bound\`, and partially-evaluates the result before returning.`,
 
   _bindFunc:{
     txt:`Binds only the function body, with either a Map or a replacing function.`,
-    call(f, ctx, rewrite) {
+    call(f, ctx, rewrite, env) {
       let escaping = true
       const binder = x => {
         // Look up in regular env.
@@ -5034,7 +5147,7 @@ Uses \`bound\`, and partially-evaluates the result before returning.`,
         else if (x === closure || _isArray(x) && x[0] === closure) escaping = true
         else escaping = false
       }
-      return bound(binder, f, false, undefined, rewrite)
+      return bound(binder, f, false, env, rewrite)
     },
   },
 
@@ -5042,9 +5155,20 @@ Uses \`bound\`, and partially-evaluates the result before returning.`,
 
   _bindToUs(x) { if (x === _bindToUs.us) return _funcPlaceholder },
 
+  _collectUnknownPromises(x) {
+    if (_isUnknown(x)) {
+      if (_isDeferred(x)) {
+        (_collectUnknownPromises.record || (_collectUnknownPromises.record = [])).push(...x.slice(2))
+        return x
+      }
+      return x[1]
+    }
+    return x
+  },
+
   _function:{
-    txt:`\`Input→Output\` or \`(function …Inputs Output)\`: an arbitrary transformation of inputs into output. It can be called (like \`(f …Data)\`), which assigns …Inputs to …Data (setting variables), and evaluates the function body (Output).
-Equal input variables must be ref-equal (so \`f f:(function x x 0)\` accepts \`(f 0 0)\` and \`(f 1 1)\`, but not \`(f 0 1)\`).
+    txt:`\`Input→Output\` or \`(function …Inputs Output)\`: specifies an arbitrary transformation of inputs into output. The result can be called (like \`(f …Data)\`), which assigns \`…Inputs\` to \`…Data\` (setting variables) then evaluates \`Output\`.
+Equal input variables must be equal (so \`f f=(function x x 0)\` accepts \`(f 0 0)\` and \`(f 1 1)\`, but not \`(f 0 1)\`).
 Variables within non-\`closure\` functions will not be changed by application.`,
     buzzwords:`graph pattern matching`,
     examples:[
@@ -5053,7 +5177,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
         `error 0 'cannot be assigned' 1`,
       ],
       [
-        `f:(function x x 0) f 10 20`,
+        `f=(function x x 0) f 10 20`,
         `(error 'Non-matching graph: expected' 10 'for' x 'but got' 20)`,
       ],
       [
@@ -5069,15 +5193,15 @@ Variables within non-\`closure\` functions will not be changed by application.`,
         `a→(error 'An unassigned label' b 'was evaluated')`,
       ],
       [
-        `(f "hi") f:a→a`,
+        `(f "hi") f=a→a`,
         `"hi"`,
       ],
       [
-        `(f "1" f:x→(f x))`,
+        `(f "1" f=x→(f x))`,
         `cycle`,
       ],
       [
-        `(f 1 2) f:(function 1 3 5)`,
+        `(f 1 2) f=(function 1 3 5)`,
         `(error 3 'cannot be assigned' 2)`,
       ],
       [
@@ -5090,24 +5214,25 @@ Variables within non-\`closure\` functions will not be changed by application.`,
       ],
       [
         `x->((function (1 2 t t) 3 4 5) x 3 4)`,
-        `(1 2 x x x:?)→5`,
+        `(1 2 x x x=?)→5`,
       ],
       [
-        `^a->b ^c  a:(a b)  c:(c 10)`,
+        `^a->b ^c  a=(a b)  c=(c 10)`,
         `10`,
       ],
       [
-        `x->a a:(0 x a) 5`,
-        `a a:(0 5 a)`,
+        `x->a a=(0 x a) 5`,
+        `a a=(0 5 a)`,
       ],
       [
-        `function x y ((function a a 0) (0 1 x) (0 y 2)) x:? y:?`,
+        `function x y ((function a a 0) (0 1 x) (0 y 2)) x=? y=?`,
         `function 2 1 0`,
       ],
     ],
     merge:__is(`true`),
     finish(...inputs) {
       // Purify all inputs (and output).
+      if (!inputs.length) error("Too few args. A function must always produce a result.")
       const us = finish.v
       let [i = 1, f, record, scope = new Map, inferred, escaped = _notFound] = interrupt(_function)
       if (f === undefined) f = inputs, f.unshift(_function)
@@ -5132,15 +5257,11 @@ Variables within non-\`closure\` functions will not be changed by application.`,
           }
           if (!isBody && _hasCycles(f[i])) _assignVarsIn(f[i])
         }
-        f = _bindFunc(f, undefined, x => {
-          if (_isUnknown(x)) {
-            if (_isDeferred(x)) return (record || (record = [])).push(...x.slice(2)), x
-            return x[1]
-          }
-          return x
-        }) // This closure should be extracted too.
+        _collectUnknownPromises.record = record
+        f = _bindFunc(f, undefined, _collectUnknownPromises)
+        record = _collectUnknownPromises.record
         inferred = _assign.inferred
-        if (record) return i = [_unknown, f], i.push(...record), i
+        if (record) return i = _unknown(f), i.push(...record), i
 
         // If we simply forward to another same-argCount function, just return that.
         const body = f[f.length-1]
@@ -5161,14 +5282,16 @@ Variables within non-\`closure\` functions will not be changed by application.`,
           // See if we have this call in cache.
           const cache = call.cache || (call.cache = new Map)
           const r = shouldMerge ? _maybeUncache(cache, v) : _notFound
-          if (r !== _notFound) return r
+          if (r !== _notFound) return !_isUnknown(r) ? r : _unknown(r)
 
           let result = _notFound, interrupted = false
           if (defines(impl, argCount) !== undefined && defines(impl, argCount) !== data.length)
             error("Expected", defines(impl, argCount), "args in", f, "but got")
 
-          // Evaluate body if it's suddenly needed.
-          if (!finish.inFunction && skipped) f[f.length-1] = purify(f[f.length-1]), skipped = false
+          // Evaluate body if it's suddenly needed even though we were lazy.
+          // (Even though `dec` and `f` are merged, they'll have become post-purification ones anyway if we weren't lazy.)
+          if (!finish.inFunction && skipped)
+            dec[dec.length-1] = f[f.length-1] = purify(f[f.length-1]), merge(dec), merge(f), skipped = false
 
           let labels, stage, a, prev = finish.env[_id(label)]
           try {
@@ -5211,7 +5334,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
             if (shouldMerge) {
               if (!interrupted) call.locked.delete(v)
               if (!call.impure && result !== _notFound)
-                _cache(cache, v, result)
+                _cache(cache, !_isUnknown(v) ? v : _unknown(v), result)
               else cache.delete(v)
             }
           }
@@ -5302,7 +5425,7 @@ Infers structural terms where possible.`,
       _assign.inside = true
       try {
         if (_assign.env.has(a) && !_isVar(a))
-          return _assign.env.get(a) !== b ? (!readonly ? error : errorFast)("Non-matching graph: expected", _assign.env.get(a), "for", a, "but got", b) : undefined
+          return _assign.env.get(a) !== b ? (!readonly ? error : errorFast)("Non-matching graph: expected", _assign.env.get(a), "for", a, "but got", b) : void(!readonly && finish.env[_id(label)].set(a, b))
         !_isVar(b) && _assign.env.set(a, b)
 
         if (_isUnknown(a) && !_isDeferred(a)) {
@@ -5322,7 +5445,7 @@ Infers structural terms where possible.`,
             if (finish.inFunction && (!_isUnknown(b) || _isDeferred(b) || !_isVar(b[1])))
               !readonly && m.set(a, bound(_assign.inferred, a))
           } else
-            !readonly && m.set(a, b = !_isVar(b) ? b : [_unknown, b])
+            !readonly && m.set(a, b = !_isVar(b) ? b : _unknown(b))
           return
         }
         if (_isUnknown(b) && !_isDeferred(b)) {
@@ -5354,6 +5477,13 @@ Infers structural terms where possible.`,
         }
         if (a === b) return
 
+        // If expecting a function, deconstruct both pattern and input.
+        if (!_isArray(a) && _isArray(defines(a, deconstruct))) {
+          if (_isArray(b) || !_isArray(defines(b, deconstruct)))
+            (!readonly ? error : errorFast)(a, "cannot be assigned", b)
+          a = deconstruct(a, false), b = deconstruct(b, false)
+        }
+
         if (_isArray(a) && a[0] !== _const) {
           // Assign each element, mindful of potential `…R` in a.
           if (!_isArray(b)) (!readonly ? error : errorFast)(a, "cannot be assigned", b)
@@ -5372,7 +5502,7 @@ Infers structural terms where possible.`,
             else _assign(a[i][1], b.slice(i, i + b.length - a.length + 1), readonly)
           return
         }
-        (!readonly ? errorStack : errorFast)(a, "cannot be assigned", b)
+        (!readonly ? error : errorFast)(a, "cannot be assigned", b)
       }
       finally { _assign.inside = inside, !inside && _assign.env.clear() }
       // .inferred (a Map from variables to their inferred values), .env (a Map from a to b), .inside (false to the outside world)
@@ -5380,7 +5510,7 @@ Infers structural terms where possible.`,
   },
 
   elem:{
-    txt:`\`(elem TagName Content Style)\`: creates an HTML DOM element.`,
+    txt:`\`(elem TagName Content Extra)\`: creates an HTML DOM element.`,
     nameResult:[
       `element`,
       `DOM`,
@@ -5428,7 +5558,7 @@ Infers structural terms where possible.`,
   },
 
   structured:{
-    txt:`\`(structured Arrays)\`: shows deep structure of Arrays (consisting of acyclic arrays and strings and DOM elements): wraps each sub-array in \`<node>\` if we have DOM or pretty-prints it into a string if not.`,
+    txt:`\`(structured Arrays)\`: shows deep structure of Arrays (consisting of acyclic arrays and strings and DOM elements): wraps each sub-array in \`<node>\`.`,
     call(x) {
       // structured (('Hello there.') ' ' ('General Kenobi!'))
       if (typeof Node != ''+void 0) {
@@ -5452,7 +5582,7 @@ Infers structural terms where possible.`,
   },
 
   structuredSentence(str) {
-    // '{hello there}, {general kenobi}' — in DOM, each curly-bracketed sentence fragment gets wrapped in a <node>.
+    // '{hello there}, {general kenobi}' — in DOM, each curly-bracketed sentence fragment gets wrapped in a <span>.
     if (typeof document == ''+void 0) return str.replace(/{|}/g, '')
     let i = 0
     return parseStr(true)
@@ -5462,7 +5592,7 @@ Infers structural terms where possible.`,
         if (i+1 < str.length && str[i] === '{' && str[i+1] !== ' ') ++i, a.push(parseStr(), '')
         else a[a.length-1] += str[i]
       if (!a[a.length-1]) a.pop()
-      const el = elem('node', _highlightGlobalsInString(a, s => lookup.parents.get(parse.ctx.get(label(s))) !== js ? elem('known', s) : s))
+      const el = elem('span', _highlightGlobalsInString(a, s => lookup.parents.get(parse.ctx.get(label(s))) !== js ? elem('known', s) : s))
       return !top && elemValue(el, a), el
     }
   },
@@ -5479,7 +5609,7 @@ Infers structural terms where possible.`,
         function handle(f) {
           if (n && _invertBindingContext(parse.ctx).has(f)) return set.add(f)
           if (++n > 9000) error('too big', [...set])
-          if (set.has(f)) return
+          if (set.has(f)) return; else set.add(f)
           if (defines(f, deconstruct)) f = deconstruct(f, false)
           if (typeof f == 'function') _highlightGlobalsInString(_unevalFunction(f)[1], s => !keywords.has(s) && set.add(parse.ctx.get(label(s))), true)
           if (f instanceof Map) f.forEach((v,k) => (handle(k), handle(v)))
@@ -5582,7 +5712,7 @@ Also wraps C-style strings in <string>.`,
   },
 
   style:{
-    txt:`An overridable function that turns {{a serialize/parse node}, {its value}, and {unbound representation}} into a displayed node.`,
+    txt:`An overridable-by-language function that turns {{a serialize/parse node}, {its value}, and {unbound representation}} into a displayed node.`,
     call(s,v,u) { return s },
   },
 
@@ -5618,20 +5748,22 @@ Also wraps C-style strings in <string>.`,
       if (!lang) lang = fancy
       const styles = opt && opt.style ? defines(lang, style) || style : undefined
 
-      const backctx = _invertBindingContext(ctx || parse.ctx)
+      const backctx = _invertBindingContext(serialize.ctx = ctx || parse.ctx)
       const deconstruction = new Map
       const named = new Set
       const lengths = new Map
       const boundToUnbound = new Map
-      backctx.forEach((v,k) => boundToUnbound.set(k,k))
       const unboundToBound = new Map
       arr = deconstructed(arr)
+      boundToUnbound.forEach((v,k) => k !== v && unboundToBound.set(v, k))
+      boundToUnbound.clear()
 
       let n = 0
       const freeNames = []
       const nodeNames = styles && typeof document != ''+void 0 && new Map
+      backctx.forEach((v,k) => boundToUnbound.set(k,k))
       const u = unbound(arr, nameAllocator, boundToUnbound, maxDepth)
-      boundToUnbound.forEach((v,k) => unboundToBound.set(v, k))
+      boundToUnbound.forEach((v,k) => k !== v && unboundToBound.set(v, k))
       if (breakLength) breakLength -= offset * offsetWith.length
 
       let struct = [], len = 0
@@ -5761,7 +5893,7 @@ Also wraps C-style strings in <string>.`,
           x = _bindFunc(x, x => {
             if (_isLabel(x) && !styled.has(x)) styled.set(x, styleLabel(x[1], x, [label, x[1]]))
             return styled.get(x)
-          })
+          }, undefined, boundToUnbound)
           styled.forEach((v,k) => unboundToBound.set(v, k))
         }
         if (!unboundToBound.has(x))
@@ -5817,7 +5949,6 @@ Also wraps C-style strings in <string>.`,
         for (let i = 0; i < r.length; ++i) if (typeof r[i] != 'string') return true
       }
       function unenv(u,v) {
-        if (typeof u == 'string' || typeof u == 'number') return u
         if (backctx && backctx.has(v)) {
           named.add(backctx.get(v))
           const name = backctx.get(v)
@@ -5869,6 +6000,7 @@ Also wraps C-style strings in <string>.`,
 
   _valuedColor(v) {
     // Returns v's previously displayed element color (for highlighting of the same things) or a new one.
+    return 'var(--main)'
     if (!_valuedColor.m) _valuedColor.m = new Map
     if (_valuedColor.m.has(v)) {
       const r = _valuedColor.m.get(v)
@@ -5879,9 +6011,9 @@ Also wraps C-style strings in <string>.`,
     finish.pure = false
     const colors = [randomNat(256), randomNat(256), randomNat(256)]
     finish.pure = prevPure
-    const min = 64, max = 384, sum = colors[0]+colors[1]+colors[2]
-    if (sum < min) colors[0] *= min/sum, colors[1] *= min/sum, colors[2] *= min/sum
-    if (max < sum) colors[0] *= max/sum, colors[1] *= max/sum, colors[2] *= max/sum
+    const min = 64, max = 384, Sum = colors[0]+colors[1]+colors[2]
+    if (Sum < min) colors[0] *= min/Sum, colors[1] *= min/Sum, colors[2] *= min/Sum
+    if (max < Sum) colors[0] *= max/Sum, colors[1] *= max/Sum, colors[2] *= max/Sum
     const c = 'rgb(' + colors + ')'
     _valuedColor.m.set(v, c)
     _limitMapSize(_valuedColor.m, 100000)
@@ -5889,7 +6021,7 @@ Also wraps C-style strings in <string>.`,
   },
 
   _extracted:{
-    txt:`ONLY for parsing {c:x}.`,
+    txt:`ONLY for parsing \`c=x\`.`,
   },
 
   parse:{
@@ -5908,7 +6040,7 @@ Also wraps C-style strings in <string>.`,
       let i = 0, lastI = 0
       const struct = styles && [], Unbound = styles && new Map
 
-      let line = 1, column = 1, lineLengths = sourceURL && [] // How do we maintain a healthy lining in localUpdate? Seriously.
+      let line = 1, column = 1, lineLengths = sourceURL && []
       let prevI = 0, localS = str[0], localI = 0, curBegin = 0
       function localUpdate(newI) {
         // Update localS/localI/curBegin to match the index.
@@ -5986,7 +6118,7 @@ Also wraps C-style strings in <string>.`,
       const u = !lang ? match(parser.topLevel) : match(defines(lang, parse))
       if (localI < str.length) throw 'Superfluous characters at the end: ' + (typeof localS == 'string' ? localS.slice(i - curBegin) : '···')
 
-      // Do binding ourselves (and with our own original⇒copy map) so we can style structure bottom-up properly.
+      // Do binding with the original⇒copy map preserved so that we can style structure bottom-up properly.
       const env = styles && new Map
       const b = styles ? bound(ctx, u, true, env) : bound(ctx, u, true)
       function styleNode(struct) {
@@ -5998,7 +6130,11 @@ Also wraps C-style strings in <string>.`,
           unb = Unbound.get(struct), v = ctx.has(unb) ? ctx.get(unb) : env.has(unb) ? env.get(unb) : unb
         if (typeof struct == 'string' && (struct === ' ' || !struct.trim()) && unb === undefined && v === undefined)
           return elem('space', struct)
-        if (_isArray(struct)) struct = struct.map(styleNode)
+        if (_isArray(struct)) {
+          struct = struct.map(styleNode)
+          if (struct.length == 1 && (_isArray(struct[0]) || typeof document != ''+void 0 && struct[0] instanceof Node))
+            return struct[0]
+        }
         const s = styles(struct, v, unb, ctx)
         if (typeof Element != ''+void 0 && s instanceof Element) elemValue(s, v)
         return s
@@ -6014,7 +6150,7 @@ Also wraps C-style strings in <string>.`,
   },
 
   _basicLabel(match, u) { // a, qwer, `a`; 12, 1e6
-    const legal = /-?(?:[0-9]e-|[0-9]E-|[^!=:\s\(\)\[\]→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]|\.[0-9])+/y
+    const legal = /-?(?:[0-9]e-|[0-9]E-|[^=!:\s\(\)\[\]→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]|\.[0-9])+/y
     if (u === _specialParsedValue) {
       const r = match(/`(?:[^`]|``)*`/y)
       if (r !== undefined) return label(r.slice(1,-1).replace(/``/g, '`'))
@@ -6045,21 +6181,21 @@ Also wraps C-style strings in <string>.`,
     return match(a.length < b.length ? a : b)
   },
 
-  _basicExtracted(match, u, value) { // c:x
+  _basicExtracted(match, u, value) { // c=x
     if (u === _specialParsedValue) {
       const key = match(value)
-      if (key !== undefined && match(/\s*:\s*/y)) {
+      if (key !== undefined && match(/\s*=\s*/y)) {
         const v = match(value)
         v === undefined && match.notEnoughInfo("Expected an actual value to be extracted")
         return [_extracted, key, v]
       } else return key
     }
     if (_isArray(u) && u[0] === _extracted && u.length == 3)
-      match(value, u[1]), match(':'), match(value, u[2])
+      match(value, u[1]), match('='), match(value, u[2])
     else match(value, u)
   },
 
-  _basicMany(match, u, value) { // a b c c:x
+  _basicMany(match, u, value) { // a b c c=x
     if (u === _specialParsedValue) {
       const arr = []
       let ctx
@@ -6088,7 +6224,7 @@ Also wraps C-style strings in <string>.`,
     if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], value)))
   },
 
-  _basicCall(match, u, value) { // (a b c c:x)
+  _basicCall(match, u, value) { // (a b c c=x)
     if (u === _specialParsedValue) {
       if (!match('(')) return
       const arr = _basicMany(match, u, value)
@@ -6102,8 +6238,8 @@ Also wraps C-style strings in <string>.`,
   _basicValue(match, u, call, value) { // String or label or call.
     const isEm = value === _fancyOutermost
     if (u === _specialParsedValue) {
-      if (isEm && match('?')) return [_var]
-      if (isEm && match('#')) return [_const]
+      if (isEm && match('?')) return [label('var')]
+      if (isEm && match('#')) return [label('const')]
       let r
       if ((r = match(_specialParsedValue)) !== undefined) return r
       if ((r = match(_basicString)) !== undefined) return r
@@ -6121,6 +6257,8 @@ Also wraps C-style strings in <string>.`,
       match(_basicLabel, u)
     else if (_isLabel(u))
       match(_basicLabel, u)
+    else if (_isArray(u) && u[0] === _extracted && u.length == 3)
+      match(_basicExtracted, u, value)
     else if (_isArray(u))
       match(call, u, value)
     else match(u)
@@ -6144,8 +6282,9 @@ Also wraps C-style strings in <string>.`,
     }
     if (!_fancyGrouping.pos) _fancyGrouping.pos = new Set
     const pos = match()
-    if (_fancyGrouping.pos.has(pos)) // Emit base if the second pass is over.
+    if (_fancyGrouping.pos.has(pos)) {// Emit base if the second pass is over.
       return _basicValue(match, u, !topLevel ? _basicCall : _basicMany, _fancyOutermost)
+    }
     _fancyGrouping.pos.add(pos)
     try { // Do a second pass. It's not fast, but `fast` exists to make that not a problem.
       return match(_fancyOutermost, u, topLevel)
@@ -6158,12 +6297,12 @@ Also wraps C-style strings in <string>.`,
       if (obj === undefined) return
       while (match(/\s*\.(?!\.\.)\s*/y)) {
         let key = match(_basicLabel)
-        if (key === undefined) obj = array(lookup, obj)
-        else obj = array(lookup, obj, _isLabel(key) ? key[1] : key)
+        if (key === undefined) obj = array(label('lookup'), obj)
+        else obj = array(label('lookup'), obj, _isLabel(key) ? key[1] : key)
       }
       return obj
     }
-    if (_isArray(u) && u[0] === lookup && (u[2] === undefined || typeof u[2] == 'number' || typeof u[2] == 'string')) {
+    if (_isArray(u) && u[0] === _unctx('lookup') && (u[2] === undefined || typeof u[2] == 'number' || typeof u[2] == 'string')) {
       const g = _emitGrouping(match)
       _fancyLookup(match, u[1]), match('.')
       if (u[2] !== undefined) match(_basicLabel, typeof u[2] == 'string' ? label(u[2]) : u[2])
@@ -6176,19 +6315,19 @@ Also wraps C-style strings in <string>.`,
       if (match('…') || match('...')) {
         const r = match(_fancyLookup)
         r === undefined && match.notEnoughInfo('Expected the rest')
-        return array(rest, r)
+        return array(label('rest'), r)
       }
       if (match('^')) {
         const r = match(_fancyRest)
         r === undefined && match.notEnoughInfo('Expected the quoted value')
-        return array(quote, r)
+        return array(label('quote'), r)
       }
       return match(_fancyLookup)
     }
     let g
-    if (_isArray(u) && u[0] === rest && u.length == 2)
+    if (_isArray(u) && u[0] === _unctx('rest') && u.length == 2)
       g = _emitGrouping(match), match('…'), match(_fancyLookup, u[1]), _emitGrouping(match, g)
-    else if (_isArray(u) && u[0] === quote && u.length == 2)
+    else if (_isArray(u) && u[0] === _unctx('quote') && u.length == 2)
       g = _emitGrouping(match), match('^'), match(_fancyRest, u[1]), _emitGrouping(match, g)
     else match(_fancyLookup, u, topLevel)
   },
@@ -6197,69 +6336,71 @@ Also wraps C-style strings in <string>.`,
     if (u === _specialParsedValue) {
       let a = match(_fancyRest), op
       if (a === undefined) return
-      while (op = match(/\s*(?:\*|\/)\s*/y)) {
+      while (op = match(/(\s*)(?:\*|\/)\1/y)) {
         const b = match(_fancyRest)
         b === undefined && match.notEnoughInfo('Expected the second arg of +')
-        a = array(op.trim() === '*' ? mult : div, a, b)
+        a = array(label(op.trim() === '*' ? 'mult' : 'div'), a, b)
       }
       return a
     }
     let g
-    if (_isArray(u) && u.length == 3 && (u[0] === mult || u[0] === div))
+    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('mult') || u[0] === _unctx('div')))
       g = _emitGrouping(match),
-      match(_fancyMultDiv, u[1]), match(u[0] === mult ? '*' : '/'), match(_fancyRest, u[2]),
+      match(_fancyMultDiv, u[1]), match(u[0] === _unctx('mult') ? '*' : '/'), match(_fancyRest, u[2]),
       _emitGrouping(match, g)
     else match(_fancyRest, u, topLevel)
   },
+
+  _unctx(s) { return serialize.ctx.get(label(s)) },
 
   _fancySumSub(match, u, topLevel) { // a+b, a-b
     if (u === _specialParsedValue) {
       let a = match(_fancyMultDiv), op
       if (a === undefined) return
-      while (op = match(/\s*(?:\+|-(?!>))\s*/y)) {
+      while (op = match(/(\s*)(?:\+|-(?!>))\1/y)) {
         const b = match(_fancyMultDiv)
         b === undefined && match.notEnoughInfo('Expected the second arg of '+op)
-        a = array(op.trim() === '+' ? sum : sub, a, b)
+        a = array(label(op.trim() === '+' ? 'sum' : 'sub'), a, b)
       }
       return a
     }
     let g
-    if (_isArray(u) && u.length == 3 && (u[0] === sum || u[0] === sub))
+    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('sum') || u[0] === _unctx('sub')))
       g = _emitGrouping(match),
-      match(_fancySumSub, u[1]), match(u[0] === sum ? '+' : '-'), match(_fancyMultDiv, u[2]),
+      match(_fancySumSub, u[1]), match(u[0] === _unctx('sum') ? '+' : '-'), match(_fancyMultDiv, u[2]),
       _emitGrouping(match, g)
     else match(_fancyMultDiv, u, topLevel)
   },
 
-  _matchOperator(match, u, base, funcOp, parseOp, serializeOp, topLevel) { // a OP b
+  _matchOperator(match, u, base, str, parseOp, serializeOp, topLevel) { // a OP b
     if (u === _specialParsedValue) {
       const v = match(base)
       if (v === undefined) return
       if (match(parseOp)) {
         const t = match(base)
         t === undefined && match.notEnoughInfo('Expected the type')
-        return array(funcOp, v, t)
+        return array(label(str), v, t)
       }
       return v
     }
     let g
-    if (_isArray(u) && u[0] === funcOp && u.length == 3)
+    if (_isArray(u) && u[0] === _unctx(str) && u.length == 3)
       g = _emitGrouping(match),
       match(base, u[1]), match(serializeOp), match(base, u[2]),
       _emitGrouping(match, g)
     else match(base, u, topLevel)
   },
 
-  _fancyTyped(match, u, topLevel) { // v∷t, v::t
-    return _matchOperator(match, u, _fancySumSub, typed, /\s*(?:∷|::)\s*/y, '::', topLevel)
+  _fancyTyped(match, u, topLevel) { // v:t
+    return _matchOperator(match, u, _fancySumSub, 'typed', /(\s*):\1/y, ':', topLevel)
   },
 
   _fancyFirst(match, u, topLevel) { // a\b\c
-    return _matchSequence(match, u, topLevel, _fancyTyped, first, /\s*\\\s*/y, '\\')
+    return _matchSequence(match, u, topLevel, _fancyTyped, 'first', /\s*\\\s*/y, '\\')
   },
 
   _fancyLast(match, u, topLevel) { // a,b,c
-    return _matchSequence(match, u, topLevel, _fancyFirst, last, /\s*\,\s*/y, ',')
+    return _matchSequence(match, u, topLevel, _fancyFirst, 'last', /\s*\,\s*/y, ',')
   },
 
   _fancyArrowFunc(match, u, topLevel) { // a→b, a->b
@@ -6269,12 +6410,12 @@ Also wraps C-style strings in <string>.`,
       if (match(/\s*(?:→|->)\s*/y)) {
         const b = match(_fancyClosure)
         b === undefined && match.notEnoughInfo('Expected the body of an arrow function')
-        return array(_function, a, b)
+        return array(label('function'), a, b)
       }
       return a
     }
     let g
-    if (_isArray(u) && u[0] === _function && u.length == 3)
+    if (_isArray(u) && u[0] === _unctx('function') && u.length == 3)
       g = _emitGrouping(match),
       match(_fancyLast, u[1]), match(typeof document != ''+void 0 ? '→' : '->'), match(_fancyClosure, u[2]),
       _emitGrouping(match, g)
@@ -6285,12 +6426,12 @@ Also wraps C-style strings in <string>.`,
     if (u === _specialParsedValue) {
       if (match('!')) {
         const r = match(_fancyArrowFunc)
-        return r !== undefined ? array(closure, r) : undefined
+        return r !== undefined ? array(label('closure'), r) : undefined
       }
       return match(_fancyArrowFunc)
     }
     let g
-    if (_isArray(u) && u[0] === closure && u.length == 2)
+    if (_isArray(u) && u[0] === _unctx('closure') && u.length == 2)
       g = _emitGrouping(match),
       match('!'), match(_fancyArrowFunc, u[1]),
       _emitGrouping(match, g)
@@ -6305,12 +6446,12 @@ Also wraps C-style strings in <string>.`,
       while (match(parseSep)) {
         const b = match(base)
         if (b === undefined) match.notEnoughInfo("Expected the next base value after "+separator)
-        if (!arr) arr = [head, a]
+        if (!arr) arr = [label(head), a]
         arr.push(b)
       }
       return arr || a
     }
-    if (_isArray(u) && u[0] === head && u.length > 2) {
+    if (_isArray(u) && u[0] === _unctx(head) && u.length > 2) {
       const g = _emitGrouping(match)
       for (let i = 1; i < u.length; ++i)
         i > 1 && match(separator), match(base, u[i])
@@ -6319,7 +6460,7 @@ Also wraps C-style strings in <string>.`,
   },
 
   _fancyTry(match, u, topLevel) { // a|b|c
-    return _matchSequence(match, u, topLevel, _fancyClosure, _try, /\s*\|\s*/y, '|')
+    return _matchSequence(match, u, topLevel, _fancyClosure, 'try', /\s*\|\s*/y, '|')
   },
 
   _fancyOutermost(match, u, topLevel) {
@@ -6333,12 +6474,14 @@ Also wraps C-style strings in <string>.`,
 
   _basicOutermost(match, u) { return _basicValue(match, u, _basicCall, _basicOutermost) },
 
-  _fancyTopLevel(match, u) { // (f); a b c c:x
+  _fancyTopLevel(match, u) { // (f); a b c c=x; a=b
     if (u === _specialParsedValue) {
       const arr = _basicMany(match, u, _fancyOutermost)
       match(/\s+/y)
 
       const inner = _isArray(arr) && arr[0] === bound ? arr[2] : arr
+      if (_isArray(arr) && arr[0] === bound && !inner.length && arr[1].size == 1)
+        return [_extracted, ...arr[1].keys(), ...arr[1].values()]
       if (!inner.length) match.notEnoughInfo("No value at top level")
       if (inner.length == 1) {
         if (_isArray(arr) && arr[0] === bound) arr[2] = arr[2][0]
@@ -6350,12 +6493,14 @@ Also wraps C-style strings in <string>.`,
     _fancyOutermost(match, !_isArray(u) || u.length <= 1 ? [u] : u, true)
   },
 
-  _basicTopLevel(match, u) { // (f); a b c c:x
+  _basicTopLevel(match, u) { // (f); a b c c=x; a=b
     if (u === _specialParsedValue) {
       const arr = _basicMany(match, u, _basicOutermost)
       match(/\s+/y)
 
       const inner = _isArray(arr) && arr[0] === bound ? arr[2] : arr
+      if (_isArray(arr) && arr[0] === bound && !inner.length && arr[1].size == 1)
+        return [_extracted, ...arr[1].keys(), ...arr[1].values()]
       if (!inner.length) match.notEnoughInfo("No value at top level")
       if (inner.length == 1) {
         if (_isArray(arr) && arr[0] === bound) arr[2] = arr[2][0]
@@ -6369,8 +6514,9 @@ Also wraps C-style strings in <string>.`,
 
   basic:{
     txt:`A language for ordered-edge-list graphs.
-\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`.
+\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a=2 a)\`.
 This is a {more space-efficient than binary} representation for graphs of arrays.`,
+    buzzwords:`homoiconic`,
     style:__is(`_basicStyle`),
     parse:__is(`_basicTopLevel`),
     serialize:__is(`_basicTopLevel`),
@@ -6380,17 +6526,41 @@ This is a {more space-efficient than binary} representation for graphs of arrays
 
   fancy:{
     txt:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
-\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`; \`1+2\`, \`x→x*2\`, \`2*[1+2]\`.`,
+\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a=2 a)\`; \`1+2\`, \`x→x*2\`, \`2*[1+2]\`.`,
     style:__is(`_basicStyle`),
     parse:__is(`_fancyTopLevel`),
     serialize:__is(`_fancyTopLevel`),
     REPL:`\`(docs)\` for {all functionality}, \`(examples)\` for {all tests}.`,
     insertLinkTo:__is(`_basicLinkTo`),
+    examples:[
+      `Binary operators must have the same whitespace characters before and after:`,
+      [
+        `1 - 2 -3`,
+        `-1 -3`,
+        true
+      ],
+      `Operators' labels can be re-bound:`,
+      [
+        `1+2 sum='Sum'`,
+        `'Sum' 1 2`,
+        true
+      ],
+      [
+        `1:2 typed='Typed'`,
+        `'Typed' 1 2`,
+        true
+      ],
+      [
+        `![1+2] closure=quote sum=mult`,
+        `1*2`,
+        true
+      ],
+    ],
   },
 
   _basicLinkTo(r, el) {
-    // Create a name not seen in editor, replace el with name, insert newline and name and ':' and el at editor's end, and return a name element.
-      // × (1 2 3)  ⇒  a a  a:(1 2 3)
+    // Create a name not seen in editor, replace el with name, insert newline and name and '=' and el at editor's end, and return a name element.
+      // × (1 2 3)  ⇒  a a  a=(1 2 3)
     const editor = _isEditable(el), names = new Set
     if (el === editor) return
     _visitText(editor, str => typeof str == 'string' && names.add(str))
@@ -6411,7 +6581,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       el.replaceWith(elBecomes = document.createTextNode(name))
       if (_isArray(el.to) && el.to.length > 1 && topLevel && el.firstChild.textContent[0] !== '(')
         el = elem('node', ['(', el, ')'])
-      editor.append('\n'+name+':', el)
+      editor.append('\n'+name+'=', el)
     }
     if (!rBecomes) {
       rBecomes = document.createTextNode(name)
@@ -6426,7 +6596,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     }
     function space() { return document.createTextNode(' ') }
     function ensureSpacesAround(el, before1, before2) {
-      const legal = /[!=:\s\(\)→>\+\-\*\/\&\|]/
+      const legal = /[=!:\s\(\)→>\+\-\*\/\&\|]/
       let spaceBefore = true, spaceAfter = false
       _visitText(el, (str, ch) => {
         if (spaceAfter)
@@ -6510,16 +6680,16 @@ Does not merge the parsed arrays.`,
         `12`,
       ],
       [
-        `fast.parse '(a:(b) b:(a) a)'`,
-        `a a:((a))`,
+        `fast.parse '(a=(b) b=(a) a)'`,
+        `a a=((a))`,
       ],
       [
-        `fast.parse (fast.serialize ^(a b a:(b) b:(a)))`,
-        `a b a:(b) b:(a)`,
+        `fast.parse (fast.serialize ^(a b a=(b) b=(a)))`,
+        `a b a=(b) b=(a)`,
       ],
       [
-        `fast.serialize ^(a b a:(b) b:(a)) undefined (jsEval '{humanReadableMode:true}')`,
-        `'(&0:(&1) &1:(&0) (&0 &1))'`,
+        `fast.serialize ^(a b a=(b) b=(a)) undefined (jsEval '{humanReadableMode:true}')`,
+        `'(&0=(&1) &1=(&0) (&0 &1))'`,
       ],
       [
         `fast.parse '("a""b")'`,
@@ -6531,7 +6701,7 @@ Does not merge the parsed arrays.`,
         // ctx is an object here, not a Map from label objects like in `parse`.
         if (!str) throw "Expected input"
         if (!ctx) ctx = defines(Self, lookup)
-        const regex = /[ \n]+|:|!|\(|\)|`(?:[^`]|``)*`|'(?:[^']|'')*'|"(?:[^"]|"")*"|[^ \n:!\(\)'"`]+|$/g
+        const regex = /[ \n]+|=|!|\(|\)|`(?:[^`]|``)*`|'(?:[^']|'')*'|"(?:[^"]|"")*"|[^ \n=!\(\)'"`]+|$/g
         let [i = 0, j, ctxs = [ctx], visited = new Set] = interrupt(fast)
         regex.lastIndex = i
         if (j === undefined) regex.test(str), j = regex.lastIndex
@@ -6550,9 +6720,9 @@ Does not merge the parsed arrays.`,
           const arr = []
           let bindings
           ctxs.push(bindings)
-          while (i < str.length && str[i] !== ':' && str[i] !== ')') {
+          while (i < str.length && str[i] !== '=' && str[i] !== ')') {
             const v = getValue()
-            if (str[i] === ':') {
+            if (str[i] === '=') {
               if (typeof v != 'string') throw "Only labels can be bound"
               nextToken()
               if (!bindings) ctxs[ctxs.length-1] = {}, bindings = []
@@ -6580,7 +6750,7 @@ Does not merge the parsed arrays.`,
         function labelLookup(name) {
           // If a name defined in an outer scope is later re-bound by the inner scope, this will bind to the outer before we know it.
             // This language is supposed to be fast, so we just left this in. It is not a problem with how we serialize things here.
-          if (str[i] === ':') return name
+          if (str[i] === '=') return name
           if (+name === +name) return +name
           for (let i = ctxs.length-1; i >= 0; --i)
             if (ctxs[i] && name in ctxs[i]) return ctxs[i][name]
@@ -6611,7 +6781,7 @@ Does not merge the parsed arrays.`,
             finally { finish.noSystem = prev }
           }
           if (str[i] === '(') return getCall()
-          if (str[i] === ':' || str[i] === ')') return
+          if (str[i] === '=' || str[i] === ')') return
           const I = i, J = j;  nextToken()
           if (str[I] === "'" && str[J-1] === "'") return str.slice(I+1,J-1).replace(/''/g, "'")
           if (str[I] === '"' && str[J-1] === '"') return str.slice(I+1,J-1).replace(/""/g, '"')
@@ -6633,7 +6803,7 @@ Does not merge the parsed arrays.`,
         visited.clear()
         const result = []
         result.push('(')
-        names.forEach((named,arr) => (result.push(named, ':'), putValue(arr, true), result.push(' ')))
+        names.forEach((named,arr) => (result.push(named, '='), putValue(arr, true), result.push(' ')))
         putValue(expr)
         result.push(')')
         return result.join('')
@@ -6679,7 +6849,7 @@ Does not merge the parsed arrays.`,
             return result.push(v.indexOf("'") < 0 ? "'" + v.replace(/'/g, "''") + "'" : '"' + v.replace(/"/g, '""') + '"')
           if (!_isArray(v)) throw "Not-an-array unknown value"
           if (v[0] === label && typeof v[1] == 'string' && v.length == 2) {
-            if (/[ \n:!\(\)'"`]/.test(v[1])) return result.push('`' + v[1].replace(/`/g, '``') + '`')
+            if (/[ \n=!:\(\)'"`]/.test(v[1])) return result.push('`' + v[1].replace(/`/g, '``') + '`')
             return result.push(v[1])
           }
           return putCall(v)
@@ -6703,7 +6873,7 @@ Does not merge the parsed arrays.`,
         const r = Object.create(null)
         Object.assign(r, finish.env)
         if (_isArray(r[_id(interrupt)]))
-          r.set(interrupt, r[_id(interrupt)].map(x => x instanceof Map ? new Map(x) : !_isArray(x) || _wasMerged(x) ? x : x.slice()))
+          r.set(interrupt, r[_id(interrupt)].map(x => x instanceof Map ? new Map(x) : !_isArray(x) || _wasMerged(x) || _read.marks && _read.marks.has(x) ? x : x.slice()))
         Object.seal(r)
         return r
       } else
@@ -6730,18 +6900,18 @@ Does not merge the parsed arrays.`,
   },
 
   interrupt:{
-    txt:`Used to make functions re-entrant in a non-interruptible language, for better UX.
-
-Technical details:
-\`throw interrupt\` to interrupt execution.
-Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(f)\`, in particular for loops.
-Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2)(i,j);  throw err }\`: store 4 values in tmp at a time, up to the requested length (\`...args\` in JS allocates, so this way tries to avoid that).`,
+    txt:`Used to make functions re-entrant in a non-interruptible host language, for better UX.`,
     lookup:{
       check:__is(`_checkInterrupt`),
       noInterrupt:__is(`noInterrupt`),
       continuation:__is(`_continuation`),
     },
-    philosophy:`This (and sandboxing) is absolutely essential for being able to actually use a language comfortably, but no one buzzes about it. Probably because almost all cheat and rely on the OS to provide it via processes.`,
+    philosophy:`This (and sandboxing) is absolutely essential for being able to actually use a language comfortably, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes.
+
+Technical details:
+\`throw interrupt\` to interrupt execution.
+Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(f)\`, in particular for loops.
+Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2)(i,j);  throw err }\`: store 4 values in tmp at a time, up to the requested length (\`...args\` in JS allocates, so this way tries to avoid that).`,
     call(cause, len = undefined) {
       if (!interrupt.tmp) interrupt.tmp = []
       if (!interrupt.populate) interrupt.populate = (a,b,c,d) => {
@@ -6865,51 +7035,54 @@ Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2
   },
 
   typed:{
-    txt:`\`Value::Type\` or \`(typed Value Type)\`: specifies that the value definitely fits the type.
+    txt:`\`Value:Type\` or \`(typed Value Type)\`: specifies that the value definitely fits the type.
 Since we currently inline everything, specifying types of function args allows to see either the final type of body or the error.`,
     examples:[
       [
-        `1::2->2::3  1::2`,
-        `2::3`,
+        `1:2->2:3  1:2`,
+        `2:3`,
       ],
       `Values and types can be mixed and computed freely:`,
       [
-        `1::a->a::Type  1::2  Type:#`,
-        `2::#`,
+        `1:a->a:Type  1:2  Type=#`,
+        `2:#`,
       ],
       [
-        `a::b->a+1::b+1  1::2`,
-        `2::3`,
+        `a:b->a+1:b+1  1:2`,
+        `2:3`,
       ],
       `Partial evaluation with inlining propagates and infers types as a side-effect:`,
       [
-        `Int: 'Int'
-Sum: (function  a::Int  b::Int  a+b::Int)
-Mult: (function  n::Int  m::Int  n*m::Int)
-x: ?::Int
+        `Int = 'Int'
+Sum = (function  a:Int  b:Int  a+b:Int)
+Mult = (function  n:Int  m:Int  n*m:Int)
+x = ?:Int
 x -> (Sum x (Mult x x))`,
-        `x::Int→x+x*x::Int x:? Int:'Int'`,
+        `x:Int→x+x*x:Int x=? Int='Int'`,
+        true
       ],
       [
-        `Int: 'Int'
-Sum: (function  a::Int  b::Int  a+b::Int)
-Mult: (function  n::Int  m::Int  n*m::Int)
+        `Int = 'Int'
+Sum = (function  a:Int  b:Int  a+b:Int)
+Mult = (function  n:Int  m:Int  n*m:Int)
 x -> (Sum x (Mult x x))`,
-        `x::Int→x+x*x::Int x:? Int:'Int'`,
+        `x:Int→x+x*x:Int x=? Int='Int'`,
+        true
       ],
       [
-        `Int: 'Int'
-Sum: (function  a::Int  b::Int  a+b::Int)
-Mult: (function  n::Int  m::Int  n*m::Int)
-x -> (Sum x (Mult 20::Int 2::Int))`,
-        `x::Int→x+40::Int x:? Int:'Int'`,
+        `Int = 'Int'
+Sum = (function  a:Int  b:Int  a+b:Int)
+Mult = (function  n:Int  m:Int  n*m:Int)
+x -> (Sum x (Mult 20:Int 2:Int))`,
+        `x:Int→x+40:Int x=? Int='Int'`,
+        true
       ],
     ],
     buzzwords:`gradually dependently typed`,
     argCount:2,
     philosophy:`This is not handled specially whatsoever (because constructions turned out to be more fundamental than types), and is pattern-matched as any other array, but it still allows dependent types (as long as only trusted-to-be-correct-for-an-application functions are used).
 Self is not a theorem-proving tool, and does not have features that get in the way of regular programming, like ensuring totality.
-Correctness is defined and developed per application. It is not an evident-by-itself thing; on the same base, infinitely many interpretations can be constructed.`,
+Correctness is defined per usage context (see \`get\`). It is not an evident-by-itself thing; on the same base, infinitely many interpretations can be constructed.`,
     merge:__is(`true`),
   },
 
@@ -6932,16 +7105,22 @@ Correctness is defined and developed per application. It is not an evident-by-it
 
   Rewrite:{
     txt:`A namespace for rewriting Self's code to a different form.`,
+    future:`Pull the current context from current bindings unless passed explicitly (not a JS object from strings, but a Map from labels). Define \`output\` for rewrites for easy finding; have iframe/textarea/link acceptors of rewrites. Also have ToGraph and ToHTML and ToExtension.`,
     lookup:{
       readableJS:__is(`ToReadableJS`),
       scopedJS:__is(`ToScopedJS`),
     },
+    philosophy:`The quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite.`,
   },
 
   ToReadableJS:{
     txt:`Converts Self to a human-readable form that pollutes the global scope on execution.`,
-    philosophy:`The quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite.`,
-    call(markLines = true, net = defines(Self, lookup), prefix) {
+    examples:[
+      [
+        `ToReadableJS true (defines Self lookup) '' 'document.body.appendChild(document.createElement(''div''))'`,
+      ],
+    ],
+    call(markLines = true, net = defines(Self, lookup), prefix = '', into = 'document.body') {
       if (!net || net[defines.key] || typeof net != 'object') throw "Invalid net"
       Object.keys(net).forEach(k => !_isValidIdentifier(k) && error('Not a valid JS identifier:', k))
       const seen = new Map
@@ -6962,7 +7141,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
       write(`  const obj = Object.create(is)\n`)
       write(`  return obj.is = name, obj\n`)
       write(`});\n`)
-      write(_unevalFunction(__base)[1]+'\n')
+      write(_unevalFunction(__base)[1].replace(/__INTO__/, into)+'\n')
       write("__base({")
       ++depth
       Object.keys(net).forEach(k => {
@@ -7050,7 +7229,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
         if (!markLines && isFunc(v) && v[1].slice(0,8) === 'function' && (ignoreName || !names.has(v)))
           write(key), v[1] = v[1].slice(v[1].indexOf('(')), put(v, ignoreName), write(',')
         else
-          write(key), write(':'), put(v, ignoreName), write(',')
+          write(key), write('='), put(v, ignoreName), write(',')
       }
 
       // The bootstrapper for this.
@@ -7065,7 +7244,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
         load(net, globals, true)
         Object.keys(net).forEach(k => k && +k === +k && delete net[k])
 
-        return Initialize.call(globals, net, typeof __line != ''+void 0 ? __line.lines : undefined)
+        return Initialize.call(globals, net, typeof __line != ''+void 0 ? __line.lines : undefined, __INTO__)
 
         function objectFor(x) {
           // Load {call(){}} into a trivially-callable function, as a notational convenience.
@@ -7267,8 +7446,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
   },
 
   System:{
-    txt:`A namespace for low-level functions that must not be called in user code, for safety.`,
-    future:`Have a DOM element for rewriting. An editable map diff (a table of key, from, to: labeled key becomes the specified value (or '' — deleted), using old labels to refer to potentially-new things), selection of the particular Rewrite.?, and the resulting iframe/textarea/link. Also have ToGraph and ToHTML and ToExtension.`,
+    txt:`A namespace for low-level functions that should not be called in user code, for safety.`,
     lookup:{
       interrupt:__is(`interrupt`),
       deconstruct:__is(`deconstruct`),
@@ -7320,13 +7498,14 @@ Correctness is defined and developed per application. It is not an evident-by-it
     call(opt, ...a) {
       // compile undefined ^(sum a 5)
       // compile undefined ^a 5
-      // compile undefined ^x ^(if a a 1) a:x+1
-      // compile undefined ^x ^(if x a a) a:x+1
-      // compile undefined ^x ^(if a a a) a:x+1
-      // compile undefined ^x ^[(if x a 1), a] a:x+1
-      // compile undefined ^x ^[(if x a 1)\ a] a:x+1
-      // compile undefined ^[a::1] ^[b::2] 4
+      // compile undefined ^x ^(if a a 1) a=x+1
+      // compile undefined ^x ^(if x a a) a=x+1
+      // compile undefined ^x ^(if a a a) a=x+1
+      // compile undefined ^x ^[(if x a 1), a] a=x+1
+      // compile undefined ^x ^[(if x a 1)\ a] a=x+1
+      // compile undefined ^[a:1] ^[b:2] 4
       // compile undefined ^[(delay 5)+1]
+      // compile (jsEval '{comments:true}') (function a a a) ^a
 
       // Do more work before so that you could do less work after.
 
@@ -7394,12 +7573,6 @@ Correctness is defined and developed per application. It is not an evident-by-it
           compileAssign(a[i], arg)
           used(arg)
         }
-      assigned.clear()
-
-      // Dump all non-var names/exprs, because we now want to execute and not just match.
-        // (If assign and body share nodes, having the same ref-counting for both creates a false dependency.)
-      names.forEach((name, expr) => !_isVar(expr) && (names.delete(expr), exprs.delete(name)))
-      compiledStack.clear()
 
       let nextStage = 1
       let stageBackpatch = write(`while(true)switch(stage){case 0:\n`)
@@ -7450,6 +7623,8 @@ Correctness is defined and developed per application. It is not an evident-by-it
       function markRefCounts(x) {
         // Go through the array-graph and mark the ref-count of each reachable node.
         refCount.set(x, (refCount.get(x) || 0) + 1)
+        if (!_isArray(x) && _isArray(defines(x, deconstruct)))
+          return markRefCounts(deconstruct(x, false))
         if (!_isArray(x) || refCount.get(x) !== 1) return
         if (x[0] === quote) return
         x.forEach(markRefCounts)
@@ -7471,18 +7646,20 @@ Correctness is defined and developed per application. It is not an evident-by-it
         if (!names.has(expr))
           names.set(expr, name),
           exprs.set(name, expr)
+        else if (!exprs.has(name))
+          exprs.set(name, expr)
         return name
       }
       function used(name, times = 1) {
         // Decrement ref-count and mark the var as free if it won't be used anymore.
         if (!exprs.has(name)) return name && name[0] === 'V' && freeList.push(name)
         const expr = exprs.get(name)
-        if (refCount.get(expr) < times) error("Freed more than used:", name, expr, s.join(''), nameToEnv)
+        if (refCount.get(expr) < times) errorStack("Freed more than used:", name, expr, s.join(''), nameToEnv)
         refCount.set(expr, refCount.get(expr) - times)
-        if (!refCount.get(expr)) {
+        if (!refCount.get(expr) || name !== names.get(expr)) {
           comments && (jumped ? (write(`// Dispose ${name}\n`), jumped = true) : write(`// Dispose ${name}\n`))
-          names.delete(expr), exprs.delete(name)
-          refCount.delete(expr)
+          name === names.get(expr) && names.delete(expr), exprs.delete(name)
+          name === names.get(expr) && refCount.delete(expr)
           freeList.push(name)
         }
       }
@@ -7499,10 +7676,12 @@ Correctness is defined and developed per application. It is not an evident-by-it
         if (_isVar(a) && refCount.get(a) === 1 && !assigned.has(a)) return
         lines && lines.push(line, a)
 
-        write(`if(${outside(_isArray)}(${bVar})&&${bVar}[0]===${outside(_unknown)})`)
-        write(allowEscape ? `throw ${outside(_escapeToInterpretation)}\n` : `${outside(error)}(${outside("Code deciding to make the caller infer things is illegal")})\n`, `no inference here`)
+        if (!assigned.has(a))
+          write(`if(${outside(_isArray)}(${bVar})&&${bVar}[0]===${outside(_unknown)})`),
+          write(allowEscape ? `throw ${outside(_escapeToInterpretation)}\n` : `${outside(error)}(${outside("Code deciding to make the caller infer things is illegal")})\n`, `no inference here`)
 
-        const demandEq = !_isArray(a) || a[0] === _const
+        // If demandEq is false, we'll check graph equality, else ref equality.
+        const demandEq = !_isArray(a) && !_isArray(defines(a, deconstruct)) || a[0] === _const
         if (!demandEq && assigned.has(a)) { // if (a !== b) error(…)
           write(`if(${use(a)}!==${bVar})${outside(error)}(${outside("Non-matching graph: expected")}, ${use(a)}, ${outside("for")}, ${outside(a)}, ${outside("but got")}, ${bVar})\n`, `cyclic check`)
           return
@@ -7511,24 +7690,32 @@ Correctness is defined and developed per application. It is not an evident-by-it
         if (_isVar(a))
           write(`${use(a)}=${bVar}\n`, `var assign`) // a=b
         const err = `${outside(error)}(${outside(a)},${outside("cannot be assigned")},${bVar})\n`
+
         if (!demandEq) {
           write(`if(${outside(a)}!==${bVar}){\n`, `destructure array`)
-          write(`if(!${outside(_isArray)}(${bVar}))${err}`, `expected an array`)
+
+          // If expecting a function, deconstruct both pattern and input.
+          if (!_isArray(a) && _isArray(defines(a, deconstruct))) {
+            write(`if(${outside(_isArray)}(${bVar})||!${outside(_isArray)}(${outside(defines)}(${bVar},${outside(deconstruct)})))${err}\n`, `since a deconstructs, b must too`)
+            a = deconstruct(a, false)
+            write(`${bVar}=${outside(deconstruct)}(${bVar},false)\n`, `deconstruct`)
+          } else write(`if(!${outside(_isArray)}(${bVar}))${err}`, `expected an array`)
+
           const Rest = _findRest(a)
           if (Rest < a.length) {
             write(`if(${bVar}.length<${a.length-1})${err}`, `too few args`)
             // Compile assignments of each item before …R, and each item after …R, and rest-pattern to b.slice(…).
             for (let i = 0; i < Rest; ++i) {
-              const name = use(a[i])
+              const name = use(a[i], assigned.has(a[i]))
               write(`${name}=${bVar}[${i}]\n`)
               compileAssign(a[i], name), used(name)
             }
             for (let i = Rest+1; i < a.length; ++i) {
-              const name = use(a[i])
+              const name = use(a[i], assigned.has(a[i]))
               write(`${name}=${bVar}[${bVar}.length-${a.length - i}]\n`)
               compileAssign(a[i], name), used(name)
             }
-            const name = use(a[Rest][1])
+            const name = use(a[Rest][1], assigned.has(a[Rest][1]))
             write(`${name}=${bVar}.slice(${Rest},${bVar}.length+${Rest - a.length + 1})\n`)
             compileAssign(a[Rest][1], name), used(name)
           } else {
@@ -7655,7 +7842,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
         // Marks-as-uncertain all nodes seen from both branches unless shrouded by uncertainty.
         if (!_isArray(a) || !_isArray(b)) return
         markA(a), b.forEach(markB)
-        assigned.clear(), inA.clear(), inB.clear()
+        inA.clear(), inB.clear()
 
         function markA(x) {
           if (!_isArray(x)) return
@@ -7683,7 +7870,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
       function compileIf(x, into) {
         // condition = ...
         // if (condition !== true) goto ELSE
-        // THEN: ... goto RESULT
+        // ... goto RESULT
         // ELSE: ...
         // RESULT: ...
         const cond = compileExpr(x[1])
@@ -7730,6 +7917,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
         if (_isArray(x) && x[0] === _const) return outside(x)
         if (x[0] === quote) return outside(x[1])
         if (compiledStack.has(x)) return _isStruct(x) ? use(x) : outside(cycle)
+        if (!_isVar(x) && assigned.has(x) && names.has(x)) return use(x)
         const firstTime = names.has(x)
         const name = !into && use(x)
         lines && lines.push(line, x)
@@ -7864,22 +8052,12 @@ Correctness is defined and developed per application. It is not an evident-by-it
       if (!_allocMap.free) _allocMap.free = []
       if (!a) return _allocMap.free.length ? _allocMap.free.pop() : new Map
       if (!(a instanceof Map)) throw "Expected undefined or a Map"
+      // a.forEach(_reclaimUnknown)
+      // _reclaimUnknown(v) { if (_isUnknown(v)) _allocArray(v) },
+        // Seems to make `a→((function a:Int b:Int a+b:Int) a ((function n:Int m:Int n*m:Int) a a)) a=?:Int Int='Int'` return `^[^a+b:Int]→a:Int a=[quoted+b] quoted=^[quoted+b] b=[x*x] x=? Int='Int'`, for some reason?
+          // (Re-using memory would have been real good for performance, though.)
       a.clear()
       _allocMap.free.push(a)
-    },
-  },
-
-  files:{
-    txt:`\`(elem files StringMap)\`: an element for downloading files.`,
-    elem(tag, content, name = 'Files:') {
-      if (tag != files) error('...')
-      const el = elem('details', elem('summary', name))
-      if (content instanceof Map)
-        content.forEach((value, name) => _appendFile(el, name, value) )
-      else if (typeof content == 'object' && !content[defines.key])
-        Object.keys(content).forEach(k => _appendFile(el, k, content[k]))
-      el.open = true
-      return el
     },
   },
 
@@ -7901,20 +8079,20 @@ Correctness is defined and developed per application. It is not an evident-by-it
   },
 
   _structHash:{
-    txt:`Returns an object that's equal for equally-decomposed (mutually assignable) objects, so trying assignment could be replaced by a lookup then trying. Optimized for \`?::(type ? ?)\`.`,
+    txt:`Returns an object that's equal for equally-decomposed (mutually assignable) objects, so trying assignment could be replaced by a lookup then trying. Optimized for \`?:(type ? ?)\`.`,
     call(x) {
       if (!_structHash.dependent)
         _structHash.dependent = Symbol('dependent'), _structHash.context = Symbol('context')
       if (_isUnknown(x) && x.length == 2) x = x[1]
       if (typeof x == 'function') return _structHash.dependent
       if (!_isArray(x) || !x.length || x[0] === _const) return x
-      if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Uses) == 'function') return _structHash.context
+      if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Usage) == 'function') return _structHash.context
       if (_isVar(x)) return _structHash.dependent
       x = x[x.length-1]
       if (_isUnknown(x) && x.length == 2) x = x[1]
       if (typeof x == 'function') return _structHash.dependent
       if (!_isArray(x) || !x.length || x[0] === _const) return x
-      if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Uses) == 'function') return _structHash.context
+      if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Usage) == 'function') return _structHash.context
       if (_isVar(x)) return _structHash.dependent
       x = x[0]
       if (_isUnknown(x) && x.length == 2) x = x[1]
@@ -7928,7 +8106,7 @@ Correctness is defined and developed per application. It is not an evident-by-it
     return typeof x == 'function' && _isArray(d = defines(x, deconstruct)) && d[0] === _try ? d : undefined
   },
 
-  _addHashed(result, v, add, inp) {
+  _addHashed(result, v, add, inp, actuallyRemove = false) {
     let d
     if (_isUnknown(v) && v.length == 2)
       v = v[1]
@@ -7959,15 +8137,46 @@ Correctness is defined and developed per application. It is not an evident-by-it
       const hash = _structHash(v)
       if (!result.has(hash)) result.set(hash, [])
       const arr = result.get(hash)
-      if (!arr.includes(add)) arr.push(add)
+      if (!actuallyRemove) 
+        !arr.includes(add) && arr.push(add)
+      else {
+        const i = arr.indexOf(add)
+        i>0 && arr.splice(i,1)
+      }
 
     }
+  },
+
+  _addUsage:{
+    txt:`Adds an item to a usage context.`,
+    call(ctx, v) {
+      if (_wasMerged(ctx)) error(ctx, "was merged")
+      ctx.push(v)
+      if (_hashes.ins.has(ctx))
+        _addHashed(_hashes.ins.get(ctx), v, v, true, false)
+      if (_hashes.outs.has(ctx))
+        _addHashed(_hashes.outs.get(ctx), v, v, false, false)
+    },
+  },
+
+  _removeUsage:{
+    txt:`Removes an item from a usage context.`,
+    call(ctx, v) {
+      if (_wasMerged(ctx)) error(ctx, "was merged")
+      const i = ctx.indexOf(v)
+      if (i <= 0) return
+      ctx.splice(i,1)
+      if (_hashes.ins.has(ctx))
+        _addHashed(_hashes.ins.get(ctx), v, v, true, true)
+      if (_hashes.outs.has(ctx))
+        _addHashed(_hashes.outs.get(ctx), v, v, false, true)
+    },
   },
 
   _hashes:{
     txt:`Returns a Map from _structHash of items to arrays of items that are present in \`ctx\`, for quick finding of assignable-structure.
 (Deconstructable functions are added as each of their inputs or as output, depending on \`input\`.)
-When a context is modified, call \`(_hashes Ctx true)\`.`,
+For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsage Ctx Value)\`, or call \`(_hashes Ctx true)\` to clear caches at modification.`,
     call(ctx, clearCaches = false, input = true) {
       if (!_isArray(ctx) || ctx[0] !== either)
         error("Expected a value context, got", ctx)
@@ -7995,19 +8204,26 @@ When a context is modified, call \`(_hashes Ctx true)\`.`,
     argCount:1,
   },
 
-  Uses:{
+  CurrentUsage:[__is(`either`)],
+
+  Usage:{
     txt:`A namespace for contextual structural enumeration and generation.`,
     lookup:{
+      current:__is(`CurrentUsage`),
+      either:__is(`either`),
       input:__is(`input`),
       output:__is(`output`),
-      either:__is(`either`),
+      use:__is(`use`),
+      get:__is(`get`),
     },
+    philosophy:`Optimization/approximation is like the Dark Side. It makes you much stronger, but even a single bit of reliance on it makes the development of perfect usage/analysis mechanisms unnecessary. It makes groups look like a few inspiring masters and a horde of interchangeable minions who they inspired. So until this is done, there are intentionally no such things here.`,
   },
 
   _addUsesToContext(result, as, v, ctx, values, inp) {
     // The result of this (and `input`/`output`) can and should be `_allocArray(?)`d.
     _checkInterrupt()
     let d
+    if (!inp && _isVar(values) && result === false) return true
 
     if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
       // Check both branches.
@@ -8023,29 +8239,30 @@ When a context is modified, call \`(_hashes Ctx true)\`.`,
     } else if (_isFunction(v) || typeof v == 'function' && (inp ? (d = !_isArray(v) && defines(v, input)) : (d = !_isArray(v) && defines(v, output)))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
       const f = d || deconstruct(v, false)
-      let [j = 0, k = d ? 0 : (inp ? 1 : f.length-1)] = interrupt(_addUsesToContext)
+      let [j = 0, k = d ? 0 : 1] = interrupt(_addUsesToContext)
       const endJ = inp ? values.length+1 : 1
-      const endK = inp ? (d?f.length:f.length-1) : (d?1:f.length)
+      const endK = d ? f.length : f.length-1
       try { // This interrupt-handling deal is getting worse every time.
         for (; j < endJ; ++j)
           for (; k < endK; ++k) {
-            if (inp) {
-              // Try assigning the arg to value.
-              if (j < values.length)
-                try { _assign(f[k], values[j], true); ++k; break } catch (err) {}
-              // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
-              if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
-                { k = endK+1; break } // Does not exist.
-            } else {
-              if (!d && _isArray(f[k]) && f[k][0] === _if) {
-                // Look into both branches.
-                result = _addUsesToContext(result, as, f[k], ctx, values, inp)
-              } else
-                try { // Check the structural output.
-                  _assign(_bindFunc(d ? f : f[k], _turnComputedIntoVars), values, true); break
-                } catch (err) {}
-            }
+            // Try matching the arg to value.
+            if (_isArray(f[k]) && f[k][0] === rest)
+              error("Rest args are not permitted in usage contexts:", f[k], 'in', v)
+            if (inp && j < values.length)
+              try { _assign(f[k], values[j], true); ++k; break } catch (err) {}
+            // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
+            if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
+              { k = endK+1; break } // Does not exist.
           }
+        if (!inp) {
+          if (!d && _isArray(d ? f : f[f.length-1]) && (d ? f : f[f.length-1])[0] === _if) {
+            // Look into both branches.
+            result = _addUsesToContext(result, as, d ? f : f[f.length-1], ctx, values, inp)
+          } else
+            try { // Check the structural output.
+              _assign(_bindFunc(d ? f : f[f.length-1], _turnComputedIntoVars), values, true)
+            } catch (err) { k = endK+1 }
+        }
         if (k < endK+1) {
           // Everything succeeded; add the function to the resulting context.
           if (result === false) return true
@@ -8079,9 +8296,10 @@ When a context is modified, call \`(_hashes Ctx true)\`.`,
       } catch (err) { if (err === interrupt || !inp) throw err }
       // (Impure functions won't be added during purification.)
 
-    } else if (_isArray(v) && v[0] === either) {
+    } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
 
       // Check out this sub-context.
+      if (!_isArray(v) && _isArray(d) && d[0] === either) v = d
       if (!_addUsesToContext.stack)
         _addUsesToContext.stack = new Set, _addUsesToContext.checkStack = new Set
       const stack = result !== false ? _addUsesToContext.stack : _addUsesToContext.checkStack
@@ -8153,13 +8371,13 @@ When a context is modified, call \`(_hashes Ctx true)\`.`,
         `either id fromBase64 toBase64`,
       ],
       [
-        `input (either (either (either 1::2->2::3))) 1::2`,
-        `either 1::2->2::3`,
+        `input (either (either (either 1:2->2:3))) 1:2`,
+        `either 1:2->2:3`,
       ],
       `It checks that all args can be generated in the context:`,
       [
-        `input (either (function a::10 b::20 a+b::30) 0::50 (function a::10 b::50 a*b::60)) 1::10`,
-        `either (function a::10 b::50 a*b::60)`,
+        `input (either (function a:10 b:20 a+b:30) 0:50 (function a:10 b:50 a*b:60)) 1:10`,
+        `either (function a:10 b:50 a*b:60)`,
       ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object's outgoing morphisms.`,
@@ -8170,30 +8388,206 @@ When a context is modified, call \`(_hashes Ctx true)\`.`,
     txt:`\`(output Context Value)\`: returns a sub-context of all values and functions that may produce results that fit the shape \`Value\`.`,
     examples:[
       [
-        `output (either 1 2::2 3::4) ?::2`,
-        `either 2::2`,
+        `output (either 1 2:2 3:4) ?:2`,
+        `either 2:2`,
       ],
       [
-        `output (either 1::Int 2::Int 3::'Float') ?::Int Int:'Int'`,
-        `either 1::Int 2::Int Int:'Int'`,
+        `output (either 1:Int 2:Int 3:'Float') ?:Int Int='Int'`,
+        `either 1:Int 2:Int Int='Int'`,
       ],
       [
-        `output (either a->a::Int b::Int->b::'Float') ?::Int Int:'Int'`,
-        `either a→a::'Int'`,
+        `output (either a->a:Int b:Int->b:'Float') ?:Int Int='Int'`,
+        `either a→a:'Int'`,
       ],
       `Non-structural outputs are not eliminated:`,
       [
-        `output (either 1::Int a::b→a+1::b+1 toBase64) ?::Int Int:'Int'`,
-        `either 1::'Int' a::b→a+1::b+1 toBase64`,
+        `output (either 1:Int a:b→a+1:b+1 toBase64) ?:Int Int='Int'`,
+        `either 1:'Int' a:b→a+1:b+1 toBase64`,
       ],
       `Conditional branches get looked into:`,
       [
-        `output (either x->(if x x::Int (error))) ?::Int Int:'Int'`,
-        `either x->(if x x::'Int' (error))`,
+        `output (either x->(if x x:StringlyTyped (error))) ?:StringlyTyped StringlyTyped='StringlyTyped'`,
+        `either x->(if x x:'StringlyTyped' (error))`,
+      ],
+      `Inputs are checked to exist in the context:`,
+      [
+        `output (either 1:1 ?:1->?:Int ?:2->?:Int) ?:Int Int='Int'`,
+        `either ?:1→?:Int Int='Int'`,
       ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object's incoming morphisms.`,
     call(ctx, value) { return _addUsesToContext(null, ctx, ctx, ctx, value, false) },
+  },
+
+  use:{
+    txt:`\`use Context Function\` or \`(use Context Function Values)\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
+Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where missing.`,
+    examples:[
+      `Can find args in \`Context\``,
+      [
+        `use (either 1:2 2:3) (function a:2 b:3 a+b:5)`,
+        `3:5`,
+      ],
+      `Take some, find some:`,
+      [
+        `use (either 5:Int) (function 0 x:Int 1 x:Int) (0 1) Int='Int'`,
+        `5:'Int'`,
+      ],
+      `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
+      [
+        `use (either 5:Int x:Int->0 x:Int->x x:Int->2*x) (function 0 x:Int 5 x:Int) Int='Int'`,
+        `5:'Int'`,
+      ],
+    ],
+    call(ctx, v, values) {
+      return _search(undefined, ctx, v, values, false)
+    },
+  },
+
+  _search:{
+    call(cont, ctx, v, values, isMacro = false, canDestroyV = false) {
+      _checkInterrupt()
+      let d, fun = false
+
+      if (_isFunction(v) || typeof v == 'function' && (d = !_isArray(v) && defines(v, input)) || typeof v == 'function' && values && defines(v, argCount) >= values.length && (fun = true)) {
+        // Create an array for actual args, then go through args and put the value if matching or `get(ctx, arg)` if not.
+          // `input`-defining functions get treated as if their inputs are as defined.
+          // Native functions with enough argCount accept `values` in order if any, then `?`s.
+        const f = !fun && (d || deconstruct(v, false))
+        if (!use.var) use.var = [_var]
+        let [args = _allocArray(), j = 0, k = d ? 0 : 1] = interrupt(use)
+          // Should also have an array for continuations of args.
+        const endJ = values ? values.length+1 : 1
+        const endK = !fun ? (d ? f.length : f.length-1) : defines(v, argCount)
+        args.length = endK - k
+        try { // This interrupt-handling deal is getting worse every time.
+          for (; j < endJ; ++j)
+            for (; k < endK; ++k) {
+              // Try matching the arg to value, set it as arg if succeeded.
+              if (values && j < values.length)
+                try { !fun && _assign(f[k], values[j], true); args[k++ - (d?0:1)] = values[j]; break } 
+                catch (err) {}
+              // If not handled by `values`, get a not-present-in-`values` arg from context.
+              args[k - (d?0:1)] = get(ctx, !fun ? f[k] : use.var)
+            }
+          if (isMacro) args = bound(_unwrapUnknown, args, false).slice()
+          return d = v.apply(v, args), _allocArray(args), d
+            // Should also return a continuation for our args, even on error (and accept continuations from `get`s).
+        } catch (err) { if (err === interrupt) interrupt(use, 3)(args, j, k); else _allocArray(args);  throw err }
+
+      } else if (d = _isTry(v)) {
+        // Treat a wannabe context as an actual context.
+        const c = _allocArray()
+        c.length = d.length, c[0] = either
+        for (let i = 1; i < d.length; ++i) c[i] = d[i]
+        try { let r = use(ctx, c, values, true);  _allocArray(c);  return r }
+        catch (err) { if (err !== interrupt) _allocArray(c);  throw err }
+
+      } else if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function') {
+        // If a macro, unwrap unknowns inside `values` and treat it as a call.
+        return use(ctx, d, values, true)
+
+      } else if (typeof v == 'function' && defines(v, argCount) === values.length) {
+        // Native functions bear no hint of the required structure, so treat every arg as `?`.
+        let [args = _allocArray(), k = 0] = interrupt(use)
+        const endK = args.length = defines(v, argCount)
+        if (!use.var) use.var = [_var]
+        try {
+          for (; k < endK; ++k)
+            args[k] = get(ctx, use.var)
+          if (isMacro) args = bound(_unwrapUnknown, args, false).slice()
+          return d = v.apply(v, args), _allocArray(args), d
+        } catch (err) { if (err === interrupt) interrupt(use, 2)(args, k); else _allocArray(args);  throw err }
+
+      } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
+        if (!d) d = canDestroyV ? v : v.slice()
+          // Should be a separate var... Named what?
+        const conts = _allocArray()
+        // While we have some:
+          // Pick one and swap+pop it out of existence;
+          // `return _search(conts[i], ctx, picked[i])`.
+            // We only preserve `conts` on failure?
+
+      } else
+        return v
+    },
+  },
+
+  get:{
+    txt:`\`get Context OutputStructure\`: creates a structured value from \`context\`.
+\`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
+    examples:[
+      `Trivial finding:`,
+      [
+        `get (either 0:1) ?:1`,
+        `0:1`,
+      ],
+      `Trivial composition:`,
+      [
+        `get (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10) ?:10`,
+        `4:10`,
+      ],
+      `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
+      [
+        `get (either 10 x->(Next x-1)) (Next ?) Next='Next'`,
+        `(Next 9)`,
+      ],
+      `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
+      [
+        `get (either A+0->A A+^B->^[A+B])  X+^^^0->^^^X  X=#
+sum='Sum' quote='Next'`,
+        `^^^# quote='Next'`,
+        true
+      ],
+      [
+        `(get (either A+0->A A+^B->^[A+B])  X+^^^0->X)  X=#
+sum='Sum' quote='Next'`,
+        `error X+^^^0->X 'is not in' (either A+0->A A+^B->^[A+B]) X=#
+sum='Sum' quote='Next'`,
+        true
+      ],
+      `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+      [
+        `get (either A*0->0  A+0->A  A*^B->A+A*B)  X*^0->X  X=#
+mult='Times' sum='Sum' quote='Next'`,
+        `X*^0->X  X=#
+mult='Times' quote='Next'`,
+        true
+      ],
+      `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+      [
+        `get (either A*0->0  A+0->A  A*^B->A+A*B)  X*^^0->X  X=?
+mult='Times' sum='Sum' quote='Next'`,
+        `0*^^0->0
+mult='Times' quote='Next'`,
+        true
+      ],
+      `Can create a function from context as an arg:`,
+      [
+        `get
+(either Dataset Goal)
+  Dataset = i:(Index 100)->i+70:Image
+  Goal = i:Image->1000-i:Measure
+(function assessIndex j (assessIndex j))
+  assessIndex = i:(Index n)->goal:Measure
+Index='Index' Image='Image' Measure='Measure'`,
+        `(function f j (f j))
+  f = i:('Index' 100)->1000-[i+70]:'Measure'`,
+        true
+      ],
+    ],
+    philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices make it even more useful). Automatic constrained expression generation with no way unthinkable.
+Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
+But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found.`,
+    call(ctx, out) {
+      // If `out` is a function: compose in `use`, try to assign to all fitting-output functions in `get` (if _assign.inferred got filled and we assigned, then `return bound(_assign.inferred, out)` (actually, just regular label-env assignment should be enough)).
+      const [v = output(ctx, out)] = interrupt(get)
+      try {
+        const r = _search(undefined, ctx, v, undefined, false, true)
+        _assign(r, out, true)
+        return r
+      } catch (err) { if (err === interrupt) interrupt(get, 1)(v);  throw err }
+    },
   },
 
   _turnComputedIntoVars(x) {
@@ -8207,21 +8601,15 @@ When a context is modified, call \`(_hashes Ctx true)\`.`,
   },
 
 
-  zzz:{
-    // output (either zzz) ?::15
-    call() { return [typed, Math.random(), 15] },
-    output:[__is(`typed`), [__is(`var`)], 15],
-  },
+  // zzz:{
+  //   // output (either zzz) ?:15
+  //   call() { return [typed, Math.random(), 15] },
+  //   output:[__is(`typed`), [__is(`var`)], 15],
+  // },
 
   _clearStyle(el) {
     if (!el.style.length) el.removeAttribute('style')
     if (!el.classList.length) el.removeAttribute('class')
-  },
-
-  apply:{
-    txt:`\`(apply Context Function ...Values)\`: applies a function with arguments taken from \`Values\` where possible and randomly-generated from \`Context\` where not.`,
-    call(ctx, func, ...values) {
-    },
   },
 
   pick:{
@@ -8235,7 +8623,7 @@ Use \`picker\` to override behavior.`,
       ],
       [
         `(X Y)→(picker Y (picker X (pick 10)))`,
-        `(X Y)→(X !(function x y z (Y pick x y z)) x:? y:? z:? 10 ^(pick 10) undefined)`,
+        `(X Y)→(X !(function x y z (Y pick x y z)) x=? y=? z=? 10 ^(pick 10) undefined)`,
       ],
       [
         `(X Y)→(picker X (picker randomPicker (pick 10)))`,
@@ -8253,11 +8641,9 @@ Use \`picker\` to override behavior.`,
     future:`Index-based per-cause choice optimization (a base that could optimize more advanced optimizer families):
 \`pick.best Result→Measure Expr\`, blending estimated-measures of all choices made during evaluation into Measure.
 \`pick.sample Result→ProbabilityAdjustment Expr\`, adding probability to all.
-\`best Metric Expr Repeats=2\`, journaling everything and commiting.`,
+\`best Metric Expr Repeats=2\`, \`journal\`ing everything and commiting the best.`,
     call(from, cause = finish.v, extra) {
-      if (!from || ((!_isArray(from) || !from.length) && (typeof from != 'number' || !from || from !== from>>>0)))
-        error("Expected options to pick from, got", from)
-      if (_isArray(from) ? from.length === 1 : from === 1) return 0
+      if (_pickCount(from) === 1) return 0
       if (pick.depth > pick.ers.length)
         return randomPicker(null, from)
       // Execute pick.ers[pick.ers.length - pick.depth], or record the call if _isUnknown.
@@ -8266,9 +8652,8 @@ Use \`picker\` to override behavior.`,
         try { // Consult the current picker.
           ++pick.depth
           const i = f(pick, from, cause, extra)
-          const len = _isArray(from) ? from.length : from
-          if ((typeof i != 'number' || i !== i>>>0 || i >= len) && !_isUnknown(i))
-            error("Expected an index less than", len, "but got", i)
+          if ((typeof i != 'number' || i !== i>>>0 || i >= _pickCount(from)) && !_isUnknown(i))
+            error("Expected an index less than", _pickCount(from), "but got", i)
           return i
         }
         finally { --pick.depth }
@@ -8301,6 +8686,12 @@ Use \`picker\` to override behavior.`,
         return pick.inlineCache[pick.ers.length - pick.depth] = closeOver ? array(closure, r) : r
       } catch (err) { if (err === interrupt) interrupt(_nextPickerAsFunction, 4)(a,b,c,d);  throw err }
     } finally { --pick.depth }
+  },
+
+  _pickCount(from) {
+    if (typeof from == 'number' && from === from>>>0) return from
+    if (_isArray(from) && from[0] === either) return from.length-1
+    error(`Invalid pick-from: expected a number or a context, got`, from)
   },
 
   picker:{
@@ -8343,7 +8734,7 @@ Use \`picker\` to override behavior.`,
   randomPicker:{
     txt:`A \`With\` for \`picker\` that just returns \`randomNat From\`.
 This is the default when no picker is specified.`,
-    call(next, from) { return !finish.pure ? randomNat(from) : [_unknown, [randomNat, !_isArray(from) ? from : from.length]] },
+    call(next, from) { return !finish.pure ? randomNat(from) : _unknown([randomNat, _pickCount(from)]) },
   },
 
   askUser:{
@@ -8357,7 +8748,10 @@ This is the default when no picker is specified.`,
       call.impure = true
       if (!askUser.got) askUser.got = new Map
       let a = array(askUser, next, from, cause, extra)
-      if (askUser.got.has(a)) return askUser.got.delete(a, a = askUser.got.get(a)), a
+      if (askUser.got.has(a))
+        try {
+          return askUser.got.get(a) !== _notFound ? askUser.got.get(a) : next(from, cause, extra)
+        } finally { askUser.got.delete(a, a = askUser.got.get(a)) }
 
       const el = elem('div')
       if (cause !== undefined)
@@ -8365,6 +8759,9 @@ This is the default when no picker is specified.`,
       if (extra !== undefined)
         el.append(serialize(extra, _langAt(), _bindingsAt(), serialize.displayed), elem('br'))
       el.append(elem('unimportant', 'Pick one:\n'))
+      if (finish.inFunction === 2)
+        el.append(elemValue(elem('button', 'Ask each time'), _unknown(array(pick, from, cause, extra))))
+      el.append(elemValue(elem('button', 'Auto'), _notFound))
       if (_isArray(from)) {
         const table = elem('table')
         for (let i = 0; i < from.length; ++i) {
@@ -8382,8 +8779,7 @@ This is the default when no picker is specified.`,
       let job
       el.onclick = evt => {
         if (evt.target.tagName !== 'BUTTON' || !('to' in evt.target)) return
-        const i = evt.target.to
-        askUser.got.set(a,i)
+        askUser.got.set(a, evt.target.to)
         _schedule(...job)
         elemRemove(el), el.onclick = null
       }
@@ -8394,28 +8790,29 @@ This is the default when no picker is specified.`,
     },
   },
 
-  pickExpr:{
-    future:[
-      `Cached-per-context structural filters (Maps from thing-at-path to arrays): _filterExactType (in a special \`?\` slot if the type contains vars), _filterInputType, _filterOutputType.`,
-        // Do we really need _filterOutputType if we will just partially-evaluate everything for max precision?
-        // (If not, could just merrily pick+apply-random-function-until-satisfied.)
-      `pickExpr(Ctx, Pattern = [typed, [_var], Output]).`,
-        // Ctx is just an array of expressions to pick from, right?
-      // (The choices should be able to return an unknown, and record the choice, if they want.)
-    ], 
-  },
-
   using:{
-    future:[
-      `Function families \`using …Args Ctx\`, where Ctx could be \`(either  a::In  b::In  x::In->x+1::In  (function  a::In  b::In  a+b::Med)  x::Med->x*2::Output)\`, using \`pick\` to optimize choices.`,
-      `\`Output\` to use as the type marker of \`using\`'s output, to separate intermediate computations and result candidates.`,
-      `All current REPL outputs as a context. Have contexts be composable — \`either\`?`,
-    ],
+    future:`Function families \`using …Args Ctx\`, where Ctx could be \`(either  a:In  b:In  x:In->x+1:In  (function  a:In  b:In  a+b:Med)  x:Med->x*2:Output)\`, using \`pick\` to optimize choices.`,
     philosophy:`No matter how fancy optimization algorithms get, there is nothing more fundamental than "use any of these things in any way you want".
 But how to make such an immaterial thing perform as well as the particulars? Must enrichen it without end, I think.
 
-Usage suggestions pulled in and tried with but a click. Code libraries used not by naming their functions manually, but by automatically connecting user's typed inputs easily, optimized for a user's purposes. networks of applicable meaning, made to try and discard everything as wanted. Slightly convenient.`,
+Usage suggestions pulled in and tried with but a click. Code libraries used not by naming their functions manually, but by automatically connecting user's typed inputs easily, optimized for a user's purposes. Networks of applicable meaning, made to try and discard everything as wanted. Slightly convenient.`,
   },
-  help:'no',
+  help:['no'],
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 })
 })()
