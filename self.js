@@ -6906,7 +6906,8 @@ Does not merge the parsed arrays.`,
       noInterrupt:__is(`noInterrupt`),
       continuation:__is(`_continuation`),
     },
-    philosophy:`This (and sandboxing) is absolutely essential for being able to actually use a language comfortably, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes.
+    philosophy:`Termination checking (totality) is unnecessary if the host can just interrupt and continue. In fact, it is harmful to provide a false assurance of everything terminating in reasonable time.
+Interruption (and sandboxing) is absolutely essential for being able to actually use a program comfortably, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes, and/or heuristic-based totality guarantees.
 
 Technical details:
 \`throw interrupt\` to interrupt execution.
@@ -7110,7 +7111,8 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
       readableJS:__is(`ToReadableJS`),
       scopedJS:__is(`ToScopedJS`),
     },
-    philosophy:`The quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite.`,
+    philosophy:`Writing the system's code in a special style allows it to be viewed/modified in the system by the user, preserving anything they want in the process without external storage mechanisms.
+The quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite.`,
   },
 
   ToReadableJS:{
@@ -8500,13 +8502,19 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
         } catch (err) { if (err === interrupt) interrupt(use, 2)(args, k); else _allocArray(args);  throw err }
 
       } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
-        if (!d) d = canDestroyV ? v : v.slice()
-          // Should be a separate var... Named what?
-        const conts = _allocArray()
-        // While we have some:
-          // Pick one and swap+pop it out of existence;
-          // `return _search(conts[i], ctx, picked[i])`.
-            // We only preserve `conts` on failure?
+        const [conts = cont, opts = d || (canDestroyV ? v : v.slice())] = interrupt(_search)
+        try {
+          while (opts.length > 1) {
+            const i = pick(opts)
+            // Swap+pop it out of existence;
+            // `return _search(conts[i], ctx, picked[i])` --- except, also return `conts` for possible resuming.
+              // We only preserve `conts` on failure, then?
+              // Actually, preserving `conts` for only `_search` on failure is relatively useless.
+              // A much better option is to preserve whole continuation stacks, and re-pick on each entry, restoring if we ever were there.
+                // We'd have both the speed and ease of recursive descent, and not being stuck in a cycle of graph search.
+                // ...Except, what about continuations of successes? I think both is a better option than either.
+          }
+        } catch (err) { if (err === interrupt) interrupt(_search, 2)(conts, opts);  throw err }
 
       } else
         return v
