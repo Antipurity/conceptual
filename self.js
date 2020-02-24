@@ -271,6 +271,7 @@ __base({
 
   UI:{
     txt:`A namespace for user interface functionality.`,
+    philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).`,
     lookup:{
       log:__is(`log`),
       elem:__is(`elem`),
@@ -440,7 +441,9 @@ Evaluates as much as is possible, so manual pre-calculations of any kind are nev
     lookup:{
       impure:__is(`impure`),
     },
-    philosophy:`Staging (code generating code when not everything is known) is done in some native functions here (those that mention _isUnknown and do non-trivial things with it), but with proper partial evaluation, it seems worse than useless for non-native code (since every function inlining acts as its own staging, though not forced through any particular staging order).`,
+    philosophy:`Though everything here is evaluated eagerly, inlining and partially-evaluating functions will drop unused args. This gives benefits of both eager and lazy evaluation.
+
+Staging (code generating code when not everything is known) is done in some native functions here (those that mention _isUnknown and do non-trivial things with it), but with proper partial evaluation, it seems worse than useless for non-native code (since every function inlining acts as its own staging, though not forced through any particular staging order).`,
     call(x) {
       // Set finish.pure to true and just evaluate.
       const prev = finish.pure
@@ -943,7 +946,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // Create a REPL.
       const env = finish.env = _newExecutionEnv()
-      const repl = finish.env[_id(log)] = elem(REPL, [fancy, new Map(parse.ctx)])
+      const repl = finish.env[_id(log)] = elem(REPL, fancy, new Map(parse.ctx))
       into.insertBefore(repl, into.firstChild)
       document.querySelector('[contenteditable]').focus()
 
@@ -1252,17 +1255,19 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
     return el
   },
 
+  _getOuterLinker(el) { return el && (el.contentEditable === 'true' || el.parentNode && !_isArray(el.parentNode.to) && defines(el.parentNode.to, insertLinkTo) ? el : _getOuterLinker(el.parentNode)) },
+
   insertLinkTo:{
     txt:`Replaces a Range (obtained from the current selection) with a link to the elem.
 A language can define this with a function that {takes the element and value to {link to}} and {returns an element to insert}.
 Remember to quote the link unless you want to evaluate the insides.`,
-    future:`Allow any valued elem to define linking in it, and have sliders for editing range options and persistent value stores.`,
+    future:`Make collapsed refs refer to quoted values.`,
     call(r, el) {
-      const p = r.commonAncestorContainer, editor = _isEditable(el)
+      const p = r.commonAncestorContainer, editor = _getOuterLinker(el)
       const pre = _smoothTransformPre(el)
-      if (!_isEditable(p)) return false
+      if (!_getOuterLinker(p)) return false
       let col
-      if (editor && editor === _isEditable(p) && defines(editor.parentNode.to, insertLinkTo))
+      if (editor && editor === _getOuterLinker(p) && defines(editor.parentNode.to, insertLinkTo))
         col = defines(editor.parentNode.to, insertLinkTo)(r, el)
       else {
         col = elemValue(elemCollapse(() => _collapsedSerialization(el.to)), el.to)
@@ -1310,6 +1315,12 @@ Remember to quote the link unless you want to evaluate the insides.`,
         if (!their) globals.set(p, their = elemFor(p))
         their.append(our)
       })
+      m.forEach((_,x) => { // Add anything we missed from going through globals to the top-level.
+        if (topLevel && x === topLevel || !globals.has(x)) return
+        let our = globals.get(x)
+        if (!our) globals.set(x, our = elemFor(x))
+        result.append(our)
+      })
       for (let ch = result.firstChild.nextSibling; ch; ch = ch.nextSibling)
         ch.replaceWith(ch = purgeChildless(ch))
       if (result.childNodes.length == 1) result.append(elem('div', 'nothing'))
@@ -1338,6 +1349,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   permissionsElem:{
     txt:`Build a namespace hierarchy of globals that \`expr\` is bound to.`,
+    future:`Pass in the lookup.parent map, to here and to \`hierarchy\`.`,
     call(expr, summary = id, topLevel) {
       const uses = new Set, seen = new Set
       mark(expr), seen.clear()
@@ -1433,6 +1445,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   elemCollapse:{
     txt:`Collapses an element (or a range of elements) in-place. Click to expand again. Pass in a function to create the element only if needed. Pass in null as \`end\` to collapse all consequent siblings.`,
+    future:`Make collapsed elems in contentEditable areas not handled properly in Chrome.`,
     call(start, end = undefined) {
       const col = elem('collapsed')
       if (typeof start == 'function')
@@ -1701,6 +1714,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   contextMenu:{
     txt:`Creates and displays a <context-menu> element near the specified element.`,
+    future:`Have \`atCursor(el, evt = <lastPointerEvt>)\`, and have \`contextMenu\` use that.`,
+    philosophy:`Do not presume that information will get up in your face to yell all you want about itself. Drill down to what you need or want.`,
     lookup:{
       describe:__is(`describe`),
       toWindow:__is(`elemToWindow`),
@@ -1809,6 +1824,10 @@ Remember to quote the link unless you want to evaluate the insides.`,
   evaluator:{
     txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
+    future:[
+      `Have an at-cursor evaluator \`daintyEvaluator\`, using \`_doJob\`, closing+canceling itself if clicked elsewhere or if returned \`undefined\`.`,
+      `On click, run \`(picker askUser (use (X Y):'onclick'))\` daintily.`,
+    ],
     elem(tag, expr, then) {
       if (tag !== evaluator || typeof document == ''+void 0) return
       impure()
@@ -1941,10 +1960,10 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
   },
 
   REPL:{
-    txt:`\`(elem REPL (Language Bindings))\`: Creates a visual REPL instance (read-evaluate-print loop).`,
-    elem(tag, arr) {
+    txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
+    elem(tag, lang, ctx) {
       if (tag !== REPL || typeof document == ''+void 0) return
-      const lang = arr && arr[0] || fancy, ctx = arr && arr[1] || new Map(parse.ctx)
+      lang = lang || fancy, ctx = ctx || new Map(parse.ctx)
       if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
       if (!(ctx instanceof Map)) throw "Invalid binding context"
       impure()
@@ -2683,7 +2702,8 @@ All these are automatically tested to be correct at launch.`,
         `Modern "AI" stands for Approximate Imagination.`,
         `Reward hacking isn't an AI issue (AI would be controlled by more than a static reward function, just like advanced humans), it's a human issue. Drugs and porn and unhealthy addictive habits are obvious, but it is so much more prevalent: art and pretty words, religion and everyday rituals, cooking and fashion — everything is stained in it (though it is a thing subjective to a viewer, impossible to unfailingly pin down). The brightest side of deliberated reward hacking is that (some of) it allows humans to move past their built-in limited ideas of what's good, and find their own meaning despite having been given one; the dark side is that the new ideas are often very wrong. Reward hacking can be both beautiful and grotesque. (Evolution has not caught up to modern society at all, so ugly effects are visible.)`,
         `Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about AI that's not in I, it's just somewhat more clear and efficient.`,
-        `AI is usually considered as either slave or master (or transitioning to one of those). That's wrong. Intelligence is total generality, able to include everything, and including everything found useful. Both humans and AI can understand and propose with both words and actions, and consider a problem from every point of view`,
+        `AI is usually considered as either slave or master (or transitioning to one of those). That's wrong. Intelligence is total generality, able to include everything, and including everything found useful. Both humans and AI can understand and propose with both words and actions, and consider a problem from every point of view.`,
+        `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached. And you can't improve a mind's design without perfection.`,
       ],
       `Believing in lies… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
@@ -2695,6 +2715,9 @@ He became so powerful, the only thing he was afraid of was losing his power, whi
       `The picked governance form is a reflection of how much the people can be trusted to run a country. Here, forms are either monarchy, anarchy (rule of the smartest guy/s, trusting no one), democracy (rule of majority over minority), consensus (overrule by minority of majority — unachievable today except in small groups beyond which human instinct doesn't scale).`,
       `An idea isn't good unless it's been refactored and rethought five times.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
+      `---`,
+      `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up. Studying AI or willful humans could help start, as could a problem-solving background. Once the core is present, tight integration with all human subsystems has to be developed to seem like a normal person (but better).`,
+      `Long ago, evolution has found something. Concealed in irrelevant randomly-created instincts, that something gave rise to civilizations far beyond the previous nature. The invisible core of mind is just within our reach now. Sure, ignore it, I don't care; I'd rather perfect all that I consider necessary to bring it out, so that this might someday inspire.`,
     ],
   },
 
@@ -2875,51 +2898,53 @@ If any promises the job depends on have a method .cancel, calls those.`,
     return _newJobId.ID++
   },
 
+  _doJob(expr, env, then, ID) {
+    const microstart = env[_id(realTime)] = _timeSince()
+    if (_isDeferred(expr))
+      expr = _deferredPrepare(expr, env, then, ID)
+
+    finish.env = env, call.ID = ID
+    finish.pure = false, finish.inFunction = 0, finish.noSystem = false, finish.depth = 0
+    call.impure = false, _assign.inferred = undefined
+    _checkInterrupt.stepped = false
+    interrupt.started = microstart
+    _jobs.reEnter = true
+    let v, interrupted
+    try { v = finish(expr) }
+    catch (err) {
+      if (err === interrupt) interrupted = true
+      else v = jsRejected(err)
+    }
+    finish.env = env
+    env[_id(userTime)] += _timeSince(env[_id(realTime)])
+
+    if (_isPromise(v)) v = 'result' in v ? v.result : _promiseToDeferred(v)
+    if (interrupted) // Re-schedule.
+      _jobs.reEnter === true ? _schedule(expr, env, then, ID) : _jobs.reEnter(expr, env, then, ID)
+    else if (_highlightOriginal(finish.env[_id(_checkInterrupt)], false), _isDeferred(v)) // Make promises know we're here.
+      _deferredResult(v, env, then, ID)
+    else // We have our result.
+      Promise.resolve(v).then(then)
+  },
+
   _jobs:{
     txt:`The interpreter loop. Most of it is about dealing with deferred stuff. Use _schedule to do stuff with it.`,
+    future:`Have \`_doJob(expr, env, then, ID)\``,
     call() {
       const DOM = typeof document != ''+void 0
       if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
       if (_jobs.expr.length) {
-        let time, start = _timeSince(), end = start + (typeof document != ''+void 0 ? 10 : 100)
+        let start = _timeSince(), end = start + (typeof document != ''+void 0 ? 10 : 100)
         if (!_jobs.duration) _jobs.duration = 0
 
         _jobs.running = true
 
         // Execute while checking for end.
         if (_jobs.indicator) _jobs.indicator.classList.toggle('yes', true)
-        let jobs = _jobs.expr, begin = 0
+        let jobs = _jobs.expr
         _jobs.begin && jobs.splice(0, _jobs.begin), _jobs.begin = 0
-        do {
-          let expr = jobs[begin++], env = jobs[begin++], then = jobs[begin++], ID = jobs[begin++]
-          _jobs.begin = begin
-          const microstart = env[_id(realTime)] = _timeSince()
-          if (_isDeferred(expr))
-            expr = _deferredPrepare(expr, env, then, ID)
-
-          finish.env = env, call.ID = ID
-          finish.pure = false, finish.inFunction = 0, finish.noSystem = false, finish.depth = 0
-          call.impure = false, _assign.inferred = undefined
-          _checkInterrupt.stepped = false
-          interrupt.started = microstart
-          _jobs.reEnter = true
-          let v, interrupted
-          try { v = finish(expr) }
-          catch (err) {
-            if (err === interrupt) interrupted = true
-            else v = jsRejected(err)
-          }
-          finish.env = env
-          env[_id(userTime)] += _timeSince(env[_id(realTime)])
-
-          if (_isPromise(v)) v = 'result' in v ? v.result : _promiseToDeferred(v)
-          if (interrupted) // Re-schedule.
-            _jobs.begin = begin, _jobs.reEnter === true ? _schedule(expr, env, then, ID) : _jobs.reEnter(expr, env, then, ID)
-          else if (_highlightOriginal(finish.env[_id(_checkInterrupt)], false), _isDeferred(v)) // Make promises know we're here.
-            _deferredResult(v, env, then, ID)
-          else // We have our result.
-            Promise.resolve(v).then(then)
-        } while (begin < jobs.length && _timeSince() < end)
+        do { _doJob(jobs[_jobs.begin++], jobs[_jobs.begin++], jobs[_jobs.begin++], jobs[_jobs.begin++]) }
+        while (_jobs.begin < jobs.length && _timeSince() < end)
         jobs.splice(0, _jobs.begin), _jobs.begin = 0
         _jobs.duration = _timeSince(start)
         _jobs.running = false
@@ -3977,6 +4002,7 @@ Code (array head) that defines neither \`finish\` nor \`call\` creates structure
 These can matched by function args exactly as they were constructed (so functions are rewrite rules for structures, with optional non-structural code in the body), which can infer the required structure of variables if underspecified.
 Functions are almost always inlined, so there is almost no performance cost to structures beyond the initial \`purify\`ing.
 Cyclic structures construct a graph.`,
+    future:`Create and cache the unbound repr, and only preserve results for nodes that need it.`,
     nameResult:[
       `finished`,
     ],
@@ -4759,6 +4785,7 @@ Somewhat usable in a REPL.`,
   bound:{
     txt:`Finishing \`(bound Bindings Expr)\`: When called, returns a copy-where-needed of \`Expr\` with all keys bound to values in \`Bindings\`, as if copying then changing in-place. When evaluated, also evaluates the result.
 Can be written as \`key=value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
+    future:`Have \`disableBindingsElem\` that displays hierarchical checkboxes for all current bindings.`,
     examples:[
       [
         `(bound (map ^a 1) a)`,
@@ -4781,7 +4808,8 @@ Can be written as \`key=value\` in an array to bind its elements. Can be used to
       `copy`,
     ],
     argCount:2,
-    philosophy:`Nothing is more general than a graph, so in general, nothing is more convenient and powerful than a language built on graphs. (Having to account for cyclicity everywhere is a big overhead, but that's what \`compile\` is for.)`,
+    philosophy:`Nothing is more general than a graph, so in general, nothing is more convenient and powerful than a language built on graphs.
+Other languages use let-bindings for variables (and devote lots of attention to scoping rules and various declaration methods and their subversions (like lambdas)), but here we just share graph nodes (and build the language on top of a very simple graph interchange format, \`basic\`). Elsewhere, a value-flow graph is a complicated compiler transformation (and a skill that users have to learn); here, meaning is a first-class citizen.`,
     finish(ctx, v) {
       // On finish, finish ctx, bind, then finish the bound expr.
       // Same as `return finish(bound(finish(ctx), v))`, but interrupt-safe.
@@ -5372,6 +5400,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
       compose:__is(`compose`),
       argCount:__is(`argCount`),
     },
+    philosophy:`Currying is garbage, just like any other representation method that imposes a semantically-visible artifact (like cons cells).`,
   },
 
   function:__is(`_function`),
@@ -5723,6 +5752,7 @@ Also wraps C-style strings in <string>.`,
 
   serialize:{
     txt:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes Expr into a string or a DOM tree (that can be parsed to retrieve the original structure).`,
+    future:`Fix serialization not associating elems with their correct values (particularly functions).`,
     philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.`,
     examples:[
       [
@@ -5979,6 +6009,7 @@ Also wraps C-style strings in <string>.`,
 
   elemValue:{
     txt:`If el, remember that it is a viewer of v. If !el, return an array of all in-document viewers of v.`,
+    future:`Make \`undefined\` highlight again.`,
     call(el, v) {
       if (!elemValue.empty) elemValue.empty = []
       if (typeof document == ''+void 0) return elemValue.empty
@@ -6527,6 +6558,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
   fancy:{
     txt:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
 \`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a=2 a)\`; \`1+2\`, \`x→x*2\`, \`2*[1+2]\`.`,
+    future:`Fix \`1:2 2:3\` serializing as \`[1:2] 2:3\``,
     style:__is(`_basicStyle`),
     parse:__is(`_fancyTopLevel`),
     serialize:__is(`_fancyTopLevel`),
@@ -8210,6 +8242,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
 
   Usage:{
     txt:`A namespace for contextual structural enumeration and generation.`,
+    future:`Have \`disableUsageElem\` that displays a checkbox for each thing in \`CurrentUsage\` (checked) and \`DisabledUsage\` (unchecked). recursive-in-<details> for inner contexts, shuffling between contexts on input.`,
     lookup:{
       current:__is(`CurrentUsage`),
       either:__is(`either`),
@@ -8291,12 +8324,12 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     } else if (typeof v == 'function' && (!inp || defines(v, argCount) === values.length)) {
       // Native functions bear no hint of the required structure, so the only thing we can do is call them and see if an error arises.
       try {
-        inp && v(...values) // If seeking output, always add.
+        try { inp && v(...values) } // If seeking output, always add.
+        catch (err) { if (err !== impure) throw err } // Always add impure functions.
         if (result === false) return true
         if (!result) result = _allocArray(), result.push(either)
         if (!result.includes(as)) result.push(as)
       } catch (err) { if (err === interrupt || !inp) throw err }
-      // (Impure functions won't be added during purification.)
 
     } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
 
@@ -8422,8 +8455,9 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
   },
 
   use:{
-    txt:`\`use Context Function\` or \`(use Context Function Values)\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
+    txt:`\`use Values Function Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where missing.`,
+    future:`\`get\` the actual function \`v\`.`,
     examples:[
       `Can find args in \`Context\``,
       [
@@ -8441,8 +8475,9 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
         `5:'Int'`,
       ],
     ],
-    call(ctx, v, values) {
-      return _search(undefined, ctx, v, values, false)
+    call(values, v, ctx = CurrentUsage) {
+      if (!use.var) use.var = [_var]
+      return _search(undefined, ctx, v !== undefined ? v : use.var, values, false)
     },
   },
 
@@ -8521,8 +8556,13 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
     },
   },
 
+  _get:{
+    txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful (to preserve interrupt stacks of things -- wait, but on interrupt, inner interrupts will not be preserved... so, must have all continuations as a global?).`,
+    future:`Have all continuations as _search.cont, a Map from a unique-per-call node to its full state --- args, continuation.`,
+  },
+
   get:{
-    txt:`\`get Context OutputStructure\`: creates a structured value from \`context\`.
+    txt:`\`get OutputStructure Context\`: creates a structured value from \`Context\` (\`CurrentUsage\` by default).
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
     examples:[
       `Trivial finding:`,
@@ -8587,8 +8627,9 @@ Index='Index' Image='Image' Measure='Measure'`,
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices make it even more useful). Automatic constrained expression generation with no way unthinkable.
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
 But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found.`,
-    call(ctx, out) {
-      // If `out` is a function: compose in `use`, try to assign to all fitting-output functions in `get` (if _assign.inferred got filled and we assigned, then `return bound(_assign.inferred, out)` (actually, just regular label-env assignment should be enough)).
+    call(out, ctx = CurrentUsage) {
+      // If `out` is a function: should compose in `use`, try to assign to all fitting-output functions in `get` (if _assign.inferred got filled and we assigned, then `return bound(_assign.inferred, out)` (actually, just regular label-env assignment should be enough)).
+      // If `out` is directly present in `ctx`, should return it immediately.
       const [v = output(ctx, out)] = interrupt(get)
       try {
         const r = _search(undefined, ctx, v, undefined, false, true)
@@ -8747,6 +8788,10 @@ This is the default when no picker is specified.`,
 
   askUser:{
     txt:`A \`With\` for \`picker\` that pauses execution and asks the user.`,
+    future:[
+      `Add a "Remember" checkbox (and maps from cause to the length and the choice).`,
+      `Have \`askUserElem()\` for inspecting the remembered choices.`,
+    ],
     examples:[
       [`(picker askUser (pick (1 2 3 4365)))`],
     ],
