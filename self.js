@@ -6270,11 +6270,13 @@ Also wraps C-style strings in <string>.`,
       ctx = u[1], u = u[2]
     let b = false
     if (!_isArray(u)) match(u)
-    else
+    else {
+      _fancyGrouping.pos.delete(match())
       for (let j = 0; j < u.length; ++j) {
         b ? match(' ') : (b = true)
         match(_basicExtracted, u[j], value)
       }
+    }
     if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], value)))
   },
 
@@ -6581,7 +6583,6 @@ This is a {more space-efficient than binary} representation for graphs of arrays
   fancy:{
     txt:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
 \`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a=2 a)\`; \`1+2\`, \`x→x*2\`, \`2*[1+2]\`.`,
-    future:`Fix \`1:2 2:3\` serializing as \`[1:2] 2:3\``,
     style:__is(`_basicStyle`),
     parse:__is(`_fancyTopLevel`),
     serialize:__is(`_fancyTopLevel`),
