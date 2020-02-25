@@ -272,6 +272,7 @@ __base({
   UI:{
     txt:`A namespace for user interface functionality.`,
     philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).`,
+    future:`Since ontransitionend events have proven unreliable, remove height after a timeout too.`,
     lookup:{
       log:__is(`log`),
       elem:__is(`elem`),
@@ -1586,6 +1587,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   describe:{
     txt:`Creates an element that describes a value.`,
+    future:`Have escapeLabel(name, lang) and unescapeLabel(repr, lang).`,
     call(el) {
       if (typeof document == ''+void 0) return
       const d = document.createElement('div')
@@ -1986,6 +1988,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
   REPL:{
     txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
+    future:`When a result gets purified or computed, add "Input to N: " and "Output of M: " right after it (unless there are none). Or, better yet, have these as \`?:Computed->?\` in CurrentUsage, and display each usage in purifyAndDisplay and evaluator.`,
     elem(tag, lang, ctx) {
       if (tag !== REPL || typeof document == ''+void 0) return
       lang = lang || fancy, ctx = ctx || new Map(parse.ctx)
@@ -2954,6 +2957,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _jobs:{
     txt:`The interpreter loop. Most of it is about dealing with deferred stuff. Use _schedule to do stuff with it.`,
+    future:`Have definable-with-the-index \`resultInInterrupt\`, and in _jobs, {delete if already logged} and {log with low collapseDepth} if defined on the top-most interrupt cause (which is \`ints[ints.length - ints[ints.length-1] - 2]\`, and we need to add that definition to the index to get what we need to log).`,
     call() {
       const DOM = typeof document != ''+void 0
       if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
@@ -5108,6 +5112,9 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   _resolveStack:{
     txt:`If lines are marked, this resolves the JS stack trace to the network's functions.`,
+    future:`Have _resolveStack.location (a Map from expr to [sourceURL, line, column]) and further lookup the expr or its _cameFrom there. Have parse fill that.
+Have _resolveStack check against document.location if document exists, and filter out things that don't fit.
+Have \`(readFile URL)\` that preserves that.`,
     call(stack = new Error().stack || '') {
       return stack.trim().split('\n').map(L => {
         const loc = /(?: \(|@)(.+):(\d+):(\d+)\)?$/.exec(L)
@@ -5776,7 +5783,10 @@ Also wraps C-style strings in <string>.`,
 
   serialize:{
     txt:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes Expr into a string or a DOM tree (that can be parsed to retrieve the original structure).`,
-    future:`Fix serialization not associating elems with their correct values (particularly functions).`,
+    future:[
+      `Fix serialization not associating elems with their correct values (particularly functions).`,
+      `Style only after we fully have the struct, then lazily create/style the tree.`,
+    ],
     philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.`,
     examples:[
       [
@@ -6033,6 +6043,7 @@ Also wraps C-style strings in <string>.`,
 
   elemValue:{
     txt:`If el, remember that it is a viewer of v. If !el, return an array of all in-document viewers of v.`,
+    future:`Rarely collect !el.isConnected garbage in \`elemValue\`'s value-to-elems map.`,
     call(el, v) {
       if (!elemValue.empty) elemValue.empty = []
       if (typeof document == ''+void 0) return elemValue.empty
@@ -6522,9 +6533,9 @@ Also wraps C-style strings in <string>.`,
   _fancyOutermost(match, u, topLevel) {
     let ctx
     if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3)
-      ctx = u[1], u = u[2]
+      ctx = u[1], u = u[2], match('[')
     const r = _fancyTry(match, u, topLevel)
-    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], _fancyTry)))
+    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], _fancyTry))), match(']')
     return r
   },
 
@@ -6958,6 +6969,12 @@ Does not merge the parsed arrays.`,
 
   interrupt:{
     txt:`Used to make functions re-entrant in a non-interruptible host language, for better UX.`,
+    future:[
+      `Have \`(step)\`, which pauses-to-buttons execution when finished.`,
+      `Have \`_pausedToStepper(expr, env, then, ID)\`, which logs "> /\ = \/" buttons (run, step out (finish.depth-1), step over (finish.depth), step into (finish.depth+1)). Also preserve finish.depth in env on interrupt.`,
+      `In \`interrupt\`, have \`finish.env[_id(step)]\` (null or a number), and if finish.depth is <= that, interrupt with _jobs.reEnter being _pausedToStepper.`,
+      `Add a "||" pause button to <waiting>, which does \`_pausedToStepper(_cancel(ID))\`.`,
+    ],
     lookup:{
       check:__is(`_checkInterrupt`),
       noInterrupt:__is(`noInterrupt`),
@@ -7552,6 +7569,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   },
   compile:{
     txt:`Compiles a function to JS.`,
+    future:`Check argCount in compileFinish/compileCall/compileStruct.`,
     philosophy:`I am speed.`,
     buzzwords:`JIT-compiled`,
     call(opt, ...a) {
@@ -8147,13 +8165,13 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       if (!_isArray(x) || !x.length || x[0] === _const) return x
       if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Usage) == 'function') return _structHash.context
       if (_isVar(x)) return _structHash.dependent
-      x = x[x.length-1]
+      x = x[x.length-1] // Go to last.
       if (_isUnknown(x) && x.length == 2) x = x[1]
       if (typeof x == 'function') return _structHash.dependent
       if (!_isArray(x) || !x.length || x[0] === _const) return x
       if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Usage) == 'function') return _structHash.context
       if (_isVar(x)) return _structHash.dependent
-      x = x[0]
+      x = x[0] // Go to first.
       if (_isUnknown(x) && x.length == 2) x = x[1]
       return typeof x == 'function' || _hasCallableParts(x) ? _structHash.dependent : x
       // .dependent, .context
@@ -8169,8 +8187,12 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
     let d
     if (_isUnknown(v) && v.length == 2)
       v = v[1]
+    if (!inp && _isArray(v) && v[0] === array)
+      // If `array ...?`, treat it as v.slice(1).
+      v = v.slice(1)
+
     if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
-      // Add both branches.
+      // If `if ? ? ?`, add both branches.
       _addHashed(result, v[2], add, inp)
       _addHashed(result, v[3], add, inp)
 
@@ -8288,9 +8310,12 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length)) {
       // If a macro, unwrap unknowns inside `values` and treat it as a call.
       result = _addUsesToContext(result, v, d, ctx, bound(_unwrapUnknown, values, false), inp)
+    if (!inp && _isArray(v) && v[0] === array)
+      // If `array ...?`, treat it as v.slice(1).
+      v = v.slice(1)
 
     } else if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
-      // Check both branches.
+      // If `if ? ? ?`, check both branches.
       let [r = result, stage = 0] = interrupt(_addUsesToContext)
       try {
         if (stage === 0)
@@ -8301,7 +8326,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, stage);  throw err }
 
     } else if (d = _isTry(v)) {
-      // Add each sub-function if appropriate.
+      // If `try ...?`, add each sub-function if appropriate.
       let [r = result, j = 1] = interrupt(_addUsesToContext)
       try {
         for (; j < d.length; ++j) {
@@ -8364,7 +8389,6 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         _addUsesToContext.stack = new Set, _addUsesToContext.checkStack = new Set
       const stack = result !== false ? _addUsesToContext.stack : _addUsesToContext.checkStack
       if (stack.has(v)) return null
-        // wait, for the check, this is there, so this would return null.
       if (_isVar(values)) return result === false ? v.length > 1 : v ? v.slice() : v
       let [r = result, i = 0, j = 0, k = 0] = interrupt(_addUsesToContext)
       stack.add(v)
@@ -8440,7 +8464,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         `either (function a:10 b:50 a*b:60)`,
       ],
     ],
-    philosophy:`If value/function contexts are categories, then this enumerates an object's outgoing morphisms.`,
+    philosophy:`If value/function contexts are categories, then this enumerates an object family's outgoing morphisms.`,
     call(ctx, ...values) { return _addUsesToContext(null, ctx, ctx, ctx, values, true) },
   },
 
@@ -8475,15 +8499,20 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         `either ?:1→?:Int Int='Int'`,
       ],
     ],
-    philosophy:`If value/function contexts are categories, then this enumerates an object's incoming morphisms.`,
+    philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code.`,
     call(ctx, value) { return _addUsesToContext(null, ctx, ctx, ctx, value, false) },
   },
 
   use:{
-    txt:`\`use Values Function Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
-Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where missing.`,
+    txt:`\`use Inputs Function Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
+Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     future:`\`get\` the actual function \`v\`.`,
     examples:[
+      `Select the proper semantic type in a bank of knowledge:`,
+      [
+        `use (15:'AnalysisResult') undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x)))`,
+        `1:'Action'`,
+      ],
       `Can find args in \`Context\``,
       [
         `use (either 1:2 2:3) (function a:2 b:3 a+b:5)`,
@@ -8524,6 +8553,7 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
         // User function.
         // Native function.
         // Context.
+      // And when we finish a node, how do we return to the node above (applying functions if ready) while still being able to return to ourselves?
     },
   },
 
@@ -8536,6 +8566,8 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
       if (!_search.nodes) _search.nodes = new Set
       _visitNode(undefined, )
       _search.nodes.forEach(_handleNode)
+        // We can probably put nodes in an array (we won't be merging nodes, so no need for a Set), and not need a separate function (and preserve position and all-nodes on interrupt).
+          // (Functions can still be good for separation.)
 
       // What to do with the below?
 
@@ -8573,6 +8605,9 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
                 catch (err) {}
               // If not handled by `inputs`, get a not-present-in-`inputs` arg from context.
               args[k - (d?0:1)] = get(ctx, !fun ? f[k] : use.var)
+                // Actually, we probably don't even care about ensuring valid structure, right?
+                // ...Also, if we allow continuations, then we'll have to be able to consider all A*B*C*D*E*F*G combinations...
+                  // (Would need to have each node have the next-arg-to-generate index, and spawn a new node with index+1 for each potential input.)
             }
           if (isMacro) args = bound(_unwrapUnknown, args, false).slice()
           return d = v.apply(v, args), _allocArray(args), d
@@ -8746,7 +8781,8 @@ Use \`picker\` to override behavior.`,
     future:`Index-based per-cause choice optimization (a base that could optimize more advanced optimizer families):
 \`pick.best Result→Measure Expr\`, blending estimated-measures of all choices made during evaluation into Measure.
 \`pick.sample Result→ProbabilityAdjustment Expr\`, adding probability to all.
-\`best Metric Expr Repeats=2\`, \`journal\`ing everything and commiting the best.`,
+\`best Metric Expr Repeats=2\`, \`journal\`ing everything and commiting the best.
+"Freeze all all choices but one, which is changed every 50 ms". (A generative function family would be a more complete solution here.)`,
     call(from, cause = finish.v, extra) {
       if (_pickCount(from) === 1) return 0
       if (pick.depth > pick.ers.length)
