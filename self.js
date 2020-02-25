@@ -284,6 +284,7 @@ __base({
       url:__is(`url`),
       structured:__is(`structured`),
       structuredSentence:__is(`structuredSentence`),
+      disableBindings:__is(`disableBindingsElem`),
     },
   },
 
@@ -922,11 +923,11 @@ iframe { width:100%; height:100% }
 
 details { padding-left: 1em }
 summary { margin-left: -1em }
-details>:not(summary) { display:block; margin-top:1em; border-bottom:1px solid black }
+details>:not(summary) { display:block; margin-bottom:1em; border-bottom:1px solid black }
 details>div>:not(:first-child) { max-width:75vw }
 details { display:table; overflow:hidden }
 details>div { display:table-row }
-details>div>* { display:table-cell }
+details>div>* { display:table-cell; padding-left:2ch }
 
 time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:hidden }
 .hover>time-report, time-report:hover { opacity:1; visibility:visible }
@@ -1258,10 +1259,9 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
   _getOuterLinker(el) { return el && (el.contentEditable === 'true' || el.parentNode && !_isArray(el.parentNode.to) && defines(el.parentNode.to, insertLinkTo) ? el : _getOuterLinker(el.parentNode)) },
 
   insertLinkTo:{
-    txt:`Replaces a Range (obtained from the current selection) with a link to the elem.
+    txt:`Replaces a Range (obtained from the current selection) with a link to the elem's value.
 A language can define this with a function that {takes the element and value to {link to}} and {returns an element to insert}.
 Remember to quote the link unless you want to evaluate the insides.`,
-    future:`Make collapsed refs refer to quoted values.`,
     call(r, el) {
       const p = r.commonAncestorContainer, editor = _getOuterLinker(el)
       const pre = _smoothTransformPre(el)
@@ -1270,7 +1270,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       if (editor && editor === _getOuterLinker(p) && defines(editor.parentNode.to, insertLinkTo))
         col = defines(editor.parentNode.to, insertLinkTo)(r, el)
       else {
-        col = elemValue(elemCollapse(() => _collapsedSerialization(el.to)), el.to)
+        const v = quote(el.to)
+        col = elemValue(elemCollapse(() => _collapsedSerialization(v)), v)
         col.special = id
         r.deleteContents()
         r.insertNode(col)
@@ -1298,25 +1299,25 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   hierarchy:{
     txt:`Turns a map from globals into a namespace-based hierarchy.`,
-    call(m, topLevel, lang = basic, binds) {
+    call(m, topLevel, parents = lookup.parents, lang = basic, binds) {
       if (!(m instanceof Map)) error("Expected a map, got", m)
       const globals = new Map // From globals to their elems.
       m.forEach((v,x) => globals.set(x, null))
       let p // Add unmentioned namespace-parent globals too.
-      globals.forEach((our, x) => (p = lookup.parents.get(x)) && !globals.has(p) && globals.set(p, null))
+      globals.forEach((our, x) => (p = parents.get(x)) && !globals.has(p) && globals.set(p, null))
       const result = !topLevel ? elem('details', elem('summary', 'Binds to:')) : elemFor(topLevel)
       parse.ctx.forEach(x => { // Make globals appear in source-code order.
         if (topLevel && x === topLevel || !globals.has(x)) return
         let our = globals.get(x)
         if (!our) globals.set(x, our = elemFor(x))
-        const p = lookup.parents.get(x)
+        const p = parents.get(x)
         if (!p) return result.append(our)
         let their = globals.get(p)
         if (!their) globals.set(p, their = elemFor(p))
         their.append(our)
       })
       m.forEach((_,x) => { // Add anything we missed from going through globals to the top-level.
-        if (topLevel && x === topLevel || !globals.has(x)) return
+        if (topLevel && x === topLevel || globals.has(x)) return
         let our = globals.get(x)
         if (!our) globals.set(x, our = elemFor(x))
         result.append(our)
@@ -1329,9 +1330,9 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
       function elemFor(x) {
         const el = elem('details')
-        const xEl = serialize(x, lang, binds, serialize.displayed)
+        const xEl = _isDOM(x) ? x : serialize(x, lang, binds, serialize.displayed)
         const v = m.get(x)
-        el.append(elem('summary', v === undefined ? xEl : [xEl, ':  ', serialize(v, lang, binds, serialize.displayed)]))
+        el.append(elem('summary', v === undefined ? xEl : [xEl, ':  ', _isDOM(v) ? v : serialize(v, lang, binds, serialize.displayed)]))
         elemValue(el, x)
         return _isArray(x) || defines(x, permissionsElem) === undefined || topLevel ? el : defines(x, permissionsElem)(el)
       }
@@ -1349,14 +1350,13 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   permissionsElem:{
     txt:`Build a namespace hierarchy of globals that \`expr\` is bound to.`,
-    future:`Pass in the lookup.parent map, to here and to \`hierarchy\`.`,
-    call(expr, summary = id, topLevel) {
+    call(expr, topLevel) {
       const uses = new Set, seen = new Set
       mark(expr), seen.clear()
       uses.forEach(x => lookup.parents.has(x) && uses.add(lookup.parents.get(x)))
       if (topLevel) uses.delete(topLevel)
       const m = new Map
-      uses.forEach(x => m.set(x, summary()))
+      uses.forEach(x => m.set(x, undefined))
       return hierarchy(m, topLevel)
 
       function mark(x) {
@@ -1443,9 +1443,34 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   _getOuterWindow(el) { return !el ? null : el.isWindow ? el : _getOuterWindow(el.parentNode) },
 
+  disableBindingsElem:{
+    txt:`\`(disableBindingsElem)\`: creates an elem for disabling current bindings hierarchically.`,
+    call() {
+      const binds = _bindingsAt()
+      const m = new Map
+      binds.forEach(addCheckbox)
+      return elemValue(hierarchy(m, elem('span', 'Bindings:')), binds)
+
+      function addCheckbox(v, L) {
+        const el = elem('input')
+        el.type = 'checkbox'
+        el.checked = true
+        el.onchange = function() {
+          this.checked ? binds.set(L, v) : binds.delete(L);
+          if (this.parentNode.tagName === 'SUMMARY') {
+            [...this.parentNode.parentNode.querySelectorAll('input[type=checkbox]')].forEach(
+              el => el !== this && (el.checked = this.checked, el.onchange())
+            )
+          }
+        }
+        m.set(v, el)
+      }
+    },
+  },
+
   elemCollapse:{
     txt:`Collapses an element (or a range of elements) in-place. Click to expand again. Pass in a function to create the element only if needed. Pass in null as \`end\` to collapse all consequent siblings.`,
-    future:`Make collapsed elems in contentEditable areas not handled properly in Chrome.`,
+    future:`Fix collapsed elems in contentEditable areas not handled properly in Chrome.`,
     call(start, end = undefined) {
       const col = elem('collapsed')
       if (typeof start == 'function')
@@ -2929,7 +2954,6 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _jobs:{
     txt:`The interpreter loop. Most of it is about dealing with deferred stuff. Use _schedule to do stuff with it.`,
-    future:`Have \`_doJob(expr, env, then, ID)\``,
     call() {
       const DOM = typeof document != ''+void 0
       if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
@@ -4785,7 +4809,6 @@ Somewhat usable in a REPL.`,
   bound:{
     txt:`Finishing \`(bound Bindings Expr)\`: When called, returns a copy-where-needed of \`Expr\` with all keys bound to values in \`Bindings\`, as if copying then changing in-place. When evaluated, also evaluates the result.
 Can be written as \`key=value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
-    future:`Have \`disableBindingsElem\` that displays hierarchical checkboxes for all current bindings.`,
     examples:[
       [
         `(bound (map ^a 1) a)`,
@@ -5579,6 +5602,7 @@ Infers structural terms where possible.`,
     const copy = el.cloneNode(false)
     if ('to' in el) elemValue(copy, el.to)
     if (el.special) copy.special = el.special, copy.special(el, copy)
+    if (el.onchange) copy.onchange = el.onchange
     if (el.isWindow) copy.isWindow = true
     if (el.isREPL) copy.isREPL = true
     for (let ch = el.firstChild; ch; ch = ch.nextSibling)
@@ -6009,7 +6033,6 @@ Also wraps C-style strings in <string>.`,
 
   elemValue:{
     txt:`If el, remember that it is a viewer of v. If !el, return an array of all in-document viewers of v.`,
-    future:`Make \`undefined\` highlight again.`,
     call(el, v) {
       if (!elemValue.empty) elemValue.empty = []
       if (typeof document == ''+void 0) return elemValue.empty
@@ -6605,13 +6628,14 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     else if (el.tagName === 'NUMBER')
       name = el.innerText
     else {
-      const proposals = _isArray(el.to) && typeof el.to[0] == 'function' && nameResult(el.to[0]) || []
+      const v = quote(el.to)
+      const proposals = _isArray(v) && typeof v[0] == 'function' && nameResult(v[0]) || []
       while (names.has(name = i < proposals.length ? proposals[i] : toString(i - proposals.length, 'abcdefghijklmnopqrstuvwxyz'))) ++i
       const topLevel = el.parentNode === editor || el.parentNode.parentNode === editor
       rBecomes = document.createTextNode(name)
       r.deleteContents(), r.insertNode(rBecomes), r.setEndAfter(rBecomes)
       el.replaceWith(elBecomes = document.createTextNode(name))
-      if (_isArray(el.to) && el.to.length > 1 && topLevel && el.firstChild.textContent[0] !== '(')
+      if (_isArray(v) && v.length > 1 && topLevel && el.firstChild.textContent[0] !== '(')
         el = elem('node', ['(', el, ')'])
       editor.append('\n'+name+'=', el)
     }
@@ -8260,7 +8284,11 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     let d
     if (!inp && _isVar(values) && result === false) return true
 
-    if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
+    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length)) {
+      // If a macro, unwrap unknowns inside `values` and treat it as a call.
+      result = _addUsesToContext(result, v, d, ctx, bound(_unwrapUnknown, values, false), inp)
+
+    } else if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
       // Check both branches.
       let [r = result, stage = 0] = interrupt(_addUsesToContext)
       try {
@@ -8270,6 +8298,17 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
           r = _addUsesToContext(r, as, v[3], ctx, values, inp)
         return r
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, stage);  throw err }
+
+    } else if (d = _isTry(v)) {
+      // Add each sub-function if appropriate.
+      let [r = result, j = 1] = interrupt(_addUsesToContext)
+      try {
+        for (; j < d.length; ++j) {
+          r = _addUsesToContext(r, v, d[j], ctx, values, inp)
+          if (r === true) return r
+        }
+        result = r
+      } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, j);  throw err }
 
     } else if (_isFunction(v) || typeof v == 'function' && (inp ? (d = !_isArray(v) && defines(v, input)) : (d = !_isArray(v) && defines(v, output)))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
@@ -8305,21 +8344,6 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
           if (!result.includes(as)) result.push(as) // (Quadratic time complexity. Shouldn't matter.)
         }
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(j, k);  throw err }
-
-    } else if (d = _isTry(v)) {
-      // Add each sub-function if appropriate.
-      let [r = result, j = 1] = interrupt(_addUsesToContext)
-      try {
-        for (; j < d.length; ++j) {
-          r = _addUsesToContext(r, v, d[j], ctx, values, inp)
-          if (r === true) return r
-        }
-        result = r
-      } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, j);  throw err }
-
-    } else if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length)) {
-      // If a macro, unwrap unknowns inside `values` and treat it as a call.
-      result = _addUsesToContext(result, v, d, ctx, bound(_unwrapUnknown, values, false), inp)
 
     } else if (typeof v == 'function' && (!inp || defines(v, argCount) === values.length)) {
       // Native functions bear no hint of the required structure, so the only thing we can do is call them and see if an error arises.
@@ -8475,36 +8499,78 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
         `5:'Int'`,
       ],
     ],
-    call(values, v, ctx = CurrentUsage) {
+    call(inputs, v, ctx = CurrentUsage) {
       if (!use.var) use.var = [_var]
-      return _search(undefined, ctx, v !== undefined ? v : use.var, values, false)
+      return _search(undefined, ctx, v !== undefined ? v : use.var, inputs, false)
+    },
+  },
+
+  _visitNode:{
+    txt:`Remembers to visit the node in this graph search.`,
+    call(parent, ) {
+      _search.nodes.add([parent, ])
+    },
+  },
+
+  _handleNode:{
+    txt:``,
+    call(arr) {
+      _search.nodes.delete(arr)
+      const [parent, ] = arr
+      // How do we handle each case?
+        // Macro.
+        // Tries.
+        // User function.
+        // Native function.
+        // Context.
     },
   },
 
   _search:{
-    call(cont, ctx, v, values, isMacro = false, canDestroyV = false) {
+    txt:``,
+    call(cont, ctx, v, inputs, canDestroyV = false) {
       _checkInterrupt()
       let d, fun = false
 
-      if (_isFunction(v) || typeof v == 'function' && (d = !_isArray(v) && defines(v, input)) || typeof v == 'function' && values && defines(v, argCount) >= values.length && (fun = true)) {
+      if (!_search.nodes) _search.nodes = new Set
+      _visitNode(undefined, )
+      _search.nodes.forEach(_handleNode)
+
+      // What to do with the below?
+
+      let isMacro = false
+      if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function')
+        // If a macro, unwrap unknowns inside `inputs` and treat it as a call.
+        v = d, isMacro = true
+
+
+      if (d = _isTry(v)) {
+        // Treat a wannabe context as an actual context.
+        const c = _allocArray()
+        c.length = d.length, c[0] = either
+        for (let i = 1; i < d.length; ++i) c[i] = d[i]
+        try { let r = _search(null, ctx, c, inputs, false, true);  _allocArray(c);  return r }
+        catch (err) { if (err !== interrupt) _allocArray(c);  throw err }
+
+      } else if (_isFunction(v) || typeof v == 'function' && (d = !_isArray(v) && defines(v, input)) || typeof v == 'function' && inputs && defines(v, argCount) >= inputs.length && (fun = true)) {
         // Create an array for actual args, then go through args and put the value if matching or `get(ctx, arg)` if not.
           // `input`-defining functions get treated as if their inputs are as defined.
-          // Native functions with enough argCount accept `values` in order if any, then `?`s.
+          // Native functions with enough argCount accept `inputs` in order if any, then `?`s.
         const f = !fun && (d || deconstruct(v, false))
         if (!use.var) use.var = [_var]
         let [args = _allocArray(), j = 0, k = d ? 0 : 1] = interrupt(use)
           // Should also have an array for continuations of args.
-        const endJ = values ? values.length+1 : 1
+        const endJ = inputs ? inputs.length+1 : 1
         const endK = !fun ? (d ? f.length : f.length-1) : defines(v, argCount)
         args.length = endK - k
         try { // This interrupt-handling deal is getting worse every time.
           for (; j < endJ; ++j)
             for (; k < endK; ++k) {
               // Try matching the arg to value, set it as arg if succeeded.
-              if (values && j < values.length)
-                try { !fun && _assign(f[k], values[j], true); args[k++ - (d?0:1)] = values[j]; break } 
+              if (inputs && j < inputs.length)
+                try { !fun && _assign(f[k], inputs[j], true); args[k++ - (d?0:1)] = inputs[j]; break } 
                 catch (err) {}
-              // If not handled by `values`, get a not-present-in-`values` arg from context.
+              // If not handled by `inputs`, get a not-present-in-`inputs` arg from context.
               args[k - (d?0:1)] = get(ctx, !fun ? f[k] : use.var)
             }
           if (isMacro) args = bound(_unwrapUnknown, args, false).slice()
@@ -8512,19 +8578,7 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
             // Should also return a continuation for our args, even on error (and accept continuations from `get`s).
         } catch (err) { if (err === interrupt) interrupt(use, 3)(args, j, k); else _allocArray(args);  throw err }
 
-      } else if (d = _isTry(v)) {
-        // Treat a wannabe context as an actual context.
-        const c = _allocArray()
-        c.length = d.length, c[0] = either
-        for (let i = 1; i < d.length; ++i) c[i] = d[i]
-        try { let r = use(ctx, c, values, true);  _allocArray(c);  return r }
-        catch (err) { if (err !== interrupt) _allocArray(c);  throw err }
-
-      } else if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function') {
-        // If a macro, unwrap unknowns inside `values` and treat it as a call.
-        return use(ctx, d, values, true)
-
-      } else if (typeof v == 'function' && defines(v, argCount) === values.length) {
+      } else if (typeof v == 'function' && defines(v, argCount) === inputs.length) {
         // Native functions bear no hint of the required structure, so treat every arg as `?`.
         let [args = _allocArray(), k = 0] = interrupt(use)
         const endK = args.length = defines(v, argCount)
@@ -8558,7 +8612,8 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
 
   _get:{
     txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful (to preserve interrupt stacks of things -- wait, but on interrupt, inner interrupts will not be preserved... so, must have all continuations as a global?).`,
-    future:`Have all continuations as _search.cont, a Map from a unique-per-call node to its full state --- args, continuation.`,
+    future:`Have all continuations as _search.state, a Map from a unique-per-call node to its full state --- args, continuation.`,
+      // I guess having to preserve the global state couldn't be escaped after all?
   },
 
   get:{
@@ -8578,7 +8633,7 @@ Args are taken from \`Values\` in order or \`pick\`ed from the \`Context\` where
       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
       [
         `get (either 10 x->(Next x-1)) (Next ?) Next='Next'`,
-        `(Next 9)`,
+        `('Next' 9)`,
       ],
       `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
       [
