@@ -3200,7 +3200,9 @@ Don't ever re-use the same env in _schedule, use this instead.`,
         try {
           for (; i < functions.length-1; ++i)
             try {
-              const v = functions[i].apply(functions[i], data)
+              const f = functions[i]
+              if (typeof defines(f, argCount) == 'number' && defines(f, argCount) != data.length) continue
+              const v = f.apply(f, data)
               if (_isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
                 return v[1] = _cameFrom(array(first, v[1], _cameFrom(array(_cameFrom(array(_try, ...functions.slice(i+1)), us), ...data), us)), us), v
               return v
@@ -4255,9 +4257,9 @@ Array data gets its head consulted (once, not recursively). A function acts like
   },
 
   _checkArgCount(a) {
-    if (_isArray(a) && !_isArray(a[0]) && _view(a[0]) && _view(a[0])[_id(argCount)] !== undefined) {
+    if (_isArray(a) && !_isArray(a[0]) && _view(a[0]) && typeof _view(a[0])[_id(argCount)] == 'number') {
       const args = _view(a[0])[_id(argCount)]
-      if (typeof args == 'number' ? a.length-1 !== args : !args(a.length-1))
+      if (a.length-1 !== args)
         error("Invalid arg count: expected", args, "but got", a.length-1, "in", a)
     }
   },
@@ -5352,8 +5354,6 @@ Variables within non-\`closure\` functions will not be changed by application.`,
           if (r !== _notFound) return !_isUnknown(r) ? r : _unknown(r)
 
           let result = _notFound, interrupted = false
-          if (defines(impl, argCount) !== undefined && defines(impl, argCount) !== data.length)
-            error("Expected", defines(impl, argCount), "args in", f, "but got")
 
           // Evaluate body if it's suddenly needed even though we were lazy.
           // (Even though `dec` and `f` are merged, they'll have become post-purification ones anyway if we weren't lazy.)
@@ -8009,6 +8009,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       }
       function compileExpr(x, into) {
         // Return a var that holds the result of finishing x.
+        _checkArgCount(x)
         if (!_isVar(x) && !_hasCallableParts(x)) return outside(x)
         if (_isArray(x) && x[0] === _const) return outside(x)
         if (x[0] === quote) return outside(x[1])
@@ -8572,19 +8573,29 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
     call(node) {
       const [ctx, v, wantedInputs, wantedOutput, actualArgs, then] = node
-      // Macro.
-        // Just as before: go to defines(v, finish) and (remember to) unwrap unknowns in actualArgs.
-      // Tries.
-        // Just as before: convert it to a context, then _visitNode and return.
-      // Function. (Must define argCount.)
+
+
+      let d, isMacro = false
+      if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function')
+        // If a macro, (remember to) unwrap unknowns inside `actualArgs` and treat it as a call.
+        v = d, isMacro = true
+
+
+      // If `either …?` or `try …?` or defines `Usage` to be `either …?`:
+      if (_isArray(d = v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either || (d = _isTry(v))) {
+        // _visitNode with each item.
+        for (let i = 1; i < d.length; ++i)
+          _visitNode(ctx, d[i], wantedInputs, wantedOutput, actualArgs, then)
+        return
+      }
+
+      // Function. (Must define argCount, as a number.)
         // If !actualArgs || actualArgs.length < defines(v, argCount):
           // if the next input matches, _visitNode(ctx, v, wantedInputs.length > 1 ? wantedInputs.slice(1) : null, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], node);
           // else get output(def[nextArg]), and for each item in it, _visitNode(ctx, item, null, null, node).
         // Else our args are complete:
           // if wantedInputs still contains something, fail;
           // else apply v, then handle the result as "Any other item".
-      // Context or tries.
-        // _visitNode with each item, then return.
       // Any other item.
         // If !_isVar(wantedOutput), _assign(wantedOutput, v, true).
         // If `then`, _visitNode(then[0], then[1], then[2], [...then[3], v], then[4]).
@@ -8605,6 +8616,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       try {
         if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, null, null)
         while (arr.length) {
+          _checkInterrupt()
           const node = arr[0];
           [arr[arr.length-1], arr[0]] = [arr[0], arr[arr.length-1]], arr.pop()
           _search.nodes = arr
@@ -8612,7 +8624,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           if (r !== undefined)
             return [r !== _onlyUndefined ? r : undefined, arr]
         }
-        error('Not found:', v, 'in', ctx)
+        throw error('Not found:', v, 'in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 1)(arr);  throw err }
 
       // _search.nodes (the current array of nodes)
