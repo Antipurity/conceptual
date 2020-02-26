@@ -874,15 +874,15 @@ node.code {display:table; font-family:monospace}
 prompt { width:2ch; color:red; float:left }
 prompt::before { content:'▶' /* > ⊱ ▶ */ }
 
-JobIndicator { width:.7em; height:.7em; margin:.25em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
+JobIndicator { width:1em; height:1em; margin:.2em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
 JobIndicator.yes { background-color:var(--highlight); animation: rotate 4s infinite linear, fadein .2s }
-JobIndicator>div { width: .2em; height:.2em; margin:.25em; position:absolute; background-color:var(--highlight); border-radius:50%; transform: rotate(var(--turns)) translate(.5em); animation:none }
+JobIndicator>div { width:.3em; height:.3em; margin:.35em; position:absolute; background-color:var(--highlight); border-radius:50%; transform: rotate(var(--turns)) translate(.7em); animation:none }
 @keyframes rotate {
   0% { transform: rotate(-0.25turn) }
   100% { transform: rotate(0.75turn) }
 }
 
-button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:var(--highlight); color:var(--background) }
+button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:var(--highlight); color:var(--background); font-family:monospace }
 button:hover, a:hover, collapsed:hover, prompt:hover { filter:brightness(120%) }
 button:active, a:active, collapsed:active, prompt:active { filter:brightness(80%) }
 button::-moz-focus-inner { border:0 }
@@ -1049,7 +1049,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       // Highlight equal-id <node>s over selection or under cursor.
       function changeHoverTo(el) {
         const prev = changeHoverTo.prev
-        const def = el && defines(el.to, _closestNodeParent)
+        const def = el && !_isArray(el.to) && defines(el.to, _closestNodeParent)
         const New = el == null ? null : el instanceof Set ? el : el && def ? def(el) : elemValue(undefined, el.to)
         const needed = new Set
         let b = false
@@ -1110,30 +1110,27 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       }
 
       // On any element tree mutations inside `into`, re-highlight.
-      new MutationObserver(_throttled(record => {
+      const mo = new MutationObserver(_throttled(record => {
         changeHoverTo(changeHoverTo.prev)
-      }, .05))
-      .observe(into, { childList:true, subtree:true })
+      }, .05));
+      [...into.childNodes].forEach(ch => mo.observe(ch, { childList:true, subtree:true }))
 
       // Show the current highlight on the global scrollbar.
       const scrollHighlights = new Map
       const scrollHighlight = _throttled(function scrollHighlight(els) {
-        const free = []
+        const free = _allocArray()
         scrollHighlights.forEach(v => free.push(v)), scrollHighlights.clear()
+        let n = 0
         els && els.forEach(el => {
-          if (!_isStylableDOM(el)) return
+          if (!_isStylableDOM(el) || n++ > 100) return
           const h = free.length ? free.shift() : document.createElement('scroll-highlight')
           scrollHighlights.set(el, h)
-          if (free.includes(h)) console.log('duplicate')
         })
-        free.forEach(el => elemRemove(el, false, false, false))
+        free.forEach(el => elemRemove(el, false, false, false)), _allocArray(free)
         if (scrollHighlights.size) {
           updateScrollHighlights()
-          scrollHighlights.forEach(v => {
-            if (!v.parentNode) v.style.opacity = 0, into.append(v)
-          })
-          into.offsetHeight
-          scrollHighlights.forEach(v => v.style.opacity !== '' && (v.style.opacity = 1))
+          scrollHighlights.forEach(v => {!v.parentNode && (v.style.opacity = 0, into.append(v))})
+          _reflow().then(() => scrollHighlights.forEach(v => v.style.opacity !== '' && (v.style.removeProperty('opacity'))))
         } else if (document.querySelector('scroll-highlight'))
           [...document.querySelectorAll('scroll-highlight')].forEach(el => !el.removed && (console.error('Dangling scroll highlight:', el), el.remove()))
       }, .2)
@@ -1142,7 +1139,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         const min = -document.documentElement.scrollTop, max = document.documentElement.scrollHeight + min
         if (max+1 <= min) return
         scrollHighlights.forEach((v,k) => {
-          if (!k.isConnected)
+          if (!k.isConnected || getComputedStyle(k).display === 'none')
             return elemRemove(scrollHighlights.get(k)), scrollHighlights.delete(k)
           let rect = k.getBoundingClientRect()
           if (!rect.x && !rect.y && !rect.width && !rect.height) {
@@ -1527,8 +1524,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
     call(...x) {
       log.did = true, impure.impure = true
       try {
-        let str
         const into = finish.env[_id(log)]
+        let str
         if (x.length != 1 || !_isStylableDOM(x[0]))
           str = serialize(x.length > 1 ? x : x[0], _langAt(into), _bindingsAt(into), serialize.displayed)
         else str = x[0]
@@ -5570,6 +5567,7 @@ Infers structural terms where possible.`,
 
   elem:{
     txt:`\`(elem TagName Content Extra)\`: creates an HTML DOM element.`,
+    future:`Figure out why elems get cloned when outputted.`,
     nameResult:[
       `element`,
       `DOM`,
@@ -5592,17 +5590,18 @@ Infers structural terms where possible.`,
       if (typeof tag != 'string') error("Invalid elem tag:", tag)
       if (content != null && typeof content != 'string' && !_isArray(content) && !(content instanceof Node))
         errorStack("Invalid elem content:", content)
-      const e = document.createElement(tag)
-      _elemAppend(e, content)
-      return e
+      const el = document.createElement(tag)
+      _elemAppend.to = el
+      _elemAppend(content)
+      return el
     },
   },
 
-  _elemAppend(p, ch) {
+  _elemAppend(ch) {
     // Out-of-document DOM append.
-    if (_isArray(ch)) return ch.forEach(ch => _elemAppend(p, ch))
-    if (ch && ch.parentNode && !ch.special) p.append(elemClone(ch))
-    else if (ch !== undefined) p.append(ch)
+    if (_isArray(ch)) ch.forEach(_elemAppend)
+    else if (ch && ch.parentNode && !ch.special) _elemAppend.to.append(elemClone(ch))
+    else if (ch !== undefined) _elemAppend.to.append(ch)
   },
 
   elemClone(el) {
@@ -6543,17 +6542,18 @@ Also wraps C-style strings in <string>.`,
 
   _fancyTopLevel(match, u) { // (f); a b c c=x; a=b
     if (u === _specialParsedValue) {
-      const arr = _basicMany(match, u, _fancyOutermost)
+      let arr = _basicMany(match, u, _fancyOutermost)
       match(/\s+/y)
+      if (!_isArray(arr)) return arr
 
-      const inner = _isArray(arr) && arr[0] === bound ? arr[2] : arr
-      if (_isArray(arr) && arr[0] === bound && !inner.length && arr[1].size == 1)
+      if (arr.length == 1) arr = arr[0]
+      const inner = arr[0] === bound ? arr[2] : arr
+      if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length)
         return [_extracted, ...arr[1].keys(), ...arr[1].values()]
+      if (!_isArray(inner)) return inner
       if (!inner.length) match.notEnoughInfo("No value at top level")
-      if (inner.length == 1) {
-        if (_isArray(arr) && arr[0] === bound) arr[2] = arr[2][0]
-        else return arr[0]
-      }
+      if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
+        arr[2] = arr[2][0]
 
       return arr
     }
@@ -6562,17 +6562,18 @@ Also wraps C-style strings in <string>.`,
 
   _basicTopLevel(match, u) { // (f); a b c c=x; a=b
     if (u === _specialParsedValue) {
-      const arr = _basicMany(match, u, _basicOutermost)
+      let arr = _basicMany(match, u, _basicOutermost)
       match(/\s+/y)
+      if (!_isArray(arr)) return arr
 
-      const inner = _isArray(arr) && arr[0] === bound ? arr[2] : arr
-      if (_isArray(arr) && arr[0] === bound && !inner.length && arr[1].size == 1)
+      if (arr.length == 1) arr = arr[0]
+      const inner = arr[0] === bound ? arr[2] : arr
+      if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length)
         return [_extracted, ...arr[1].keys(), ...arr[1].values()]
+      if (!_isArray(inner)) return inner
       if (!inner.length) match.notEnoughInfo("No value at top level")
-      if (inner.length == 1) {
-        if (_isArray(arr) && arr[0] === bound) arr[2] = arr[2][0]
-        else return arr[0]
-      }
+      if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
+        arr[2] = arr[2][0]
 
       return arr
     }
@@ -6720,7 +6721,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     let hasOperators = false
     if (_isArray(s) && _isArray(u) && !_isLabel(u) && s.length > 1)
       for (let i = 0; i < s.length; ++i)
-        if (typeof s[i] == 'string')
+        if (typeof s[i] == 'string' && s[i] !== '[' && s[i] !== ']')
           s[i] = elem('operator', s[i]), hasOperators = true
 
     const backctx = _invertBindingContext(ctx)
@@ -7569,7 +7570,10 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   },
   compile:{
     txt:`Compiles a function to JS.`,
-    future:`Check argCount in compileFinish/compileCall/compileStruct.`,
+    future:[
+      `Check argCount in compileFinish/compileCall/compileStruct.`,
+      `In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out, so that all disposals are always hit.`,
+    ],
     philosophy:`I am speed.`,
     buzzwords:`JIT-compiled`,
     call(opt, ...a) {
@@ -7972,6 +7976,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
           refCount.delete(x)
           x.forEach(walk)
         }
+        walk()
         refCount.clear();  refCount = prevRefs
 
         used(names.get(x[2]))
@@ -8289,7 +8294,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
 
   Usage:{
     txt:`A namespace for contextual structural enumeration and generation.`,
-    future:`Have \`disableUsageElem\` that displays a checkbox for each thing in \`CurrentUsage\` (checked) and \`DisabledUsage\` (unchecked). recursive-in-<details> for inner contexts, shuffling between contexts on input.`,
+    future:`Have \`disableUsageElem\` that displays a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled), shuffling between disabled-ness on input.`,
     lookup:{
       current:__is(`CurrentUsage`),
       either:__is(`either`),
@@ -8336,7 +8341,8 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         result = r
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, j);  throw err }
 
-    } else if (_isFunction(v) || typeof v == 'function' && (inp ? (d = !_isArray(v) && defines(v, input)) : (d = !_isArray(v) && defines(v, output)))) {
+    // If a deconstructable function, or a JS function that defines `input`/`output`:
+    } else if (_isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
       const f = d || deconstruct(v, false)
       let [j = 0, k = d ? 0 : 1] = interrupt(_addUsesToContext)
@@ -8371,16 +8377,18 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         }
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(j, k);  throw err }
 
-    } else if (typeof v == 'function' && (!inp || defines(v, argCount) === values.length)) {
+    // If a JS function with the exact arg count we need, and seeking input, and all args are non-arrays (non-structural):
+    } else if (typeof v == 'function' && values && inp && defines(v, argCount) === values.length && !values.some(_isArray)) {
       // Native functions bear no hint of the required structure, so the only thing we can do is call them and see if an error arises.
       try {
-        try { inp && v(...values) } // If seeking output, always add.
+        try { v(...values) }
         catch (err) { if (err !== impure) throw err } // Always add impure functions.
         if (result === false) return true
         if (!result) result = _allocArray(), result.push(either)
         if (!result.includes(as)) result.push(as)
-      } catch (err) { if (err === interrupt || !inp) throw err }
+      } catch (err) { if (err === interrupt) throw err }
 
+    // If `either ...?`, or defines `Usage` to be `either ...?`:
     } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
 
       // Check out this sub-context.
@@ -8404,19 +8412,21 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
             if (!d) break
           }
         else hash = _structHash(values), direct = a.get(hash)
+        if (hash === _structHash.dependent) direct = v
+
         if (direct)
           for (; i < direct.length; ++i) {
             r = _addUsesToContext(r, direct[i], direct[i], ctx, values, inp)
             if (r === true) return true
           }
-        const dep = a.get(_structHash.dependent)
-        if (hash !== _structHash.dependent && dep)
+        const dep = hash !== _structHash.dependent && a.get(_structHash.dependent)
+        if (dep)
           for (; j < dep.length; ++j) {
             r = _addUsesToContext(r, dep[j], dep[j], ctx, values, inp)
             if (r === true) return true
           }
-        const subcontext = a.get(_structHash.context)
-        if (hash !== _structHash.context && subcontext)
+        const subcontext = hash !== _structHash.context && a.get(_structHash.context)
+        if (subcontext)
           for (; k < subcontext.length; ++k) {
             r = _addUsesToContext(r, subcontext[k], subcontext[k], ctx, values, inp)
             if (r === true) return true
@@ -8440,67 +8450,67 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
   },
 
   input:{
-    txt:`\`(input Context …Values)\`: returns a sub-context of all functions that can accept \`Values\` in the given order, or \`null\`.`,
+    txt:`\`(input Values)\` or \`(input Values Context)\`: returns a sub-context of all functions that can accept \`Values\` in the given order, or \`null\`.`,
     examples:[
       [
-        `input (either 1->2 2->3 a->a+1 toBase64) 2`,
+        `input (2) (either 1->2 2->3 a->a+1 toBase64)`,
         `either 2→3 a→a+1`,
       ],
       [
-        `input (either quote fromBase64 toBase64) 'a'`,
+        `input ('a') (either quote fromBase64 toBase64)`,
         `either quote toBase64`,
       ],
       [
-        `input (either id fromBase64 toBase64) 'U28gdGhpcyBpcyB0aGUgcG93ZXIgb2YgdWx0cmEgaW5zdGluY3Q='`,
+        `input ('U28gdGhpcyBpcyB0aGUgcG93ZXIgb2YgdWx0cmEgaW5zdGluY3Q=') (either id fromBase64 toBase64)`,
         `either id fromBase64 toBase64`,
       ],
       [
-        `input (either (either (either 1:2->2:3))) 1:2`,
+        `input (1:2) (either (either (either 1:2->2:3)))`,
         `either 1:2->2:3`,
       ],
       `It checks that all args can be generated in the context:`,
       [
-        `input (either (function a:10 b:20 a+b:30) 0:50 (function a:10 b:50 a*b:60)) 1:10`,
+        `input (1:10) (either (function a:10 b:20 a+b:30) 0:50 (function a:10 b:50 a*b:60))`,
         `either (function a:10 b:50 a*b:60)`,
       ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object family's outgoing morphisms.`,
-    call(ctx, ...values) { return _addUsesToContext(null, ctx, ctx, ctx, values, true) },
+    call(values, ctx = CurrentUsage) { return _addUsesToContext(null, ctx, ctx, ctx, values, true) },
   },
 
   output:{
-    txt:`\`(output Context Value)\`: returns a sub-context of all values and functions that may produce results that fit the shape \`Value\`.`,
+    txt:`\`(output Value)\` or \`(output Value Context)\`: returns a sub-context of all values and functions that may produce results that fit the shape \`Value\`.`,
     examples:[
       [
-        `output (either 1 2:2 3:4) ?:2`,
+        `output ?:2 (either 1 2:2 3:4)`,
         `either 2:2`,
       ],
       [
-        `output (either 1:Int 2:Int 3:'Float') ?:Int Int='Int'`,
+        `output ?:Int (either 1:Int 2:Int 3:'Float') Int='Int'`,
         `either 1:Int 2:Int Int='Int'`,
       ],
       [
-        `output (either a->a:Int b:Int->b:'Float') ?:Int Int='Int'`,
+        `output ?:Int (either a->a:Int b:Int->b:'Float') Int='Int'`,
         `either a→a:'Int'`,
       ],
-      `Non-structural outputs are not eliminated:`,
+      `Dependent outputs are not discarded:`,
       [
-        `output (either 1:Int a:b→a+1:b+1 toBase64) ?:Int Int='Int'`,
-        `either 1:'Int' a:b→a+1:b+1 toBase64`,
+        `output ?:Int (either 1:Int a:b→a+1:b+1 toBase64) Int='Int'`,
+        `either 1:'Int' a:b→a+1:b+1`,
       ],
       `Conditional branches get looked into:`,
       [
-        `output (either x->(if x x:StringlyTyped (error))) ?:StringlyTyped StringlyTyped='StringlyTyped'`,
+        `output ?:StringlyTyped (either x->(if x x:StringlyTyped (error))) StringlyTyped='StringlyTyped'`,
         `either x->(if x x:'StringlyTyped' (error))`,
       ],
       `Inputs are checked to exist in the context:`,
       [
-        `output (either 1:1 ?:1->?:Int ?:2->?:Int) ?:Int Int='Int'`,
+        `output ?:Int (either 0:1 ?:1->?:Int ?:2->?:Int) Int='Int'`,
         `either ?:1→?:Int Int='Int'`,
       ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code.`,
-    call(ctx, value) { return _addUsesToContext(null, ctx, ctx, ctx, value, false) },
+    call(value, ctx = CurrentUsage) { return _addUsesToContext(null, ctx, ctx, ctx, value, false) },
   },
 
   use:{
@@ -8537,23 +8547,32 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
   _visitNode:{
     txt:`Remembers to visit the node in this graph search.`,
-    call(parent, ) {
-      _search.nodes.add([parent, ])
+    call(ctx, v, wantedInputs, actualArgs, then) {
+      _search.nodes.push([ctx, v, wantedInputs, actualArgs, then])
     },
   },
 
   _handleNode:{
-    txt:``,
-    call(arr) {
-      _search.nodes.delete(arr)
-      const [parent, ] = arr
-      // How do we handle each case?
-        // Macro.
-        // Tries.
-        // User function.
-        // Native function.
-        // Context.
-      // And when we finish a node, how do we return to the node above (applying functions if ready) while still being able to return to ourselves?
+    txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
+    call(node) {
+      const [ctx, v, wantedInputs, wantedOutput, actualArgs, then] = node
+      // Macro.
+        // Just as before: go to defines(v, finish) and (remember to) unwrap unknowns in actualArgs.
+      // Tries.
+        // Just as before: convert it to a context, then _visitNode and return.
+      // Function. (Must define argCount.)
+        // If !actualArgs || actualArgs.length < defines(v, argCount):
+          // if the next input matches, _visitNode(ctx, v, wantedInputs.length > 1 ? wantedInputs.slice(1) : null, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], node);
+          // else get output(def[nextArg]), and for each item in it, _visitNode(ctx, item, null, null, node).
+        // Else our args are complete:
+          // if wantedInputs still contains something, fail;
+          // else apply v, then handle the result as "Any other item".
+      // Context or tries.
+        // _visitNode with each item, then return.
+      // Any other item.
+        // If !_isVar(wantedOutput), _assign(wantedOutput, v, true).
+        // If `then`, _visitNode(then[0], then[1], then[2], [...then[3], v], then[4]).
+        // If `!then`, return v !== undefined ? v : _onlyUndefined.
     },
   },
 
@@ -8563,11 +8582,21 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       _checkInterrupt()
       let d, fun = false
 
-      if (!_search.nodes) _search.nodes = new Set
-      _visitNode(undefined, )
-      _search.nodes.forEach(_handleNode)
-        // We can probably put nodes in an array (we won't be merging nodes, so no need for a Set), and not need a separate function (and preserve position and all-nodes on interrupt).
-          // (Functions can still be good for separation.)
+      if (!_search.nodes) _search.nodes = []
+      let [arr] = interrupt(_search)
+      try {
+        if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, null, null)
+        while (arr.length) {
+          const node = arr[0];
+          [arr[arr.length-1], arr[0]] = [arr[0], arr[arr.length-1]], arr.pop()
+          _search.nodes = arr
+          const r = _handleNode(node)
+          if (r !== undefined) return r !== _onlyUndefined ? r : undefined
+        }
+        error('Not found:', v, 'in', ctx)
+      } catch (err) { if (err === interrupt) interrupt(_search, 1)(arr);  throw err }
+
+      // _search.nodes (the current array of nodes)
 
       // What to do with the below?
 
@@ -8655,7 +8684,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   get:{
     txt:`\`get OutputStructure Context\`: creates a structured value from \`Context\` (\`CurrentUsage\` by default).
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
-    examples:[
+    examples:![
       `Trivial finding:`,
       [
         `get (either 0:1) ?:1`,
