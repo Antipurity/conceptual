@@ -923,7 +923,7 @@ iframe { width:100%; height:100% }
 .hasOperators>.hasOperators>operator, .hasOperators>.hasOperators { margin:0 .1em }
 .hasOperators>.hasOperators>.hasOperators>operator, .hasOperators>.hasOperators>.hasOperators { margin:0 }
 
-details { padding-left: 1em }
+details { padding: .1em; padding-left: 1em }
 summary { margin-left: -1em }
 details>:not(summary) { display:block; margin-bottom:1em; border-bottom:1px solid black }
 details>div>:not(:first-child) { max-width:75vw }
@@ -964,7 +964,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       // Also make <details> open smoothly, and allow them to be closed by clicking.
       _listen('click', evt => {
         if (evt.target.tagName === 'DETAILS') return evt.target.firstChild.click()
-        if (evt.target.tagName === 'SUMMARY' && evt.detail !== 3) {
+        if (evt.target.tagName === 'SUMMARY' && evt.detail !== 3 && !_smoothHeight.disabled) {
           const el = evt.target.parentNode
           const pre = _smoothHeightPre(el)
           el.style.height = pre + 'px'
@@ -2683,13 +2683,14 @@ All these are automatically tested to be correct at launch.`,
       const L = _langAt(), B = _bindingsAt()
       const transform = r => {
         if (!_isArray(r)) return
-        return r.map(a => {
+        r = r.map(a => {
           if (typeof a == 'string') return elem('div', stringToDoc(a))
           if (!_isArray(a)) throw "Examples must be arrays or comments"
-          const from = !a[2] ? parse(a[0])[0] : parse(a[0], fancy, undefined, parse.dom)[1]
+          const from = parse(a[0], fancy, undefined, parse.dom)[1]
           const to = a[1] ? parse(a[1])[0] : elemCollapse(() => elem(evaluator, from, to))
-          return elem('div', [serialize(from, L, B, serialize.displayed), elem('span', '\n⇒ '), serialize(to, L, B, serialize.displayed)])
+          return elem('div', [from, elem('span', '\n⇒ '), serialize(to, L, B, serialize.displayed)])
         })
+        return r.length != 1 ? r : r[0]
       }
       if (f !== undefined) return transform(defines(f, examples))
       const result = new Map
@@ -3590,17 +3591,16 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
   label:{
     txt:`\`(label Name)\`: represents a name that can be bound or assigned. Equal-name labels are bound to the same thing within the same binding.
 Evaluating an unbound label results in \`(error)\`; evaluating a bound label results in its value, in the current function call.`,
+    future:`Fix \`a a=(0 (a) a)\` not serializing correctly.`,
     argCount:1,
     examples:[
       [
         `a a=1`,
         `1`,
-        true
       ],
       [
         `a a 1 a a a=0`,
         `0 0 1 0 0`,
-        true
       ],
       [
         `a a=(0 (a) a)`,
@@ -7584,10 +7584,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   },
   compile:{
     txt:`Compiles a function to JS.`,
-    future:[
-      `Check argCount in compileFinish/compileCall/compileStruct.`,
-      `In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out, so that all disposals are always hit.`,
-    ],
+    future:`In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out, so that all disposals are always hit.`,
     philosophy:`I am speed.`,
     buzzwords:`JIT-compiled`,
     call(opt, ...a) {
@@ -8589,19 +8586,19 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         return
       }
 
-      // Function. (Must define argCount, as a number.)
+      if (typeof v == 'function' && typeof defines(v, argCount) == 'number') {
         // If !actualArgs || actualArgs.length < defines(v, argCount):
           // if the next input matches, _visitNode(ctx, v, wantedInputs.length > 1 ? wantedInputs.slice(1) : null, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], node);
           // else get output(def[nextArg]), and for each item in it, _visitNode(ctx, item, null, null, node).
         // Else our args are complete:
           // if wantedInputs still contains something, fail;
-          // else apply v, then handle the result as "Any other item".
+          // else apply v, then handle the result as "Any other item" (AKA don't return).
+      }
+
       // Any other item.
         // If !_isVar(wantedOutput), _assign(wantedOutput, v, true).
         // If `then`, _visitNode(then[0], then[1], then[2], [...then[3], v], then[4]).
         // If `!then`, return v !== undefined ? v : _onlyUndefined.
-
-      // Should paste the checks into here. Then move comments to branches. Then fill in with code.
     },
   },
 
