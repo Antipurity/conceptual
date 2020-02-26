@@ -813,6 +813,7 @@ Supported browsers: modern Chrome and Firefox.`,
   --highlight:royalblue;
   --main:black;
 }
+.into.noTransitions * { transition: none !important }
 .into.dark {
   --background:rgb(15,15,15);
   --highlight:rgb(225, 110, 65);
@@ -1092,7 +1093,10 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         CPU.type = 'range', CPU.min = .01, CPU.max = .99, CPU.step = .01, CPU.value = .99
         CPU.style.margin = 0
         CPU.title = "Debounce the interpreter loop to 99% CPU usage."
-      bottombar.append(JobIndicator, Darkness, CPU)
+        const Smoothness = elem('input')
+        Smoothness.type = 'checkbox', Smoothness.title = 'Disable smooth transitions?'
+        ;(Smoothness.oninput = () => {_smoothHeight.disabled = Smoothness.checked, into.classList.toggle('noTransitions', Smoothness.checked, true)})()
+      bottombar.append(JobIndicator, Darkness, CPU, Smoothness)
       into.append(bottombar)
 
       // Highlight all current jobs' logging areas when hovering over the job indicator.
@@ -2314,6 +2318,7 @@ Return stopIteration to stop iteration.`,
   },
 
   _smoothTransformPre(el) {
+    if (_smoothHeight.disabled) return
     if (!(el instanceof Element)) return !el || el.left === undefined || el.top === undefined ? undefined : [el.left + scrollX, el.top + scrollY]
     const r = el.getBoundingClientRect()
     return [r.left + scrollX, r.top + scrollY]
@@ -2322,6 +2327,7 @@ Return stopIteration to stop iteration.`,
   _smoothTransformPost:{
     txt:`For moving non position:inline elements from and to an arbitrary document location, smoothly and without lag. Use _smoothTransformPre to fill in \`pre\`.`,
     call(el, pre, delay = 0) {
+      if (_smoothHeight.disabled) return
       if (!pre || !(el instanceof Element)) return
       impure()
       const post = _smoothTransformPre(el)
@@ -2345,12 +2351,13 @@ Return stopIteration to stop iteration.`,
     return _reflow.p = Promise.resolve().then(() => (_reflow.p = null, document.body.offsetWidth))
   },
 
-  _smoothHeightPre(el) { return el instanceof Element && el.offsetHeight || 0 },
+  _smoothHeightPre(el) { return !_smoothHeight.disabled && el instanceof Element && el.offsetHeight || 0 },
 
   _smoothHeightPost:{
     txt:`Since height:auto does not transition by default (because it's too laggy for non-trivial layouts), we explicitly help it (because we don't care).
 Call this with the result of _smoothHeightPre to transition smoothly.`,
     call(el, pre) {
+      if (_smoothHeight.disabled) return _reflow()
       if (!(el instanceof Element)) return
       el.isConnected && impure()
       el.style.removeProperty('height')
@@ -8541,7 +8548,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     ],
     call(inputs, v, ctx = CurrentUsage) {
       if (!use.var) use.var = [_var]
-      return _search(undefined, ctx, v !== undefined ? v : use.var, inputs, false)
+      const r = _search(undefined, ctx, v !== undefined ? v : use.var, inputs, false)
+      if (r[1]) _allocArray(r[1])
+      return r[0]
     },
   },
 
@@ -8573,17 +8582,19 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         // If !_isVar(wantedOutput), _assign(wantedOutput, v, true).
         // If `then`, _visitNode(then[0], then[1], then[2], [...then[3], v], then[4]).
         // If `!then`, return v !== undefined ? v : _onlyUndefined.
+
+      // Should paste the checks into here. Then move comments to branches. Then fill in with code.
     },
   },
 
   _search:{
-    txt:``,
+    txt:`Searches the graph. Returns (Result Continuation).`,
     call(cont, ctx, v, inputs, canDestroyV = false) {
       _checkInterrupt()
       let d, fun = false
 
       if (!_search.nodes) _search.nodes = []
-      let [arr] = interrupt(_search)
+      let [arr = cont] = interrupt(_search)
       try {
         if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, null, null)
         while (arr.length) {
@@ -8591,7 +8602,8 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           [arr[arr.length-1], arr[0]] = [arr[0], arr[arr.length-1]], arr.pop()
           _search.nodes = arr
           const r = _handleNode(node)
-          if (r !== undefined) return r !== _onlyUndefined ? r : undefined
+          if (r !== undefined)
+            return [r !== _onlyUndefined ? r : undefined, arr]
         }
         error('Not found:', v, 'in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 1)(arr);  throw err }
