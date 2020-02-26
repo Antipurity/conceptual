@@ -8561,15 +8561,15 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
   _visitNode:{
     txt:`Remembers to visit the node in this graph search.`,
-    call(ctx, v, wantedInputs, actualArgs, then) {
-      _search.nodes.push([ctx, v, wantedInputs, actualArgs, then])
+    call(ctx, v, wantedInputs, wantedInputsIndex, actualArgs, then) {
+      _search.nodes.push([ctx, v, wantedInputs, wantedInputsIndex, actualArgs, then])
     },
   },
 
   _handleNode:{
     txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
     call(node) {
-      const [ctx, v, wantedInputs, wantedOutput, actualArgs, then] = node
+      const [ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then] = node
 
 
       let d, isMacro = false
@@ -8582,53 +8582,79 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       if (_isArray(d = v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either || (d = _isTry(v))) {
         // _visitNode with each item.
         for (let i = 1; i < d.length; ++i)
-          _visitNode(ctx, d[i], wantedInputs, wantedOutput, actualArgs, then)
+          _visitNode(ctx, d[i], wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then)
         return
       }
 
-      if (typeof v == 'function' && typeof defines(v, argCount) == 'number') {
-        // If !actualArgs || actualArgs.length < defines(v, argCount):
-          // if the next input matches, _visitNode(ctx, v, wantedInputs.length > 1 ? wantedInputs.slice(1) : null, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], node);
-          // else get output(def[nextArg]), and for each item in it, _visitNode(ctx, item, null, null, node).
-        // Else our args are complete:
-          // if wantedInputs still contains something, fail;
-          // else apply v, then handle the result as "Any other item" (AKA don't return).
+      if (typeof v == 'function' && typeof defines(v, argCount) == 'number' && (!wantedInputs || defines(v, argCount) >= wantedInputs.length)) {
+        if (!actualArgs || actualArgs.length < defines(v, argCount)) {
+          let nextArg
+          // `input`-defining functions get treated as if their inputs are as defined.
+          if (typeof v == 'function' && !_isArray(v) && defines(v, input))
+            nextArg = defines(v, input)[!actualArgs ? 0 : actualArgs.length]
+          // Deconstructable functions have their inputs read.
+          else if (_isFunction(v))
+            nextArg = deconstruct(v, false)[!actualArgs ? 1 : 1 + actualArgs.length]
+          // Native functions with enough argCount accept `inputs` in order if any, then `?`s.
+          else
+            nextArg = use.var
+          if (_isArray(nextArg) && nextArg[0] === rest)
+            error("Rest args are not permitted in usage contexts:", nextArg, 'in', v)
+
+          try {
+            // If nextArg is handled by wantedInputs, move the input to actualArgs.
+            _assign(nextArg, wantedInputs[wantedInputsIndex], true)
+            _visitNode(ctx, v, wantedInputs, wantedInputsIndex+1, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], then)
+          } catch (err) {
+            // If the arg is not in `wantedInputs`, generate it from context.
+            _visitNode(ctx, output(nextArg), null, 0, nextArg, null, node)
+          }
+        } else { // Our args are complete. Apply the function.
+          if (wantedInputs) return // Have to consume all wantedInputs.
+          if (isMacro) actualArgs = bound(_unwrapUnknown, actualArgs, false).slice()
+          try { v = v.apply(v, actualArgs); _allocArray(actualArgs) }
+          catch (err) { if (err === interrupt) throw err; return }
+        }
       }
 
-      // Any other item.
-        // If !_isVar(wantedOutput), _assign(wantedOutput, v, true).
-        // If `then`, _visitNode(then[0], then[1], then[2], [...then[3], v], then[4]).
-        // If `!then`, return v !== undefined ? v : _onlyUndefined.
+      // Else, check the structure of `v` and return it.
+      try {
+        if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
+        // If `then`, add to args, else stop this graph search.
+        if (then) _visitNode(then[0], then[1], then[2], then[3], then[4], then[5] ? [...then[5], v] : [v], then[6])
+        else return v !== undefined ? v : _onlyUndefined
+      } catch (err) {} // Can't interrupt.
     },
   },
 
   _search:{
     txt:`Searches the graph. Returns (Result Continuation).`,
     call(cont, ctx, v, inputs, canDestroyV = false) {
-      _checkInterrupt()
-      let d, fun = false
+      if (!use.var) use.var = [_var]
 
       if (!_search.nodes) _search.nodes = []
       let [arr = cont] = interrupt(_search)
+      let node
       try {
-        if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, null, null)
+        if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, 0, null, null)
         while (arr.length) {
-          _checkInterrupt()
-          const node = arr[0];
+          node = arr[0];
           [arr[arr.length-1], arr[0]] = [arr[0], arr[arr.length-1]], arr.pop()
+          _checkInterrupt()
           _search.nodes = arr
           const r = _handleNode(node)
           if (r !== undefined)
             return [r !== _onlyUndefined ? r : undefined, arr]
         }
         throw error('Not found:', v, 'in', ctx)
-      } catch (err) { if (err === interrupt) interrupt(_search, 1)(arr);  throw err }
+      } catch (err) { if (err === interrupt) arr.unshift(node), interrupt(_search, 1)(arr);  throw err }
 
       // _search.nodes (the current array of nodes)
 
       // What to do with the below?
+        // Destroy?
 
-      let isMacro = false
+      let d, fun = false, isMacro = false
       if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function')
         // If a macro, unwrap unknowns inside `inputs` and treat it as a call.
         v = d, isMacro = true
