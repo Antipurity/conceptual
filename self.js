@@ -1087,16 +1087,19 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         const JobIndicator = _jobs.indicator = elem('JobIndicator')
         JobIndicator.title = "Currently running 0 jobs."
         const Darkness = elem('input')
-        Darkness.type = 'checkbox', Darkness.title = 'Use dark theme?'
+        Darkness.id = 'Darkness', Darkness.type = 'checkbox', Darkness.title = 'Use dark theme?'
         ;(Darkness.oninput = () => into.classList.toggle('dark', Darkness.checked, true))()
         const CPU = _jobs.cpu = elem('input')
-        CPU.type = 'range', CPU.min = .01, CPU.max = .99, CPU.step = .01, CPU.value = .99
+        CPU.id = 'CPU', CPU.type = 'range', CPU.min = .01, CPU.max = .99, CPU.step = .01, CPU.value = .99
         CPU.style.margin = 0
         CPU.title = "Debounce the interpreter loop to 99% CPU usage."
         const Smoothness = elem('input')
-        Smoothness.type = 'checkbox', Smoothness.title = 'Disable smooth transitions?'
+        Smoothness.id = 'Smoothness', Smoothness.type = 'checkbox', Smoothness.title = 'Disable smooth transitions?'
         ;(Smoothness.oninput = () => {_smoothHeight.disabled = Smoothness.checked, into.classList.toggle('noTransitions', Smoothness.checked, true)})()
-      bottombar.append(JobIndicator, Darkness, CPU, Smoothness)
+        const Coloring = elem('input')
+        Coloring.id = 'Coloring', Coloring.type = 'checkbox', Coloring.title = 'Color variables in serializations?'
+        ;(Coloring.oninput = () => {_valuedColor.enabled = Coloring.checked})()
+      bottombar.append(JobIndicator, Darkness, CPU, Smoothness, Coloring)
       into.append(bottombar)
 
       // Highlight all current jobs' logging areas when hovering over the job indicator.
@@ -2315,6 +2318,8 @@ Return stopIteration to stop iteration.`,
     const pre = _smoothHeightPre(el)
     f()
     _smoothHeightPost(el, pre)
+
+    // .disabled
   },
 
   _smoothTransformPre(el) {
@@ -6071,7 +6076,7 @@ Also wraps C-style strings in <string>.`,
 
   _valuedColor(v) {
     // Returns v's previously displayed element color (for highlighting of the same things) or a new one.
-    return 'var(--main)'
+    if (!_valuedColor.enabled) return 'var(--main)'
     if (!_valuedColor.m) _valuedColor.m = new Map
     if (_valuedColor.m.has(v)) {
       const r = _valuedColor.m.get(v)
@@ -6089,6 +6094,8 @@ Also wraps C-style strings in <string>.`,
     _valuedColor.m.set(v, c)
     _limitMapSize(_valuedColor.m, 100000)
     return c
+
+    // .enabled
   },
 
   _extracted:{
@@ -6553,12 +6560,12 @@ Also wraps C-style strings in <string>.`,
       match(/\s+/y)
       if (!_isArray(arr)) return arr
 
+      if (!arr.length) match.notEnoughInfo("No value at top level")
       if (arr.length == 1) arr = arr[0]
       const inner = arr[0] === bound ? arr[2] : arr
       if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length)
         return [_extracted, ...arr[1].keys(), ...arr[1].values()]
       if (!_isArray(inner)) return inner
-      if (!inner.length) match.notEnoughInfo("No value at top level")
       if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
         arr[2] = arr[2][0]
 
@@ -6573,12 +6580,12 @@ Also wraps C-style strings in <string>.`,
       match(/\s+/y)
       if (!_isArray(arr)) return arr
 
+      if (!arr.length) match.notEnoughInfo("No value at top level")
       if (arr.length == 1) arr = arr[0]
       const inner = arr[0] === bound ? arr[2] : arr
       if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length)
         return [_extracted, ...arr[1].keys(), ...arr[1].values()]
       if (!_isArray(inner)) return inner
-      if (!inner.length) match.notEnoughInfo("No value at top level")
       if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
         arr[2] = arr[2][0]
 
