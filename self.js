@@ -1746,7 +1746,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
   contextMenu:{
     txt:`Creates and displays a <context-menu> element near the specified element.`,
     future:`Have \`atCursor(el, evt = <lastPointerEvt>)\`, and have \`contextMenu\` use that.`,
-    philosophy:`Do not presume that information will get up in your face to yell all you want about itself. Drill down to what you need or want.`,
+    philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     lookup:{
       describe:__is(`describe`),
       toWindow:__is(`elemToWindow`),
@@ -2743,6 +2743,11 @@ All these are automatically tested to be correct at launch.`,
         `AI is usually considered as either slave or master (or transitioning to one of those). That's wrong. Intelligence is total generality, able to include everything, and including everything found useful. Both humans and AI can understand and propose with both words and actions, and consider a problem from every point of view.`,
         `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached. And you can't improve a mind's design without perfection.`,
       ],
+      [
+        `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up. Studying AI or willful humans could help start, as could a problem-solving background. Once the core is present, tight integration with all human subsystems has to be developed to seem like a normal person (but better).`,
+        `Long ago, evolution has found something. Concealed in irrelevant randomly-created instincts, that something gave rise to civilizations far beyond the previous nature. The invisible core of mind is just within our reach now. Sure, ignore it, I don't care; I'd rather perfect all that I consider necessary to bring it out, so that this might someday inspire.`,
+        `In the past, humans and all they imply were the only source of everything in their world. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. The Singularity is when no attention is paid to entities anymore. But that self-perpetuating attention keeps it far off.`,
+      ],
       `Believing in lies… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
       `All known heavens are little more than metaphors for death from trying to fly too close to the sun. But with a huge amount of effort, that could change: they could be metaphors for a heaven that actually succeeds at existing.`,
@@ -2753,9 +2758,8 @@ He became so powerful, the only thing he was afraid of was losing his power, whi
       `The picked governance form is a reflection of how much the people can be trusted to run a country. Here, forms are either monarchy, anarchy (rule of the smartest guy/s, trusting no one), democracy (rule of majority over minority), consensus (overrule by minority of majority — unachievable today except in small groups beyond which human instinct doesn't scale).`,
       `An idea isn't good unless it's been refactored and rethought five times.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
-      `---`,
-      `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up. Studying AI or willful humans could help start, as could a problem-solving background. Once the core is present, tight integration with all human subsystems has to be developed to seem like a normal person (but better).`,
-      `Long ago, evolution has found something. Concealed in irrelevant randomly-created instincts, that something gave rise to civilizations far beyond the previous nature. The invisible core of mind is just within our reach now. Sure, ignore it, I don't care; I'd rather perfect all that I consider necessary to bring it out, so that this might someday inspire.`,
+      `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.
+I guess the solution is to bring so much diverse rightness that you start puking rainbows. It's even more difficult though!`,
     ],
   },
 
@@ -4847,7 +4851,9 @@ Can be written as \`key=value\` in an array to bind its elements. Can be used to
     ],
     argCount:2,
     philosophy:`Nothing is more general than a graph, so in general, nothing is more convenient and powerful than a language built on graphs.
-Other languages use let-bindings for variables (and devote lots of attention to scoping rules and various declaration methods and their subversions (like lambdas)), but here we just share graph nodes (and build the language on top of a very simple graph interchange format, \`basic\`). Elsewhere, a value-flow graph is a complicated compiler transformation (and a skill that users have to learn); here, meaning is a first-class citizen.`,
+Other languages use let-bindings for variables (and devote lots of attention to scoping rules and various declaration methods and their subversions (like lambdas)), but here we just share graph nodes (and build the language on top of a very simple graph interchange format, \`basic\`). Elsewhere, a value-flow graph is a complicated compiler transformation (and a skill that users have to learn); here, meaning is a first-class citizen.
+
+Putting all variables in a single global namespace allows for easy development. If the host language supported arbitrary links and program modification/self-rewrites like us, we wouldn't have needed that to develop comfortably. At least we have _private-ish bindings.`,
     finish(ctx, v) {
       // On finish, finish ctx, bind, then finish the bound expr.
       // Same as `return finish(bound(finish(ctx), v))`, but interrupt-safe.
@@ -5059,7 +5065,7 @@ Other languages use let-bindings for variables (and devote lots of attention to 
               copy[i] = v
             }
           }
-          if (!changed) copy = x, unenv.set(x, x)
+          if (!changed && unenv.get(x) === unbindChildren) copy = x, unenv.set(x, x)
         }
         if (ch) // Deallocate spots for children.
           ch.forEach(c => (nameAllocator(undefined, names.get(c)), currentAncestors.delete(names.get(c))))
@@ -5830,7 +5836,7 @@ Also wraps C-style strings in <string>.`,
       const boundToUnbound = new Map
       const unboundToBound = new Map
       arr = deconstructed(arr)
-      boundToUnbound.forEach((v,k) => k !== v && unboundToBound.set(v, k))
+      boundToUnbound.forEach((v,k) => k !== v && (!unboundToBound.has(v) || !_isArray(v)) && unboundToBound.set(v, k))
       boundToUnbound.clear()
 
       let n = 0
@@ -5966,10 +5972,10 @@ Also wraps C-style strings in <string>.`,
           // Bind labels inside a func to the same (new) element.
           const styled = new Map
           x = _bindFunc(x, x => {
-            if (_isLabel(x) && !styled.has(x)) styled.set(x, styleLabel(x[1], x, [label, x[1]]))
+            if (_isLabel(x) && !styled.has(x))
+              styled.set(x, styleLabel(x[1], x, [label, x[1]])), unboundToBound.set(styled.get(x), x)
             return styled.get(x)
           }, undefined, boundToUnbound)
-          styled.forEach((v,k) => unboundToBound.set(v, k))
         }
         if (!unboundToBound.has(x))
           unboundToBound.set(x, original)
@@ -5991,7 +5997,7 @@ Also wraps C-style strings in <string>.`,
               copy[i] = v
             }
           }
-          return changed ? (unboundToBound.set(copy, original), copy) : (deconstruction.set(x,x), x)
+          return changed ? (unboundToBound.set(copy, original), copy) : (deconstruction.set(x,x), unboundToBound.set(x,x), x)
         }
         return x
       }
@@ -8486,7 +8492,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         `either (function a:10 b:50 a*b:60)`,
       ],
     ],
-    philosophy:`If value/function contexts are categories, then this enumerates an object family's outgoing morphisms.`,
+    philosophy:`If value/function contexts are categories, then this enumerates an object family's outgoing morphisms. We allow non-structural (arbitrary black-box) computations though, unlike category theory.`,
     call(values, ctx = CurrentUsage) { return _addUsesToContext(null, ctx, ctx, ctx, values, true) },
   },
 
@@ -8561,8 +8567,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
   _visitNode:{
     txt:`Remembers to visit the node in this graph search.`,
-    call(ctx, v, wantedInputs, wantedInputsIndex, actualArgs, then) {
-      _search.nodes.push([ctx, v, wantedInputs, wantedInputsIndex, actualArgs, then])
+    call(ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then) {
+      // With 8 bytes for array length and 8 bytes per array item, this is 1 cache line.
+      _search.nodes.push([ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then])
     },
   },
 
@@ -8604,7 +8611,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           try {
             // If nextArg is handled by wantedInputs, move the input to actualArgs.
             _assign(nextArg, wantedInputs[wantedInputsIndex], true)
-            _visitNode(ctx, v, wantedInputs, wantedInputsIndex+1, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], then)
+            _visitNode(ctx, v, wantedInputs, wantedInputsIndex+1, use.var, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], then)
           } catch (err) {
             // If the arg is not in `wantedInputs`, generate it from context.
             _visitNode(ctx, output(nextArg), null, 0, nextArg, null, node)
@@ -8617,10 +8624,14 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         }
       }
 
+      // If `wantedOutput` is directly present in `ctx`, should return it immediately. Probably at the top here.
+      // If `v` is a function: should compose in `use`, try to assign to all fitting-output functions in `get` (if _assign.inferred got filled and we assigned, then `return bound(_assign.inferred, out)` (actually, just regular label-env assignment should be enough)).
+        // Re-reading this... the fuck does this mean
+
       // Else, check the structure of `v` and return it.
       try {
         if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
-        // If `then`, add to args, else stop this graph search.
+        // If `then`, add to args, else return from this graph search.
         if (then) _visitNode(then[0], then[1], then[2], then[3], then[4], then[5] ? [...then[5], v] : [v], then[6])
         else return v !== undefined ? v : _onlyUndefined
       } catch (err) {} // Can't interrupt.
@@ -8629,14 +8640,14 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
   _search:{
     txt:`Searches the graph. Returns (Result Continuation).`,
-    call(cont, ctx, v, inputs, canDestroyV = false) {
+    call(cont, ctx, v, inputs, out) {
       if (!use.var) use.var = [_var]
 
       if (!_search.nodes) _search.nodes = []
       let [arr = cont] = interrupt(_search)
       let node
       try {
-        if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, 0, null, null)
+        if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
         while (arr.length) {
           node = arr[0];
           [arr[arr.length-1], arr[0]] = [arr[0], arr[arr.length-1]], arr.pop()
@@ -8650,166 +8661,80 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       } catch (err) { if (err === interrupt) arr.unshift(node), interrupt(_search, 1)(arr);  throw err }
 
       // _search.nodes (the current array of nodes)
-
-      // What to do with the below?
-        // Destroy?
-
-      let d, fun = false, isMacro = false
-      if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function')
-        // If a macro, unwrap unknowns inside `inputs` and treat it as a call.
-        v = d, isMacro = true
-
-
-      if (d = _isTry(v)) {
-        // Treat a wannabe context as an actual context.
-        const c = _allocArray()
-        c.length = d.length, c[0] = either
-        for (let i = 1; i < d.length; ++i) c[i] = d[i]
-        try { let r = _search(null, ctx, c, inputs, false, true);  _allocArray(c);  return r }
-        catch (err) { if (err !== interrupt) _allocArray(c);  throw err }
-
-      } else if (_isFunction(v) || typeof v == 'function' && (d = !_isArray(v) && defines(v, input)) || typeof v == 'function' && inputs && defines(v, argCount) >= inputs.length && (fun = true)) {
-        // Create an array for actual args, then go through args and put the value if matching or `get(ctx, arg)` if not.
-          // `input`-defining functions get treated as if their inputs are as defined.
-          // Native functions with enough argCount accept `inputs` in order if any, then `?`s.
-        const f = !fun && (d || deconstruct(v, false))
-        if (!use.var) use.var = [_var]
-        let [args = _allocArray(), j = 0, k = d ? 0 : 1] = interrupt(use)
-          // Should also have an array for continuations of args.
-        const endJ = inputs ? inputs.length+1 : 1
-        const endK = !fun ? (d ? f.length : f.length-1) : defines(v, argCount)
-        args.length = endK - k
-        try { // This interrupt-handling deal is getting worse every time.
-          for (; j < endJ; ++j)
-            for (; k < endK; ++k) {
-              // Try matching the arg to value, set it as arg if succeeded.
-              if (inputs && j < inputs.length)
-                try { !fun && _assign(f[k], inputs[j], true); args[k++ - (d?0:1)] = inputs[j]; break } 
-                catch (err) {}
-              // If not handled by `inputs`, get a not-present-in-`inputs` arg from context.
-              args[k - (d?0:1)] = get(ctx, !fun ? f[k] : use.var)
-                // Actually, we probably don't even care about ensuring valid structure, right?
-                // ...Also, if we allow continuations, then we'll have to be able to consider all A*B*C*D*E*F*G combinations...
-                  // (Would need to have each node have the next-arg-to-generate index, and spawn a new node with index+1 for each potential input.)
-            }
-          if (isMacro) args = bound(_unwrapUnknown, args, false).slice()
-          return d = v.apply(v, args), _allocArray(args), d
-            // Should also return a continuation for our args, even on error (and accept continuations from `get`s).
-        } catch (err) { if (err === interrupt) interrupt(use, 3)(args, j, k); else _allocArray(args);  throw err }
-
-      } else if (typeof v == 'function' && defines(v, argCount) === inputs.length) {
-        // Native functions bear no hint of the required structure, so treat every arg as `?`.
-        let [args = _allocArray(), k = 0] = interrupt(use)
-        const endK = args.length = defines(v, argCount)
-        if (!use.var) use.var = [_var]
-        try {
-          for (; k < endK; ++k)
-            args[k] = get(ctx, use.var)
-          if (isMacro) args = bound(_unwrapUnknown, args, false).slice()
-          return d = v.apply(v, args), _allocArray(args), d
-        } catch (err) { if (err === interrupt) interrupt(use, 2)(args, k); else _allocArray(args);  throw err }
-
-      } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
-        const [conts = cont, opts = d || (canDestroyV ? v : v.slice())] = interrupt(_search)
-        try {
-          while (opts.length > 1) {
-            const i = pick(opts)
-            // Swap+pop it out of existence;
-            // `return _search(conts[i], ctx, picked[i])` --- except, also return `conts` for possible resuming.
-              // We only preserve `conts` on failure, then?
-              // Actually, preserving `conts` for only `_search` on failure is relatively useless.
-              // A much better option is to preserve whole continuation stacks, and re-pick on each entry, restoring if we ever were there.
-                // We'd have both the speed and ease of recursive descent, and not being stuck in a cycle of graph search.
-                // ...Except, what about continuations of successes? I think both is a better option than either.
-          }
-        } catch (err) { if (err === interrupt) interrupt(_search, 2)(conts, opts);  throw err }
-
-      } else
-        return v
     },
   },
 
   _get:{
-    txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful (to preserve interrupt stacks of things -- wait, but on interrupt, inner interrupts will not be preserved... so, must have all continuations as a global?).`,
-    future:`Have all continuations as _search.state, a Map from a unique-per-call node to its full state --- args, continuation.`,
-      // I guess having to preserve the global state couldn't be escaped after all?
+    txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful.`,
+    call(out, ctx = CurrentUsage) { return _search(undefined, ctx, ctx, undefined, out) },
   },
 
   get:{
     txt:`\`get OutputStructure Context\`: creates a structured value from \`Context\` (\`CurrentUsage\` by default).
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
-    examples:![
+    examples:[
       `Trivial finding:`,
       [
-        `get (either 0:1) ?:1`,
+        `get ?:1 (either 0:1)`,
         `0:1`,
       ],
       `Trivial composition:`,
       [
-        `get (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10) ?:10`,
+        `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
         `4:10`,
       ],
       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
       [
-        `get (either 10 x->(Next x-1)) (Next ?) Next='Next'`,
+        `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
         `('Next' 9)`,
       ],
       `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
       [
-        `get (either A+0->A A+^B->^[A+B])  X+^^^0->^^^X  X=#
+        `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
 sum='Sum' quote='Next'`,
         `^^^# quote='Next'`,
-        true
       ],
       [
-        `(get (either A+0->A A+^B->^[A+B])  X+^^^0->X)  X=#
+        `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
 sum='Sum' quote='Next'`,
         `error X+^^^0->X 'is not in' (either A+0->A A+^B->^[A+B]) X=#
 sum='Sum' quote='Next'`,
-        true
       ],
       `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
       [
-        `get (either A*0->0  A+0->A  A*^B->A+A*B)  X*^0->X  X=#
+        `get  X*^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=#
 mult='Times' sum='Sum' quote='Next'`,
         `X*^0->X  X=#
 mult='Times' quote='Next'`,
-        true
       ],
       `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
       [
-        `get (either A*0->0  A+0->A  A*^B->A+A*B)  X*^^0->X  X=?
+        `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
 mult='Times' sum='Sum' quote='Next'`,
         `0*^^0->0
 mult='Times' quote='Next'`,
-        true
       ],
       `Can create a function from context as an arg:`,
       [
         `get
+(function assessIndex j (assessIndex j))
+  assessIndex = i:(Index n)->goal:Measure
 (either Dataset Goal)
   Dataset = i:(Index 100)->i+70:Image
   Goal = i:Image->1000-i:Measure
-(function assessIndex j (assessIndex j))
-  assessIndex = i:(Index n)->goal:Measure
 Index='Index' Image='Image' Measure='Measure'`,
         `(function f j (f j))
   f = i:('Index' 100)->1000-[i+70]:'Measure'`,
-        true
       ],
     ],
-    philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices make it even more useful). Automatic constrained expression generation with no way unthinkable.
+    philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful). Automatic constrained expression generation with no way unthinkable.
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
 But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found.`,
     call(out, ctx = CurrentUsage) {
-      // If `out` is a function: should compose in `use`, try to assign to all fitting-output functions in `get` (if _assign.inferred got filled and we assigned, then `return bound(_assign.inferred, out)` (actually, just regular label-env assignment should be enough)).
-      // If `out` is directly present in `ctx`, should return it immediately.
-      const [v = output(ctx, out)] = interrupt(get)
-      try {
-        const r = _search(undefined, ctx, v, undefined, false, true)
-        _assign(r, out, true)
-        return r
-      } catch (err) { if (err === interrupt) interrupt(get, 1)(v);  throw err }
+      const r = _get(out, ctx)
+      const result = r[0]
+      _allocArray(r[1]), _allocArray(r)
+      return result
     },
   },
 
