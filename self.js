@@ -5970,7 +5970,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
       function deconstructed(x) {
         // Return a copy of x with non-array non-string non-backctx things deconstructed.
         if (!deconstructElems && typeof document != ''+void 0 && x instanceof Element)
-          return x.isConnected ? (boundToUnbound.set(x, x = elemClone(x)), x) : x
+          return x.parentNode && x.isConnected ? (boundToUnbound.set(x, x = elemClone(x)), x) : x
         if (deconstruction.has(x)) {
           if (deconstruction.get(x) === undefined) deconstruction.set(x, x.slice())
           x = deconstruction.get(x)
@@ -8669,6 +8669,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
       const us = finish.v
       let [node, nodes = cont] = interrupt(_search)
+        // Should also maintain a Set of all nodes (re-building it on re-enter? or make cont an array?).
       try {
         if (!nodes) nodes = _allocArray(), nodes.push(either), _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
         _search.nodes = nodes
@@ -8919,15 +8920,17 @@ This is the default when no picker is specified.`,
   askUser:{
     txt:`A \`With\` for \`picker\` that pauses execution and asks the user.`,
     future:[
+      `Test this.`,
       `Add a "Remember" checkbox (and maps from cause to the length and the choice).`,
       `Have \`askUserElem()\` for inspecting the remembered choices.`,
     ],
     examples:[
-      [`(picker askUser (pick (1 2 3 4365)))`],
+      [
+        `(picker askUser (pick (1 2 3 4365)))`,
+      ],
     ],
     merge:true,
     call(next, from, cause, extra) {
-      if (typeof document == ''+void 0) throw "askUser is not implemented in console"
       call.impure = true
       if (!askUser.got) askUser.got = new Map
       let a = array(askUser, next, from, cause, extra)
@@ -8936,6 +8939,25 @@ This is the default when no picker is specified.`,
           return askUser.got.get(a) !== _notFound ? askUser.got.get(a) : next(from, cause, extra)
         } finally { askUser.got.delete(a, a = askUser.got.get(a)) }
 
+      if (typeof document == ''+void 0) {
+        // NodeJS.
+        const rl = require('readline').createInterface({ input:process.stdin, output:process.stdout })
+        let job
+        log('A choice from' + _pickCount(from) + ':', from)
+        if (cause !== undefined) log('  Cause:', cause)
+        if (extra !== undefined) log(extra)
+        rl.question('Pick one: ', acceptChoice)
+        function acceptChoice(str) {
+          const i = +str
+          if (!(i >= 0) || !(i < _pickCount(from)))
+            rl.question('Must be a number from 0 to ' + _pickCount(from) + ': ', acceptChoice)
+          else
+            askUser.got.set(a, i), _schedule(...job)
+        }
+        _jobs.reEnter = (expr, env, then, ID) => job = [expr, env, then, ID]
+        throw interrupt
+      }
+      // Browser.
       const el = elem('div')
       if (cause !== undefined)
         el.append('Cause: ', elemValue(elemCollapse(() => serialize(cause, _langAt(), _bindingsAt(), serialize.displayed)), cause), elem('br'))
@@ -8962,8 +8984,7 @@ This is the default when no picker is specified.`,
       let job
       el.onclick = evt => {
         if (evt.target.tagName !== 'BUTTON' || !('to' in evt.target)) return
-        askUser.got.set(a, evt.target.to)
-        _schedule(...job)
+        askUser.got.set(a, evt.target.to), _schedule(...job)
         elemRemove(el), el.onclick = null
       }
       log(el)
