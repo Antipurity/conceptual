@@ -2744,9 +2744,9 @@ All these are automatically tested to be correct at launch.`,
         `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached. And you can't improve a mind's design without perfection.`,
       ],
       [
-        `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up. Studying AI or willful humans could help start, as could a problem-solving background. Once the core is present, tight integration with all human subsystems has to be developed to seem like a normal person (but better).`,
+        `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up. Studying AI or willful humans could help start, as could a problem-solving background. Once the core is present, tight integration with all human subsystems has to be developed to seem like a normal person (but better).`,
         `Long ago, evolution has found something. Concealed in irrelevant randomly-created instincts, that something gave rise to civilizations far beyond the previous nature. The invisible core of mind is just within our reach now. Sure, ignore it, I don't care; I'd rather perfect all that I consider necessary to bring it out, so that this might someday inspire.`,
-        `In the past, humans and all they imply were the only source of everything in their world. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. The Singularity is when no attention is paid to entities anymore. But that self-perpetuating attention keeps it far off.`,
+        `In the past, humans and all they imply were the only source of everything in their world. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. The Singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it far off.`,
       ],
       `Believing in lies… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
@@ -2845,10 +2845,18 @@ An alternative for the default fitting-for-script-usage partial evaluation. Best
   },
 
   delay:{
-    txt:`\`(delay)\` or \`(delay Value)\`: Just a function for testing promises. It should have no effect on evaluation.
-Examples: \`(delay 1)+(delay 2)\` eventually returns \`3\`. \`(delay 1)*(delay 3)+(delay 4)*(delay 5)\` eventually returns \`23\`.`,
+    txt:`\`(delay)\` or \`(delay Value)\`: Just a function for testing promises. It should have no effect on evaluation.`,
+    future:`Test that this still works.`,
     nameResult:[
       `delayed`,
+    ],
+    examples:[
+      [
+        `(delay 1)+(delay 2)`,
+      ],
+      [
+        `(delay 1)*(delay 3)+(delay 4)*(delay 5)`,
+      ],
     ],
     call(x = 12) { return new Promise(then => setTimeout(then, 5000 + 1000 + Math.random()*4000, x)) },
     await:true,
@@ -2856,6 +2864,7 @@ Examples: \`(delay 1)+(delay 2)\` eventually returns \`3\`. \`(delay 1)*(delay 3
 
   race:{
     txt:`Finishing \`(race …Exprs)\`: returns the first expression that returns instead of being deferred. The opposite of regular multiple-promise handling, which waits for all to join.`,
+    future:`On each return-to-\`race\` (initial entry or interrupt or promise), \`pick\` the index and remove it from exprs and run it. Save interrupt states (if any) too.`,
     nameResult:[
       `firstOf`,
     ],
@@ -3904,9 +3913,13 @@ Prove that all of (_all  1|2|3  4|5) are 3::x… Become (_any  3::1|2|3  3::4|5)
 
   randomNat:{
     txt:`\`(randomNat Nat)\`: Picks a random non-negative integer less than \`Nat\`, from a uniform distribution.
-An interface to JS's crypto.getRandomValues for generating random numbers on-demand as opposed to in-batches, optimizing to request the least amount of random bits required.
-\`(randomNat 1)\` is 0.
-\`(randomNat 2)\` is either 0 or 1.`,
+An interface to JS's crypto.getRandomValues for generating random numbers on-demand as opposed to in-batches, optimizing to request the least amount of random bits required.`,
+    examples:[
+      [
+        `Random.nat 1`,
+        `0`,
+      ],
+    ],
     nameResult:[
       `random`,
       `nat`,
@@ -3914,8 +3927,8 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
     ],
     argCount:1,
     call(n) {
-      if (_isArray(n)) n = n.length
-      n = _toNumber(n)
+      if (_isArray(n)) n = _pickCount(n)
+      else n = _toNumber(n)
 
       if (n !== (n>>>0))
         throw 'Expected uint32 as limit of randomness'
@@ -4853,7 +4866,7 @@ Can be written as \`key=value\` in an array to bind its elements. Can be used to
     philosophy:`Nothing is more general than a graph, so in general, nothing is more convenient and powerful than a language built on graphs.
 Other languages use let-bindings for variables (and devote lots of attention to scoping rules and various declaration methods and their subversions (like lambdas)), but here we just share graph nodes (and build the language on top of a very simple graph interchange format, \`basic\`). Elsewhere, a value-flow graph is a complicated compiler transformation (and a skill that users have to learn); here, meaning is a first-class citizen.
 
-Putting all variables in a single global namespace allows for easy development. If the host language supported arbitrary links and program modification/self-rewrites like us, we wouldn't have needed that to develop comfortably. At least we have _private-ish bindings.`,
+Putting all variables in a single global namespace allows for easy development. If the host language supported arbitrary non-fragile links and program modification/self-rewrites like us, we wouldn't have needed that to develop comfortably. At least we have _private-ish bindings.`,
     finish(ctx, v) {
       // On finish, finish ctx, bind, then finish the bound expr.
       // Same as `return finish(bound(finish(ctx), v))`, but interrupt-safe.
@@ -5804,7 +5817,9 @@ Also wraps C-style strings in <string>.`,
       `Fix serialization not associating elems with their correct values (particularly functions).`,
       `Style only after we fully have the struct, then lazily create/style the tree.`,
     ],
-    philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.`,
+    philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.
+
+In theory, having symmetric parse+serialize allows updating the language of written code via "read in with the old, write out with the new", but we don't curently do that.`,
     examples:[
       [
         `serialize ^(parse '12')`,
@@ -6109,8 +6124,9 @@ Also wraps C-style strings in <string>.`,
   },
 
   parse:{
-    txt:`\`(parse String)\` or … or \`(parse String Language Bindings Options)\`: parses String into the graph represented by it, returning \`(Expr StyledDOM)\`.`,
-    philosophy:`Options is a JS object like { style=false }.`,
+    txt:`\`(parse String)\` or … or \`(parse String Language Bindings Options)\`: parses String into the graph represented by it, returning \`(Expr StyledInput)\`.`,
+    philosophy:`Options is a JS object like { style=false }.
+And parsing is more than just assigning meaning to a string of characters (it's also styling and associating source positions).`,
     call(str, lang, ctx, opt) {
       if (typeof str == 'string') str = str ? [str] : []
       if (_isDOM(str)) str = _innerText(str) // Don't even attempt to cache subtrees lol
@@ -6119,7 +6135,7 @@ Also wraps C-style strings in <string>.`,
 
       if (!lang) lang = fancy
       const styles = opt && opt.style ? defines(lang, style) || style : undefined
-      const sourceURL = opt && opt.sourceURL || 'yep'
+      const sourceURL = opt && opt.sourceURL
 
       let i = 0, lastI = 0
       const struct = styles && [], Unbound = styles && new Map
@@ -8568,8 +8584,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   _visitNode:{
     txt:`Remembers to visit the node in this graph search.`,
     call(ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then) {
-      // With 8 bytes for array length and 8 bytes per array item, this is 1 cache line.
+      // With 8 bytes for array length and 8 bytes per array item, this is (usually) 1 cache line.
       _search.nodes.push([ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then])
+      // Should also merge nodes (`array` instead of `[]`), and not add duplicate nodes (via _search.set).
     },
   },
 
@@ -8577,6 +8594,10 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
     call(node) {
       const [ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then] = node
+
+
+      // If `wantedOutput` is a function: _visitNode(array(either, ...Inputs, ctx), <same>, null, 0, Output, null, then) and return.
+        // (Would need forward-search support to be useful, first.)
 
 
       let d, isMacro = false
@@ -8587,8 +8608,12 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
       // If `either …?` or `try …?` or defines `Usage` to be `either …?`:
       if (_isArray(d = v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either || (d = _isTry(v))) {
+        // If `v` contains `wantedOutput` as-is, return that.
+        let i = d.indexOf(wantedOutput)
+        if (i > 0) return d[i] !== undefined ? d[i] : _onlyUndefined
+
         // _visitNode with each item.
-        for (let i = 1; i < d.length; ++i)
+        for (i = 1; i < d.length; ++i)
           _visitNode(ctx, d[i], wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then)
         return
       }
@@ -8619,14 +8644,12 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         } else { // Our args are complete. Apply the function.
           if (wantedInputs) return // Have to consume all wantedInputs.
           if (isMacro) actualArgs = bound(_unwrapUnknown, actualArgs, false).slice()
+          const nodes = _search.nodes // Safeguard against an inner search.
           try { v = v.apply(v, actualArgs); _allocArray(actualArgs) }
           catch (err) { if (err === interrupt) throw err; return }
+          _search.nodes = nodes
         }
       }
-
-      // If `wantedOutput` is directly present in `ctx`, should return it immediately. Probably at the top here.
-      // If `v` is a function: should compose in `use`, try to assign to all fitting-output functions in `get` (if _assign.inferred got filled and we assigned, then `return bound(_assign.inferred, out)` (actually, just regular label-env assignment should be enough)).
-        // Re-reading this... the fuck does this mean
 
       // Else, check the structure of `v` and return it.
       try {
@@ -8635,30 +8658,37 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         if (then) _visitNode(then[0], then[1], then[2], then[3], then[4], then[5] ? [...then[5], v] : [v], then[6])
         else return v !== undefined ? v : _onlyUndefined
       } catch (err) {} // Can't interrupt.
+        // If not ok, should expand the context with `v` (`array(either, v, ctx)`) since we got it through legitimate in-context means (forward search).
     },
   },
 
   _search:{
-    txt:`Searches the graph. Returns (Result Continuation).`,
-    call(cont, ctx, v, inputs, out) {
+    txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results) or throws.`,
+    call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
       if (!use.var) use.var = [_var]
 
-      if (!_search.nodes) _search.nodes = []
-      let [arr = cont] = interrupt(_search)
-      let node
+      const us = finish.v
+      let [node, nodes = cont] = interrupt(_search)
       try {
-        if (!arr) arr = _allocArray(), _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
-        while (arr.length) {
-          node = arr[0];
-          [arr[arr.length-1], arr[0]] = [arr[0], arr[arr.length-1]], arr.pop()
+        if (!nodes) nodes = _allocArray(), nodes.push(either), _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
+        _search.nodes = nodes
+        while (nodes.length > 1) {
+          if (node === undefined) {
+            // We should do pick(nodes, us, 'The graph node to search next')+1 on each iteration, to get the index.
+            node = nodes[1];
+            [nodes[nodes.length-1], nodes[1]] = [nodes[1], nodes[nodes.length-1]], arr.pop()
+          }
           _checkInterrupt()
-          _search.nodes = arr
           const r = _handleNode(node)
-          if (r !== undefined)
-            return [r !== _onlyUndefined ? r : undefined, arr]
+          if (r !== undefined) {
+            const a = _allocArray()
+            a.push(r !== _onlyUndefined ? r : undefined, nodes)
+            return a
+          }
+          node = undefined
         }
         throw error('Not found:', v, 'in', ctx)
-      } catch (err) { if (err === interrupt) arr.unshift(node), interrupt(_search, 1)(arr);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_search, 2)(node, nodes);  throw err }
 
       // _search.nodes (the current array of nodes)
     },
