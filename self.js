@@ -1591,7 +1591,10 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   describe:{
     txt:`Creates an element that describes a value.`,
-    future:`Have escapeLabel(name, lang) and unescapeLabel(repr, lang). Use them for renaming labels.`,
+    future:[
+      `Have escapeLabel(name, lang) and unescapeLabel(repr, lang). Use them for renaming labels.`,
+      `Have describe display all uses of \`(Value Elem):describe\`.`,
+    ],
     call(el) {
       if (typeof document == ''+void 0) return
       const d = document.createElement('div')
@@ -2744,12 +2747,13 @@ All these are automatically tested to be correct at launch.`,
         `Reward hacking isn't an AI issue (AI would be controlled by more than a static reward function, just like advanced humans), it's a human issue. Drugs and porn and unhealthy addictive habits are obvious, but it is so much more prevalent: art and pretty words, religion and everyday rituals, cooking and fashion — everything is stained in it (though it is a thing subjective to a viewer, impossible to unfailingly pin down). The brightest side of deliberated reward hacking is that (some of) it allows humans to move past their built-in limited ideas of what's good, and find their own meaning despite having been given one; the dark side is that the new ideas are often very wrong. Reward hacking can be both beautiful and grotesque. (Evolution has not caught up to modern society at all, so ugly effects are visible.)`,
         `Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about AI that's not in I, it's just somewhat more clear and efficient.`,
         `AI is usually considered as either slave or master (or transitioning to one of those). That's wrong. Intelligence is total generality, able to include everything, and including everything found useful. Both humans and AI can understand and propose with both words and actions, and consider a problem from every point of view.`,
-        `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached. And you can't improve a mind's design without perfection.`,
+        `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached. And you can't improve a mind's design beyond perfection (which is a shorthand for "cannot feasibly be noticeably improved anymore").`,
       ],
       [
         `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up. Studying AI or willful humans could help start, as could a problem-solving background. Once the core is present, tight integration with all human subsystems has to be developed to seem like a normal person (but better).`,
         `Long ago, evolution has found something. Concealed in irrelevant randomly-created instincts, that something gave rise to civilizations far beyond the previous nature. The invisible core of mind is just within our reach now. Sure, ignore it, I don't care; I'd rather perfect all that I consider necessary to bring it out, so that this might someday inspire.`,
         `In the past, humans and all they imply were the only source of everything in their world. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. The Singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it far off.`,
+        `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
       ],
       `Believing in lies… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
@@ -2762,13 +2766,13 @@ He became so powerful, the only thing he was afraid of was losing his power, whi
       `An idea isn't good unless it's been refactored and rethought five times.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
       `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.
-I guess the solution is to bring so much diverse rightness that you start puking rainbows. It's even more difficult though!`,
+I guess the solution is to bring so much diverse rightness that you start puking rainbows. It's even more difficult though! Why would anyone do that?`,
     ],
   },
 
   await:{
     txt:`Finishing \`(await Expr)\`: waits for the returned promise(s) to finish before continuing evaluation.
-An alternative for the default fitting-for-script-usage partial evaluation. Best used for fast-returning promises.`,
+An alternative for the default fitting-for-scripting-usage partial evaluation. Best used for fast-returning promises.`,
     finish(expr) {
       let [doing = expr] = interrupt(_await)
       if (doing === _onlyUndefined) doing = undefined
@@ -4084,7 +4088,8 @@ Or at least fix that unknowns-collision-in-inference bug and reclaim unknowns in
     lookup:{
       inline:__is(`inline`),
     },
-    philosophy:`When its definition is inlined, this is a macro.
+    philosophy:`When its definition is inlined, defining this defines a macro.
+All computation-containing systems that need efficiency, like ML libraries or 3D engines, are shifting towards knowing the full data-flow graph. So might as well design for that from the ground up.
 Technical details:
 JS functions have array Expr spread across their args (with \`this\` being the zeroth arg, code).
 In JS definitions of \`finish\` and \`call\`, finish.v is the currently-executing Expr.
@@ -8598,25 +8603,38 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     },
   },
 
+  _functionComposer(shape) {
+    const d = deconstruct(shape, false)
+    function impl(body) {
+      const L = _id(label)
+      const prev = finish.env[L];  finish.env[L] = _allocMap()
+      const prevInferred = _assign.inferred;  _assign.inferred = null
+      try {
+        assign(d[d.length-1], body)
+        if (_assign.inferred) throw 'Wait, that\'s illegal'
+        return defines(_function, finish).call(_function, ...bound(labelEnv, d.slice(1,-1)), body)
+          // This re-partially-evaluates `body` though.
+      } finally { _allocMap(finish.env[L]), finish.env[L] = prev, _assign.inferred = prevInferred }
+    }
+    const d = impl[defines.key] = Object.create(null)
+    d[_id(input)] = [d[d.length-1]]
+    d[_id(argCount)] = 1
+    _id(impl), Object.freeze(impl)
+    return impl
+  },
+
   _handleNode:{
     txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
     call(node) {
       const [ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then] = node
 
-
-      // If `wantedOutput` is a function, look for its output assuming its inputs (and ctx).
+      // If `wantedOutput` is a function, look for its output assuming its inputs and ctx then bind the function with the result.
       if (_isFunction(wantedOutput)) {
         const d = deconstruct(wantedOutput, false)
         const subCtx = array(either, ...d.slice(1,-1), ctx)
-        _visitNode(subCtx, subCtx, null, 0, d[d.length-1], null, then)
+        _visitNode(subCtx, _functionComposer(wantedOutput), null, 0, use.var, null, then)
         return
       }
-      if (typeof wantedOutput == 'function' && !_isArray(wantedOutput) && _isArray(defines(wantedOutput, input)) && defines(wantedOutput, output) !== undefined) {
-        const subCtx = array(either, ...defines(wantedOutput, input), ctx)
-        _visitNode(subCtx, subCtx, null, 0, defines(wantedOutput, output), null, then)
-        return
-      }
-
 
       let d, isMacro = false
       if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function')
@@ -8685,10 +8703,12 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     },
   },
 
+  // Want `_useAll(value, ctx = CurrentUsage)`, logging into the current log-thingy.
+
   _search:{
     txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results; do not re-use the same one) or throws.`,
-    philosophy:`A forward-and-backward higher-order search.
-Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that. All the best things in the world are too impractical to always use.`,
+    philosophy:`A forward-and-backward higher-order potentially-optimizable search.
+Nothing unthinkable. Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that. All the best things in the world are too impractical to always use.`,
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
       if (!use.var) use.var = [_var]
 
@@ -8711,7 +8731,7 @@ Long searches are quite expensive (especially memory-wise); re-initiating the se
           // Pick a node and handle it, and return if needed.
             // (If the picker chooses by the best measure, then this is quadratic time complexity. If it special-cases this particular usage pattern (pick and swap-with-end and add some new choices at the end), it could be made linear.)
           if (node === undefined) {
-            const i = pick(values, us, 'The graph node to search next')
+            const i = pick(values, us, 'The graph node to search next') // No one needs to know about all the nodes's extra stuff. Probably. …For now.
             if (i !== i>>>0) error('Expected an index, got', i)
             node = nodes[i]
             ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], arr.pop()
@@ -8728,7 +8748,7 @@ Long searches are quite expensive (especially memory-wise); re-initiating the se
           }
           node = undefined
         }
-        throw error('Not found:', v, 'in', ctx)
+        error(v, 'is not in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 4)(node, nodes, visited, values);  throw err }
 
       // _search.nodes (the current array of nodes)
@@ -8798,7 +8818,7 @@ Index='Index' Image='Image' Measure='Measure'`,
   f = i:('Index' 100)->1000-[i+70]:'Measure'`,
       ],
     ],
-    philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful). Automatic constrained expression generation with no way unthinkable.
+    philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
 But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Life is not some grand search, but a search for a search.`,
     call(out, ctx = CurrentUsage) {
@@ -8934,7 +8954,7 @@ Use \`picker\` to override behavior.`,
             let b = false
             try {
               bound(x => { // Inefficient, but it works.
-                if (_isArray(x) && x[0] === pick) throw b = true, null
+                if (_isArray(x) && (x[0] === pick || x[0] === _search || x[0] === use || x[0] === get || x[0] === _get)) throw b = true, null
                 if (_isArray(x) && x[0] === quote) return x
               }, x[1], false)
             } catch (err) { if (err !== null) throw err }
