@@ -1591,7 +1591,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   describe:{
     txt:`Creates an element that describes a value.`,
-    future:`Have escapeLabel(name, lang) and unescapeLabel(repr, lang).`,
+    future:`Have escapeLabel(name, lang) and unescapeLabel(repr, lang). Use them for renaming labels.`,
     call(el) {
       if (typeof document == ''+void 0) return
       const d = document.createElement('div')
@@ -1992,7 +1992,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
   REPL:{
     txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
-    future:`When a result gets purified or computed, add "Input to N: " and "Output of M: " right after it (unless there are none). Or, better yet, have these as \`?:Computed->?\` in CurrentUsage, and display each usage in purifyAndDisplay and evaluator.`,
+    future:`When a result gets purified or computed (in purifyAndDisplay and evaluator), display every single \`output Result:Computed\` right after it. Have \`?:Computed->?\` "Input to N: ···" and "Output of M: ···" (throw if there are none) elem-displayers in CurrentUsage.`,
     elem(tag, lang, ctx) {
       if (tag !== REPL || typeof document == ''+void 0) return
       lang = lang || fancy, ctx = ctx || new Map(parse.ctx)
@@ -2980,7 +2980,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _jobs:{
     txt:`The interpreter loop. Most of it is about dealing with deferred stuff. Use _schedule to do stuff with it.`,
-    future:`Have definable-with-the-index \`resultInInterrupt\`, and in _jobs, {delete if already logged} and {log with low collapseDepth} if defined on the top-most interrupt cause (which is \`ints[ints.length - ints[ints.length-1] - 2]\`, and we need to add that definition to the index to get what we need to log).`,
+    future:`Make functions define \`interrupt\` with a function that accepts caused-by-this-function interrupt state and returns what _jobs should display (deleting if already logged). The top-most interrupt cause is \`ints[ints.length - ints[ints.length-1] - 2]\`, and the state slice is \`ints.slice(-ints[ints.length-1] - 1, -1)\`.`,
     call() {
       const DOM = typeof document != ''+void 0
       if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
@@ -4058,7 +4058,8 @@ Code (array head) that defines neither \`finish\` nor \`call\` creates structure
 These can matched by function args exactly as they were constructed (so functions are rewrite rules for structures, with optional non-structural code in the body), which can infer the required structure of variables if underspecified.
 Functions are almost always inlined, so there is almost no performance cost to structures beyond the initial \`purify\`ing.
 Cyclic structures construct a graph.`,
-    future:`Create and cache the unbound repr, and only preserve results for nodes that need it.`,
+    future:`Create and cache the unbound repr, and only preserve results for nodes that need it.
+Or at least fix that unknowns-collision-in-inference bug and reclaim unknowns in maps again.`,
     nameResult:[
       `finished`,
     ],
@@ -4070,7 +4071,6 @@ Cyclic structures construct a graph.`,
   Mult = (function  a  b  a*b)
   x -> (SumSum x (Mult x x))`,
         `x→[x+a+a] a=x*x`,
-        true
       ],
       `No inlining if no extra info:`,
       [
@@ -4825,12 +4825,11 @@ Somewhat usable in a REPL.`,
             } else {
               ++failed, log(ss('Got an error'), ...result.slice(1)), log(ss('a'), a), log(ss('b'), b)
             }
-            if (finished === total && failed)
-              log(ss('Failed {' + failed+'/'+total + '} tests.'))
           } catch (err) { ++failed, log(jsRejected(err)) }
         })
-      }
-      catch (err) { ++failed, log(jsRejected(err)) }
+      } catch (err) { ++failed, log(jsRejected(err)) }
+      if (finished === total && failed)
+        log(ss('Failed {' + failed+'/'+total + '} tests.'))
     }
   },
 
@@ -5636,6 +5635,7 @@ Infers structural terms where possible.`,
   },
 
   elemClone(el) {
+    console.log('clone')
     const copy = el.cloneNode(false)
     if ('to' in el) elemValue(copy, el.to)
     if (el.special) copy.special = el.special, copy.special(el, copy)
@@ -7217,7 +7217,8 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
 
   Rewrite:{
     txt:`A namespace for rewriting Self's code to a different form.`,
-    future:`Pull the current context from current bindings unless passed explicitly (not a JS object from strings, but a Map from labels). Define \`output\` for rewrites for easy finding; have iframe/textarea/link acceptors of rewrites. Also have ToGraph and ToHTML and ToExtension.`,
+    future:`Pull the current context from current bindings unless passed explicitly (not a JS object from strings, but a Map from labels). Define \`output\` for rewrites for easy finding; have iframe/textarea/link acceptors of rewrites.
+Have ToGraph and ToHTML and ToExtension.`,
     lookup:{
       readableJS:__is(`ToReadableJS`),
       scopedJS:__is(`ToScopedJS`),
@@ -7606,7 +7607,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   },
   compile:{
     txt:`Compiles a function to JS.`,
-    future:`In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out, so that all disposals are always hit.`,
+    future:`In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out (by having a first-branch ref-count map that is decremented in sync with the main ref-count), so that all disposals are always hit.`,
     philosophy:`I am speed.`,
     buzzwords:`JIT-compiled`,
     call(opt, ...a) {
@@ -8550,7 +8551,6 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
   use:{
     txt:`\`use Inputs Function Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
-    future:`\`get\` the actual function \`v\`.`,
     examples:[
       `Select the proper semantic type in a bank of knowledge:`,
       [
@@ -8596,8 +8596,18 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       const [ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then] = node
 
 
-      // If `wantedOutput` is a function: _visitNode(array(either, ...Inputs, ctx), <same>, null, 0, Output, null, then) and return.
-        // (Would need forward-search support to be useful, first.)
+      // If `wantedOutput` is a function, look for its output assuming its inputs (and ctx).
+      if (_isFunction(wantedOutput)) {
+        const d = deconstruct(wantedOutput, false)
+        const subCtx = array(either, ...d.slice(1,-1), ctx)
+        _visitNode(subCtx, subCtx, null, 0, d[d.length-1], null, then)
+        return
+      }
+      if (typeof wantedOutput == 'function' && !_isArray(wantedOutput) && _isArray(defines(wantedOutput, input)) && defines(wantedOutput, output) !== undefined) {
+        const subCtx = array(either, ...defines(wantedOutput, input), ctx)
+        _visitNode(subCtx, subCtx, null, 0, defines(wantedOutput, output), null, then)
+        return
+      }
 
 
       let d, isMacro = false
@@ -8622,7 +8632,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         if (!actualArgs || actualArgs.length < defines(v, argCount)) {
           let nextArg
           // `input`-defining functions get treated as if their inputs are as defined.
-          if (typeof v == 'function' && !_isArray(v) && defines(v, input))
+          if (typeof v == 'function' && !_isArray(v) && _isArray(defines(v, input)))
             nextArg = defines(v, input)[!actualArgs ? 0 : actualArgs.length]
           // Deconstructable functions have their inputs read.
           else if (_isFunction(v))
@@ -8652,13 +8662,18 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       }
 
       // Else, check the structure of `v` and return it.
-      try {
+      try { // (Can't interrupt.)
         if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
         // If `then`, add to args, else return from this graph search.
         if (then) _visitNode(then[0], then[1], then[2], then[3], then[4], then[5] ? [...then[5], v] : [v], then[6])
         else return v !== undefined ? v : _onlyUndefined
-      } catch (err) {} // Can't interrupt.
-        // If not ok, should expand the context with `v` (`array(either, v, ctx)`) since we got it through legitimate in-context means (forward search).
+      } catch (err) {
+        // If structure does not match, initiate a forward search on `v` since we got it through legitimate in-context means.
+        const inputs = input(v, ctx)
+        if (!inputs) return
+        const subCtx = array(either, v, ctx)
+        _visitNode(subCtx, subCtx, null, 0, wantedOutput, null, then)
+      }
     },
   },
 
@@ -8669,13 +8684,14 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
       const us = finish.v
       let [node, nodes = cont] = interrupt(_search)
-        // Should also maintain a Set of all nodes (re-building it on re-enter? or make cont an array?).
+        // Should also maintain a Set of all nodes. (And make cont an array.)
+          // And probably values too, actually, because the expanded context and outputs are, extremely likely for all applications I can think of, unnecesary.
       try {
         if (!nodes) nodes = _allocArray(), nodes.push(either), _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
         _search.nodes = nodes
         while (nodes.length > 1) {
           if (node === undefined) {
-            // We should do pick(nodes, us, 'The graph node to search next')+1 on each iteration, to get the index.
+            // Should do pick(nodes, us, 'The graph node to search next')+1 on each iteration, to get the index.
             node = nodes[1];
             [nodes[nodes.length-1], nodes[1]] = [nodes[1], nodes[nodes.length-1]], arr.pop()
           }
@@ -8760,7 +8776,7 @@ Index='Index' Image='Image' Measure='Measure'`,
     ],
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful). Automatic constrained expression generation with no way unthinkable.
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
-But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found.`,
+But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Life is not some grand search, but a search for a search.`,
     call(out, ctx = CurrentUsage) {
       const r = _get(out, ctx)
       const result = r[0]
@@ -8943,12 +8959,15 @@ This is the default when no picker is specified.`,
         // NodeJS.
         const rl = require('readline').createInterface({ input:process.stdin, output:process.stdout })
         let job
-        log('A choice from' + _pickCount(from) + ':', from)
+        log('A choice from' + _pickCount(from), from)
         if (cause !== undefined) log('  Cause:', cause)
         if (extra !== undefined) log(extra)
-        rl.question('Pick one: ', acceptChoice)
+        let canRecord = finish.inFunction === 2
+        rl.question(!canRecord ? 'Pick one: ' : 'Pick one or `?`:', acceptChoice)
         function acceptChoice(str) {
           const i = +str
+          if (canRecord && str === '?')
+            askUser.got.set(a, _unknown(array(pick, from, cause, extra))), _schedule(...job)
           if (!(i >= 0) || !(i < _pickCount(from)))
             rl.question('Must be a number from 0 to ' + _pickCount(from) + ': ', acceptChoice)
           else
