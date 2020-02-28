@@ -8681,9 +8681,10 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           if (wantedInputs) return // Have to consume all wantedInputs.
           if (isMacro) actualArgs = bound(_unwrapUnknown, actualArgs, false).slice()
           const nodes = _search.nodes // Safeguard against an inner search.
-          try { v = v.apply(v, actualArgs); _allocArray(actualArgs) }
+          const prevInferred = _assign.inferred;  _assign.inferred = null
+          try { v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return }
           catch (err) { if (err === interrupt) throw err; return }
-          _search.nodes = nodes
+          finally { _assign.inferred = prevInferred; _search.nodes = nodes }
         }
       }
 
@@ -8769,10 +8770,16 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
         `get ?:1 (either 0:1)`,
         `0:1`,
       ],
-      `Trivial composition:`,
+      `First-order composition:`,
       [
         `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
         `4:10`,
+      ],
+      `Higher-order composition:`,
+      [
+        `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
+Int:'Int' Float:"Float"`,
+        `x:Int->[x+12]/2:Float`,
       ],
       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
       [
