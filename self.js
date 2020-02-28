@@ -384,7 +384,7 @@ Label-binding environment is not preserved.`,
   Self:{
     txt:`A namespace for every function here. Project's GitHub page: https://github.com/Antipurity/conceptual`,
     future:[
-      `Zero-overhead {local {immutable-seeming mutable memory} management} (like an image that is drawn on, or an array sorted in-place): argClone marker (index of what to clone), and overridable clone(obj) and dispose(obj), analyzing the graph on compilation to minimize cloning.`,
+      `Zero-overhead {local {immutable-seeming mutable memory} management} (like an image that is drawn on, or an array sorted in-place): \`(Resource OnDisposal OnClone Value)\` and an \`argClone\` marker (index of what to clone), analyzing the graph on compilation to minimize cloning and dispose right after the last use.`,
       `Global immediately-freeing memory management (for resources that are quite expensive and/or should really be released): ref-counting (with shared ref-counters for cycles) of objects with \`dispose\`.`,
     ],
     lookup:__is(`undefined`),
@@ -1745,7 +1745,10 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   contextMenu:{
     txt:`Creates and displays a <context-menu> element near the specified element.`,
-    future:`Have \`atCursor(el, evt = <lastPointerEvt>)\`, and have \`contextMenu\` use that.`,
+    future:[
+      `Have \`atCursor(el, evt = <lastPointerEvt>)\`, and have \`contextMenu\` use that.`,
+      `Have contextMenu display all uses of \`(Value Elem):contextMenu\`.`,
+    ],
     philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     lookup:{
       describe:__is(`describe`),
@@ -1992,7 +1995,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
   REPL:{
     txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
-    future:`When a result gets purified or computed (in purifyAndDisplay and evaluator), display every single \`output Result:Computed\` right after it. Have \`?:Computed->?\` "Input to N: ···" and "Output of M: ···" (throw if there are none) elem-displayers in CurrentUsage.`,
+    future:`When a result gets purified or computed (in purifyAndDisplay and evaluator), display every single \`output Result:evaluator\` right after it. Have \`?:evaluator->?\` "Input to N: ···" and "Output of M: ···" (throw if there are none) elem-displayers in CurrentUsage.`,
     elem(tag, lang, ctx) {
       if (tag !== REPL || typeof document == ''+void 0) return
       lang = lang || fancy, ctx = ctx || new Map(parse.ctx)
@@ -8576,8 +8579,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     call(inputs, v, ctx = CurrentUsage) {
       if (!use.var) use.var = [_var]
       const r = _search(undefined, ctx, v !== undefined ? v : use.var, inputs, false)
-      if (r[1]) _allocArray(r[1])
-      return r[0]
+      const result = r[0]
+      _allocArray(r[1][0]), _allocArray(r[1][2]), _allocArray(r[1]), _allocArray(r)
+      return result
     },
   },
 
@@ -8585,8 +8589,12 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     txt:`Remembers to visit the node in this graph search.`,
     call(ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then) {
       // With 8 bytes for array length and 8 bytes per array item, this is (usually) 1 cache line.
-      _search.nodes.push([ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then])
-      // Should also merge nodes (`array` instead of `[]`), and not add duplicate nodes (via _search.set).
+      const node = array(ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then)
+      if (!_search.visited.has(node)) {
+        _search.nodes.push(node)
+        _search.visited.add(node)
+        _search.values.push(v)
+      }
     },
   },
 
@@ -8668,7 +8676,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         if (then) _visitNode(then[0], then[1], then[2], then[3], then[4], then[5] ? [...then[5], v] : [v], then[6])
         else return v !== undefined ? v : _onlyUndefined
       } catch (err) {
-        // If structure does not match, initiate a forward search on `v` since we got it through legitimate in-context means.
+        // If structure does not match, initiate a forward search on `v`, since we got it through legitimate in-context means.
         const inputs = input(v, ctx)
         if (!inputs) return
         const subCtx = array(either, v, ctx)
@@ -8678,34 +8686,50 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   },
 
   _search:{
-    txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results) or throws.`,
+    txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results; do not re-use the same one) or throws.`,
+    philosophy:`A forward-and-backward higher-order search.
+Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that. All the best things in the world are too impractical to always use.`,
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
       if (!use.var) use.var = [_var]
 
       const us = finish.v
-      let [node, nodes = cont] = interrupt(_search)
-        // Should also maintain a Set of all nodes. (And make cont an array.)
-          // And probably values too, actually, because the expanded context and outputs are, extremely likely for all applications I can think of, unnecesary.
+      let [node, nodes, visited, values] = interrupt(_search)
+      if (!nodes && !cont) {
+        // Put the request in as a graph node.
+        nodes = _allocArray(), visited = new Set, values = _allocArray()
+        values.push(either)
+        _search.nodes = nodes, _search.visited = visited, _search.values = values
+        _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
+      } else if (!nodes) {
+        // Restore from continuation.
+        [nodes, visited, values] = cont, _allocArray(cont)
+        _search.nodes = nodes, _search.visited = visited, _search.values = values
+      }
+
       try {
-        if (!nodes) nodes = _allocArray(), nodes.push(either), _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
-        _search.nodes = nodes
-        while (nodes.length > 1) {
+        while (nodes.length) {
+          // Pick a node and handle it, and return if needed.
+            // (If the picker chooses by the best measure, then this is quadratic time complexity. If it special-cases this particular usage pattern (pick and swap-with-end and add some new choices at the end), it could be made linear.)
           if (node === undefined) {
-            // Should do pick(nodes, us, 'The graph node to search next')+1 on each iteration, to get the index.
-            node = nodes[1];
-            [nodes[nodes.length-1], nodes[1]] = [nodes[1], nodes[nodes.length-1]], arr.pop()
+            const i = pick(values, us, 'The graph node to search next')
+            if (i !== i>>>0) error('Expected an index, got', i)
+            node = nodes[i]
+            ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], arr.pop()
+            ;[values[values.length-1], values[i+1]] = [values[i+1], values[values.length-1]], values.pop()
           }
           _checkInterrupt()
           const r = _handleNode(node)
           if (r !== undefined) {
-            const a = _allocArray()
-            a.push(r !== _onlyUndefined ? r : undefined, nodes)
+            const a = _allocArray(), cont = _allocArray()
+            cont.push(nodes, visited, values)
+            a.push(r !== _onlyUndefined ? r : undefined, cont)
+            _search.nodes = _search.visited = _search.values = undefined
             return a
           }
           node = undefined
         }
         throw error('Not found:', v, 'in', ctx)
-      } catch (err) { if (err === interrupt) interrupt(_search, 2)(node, nodes);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_search, 4)(node, nodes, visited, values);  throw err }
 
       // _search.nodes (the current array of nodes)
     },
@@ -8780,7 +8804,7 @@ But for practical usage? If an algorithm wants a lower bound on the solution or 
     call(out, ctx = CurrentUsage) {
       const r = _get(out, ctx)
       const result = r[0]
-      _allocArray(r[1]), _allocArray(r)
+      _allocArray(r[1][0]), _allocArray(r[1][2]), _allocArray(r[1]), _allocArray(r)
       return result
     },
   },
