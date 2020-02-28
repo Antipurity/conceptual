@@ -8694,13 +8694,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         // If `then`, add to args, else return from this graph search.
         if (then) _visitNode(then[0], then[1], then[2], then[3], then[4], then[5] ? [...then[5], v] : [v], then[6])
         else return v !== undefined ? v : _onlyUndefined
-      } catch (err) {
-        // If structure does not match, initiate a forward search on `v`, since we got it through legitimate in-context means.
-        const inputs = input(v, ctx)
-        if (!inputs) return
-        const subCtx = array(either, v, ctx)
-        _visitNode(subCtx, subCtx, null, 0, wantedOutput, null, then)
-      }
+      } catch (err) {} // No forward search here. Backward search should be enough.
     },
   },
 
@@ -8708,7 +8702,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
   _search:{
     txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results; do not re-use the same one) or throws.`,
-    philosophy:`A forward-and-backward higher-order potentially-optimizable search.
+    philosophy:`A higher-order potentially-optimizable search.
 Nothing unthinkable. Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that. All the best things in the world are too impractical to always use.`,
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
       if (!use.var) use.var = [_var]
@@ -8749,7 +8743,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
           }
           node = undefined
         }
-        error(v, 'is not in', ctx)
+        error(v, 'is definitely not in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 4)(node, nodes, visited, values);  throw err }
 
       // _search.nodes (the current array of nodes)
@@ -8762,12 +8756,12 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
   },
 
   get:{
-    txt:`\`get OutputStructure Context\`: creates a structured value from \`Context\` (\`CurrentUsage\` by default).
+    txt:`\`get OutputShape\` or \`get OutputShape Context\`: creates a structured value from \`Context\` (\`CurrentUsage\` by default).
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
     examples:[
       `Trivial finding:`,
       [
-        `get ?:1 (either 0:1)`,
+        `get ?:1 (either 0:1 0:2)`,
         `0:1`,
       ],
       `First-order composition:`,
@@ -8779,7 +8773,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
       [
         `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
 Int:'Int' Float:"Float"`,
-        `x:Int->[x+12]/2:Float`,
+        `x:Int->[x+12]/2:Float x=?`,
       ],
       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
       [
@@ -8795,7 +8789,7 @@ sum='Sum' quote='Next'`,
       [
         `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
 sum='Sum' quote='Next'`,
-        `error X+^^^0->X 'is not in' (either A+0->A A+^B->^[A+B]) X=#
+        `error X+^^^0->X 'is definitely not in' (either A+0->A A+^B->^[A+B]) X=#
 sum='Sum' quote='Next'`,
       ],
       `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
