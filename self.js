@@ -984,10 +984,12 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       _listen('click', evt => !evt.shiftKey && !evt.ctrlKey && !evt.altKey && evt.target.tagName === 'KNOWN' && openMenu(evt))
       let contextMenuId, pointerId = null, startX, startY
       _listen('pointerdown', evt => {
+        atCursor.lastEvt = evt
         contextMenuId = setTimeout(openMenu, 1000, evt, getSelection().rangeCount && getSelection().getRangeAt(0))
         pointerId = evt.pointerId, startX = evt.clientX, startY = evt.clientY
       }, passiveCapture)
       function cancelContextMenu(evt) {
+        if (evt.type === 'pointermove') atCursor.lastEvt = evt
         if (contextMenuId == null) return
         const dx = evt.clientX - startX, dy = evt.clientY - startY
         if (evt.type === 'pointercancel' || evt.type === 'pointerup' || evt.pointerId != pointerId || (dx*dx + dy*dy) > 25)
@@ -999,6 +1001,12 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // Close not-containing-target <context-menu>s on a click elsewhere.
       const closeMenus = evt => !_isEditable(evt.target) && [...document.querySelectorAll('context-menu')].filter(el => !el.contains(evt.target)).forEach(elemRemove)
+      const closeMenus = evt => {
+        if (_isEditable(evt.target)) return
+        const bad = atCursor.opened.filter(el => !el.contains(evt.target))
+        atCursor.opened = atCursor.opened.filter(el => el.contains(evt.target))
+        bad.forEach(elemRemove)
+      }
       _listen('pointerdown', closeMenus)
       _listen('focusin', closeMenus)
 
@@ -1749,7 +1757,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
   contextMenu:{
     txt:`Creates and displays a <context-menu> element near the specified element.`,
     future:[
-      `Have \`atCursor(el, evt = <lastPointerEvt>)\`, and have \`contextMenu\` use that.`,
       `Have contextMenu display all uses of \`(Value Elem):contextMenu\`.`,
     ],
     philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
@@ -1771,7 +1778,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       menu.classList.add('window')
       allowDragging(menu)
 
-      // Close when unfocused or on a click on a <button> inside.
+      // Close (when unfocused or) on a click on a <button> inside.
       menu.addEventListener('click', evt => evt.target.tagName === 'BUTTON' && _getOuterContextMenu(evt.target) === menu && elemRemove(menu))
       menu.tabIndex = 0
 
@@ -1818,43 +1825,80 @@ Remember to quote the link unless you want to evaluate the insides.`,
       if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET') // Hide to end
         menu.append(button(function hideToEnd() { elemCollapse(el, null) }))
 
-      const r1 = el.getBoundingClientRect(), r2 = document.documentElement.getBoundingClientRect()
-      let x = evt && typeof evt.clientX == 'number' ? evt.clientX : r1.left
-      let y = evt && typeof evt.clientY == 'number' ? evt.clientY : r1.top
+      let inside = _getOuterContextMenu(el)
+      if (_getOuterContextMenu(inside.parentNode) !== document.body) inside = document.body // Only one nesting layer.
+      atCursor(menu, evt, inside)
+
+      menu.focus({preventScroll:true})
+    },
+  },
+
+  daintyEvaluator:{
+    txt:`\`(elem daintyEvaluator Expr)\`: returns an element that will evaluate the expression and display its \`log\`s if any.`,
+    elem(tag, expr, then) {
+      if (tag !== evaluator || typeof document == ''+void 0) return
+      impure()
+
+      // Evaluate the requested expression.
+      const el = elem('div', elem('div'))
+      const env = _newExecutionEnv(finish.env)
+      env[_id(log)] = el.lastChild
+      const ID = _newJobId()
+      _doJob(expr, env, then, ID)
+      return el
+    },
+  },
+
+  atCursor:{
+    txt:`Positions an element at cursor.`,
+    call(el, pointerEvt = atCursor.lastEvt, inside = document.documentElement) {
+      let x = pointerEvt ? pointerEvt.clientX : 0, y = pointerEvt ? pointerEvt.clientY : 0
+      if (el.parentNode) error('Only position new elements at cursor')
+      if (!inside.isConnected) error('Only position elements inside the visible document')
+      impure()
+      const r = inside.getBoundingClientRect()
+
+      if (!atCursor.opened) atCursor.opened = []
+
+      // Position at an appropriate corner of itself.
+      el.style.position = 'absolute'
       const xOk = x < innerWidth * .8, yOk = y < innerHeight * .8
-      x -= r2.left, y -= r2.top
+      x -= r.left, y -= r.top
       let w, h
       if (!xOk || !yOk) {
-        document.body.appendChild(menu)
-        w = menu.offsetWidth, h = menu.offsetHeight
-        document.body.removeChild(menu)
+        document.documentElement.appendChild(el)
+        w = el.offsetWidth, h = el.offsetHeight
+        document.documentElement.removeChild(el)
+        // (A translate-100% transform would have worked too.)
       }
       if (xOk && yOk) { // Open to bottom-right
-        menu.style.left = x + 'px'
-        menu.style.top = y + 'px'
-        menu.style.borderRadius = '0 1em 1em 1em'
+        el.style.left = x + 'px'
+        el.style.top = y + 'px'
+        el.style.borderRadius = '0 1em 1em 1em'
       } else if (xOk) { // Open to top-right
-        menu.style.left = x + 'px'
-        menu.style.top = y - h + 'px'
-        menu.style.borderRadius = '1em 1em 1em 0'
+        el.style.left = x + 'px'
+        el.style.top = y - h + 'px'
+        el.style.borderRadius = '1em 1em 1em 0'
       } else if (yOk) { // Open to bottom-left
-        menu.style.left = x - w + 'px'
-        menu.style.top = y + 'px'
-        menu.style.borderRadius = '1em 0 1em 1em'
+        el.style.left = x - w + 'px'
+        el.style.top = y + 'px'
+        el.style.borderRadius = '1em 0 1em 1em'
       } else { // Open to top-left
-        menu.style.left = x - w + 'px'
-        menu.style.top = y - h + 'px'
-        menu.style.borderRadius = '1em 1em 0 1em'
+        el.style.left = x - w + 'px'
+        el.style.top = y - h + 'px'
+        el.style.borderRadius = '1em 1em 0 1em'
       }
-      menu.style.maxWidth = innerWidth - parseFloat(menu.style.left) - 16 + 'px'
-      let into = _getOuterContextMenu(el)
-      if (_getOuterContextMenu(into.parentNode) !== document.body) into = document.body
-      if (into !== document.body) {
-        menu.style.left = parseFloat(menu.style.left) - into.getBoundingClientRect().left - scrollX + 'px'
-        menu.style.top = parseFloat(menu.style.top) - into.getBoundingClientRect().top - scrollY + 'px'
+      el.style.maxWidth = innerWidth - parseFloat(el.style.left) - 16 + 'px'
+      if (inside !== document.documentElement) {
+        el.style.left = parseFloat(el.style.left) - r.left - scrollX + 'px'
+        el.style.top = parseFloat(el.style.top) - r.top - scrollY + 'px'
       }
-      into.append(menu)
-      menu.focus({preventScroll:true})
+      inside.append(el)
+
+      // Remove on clicking/focusing elsewhere.
+      atCursor.opened.push(el)
+
+      // .lastEvt, .opened
     },
   },
 
@@ -1862,17 +1906,17 @@ Remember to quote the link unless you want to evaluate the insides.`,
     txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
     future:[
-      `Have an at-cursor evaluator \`daintyEvaluator\`, using \`_doJob\`, closing+canceling itself if clicked elsewhere or if returned \`undefined\`.`,
-      `On click, run \`(picker askUser (use (X Y):'onclick'))\` daintily.`,
+      `Have atCursor(el, evt = <lastPointerEvt>, inside = document.documentElement, removeOnUnfocused = true), closing+canceling itself if clicked elsewhere.`,
+      `On click, run \`(log (picker askUser (use (X Y):'onclick')))\` daintily.`,
     ],
     elem(tag, expr, then) {
       if (tag !== evaluator || typeof document == ''+void 0) return
       impure()
-      const into = finish.env[_id(log)]
+      const before = finish.env[_id(log)]
 
       if (!evaluator.none) evaluator.none = Symbol('none')
       let result = evaluator.none
-      const binds = _bindingsAt(into)
+      const binds = _bindingsAt(before)
       let bindAs = null, prevBinding = evaluator.none
 
       const el = elem('div')
@@ -1881,8 +1925,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       const query = elem('span')
       query.classList.add('replInputContainer')
       query.append(prompt)
-      query.append(serialize(expr, _langAt(into), binds, serialize.displayed))
-      const waiting = elem('waiting')
+      query.append(serialize(expr, _langAt(before), binds, serialize.displayed))
+      const waiting = elem('waiting') // There should be some kind of `evaluationElem(ID)` for this…
       el.append(query)
       el.append(waiting)
 
@@ -1918,7 +1962,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         _updateBroken(el)
         finish.env = env
         // Display the result.
-        el.append(serialize(r, _langAt(into), binds, serialize.displayed))
+        el.append(serialize(r, _langAt(before), binds, serialize.displayed))
 
         // Display the report on the time taken.
         const user = env[_id(userTime)], report = _timeSince(end)
@@ -2595,9 +2639,11 @@ Quite expensive.`,
         for (let p = e; p; p = p.parentNode)
           if (_updateBroken.el.has(p)) return
         _updateBroken.el.add(e)
-        Promise.resolve().then(() => { _updateBroken.el.forEach(e => _updateBroken(e, null)), _updateBroken.el.clear() })
+        if (_updateBroken.el.size === 1)
+          Promise.resolve().then(() => { _updateBroken.el.forEach(e => _updateBroken(e, null)), _updateBroken.el.clear() })
       }
 
+      if (!e.isConnected) return
       if (available == null) available = e.offsetWidth || 0
       const start = e.offsetLeft || 0
       for (let ch = e.firstChild; ch; ch = ch.nextSibling)
@@ -2610,6 +2656,7 @@ Quite expensive.`,
       let Sum = 0, max = 0
       for (let ch = e.firstChild; ch; ch = ch.nextSibling) {
         const w = _updateBroken.widths.has(ch) ? _updateBroken.widths.get(ch) : ch.offsetWidth || 0
+        _updateBroken.widths.delete(ch)
         Sum += w, max = Math.max(max, w)
       }
       if ((Sum > parentWidth) !== e.classList.contains('broken')) {
@@ -2617,6 +2664,8 @@ Quite expensive.`,
         _updateBroken.widths.set(e, max + 16)
         Promise.resolve().then(() => e.classList.toggle('broken', Sum > parentWidth))
       }
+
+      // .el (a Set of nodes to update later), .widths (a Map from children to their width-if-broken approximations)
     },
   },
 
@@ -2964,9 +3013,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
     finish.env = env, call.ID = ID
     finish.pure = false, finish.inFunction = 0, finish.noSystem = false, finish.depth = 0
     call.impure = false, _assign.inferred = undefined
-    _checkInterrupt.stepped = false
-    interrupt.started = microstart
-    _jobs.reEnter = true
+    _checkInterrupt.stepped = false // So that a step always passes even if we immediately interrupt.
+    interrupt.started = microstart // So that we can interrupt on timeout.
+    _jobs.reEnter = true // So that code can specify custom _schedule overrides.
     let v, interrupted
     try { v = finish(expr) }
     catch (err) {
@@ -8518,7 +8567,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object family's outgoing morphisms. We allow non-structural (arbitrary black-box) computations though, unlike category theory.`,
-    call(values, ctx = CurrentUsage) { return _addUsesToContext(null, ctx, ctx, ctx, values, true) },
+    call(values, ctx = CurrentUsage) { return ctx === CurrentUsage && impure(), _addUsesToContext(null, ctx, ctx, ctx, values, true) },
   },
 
   output:{
@@ -8553,7 +8602,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code.`,
-    call(value, ctx = CurrentUsage) { return _addUsesToContext(null, ctx, ctx, ctx, value, false) },
+    call(value, ctx = CurrentUsage) { return ctx === CurrentUsage && impure(), _addUsesToContext(null, ctx, ctx, ctx, value, false) },
   },
 
   use:{
@@ -8705,6 +8754,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     philosophy:`A higher-order potentially-optimizable search.
 Nothing unthinkable. Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that. All the best things in the world are too impractical to always use.`,
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
+      ctx === CurrentUsage && impure()
       if (!use.var) use.var = [_var]
 
       const us = finish.v
