@@ -8747,7 +8747,20 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     },
   },
 
-  // Want `_useAll(value, ctx = CurrentUsage)`, logging into the current log-thingy.
+  _useAll:{
+    txt:`Logs all \`use\`s of a value.`,
+    call(value, ctx = CurrentUsage) {
+      let [ins = input(value, ctx), i = 1] = interrupt(_useAll)
+      if (!ins) return
+      const valueArray = _allocArray;  valueArray.push(value)
+      try {
+        for (; i < ins.length; ++i)
+          log(use(valueArray, ins[i], ctx))
+        _allocArray(ins)
+      } catch (err) { if (err === interrupt) interrupt(_useAll, 2)(ins, i);  throw err }
+      finally { _allocArray(valueArray) }
+    },
+  },
 
   _search:{
     txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results; do not re-use the same one) or throws.`,
