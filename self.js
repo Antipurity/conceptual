@@ -960,6 +960,12 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       evalHash(location.hash)
       _listen('hashchange', () => evalHash(location.hash))
 
+      // On click, run \`(log (picker askUser (use (targetElem clientX clientY):'onclick')))\` daintily.
+      _listen('click', evt => {
+        finish.env = undefined
+        atCursor(daintyEvaluator([log, [picker, askUser, [use, [typed, [evt.target, evt.clientX, evt.clientY], 'onclick']]]]))
+      }, passive)
+
       // Select the <node> under cursor on triple-click.
       // Also make <details> open smoothly, and allow them to be closed by clicking.
       _listen('click', evt => {
@@ -1779,8 +1785,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       menu.addEventListener('click', evt => evt.target.tagName === 'BUTTON' && _getOuterContextMenu(evt.target) === menu && elemRemove(menu))
       menu.tabIndex = 0
 
-      // Append a daintyEvaluator, executing (_useAll (el range v) contextMenu).
-      menu.append(elem(daintyEvaluator, [_useAll, [typed, [el, range, v], contextMenu]]))
+      // Append a daintyEvaluator, executing `(_useAll (el range v) contextMenu)`.
+      menu.append(daintyEvaluator([_useAll, [typed, [el, range, v], contextMenu]]))
 
       let inside = _getOuterContextMenu(el)
       if (_getOuterContextMenu(inside.parentNode) !== document.body) inside = document.body // Only one nesting layer.
@@ -1791,9 +1797,9 @@ Remember to quote the link unless you want to evaluate the insides.`,
   },
 
   daintyEvaluator:{
-    txt:`\`(elem daintyEvaluator Expr)\`: returns an element that will evaluate the expression and display its \`log\`s if any.`,
-    elem(tag, expr, then) {
-      if (tag !== daintyEvaluator || typeof document == ''+void 0) return
+    txt:`\`(daintyEvaluator Expr)\`: returns an element that will evaluate the expression and display its \`log\`s if any.`,
+    call(expr, then) {
+      if (typeof document == ''+void 0) return
       impure()
 
       // Evaluate the requested expression.
@@ -1802,7 +1808,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       const env = _newExecutionEnv(finish.env)
       env[_id(log)] = el.lastChild
       const ID = _newJobId()
-      _doJob(expr, env, then || (r => !result.previousSibling ? el.remove() : result.remove()), ID)
+      _doJob(expr, env, then || (() => !result.previousSibling ? el.remove() : result.remove()), ID)
       return el
     },
   },
@@ -1864,8 +1870,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
     txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
     future:[
-      `Have atCursor(el, evt = <lastPointerEvt>, inside = document.documentElement, removeOnUnfocused = true), closing+canceling itself if clicked elsewhere.`,
-      `On click, run \`(log (picker askUser (use (X Y):'onclick')))\` daintily.`,
+      `In \`evaluator\`, should \`_useAll (Result User Real Report):evaluator\` daintily.`,
     ],
     elem(tag, expr, then) {
       if (tag !== evaluator || typeof document == ''+void 0) return
@@ -1919,26 +1924,9 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         // Merge `_updateBroken` of both logged children into one.
         _updateBroken(el)
         finish.env = env
-        // Display the result.
-        el.append(serialize(r, _langAt(before), binds, serialize.displayed))
 
-        // Display the report on the time taken.
-        const user = env[_id(userTime)], report = _timeSince(end)
-        el.append(elem('time-report', [
-          // These two logs update the parent's height twice. What gives?
-            // Should we insert ourselves?
-          elemValue(elem('span', 'user'), userTime),
-          elem('space', ' '),
-          _formatNumber(user),
-          ', ',
-          elemValue(elem('span', 'real'), realTime),
-          elem('space', ' '),
-          _formatNumber(real),
-          ', ',
-          elemValue(elem('span', 'report'), serialize),
-          elem('space', ' '),
-          _formatNumber(report),
-        ]))
+        // Display all uses of `(Result UserDuration RealDuration EndTime):evaluator`.
+        el.append(daintyEvaluator([_useAll, [typed, [r, env[_id(userTime)], real, end], evaluator]]))
         _smoothHeightPost(el, pre)
       })
       prompt.title = 'Click to remove this.'
@@ -2047,7 +2035,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
             try {
               ID = undefined, waiting && waiting.remove(), waiting = undefined
               if (!_isUnknown(result)) {
-                elemInsert(pureOutput, serialize(result, lang, ctx, serialize.displayed), pureOutput.lastChild)
+                // Display all uses of `(Result):evaluator`.
+                elemInsert(pureOutput, daintyEvaluator([_useAll, [typed, [result], evaluator]]), pureOutput.lastChild)
               } else {
                 const el = elem('button', 'Evaluate')
                 elemValue(el, result)
@@ -2207,7 +2196,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     txt:`\`(button OnClick)\`: Returns a button that calls a function(s) on click (with no arguments). Overridable.`,
     call(f) {
       const backctx = _invertBindingContext(parse.ctx)
-      let name = backctx.has(f) ? backctx.get(f) : f && f.name || 'Click'
+      let name = backctx.has(f) ? backctx.get(f) : f && f.displayName || f && f.name || 'Click'
       if (typeof defines(f, button) == 'function') return defines(f, button)(f)
       if (f instanceof Node) return f
       if (typeof f != 'function') error("Cannot call not-a-function:", f)
@@ -8345,12 +8334,12 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     {
       txt:`Describe context menu's items.`,
       input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v], _contextMenu) { log(describe(el, range)) },
+      call(_typed, [el, range, v]) { log(describe(el, range)) },
     },
     {
       txt:`Fetch URLs and try to display their contents.`,
       input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v], _contextMenu) {
+      call(_typed, [el, range, v]) {
         if (_isArray(v) && v[0] === elem && v[1] === url && typeof v[2] == 'string' && v.length == 3) {
           impure()
           const result = elem('div')
@@ -8377,7 +8366,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     {
       txt:`If the cursor is in editor, present an option to replace the currently-selected contents with a link to the value.`,
       input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v], _contextMenu) {
+      call(_typed, [el, range, v]) {
         if (range && v !== undefined && _isEditable(range.commonAncestorContainer))
           log(button(function linkToThis() { insertLinkTo(range, el) }))
       },
@@ -8385,12 +8374,12 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     {
       txt:`If we can expand all in the context element, then present that option.`,
       input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v], _contextMenu) { elemExpandAll(el, true) && log(button(function expandAll() { elemExpandAll(el) })) },
+      call(_typed, [el, range, v]) { elemExpandAll(el, true) && log(button(function expandAll() { elemExpandAll(el) })) },
     },
     {
       txt:`Present "To window" (for non-windows) or "Restore" (for windows — draggable absolutely-positioned elements).`,
       input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v], _contextMenu) {
+      call(_typed, [el, range, v]) {
         if (!_isEditable(el) && el !== document.documentElement) {
           if (!_getOuterWindow(el))
             log(button(function toWindow() { elemToWindow(el) }))
@@ -8402,14 +8391,38 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     {
       txt:`Present an option to hide the element.`,
       input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v], _contextMenu) { _getOuterWindow(el) !== el && log(button(function hide() { elemCollapse(el) })) },
+      call(_typed, [el, range, v]) { _getOuterWindow(el) !== el && log(button(function hide() { elemCollapse(el) })) },
     },
     {
-      txt:`Present an option to hide the element and all after it.`,
+      txt:`Present an option to hide the element and all elements after it on the same hierarchy level.`,
       input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v], _contextMenu) {
+      call(_typed, [el, range, v]) {
         if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET')
           log(button(function hideToEnd() { elemCollapse(el, null) }))
+      },
+    },
+    {
+      txt:`Display evaluation's result.`,
+      input:[__is(`typed`), __is(341531), __is(`evaluator`)],
+      call(_typed, [result]) { log(result) },
+    },
+    {
+      txt:`Display the report on times taken.`,
+      input:[__is(`typed`), __is(341531), __is(`evaluator`)],
+      call(_typed, [result, user, real, end]) {
+        user != null && log(elem('time-report', [
+          elemValue(elem('span', 'user'), userTime),
+          elem('space', ' '),
+          _formatNumber(user),
+          ', ',
+          elemValue(elem('span', 'real'), realTime),
+          elem('space', ' '),
+          _formatNumber(real),
+          ', ',
+          elemValue(elem('span', 'report'), serialize),
+          elem('space', ' '),
+          _formatNumber(_timeSince(end)),
+        ]))
       },
     },
   ],
