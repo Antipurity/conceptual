@@ -1614,7 +1614,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   describe:{
     txt:`Creates an element that describes a value.`,
-    future:`Have describe display all uses of \`(Value Elem):describe\`, just like evaluator/contextMenu do.`,
     call(el) {
       if (typeof document == ''+void 0) return
       const d = document.createElement('div')
@@ -1622,141 +1621,9 @@ Remember to quote the link unless you want to evaluate the insides.`,
       if (!(el instanceof Node)) v = el, el = undefined
       else v = el.to
 
-      if (el && el.classList.contains('label')) {
-        // Allow renaming labels.
-        const inp = elem('input')
-        inp.type = 'text'
-        let prev = unescapeLabel(el.textContent, el), updating = false
-        inp.value = prev
-        const updateGlobal = _throttled(() => (_updateBroken(document.body), updating = false), .05)
-        const editor = _isEditable(el)
-        inp.oninput = _throttled(() => {
-          if (inp.value && +inp.value === +inp.value) return
-          let arr = elemValue(undefined, el.to)
-          if (!arr && editor) // Restore ourselves when we've lost it because it's cyclic.
-            arr = [...editor.querySelectorAll('.label')].filter(x => unescapeLabel(x.textContent, x) === prev)
-          if (_isArray(arr))
-            for (let i = 0; i < arr.length; ++i)
-              if (arr[i].classList.contains('label') && unescapeLabel(arr[i].textContent, arr[i]) === prev)
-                arr[i].textContent = escapeLabel(inp.value, arr[i])
-          prev = inp.value
-          if (!updating) setTimeout(updateGlobal, 0), updating = true
-        }, .2)
-        d.append(inp)
-        return d
-      }
-      // A short definition of what we were called on.
-      if (v !== undefined) {
-        const backctx = _invertBindingContext(parse.ctx)
-        if (backctx.has(v)) {
-          // Display the owner namespace (if any) (even if the property name does not match) and the global.
-          const global = serialize(v, fancy, undefined, serialize.displayed), p = lookup.parents.get(v) || Self
-          d.append(p ? elem('div', [elem('unimportant', [serialize(p, fancy, undefined, serialize.displayed), '.']), global]) : global)
-        } else if (typeof v == 'number' && isFinite(v) && el && v === +el.textContent && _isEditable(el)) {
-          // Display a slider from 0 to 2*number for easy adjusting.
-          const range = elem('input', ''+v)
-          range.type = 'range'
-          range.min = v > 0 ? 0 : 2*v
-          range.max = v > 0 ? 2*v : 0
-          range.step = .01
-          range.value = v
-          let i = elemValue(undefined, el.to).indexOf(el)
-          range.oninput = () => {
-            if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
-            if (!el) return
-            el.replaceWith(el = elemValue(elem('number', ''+range.value), el.to = +range.value))
-            i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
-          }
-          d.append(range)
-        } else if (typeof v == 'string') {
-          // Display strings in a <textarea> for easy editing and copying.
-          const area = elem('textarea', v)
-          if (!_isEditable(el))
-            area.readOnly = true
-          else if (el) {
-            let i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
-            area.oninput = _throttled(() => {
-              if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
-              if (!el) return
-              el.replaceWith(el = serialize(area.value, fancy, undefined, serialize.displayed))
-              elemValue(area, el.to = area.value)
-              i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
-            }, .1)
-          }
-          d.append(elemValue(area, v))
-        } else
-          // Display the globals the expression binds to, and an expandable basic definition.
-          d.append(permissionsElem(v)),
-          d.append(elem('div', [
-            elemValue(elem('unimportant', 'Basically: '), basic),
-            elemValue(elemCollapse(() => _collapsedSerialization(v)), v),
-          ]))
+      // Append a daintyEvaluator, executing `(_useAll (el v):describe)`.
+      menu.append(daintyEvaluator([_useAll, [typed, [el, v], describe]]))
 
-        // The docstring.
-        if (!_isArray(v) && typeof defines(v, txt) == 'string')
-          d.append(elem('div', stringToDoc(defines(v, txt))))
-
-        // Examples.
-        if (!_isArray(v) && _isArray(defines(v, examples)))
-          d.append(elem('div', [
-            elemValue(elem('unimportant', 'Examples: '), examples),
-            elemCollapse(() => serialize(examples(v), fancy, undefined, serialize.displayed))
-          ]))
-
-        // A _read mark if present.
-        if (_read.marks && _read.marks.has(v))
-          d.append(elem('div', [
-            elemValue(elem('unimportant', 'Marked: '), _read),
-            elemCollapse(() => serialize(_read.marks.get(v), fancy, undefined, serialize.displayed))
-          ]))
-
-        // For globals only:
-        if (backctx.has(v)) {
-          // A table for lookups.
-          if (!_isArray(v) && defines(v, lookup)) {
-            const row = ([k,v]) => {
-              let ve
-              if (!backctx.has(v))
-                ve = elemValue(elemCollapse(() => serialize(v, fancy, undefined, serialize.displayed)), v)
-              else
-                ve = serialize(v, fancy, undefined, serialize.displayed)
-              return elem('tr', [elem('td', elem('span', k)), elem('td', ve)])
-            }
-            let a
-            if (v !== Self) a = lookup(v).map(k => [k, lookup(v, k)])
-            else a = [...backctx].filter(([v,k]) => v && v !== true && k[0] !== '_' && !lookup.parents.has(v)).map(([v,k])=>[k,v])
-            // For Self, only display public functionality without lookup.parents.
-            d.append(elemValue(elem('unimportant', 'Namespace for:'), lookup))
-            d.append(elem('table', a.length <= 16 ? a.map(row) : [a.slice(0,16).map(row), elemCollapse(() => a.slice(16).map(row))]))
-          }
-
-          // A list of back-refs.
-          const Refd = refd(v)
-          if (Refd && Refd.length)
-            d.append(elem('div', [
-              elemValue(elem('unimportant', [
-                'Used in ',
-                elemValue(elem('number', ''+Refd.length), Refd.length),
-                Refd.length != 1 ? ' other globals: ' : ' other global: ',
-              ]), refd),
-              elemCollapse(() => serialize(Refd, fancy, undefined, serialize.displayed))
-            ]))
-        }
-
-        // A full deconstruction.
-        if (backctx.has(v) || !_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
-          d.append(elem('div', [
-            elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
-            elemCollapse(() => serialize(deconstruct(v, false), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
-          ]))
-
-        // Definitions of `describe`.
-        const r = !_isArray(v) && defines(v, describe)
-        if (typeof r == 'function') d.append(r(v))
-      }
-
-      // Default buttons.
-      if (!el) return d
       return d
     },
   },
@@ -1786,7 +1653,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       menu.addEventListener('click', evt => evt.target.tagName === 'BUTTON' && _getOuterContextMenu(evt.target) === menu && elemRemove(menu))
       menu.tabIndex = 0
 
-      // Append a daintyEvaluator, executing `(_useAll (el range v) contextMenu)`.
+      // Append a daintyEvaluator, executing `(_useAll (el range v):contextMenu)`.
       menu.append(daintyEvaluator([_useAll, [typed, [el, range, v], contextMenu]]))
 
       let inside = _getOuterContextMenu(el)
@@ -8476,10 +8343,185 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         }
       },
     },
+
+    {
+      txt:`Allow renaming labels.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        if (el && el.classList.contains('label')) {
+          // Allow renaming labels.
+          const inp = elem('input')
+          inp.type = 'text'
+          let prev = unescapeLabel(el.textContent, el), updating = false
+          inp.value = prev
+          const updateGlobal = _throttled(() => (_updateBroken(document.body), updating = false), .05)
+          const editor = _isEditable(el)
+          inp.oninput = _throttled(() => {
+            if (inp.value && +inp.value === +inp.value) return
+            let arr = elemValue(undefined, el.to)
+            if (!arr && editor) // Restore ourselves when we've lost it because it's cyclic.
+              arr = [...editor.querySelectorAll('.label')].filter(x => unescapeLabel(x.textContent, x) === prev)
+            if (_isArray(arr))
+              for (let i = 0; i < arr.length; ++i)
+                if (arr[i].classList.contains('label') && unescapeLabel(arr[i].textContent, arr[i]) === prev)
+                  arr[i].textContent = escapeLabel(inp.value, arr[i])
+            prev = inp.value
+            if (!updating) setTimeout(updateGlobal, 0), updating = true
+          }, .2)
+          return inp
+        }
+      },
+    },
+
+    {
+      txt:`For globals, display the owner namespace (if any) (even if the property name does not match) and the global binding.
+For numbers, display a slider from 0 to 2*number for easy adjusting.
+For strings, display them in a <textarea> for easy editing and copying.
+For anything else, display the globals the expression binds to, and an expandable basic definition.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        // For globals, a short definition of what we were called on.
+        if (_invertBindingContext(parse.ctx).has(v)) {
+          // For globals, display the owner namespace (if any) (even if the property name does not match) and the global.
+          const global = serialize(v, fancy, undefined, serialize.displayed), p = lookup.parents.get(v) || Self
+          return p ? elem('div', [elem('unimportant', [serialize(p, fancy, undefined, serialize.displayed), '.']), global]) : global
+        } else if (typeof v == 'number' && isFinite(v) && el && v === +el.textContent && _isEditable(el)) {
+          // Display a slider from 0 to 2*number for easy adjusting.
+          const range = elem('input', ''+v)
+          range.type = 'range'
+          range.min = v > 0 ? 0 : 2*v
+          range.max = v > 0 ? 2*v : 0
+          range.step = .01
+          range.value = v
+          let i = elemValue(undefined, el.to).indexOf(el)
+          range.oninput = () => {
+            if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
+            if (!el) return
+            el.replaceWith(el = elemValue(elem('number', ''+range.value), el.to = +range.value))
+            i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
+          }
+          return range
+        } else if (typeof v == 'string') {
+          // Display strings in a <textarea> for easy editing and copying.
+          const area = elem('textarea', v)
+          if (!_isEditable(el))
+            area.readOnly = true
+          else if (el) {
+            let i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
+            area.oninput = _throttled(() => {
+              if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
+              if (!el) return
+              el.replaceWith(el = serialize(area.value, fancy, undefined, serialize.displayed))
+              elemValue(area, el.to = area.value)
+              i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
+            }, .1)
+          }
+          return elemValue(area, v)
+        } else
+          // Display the globals the expression binds to, and an expandable basic definition.
+          return elem('div', [
+            permissionsElem(v),
+            elem('div', [
+              elemValue(elem('unimportant', 'Basically: '), basic),
+              elemValue(elemCollapse(() => _collapsedSerialization(v)), v),
+            ]),
+          ])
+      },
+    },
+    {
+      txt:`Docstring.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        if (!_isArray(v) && typeof defines(v, txt) == 'string')
+          return elem('div', stringToDoc(defines(v, txt)))
+      },
+    },
+    {
+      txt:`Examples.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        if (!_isArray(v) && _isArray(defines(v, examples)))
+          return elem('div', [
+            elemValue(elem('unimportant', 'Examples: '), examples),
+            elemCollapse(() => serialize(examples(v), fancy, undefined, serialize.displayed))
+          ])
+      },
+    },
+
+    {
+      txt:`A \`_read\` mark if present.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        if (_read.marks && _read.marks.has(v))
+          return elem('div', [
+            elemValue(elem('unimportant', 'Marked: '), _read),
+            elemCollapse(() => serialize(_read.marks.get(v), fancy, undefined, serialize.displayed))
+          ])
+      },
+    },
+
+    {
+      txt:`A table for \`lookup\`s.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        const backctx = _invertBindingContext(parse.ctx)
+        if (!_isArray(v) && defines(v, lookup)) {
+          const row = ([k,v]) => {
+            let ve
+            if (!backctx.has(v))
+              ve = elemValue(elemCollapse(() => serialize(v, fancy, undefined, serialize.displayed)), v)
+            else
+              ve = serialize(v, fancy, undefined, serialize.displayed)
+            return elem('tr', [elem('td', elem('span', k)), elem('td', ve)])
+          }
+          // For `Self`, only display public functionality without lookup.parents (displaying all bindings is too much).
+          let a
+          if (v !== Self) a = lookup(v).map(k => [k, lookup(v, k)])
+          else a = [...backctx].filter(([v,k]) => v && v !== true && k[0] !== '_' && !lookup.parents.has(v)).map(([v,k])=>[k,v])
+
+          return elem('div', [
+            elemValue(elem('unimportant', 'Namespace for:'), lookup),
+            elem('table', a.length <= 16 ? a.map(row) : [a.slice(0,16).map(row), elemCollapse(() => a.slice(16).map(row))]),
+          ])
+        }
+      },
+    },
+    {
+      txt:`For globals, the list of back-refs.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        const backctx = _invertBindingContext(parse.ctx)
+        if (backctx.has(v)) {
+          const Refd = refd(v)
+          if (Refd && Refd.length)
+            return elem('div', [
+              elemValue(elem('unimportant', [
+                'Used in ',
+                elemValue(elem('number', ''+Refd.length), Refd.length),
+                Refd.length != 1 ? ' other globals: ' : ' other global: ',
+              ]), refd),
+              elemCollapse(() => serialize(Refd, fancy, undefined, serialize.displayed))
+            ])
+        }
+      },
+    },
+    {
+      txt:`The full deconstruction if a non-array.`,
+      input:__is(75891),
+      call([_typed, [el, v]]) {
+        const backctx = _invertBindingContext(parse.ctx)
+        if (backctx.has(v) || !_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
+          return elem('div', [
+            elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
+            elemCollapse(() => serialize(deconstruct(v, false), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
+          ])
+      },
+    },
   ],
 
   12341:[[__is(`typed`), [__is(`var`)], __is(`contextMenu`)]],
   78963:[[__is(`typed`), [__is(`var`)], __is(`evaluator`)]],
+  75891:[[__is(`typed`), [__is(`var`)], __is(`describe`)]],
 
   disableUsageElem:{
     txt:``,
