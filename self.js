@@ -978,7 +978,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // Open a custom <context-menu> when a context menu is requested, or when a <known> thing is clicked, or when a pointer is pressed in place for 1 second.
       function openMenu(evt, r) {
-        contextMenu(_closestNodeParent(evt.target), evt, r || getSelection().rangeCount && getSelection().getRangeAt(0)), evt.preventDefault()
+        contextMenu(_closestNodeParent(evt.target), r || getSelection().rangeCount && getSelection().getRangeAt(0), evt), evt.preventDefault()
       }
       _listen('contextmenu', evt => openMenu(evt))
       _listen('click', evt => !evt.shiftKey && !evt.ctrlKey && !evt.altKey && evt.target.tagName === 'KNOWN' && openMenu(evt))
@@ -1756,9 +1756,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   contextMenu:{
     txt:`Creates and displays a <context-menu> element near the specified element.`,
-    future:[
-      `Have contextMenu display all uses of \`(Value Elem):contextMenu\`.`,
-    ],
     philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     lookup:{
       describe:__is(`describe`),
@@ -1769,7 +1766,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       expandAll:__is(`elemExpandAll`),
       insertLinkTo:__is(`insertLinkTo`),
     },
-    call(el, evt, range) {
+    call(el, range, evt) {
       impure()
       if (!el && evt.target === document.documentElement) el = evt.target
       if (!el) return
@@ -1782,48 +1779,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       menu.addEventListener('click', evt => evt.target.tagName === 'BUTTON' && _getOuterContextMenu(evt.target) === menu && elemRemove(menu))
       menu.tabIndex = 0
 
-      menu.append(describe(el, range))
-
-      // Fetch URLs and try to display their contents.
-      if (_isArray(v) && v[0] === elem && v[1] === url && typeof v[2] == 'string' && v.length == 3) {
-        impure()
-        const result = elem('div')
-        result.classList.add('resizable')
-
-        fetch(v[2], {mode:'cors'})
-        .catch(r => elemInsert(result, serialize(jsRejected(r), fancy, undefined, serialize.displayed)))
-        .then(r => r.arrayBuffer())
-        .then(r => new TextDecoder().decode(new Uint8Array(r)))
-        .then(r => {
-          try {
-            elemInsert(result, serialize(JSON.parse(r), fancy, undefined, serialize.displayed))
-          } catch (err) { elemInsert(result, lookup(fast, 'parse')(r)) }
-        })
-        .catch(() => {
-          const frame = elem('iframe')
-          frame.src = v[2]
-          elemInsert(result, frame)
-        })
-        menu.append(result)
-      }
-
-      // This should use `Usage` and have a context of el-and-range-to-functions.
-        // Maybe also have `elemUse(ctx, ...values)` for displaying purified results neatly?
-      if (range && v !== undefined && _isEditable(range.commonAncestorContainer)) // Link to this
-        menu.append(button(function linkToThis() { insertLinkTo(range, el) }))
-          // This is also accessible via ctrl-click.
-      if (elemExpandAll(el, true))
-        menu.append(button(function expandAll() { elemExpandAll(el) }))
-      if (!_isEditable(el) && el !== document.documentElement) { // To window \ Restore
-        if (!_getOuterWindow(el))
-          menu.append(button(function toWindow() { elemToWindow(el) }))
-        else
-          menu.append(button(function restore() { return _restoreWindow(_getOuterWindow(el)) }))
-      }
-      if (_getOuterWindow(el) !== el)
-        menu.append(button(function hide() { elemCollapse(el) })) // Hide
-      if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET') // Hide to end
-        menu.append(button(function hideToEnd() { elemCollapse(el, null) }))
+      // Append a daintyEvaluator, executing (_useAll (el range v) contextMenu).
+      menu.append(elem(daintyEvaluator, [_useAll, [typed, [el, range, v], contextMenu]]))
 
       let inside = _getOuterContextMenu(el)
       if (_getOuterContextMenu(inside.parentNode) !== document.body) inside = document.body // Only one nesting layer.
@@ -1836,15 +1793,16 @@ Remember to quote the link unless you want to evaluate the insides.`,
   daintyEvaluator:{
     txt:`\`(elem daintyEvaluator Expr)\`: returns an element that will evaluate the expression and display its \`log\`s if any.`,
     elem(tag, expr, then) {
-      if (tag !== evaluator || typeof document == ''+void 0) return
+      if (tag !== daintyEvaluator || typeof document == ''+void 0) return
       impure()
 
       // Evaluate the requested expression.
-      const el = elem('div', elem('div'))
+      const result = elem('waiting')
+      const el = elem('div', result)
       const env = _newExecutionEnv(finish.env)
       env[_id(log)] = el.lastChild
       const ID = _newJobId()
-      _doJob(expr, env, then, ID)
+      _doJob(expr, env, then || (r => !result.previousSibling ? el.remove() : result.remove()), ID)
       return el
     },
   },
@@ -8382,11 +8340,94 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     argCount:1,
   },
 
-  CurrentUsage:[__is(`either`)],
+  CurrentUsage:[
+    __is(`either`),
+    {
+      txt:`Describe context menu's items.`,
+      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
+      call(_typed, [el, range, v], _contextMenu) { log(describe(el, range)) },
+    },
+    {
+      txt:`Fetch URLs and try to display their contents.`,
+      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
+      call(_typed, [el, range, v], _contextMenu) {
+        if (_isArray(v) && v[0] === elem && v[1] === url && typeof v[2] == 'string' && v.length == 3) {
+          impure()
+          const result = elem('div')
+          result.classList.add('resizable')
+  
+          fetch(v[2], {mode:'cors'})
+          .catch(r => elemInsert(result, serialize(jsRejected(r), fancy, undefined, serialize.displayed)))
+          .then(r => r.arrayBuffer())
+          .then(r => new TextDecoder().decode(new Uint8Array(r)))
+          .then(r => {
+            try {
+              elemInsert(result, serialize(JSON.parse(r), fancy, undefined, serialize.displayed))
+            } catch (err) { elemInsert(result, lookup(fast, 'parse')(r)) }
+          })
+          .catch(() => {
+            const frame = elem('iframe')
+            frame.src = v[2]
+            elemInsert(result, frame)
+          })
+          log(result)
+        }
+      },
+    },
+    {
+      txt:`If the cursor is in editor, present an option to replace the currently-selected contents with a link to the value.`,
+      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
+      call(_typed, [el, range, v], _contextMenu) {
+        if (range && v !== undefined && _isEditable(range.commonAncestorContainer))
+          log(button(function linkToThis() { insertLinkTo(range, el) }))
+      },
+    },
+    {
+      txt:`If we can expand all in the context element, then present that option.`,
+      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
+      call(_typed, [el, range, v], _contextMenu) { elemExpandAll(el, true) && log(button(function expandAll() { elemExpandAll(el) })) },
+    },
+    {
+      txt:`Present "To window" (for non-windows) or "Restore" (for windows — draggable absolutely-positioned elements).`,
+      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
+      call(_typed, [el, range, v], _contextMenu) {
+        if (!_isEditable(el) && el !== document.documentElement) {
+          if (!_getOuterWindow(el))
+            log(button(function toWindow() { elemToWindow(el) }))
+          else
+            log(button(function restore() { return _restoreWindow(_getOuterWindow(el)) }))
+        }
+      },
+    },
+    {
+      txt:`Present an option to hide the element.`,
+      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
+      call(_typed, [el, range, v], _contextMenu) { _getOuterWindow(el) !== el && log(button(function hide() { elemCollapse(el) })) },
+    },
+    {
+      txt:`Present an option to hide the element and all after it.`,
+      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
+      call(_typed, [el, range, v], _contextMenu) {
+        if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET')
+          log(button(function hideToEnd() { elemCollapse(el, null) }))
+      },
+    },
+  ],
+
+  341531:[__is(`_var`)],
+
+  disableUsageElem:{
+    txt:``,
+    call() {
+      // display a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled (in [disabled, ...] in the context)), shuffling between disabled-ness on input.
+    },
+  },
 
   Usage:{
     txt:`A namespace for contextual structural enumeration and generation.`,
     future:`Have \`disableUsageElem\` that displays a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled), shuffling between disabled-ness on input.`,
+
+        // Must also destroy the undeserved peace through that test of cruelty. Kill. It.
     lookup:{
       current:__is(`CurrentUsage`),
       either:__is(`either`),
