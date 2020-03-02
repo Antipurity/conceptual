@@ -234,6 +234,7 @@ __base({
       refd:__is(`refd`),
       examples:__is(`examples`),
       future:__is(`future`),
+      Contribution:__is(`Contribution`),
     },
   },
 
@@ -1603,12 +1604,17 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   _getOuterContextMenu(el) { return !el ? document.body : (el.tagName === 'CONTEXT-MENU' ? el : _getOuterContextMenu(el.parentNode)) },
 
+  escapeLabel(name, lang = _langAt() || fancy) {
+    return typeof defines(lang, escapeLabel) == 'function' ? defines(lang, escapeLabel)(name) : name
+  },
+
+  unescapeLabel(repr, lang = _langAt() || fancy) {
+    return typeof defines(lang, escapeLabel) == 'function' ? defines(lang, escapeLabel)(repr) : repr
+  },
+
   describe:{
     txt:`Creates an element that describes a value.`,
-    future:[
-      `Have escapeLabel(name, lang) and unescapeLabel(repr, lang). Use them for renaming labels.`,
-      `Have describe display all uses of \`(Value Elem):describe\`.`,
-    ],
+    future:`Have describe display all uses of \`(Value Elem):describe\`, just like evaluator/contextMenu do.`,
     call(el) {
       if (typeof document == ''+void 0) return
       const d = document.createElement('div')
@@ -1620,8 +1626,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
         // Allow renaming labels.
         const inp = elem('input')
         inp.type = 'text'
-        const illegal = /[!=:\s\(\)→>\+\-\*\/\&\|\.'"`\,\\]/
-        let prev = unescape(el.textContent), updating = false
+        let prev = unescapeLabel(el.textContent, el), updating = false
         inp.value = prev
         const updateGlobal = _throttled(() => (_updateBroken(document.body), updating = false), .05)
         const editor = _isEditable(el)
@@ -1629,20 +1634,16 @@ Remember to quote the link unless you want to evaluate the insides.`,
           if (inp.value && +inp.value === +inp.value) return
           let arr = elemValue(undefined, el.to)
           if (!arr && editor) // Restore ourselves when we've lost it because it's cyclic.
-            arr = [...editor.querySelectorAll('.label')].filter(x => unescape(x.textContent) === prev)
-          const s = escape(inp.value)
+            arr = [...editor.querySelectorAll('.label')].filter(x => unescapeLabel(x.textContent, x) === prev)
           if (_isArray(arr))
             for (let i = 0; i < arr.length; ++i)
-              if (arr[i].classList.contains('label') && unescape(arr[i].textContent) === prev)
-                arr[i].textContent = s
+              if (arr[i].classList.contains('label') && unescapeLabel(arr[i].textContent, arr[i]) === prev)
+                arr[i].textContent = escapeLabel(inp.value, arr[i])
           prev = inp.value
           if (!updating) setTimeout(updateGlobal, 0), updating = true
         }, .2)
         d.append(inp)
         return d
-
-        function escape(str) { return str && !illegal.test(str) ? str : '`' + str.replace(/`/g, '``') + '`' }
-        function unescape(str) { return str[0] === '`' ? str.slice(1,-1).replace(/``/g, '`') : str }
       }
       // A short definition of what we were called on.
       if (v !== undefined) {
@@ -2191,10 +2192,11 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
   },
 
   button:{
-    txt:`\`(button OnClick)\`: Returns a button that calls a function(s) on click (with no arguments). Overridable.`,
-    call(f) {
+    txt:`\`(button OnClick)\`: Returns a button that calls a function on click (with no arguments). Overridable.`,
+    call(f, name) {
       const backctx = _invertBindingContext(parse.ctx)
-      let name = backctx.has(f) ? backctx.get(f) : f && f.displayName || f && f.name || 'Click'
+      if (typeof name != 'string' && !_isDOM(name)) name = backctx.has(f) ? backctx.get(f) : f && f.displayName || f && f.name
+      if (!name) name = 'Execute'
       if (typeof defines(f, button) == 'function') return defines(f, button)(f)
       if (f instanceof Node) return f
       if (typeof f != 'function') error("Cannot call not-a-function:", f)
@@ -6251,6 +6253,10 @@ And parsing is more than just assigning meaning to a string of characters (it's 
     txt:`When matched in \`parse\` rules, represents a value that should be preserved as-is (as it likely comes from a special DOM element/reference).`,
   },
 
+  _basicEscapeLabel(s) { return s && !/[=!:\s\(\)\[\]→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]/.test(s) ? s : '`' + s.replace(/`/g, '``') + '`' },
+
+  _basicUnescapeLabel(s) { return s[0] === '`' ? s.slice(1,-1).replace(/``/g, '`') : s },
+
   _basicLabel(match, u) { // a, qwer, `a`; 12, 1e6
     const legal = /-?(?:[0-9]e-|[0-9]E-|[^=!:\s\(\)\[\]→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]|\.[0-9])+/y
     if (u === _specialParsedValue) {
@@ -6628,6 +6634,8 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     serialize:__is(`_basicTopLevel`),
     REPL:`\`(txt)\` for {all functionality}, \`(examples)\` for {all tests}.`,
     insertLinkTo:__is(`_basicLinkTo`),
+    escapeLabel:__is(`_basicEscapeLabel`),
+    unescapeLabel:__is(`_basicUnescapeLabel`),
   },
 
   fancy:{
@@ -6638,6 +6646,8 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     serialize:__is(`_fancyTopLevel`),
     REPL:`\`(docs)\` for {all functionality}, \`(examples)\` for {all tests}.`,
     insertLinkTo:__is(`_basicLinkTo`),
+    escapeLabel:__is(`_basicEscapeLabel`),
+    unescapeLabel:__is(`_basicUnescapeLabel`),
     examples:[
       `Binary operators must have the same whitespace characters before and after:`,
       [
@@ -8335,6 +8345,16 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
   CurrentUsage:[
     __is(`either`),
     {
+      txt:`Propose to execute no-args functions.`,
+      input:__is(12341),
+      call([_typed, [el, range, v]]) {
+        if (typeof v == 'function' && defines(v, argCount) === 0) {
+          const names = nameResult()
+          return button(v, names && names[0])
+        }
+      },
+    },
+    {
       txt:`Describe context menu's items.`,
       input:__is(12341),
       call([_typed, [el, range, v]]) { return describe(el) },
@@ -9222,6 +9242,16 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
+
+
+
+
+
+
+  Contribution:{
+    txt:`What, still here? Hand it over. That thing, your dark soul. For my lady's painting.`,
+    philosophy:`lol`,
+  },
 
 
 
