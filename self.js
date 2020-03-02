@@ -266,7 +266,6 @@ __base({
       lookup:__is(`lookup`),
       string:__is(`string`),
       concept:__is(`concept`),
-      typed:__is(`typed`),
     },
   },
 
@@ -1382,7 +1381,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       function mark(x) {
         if (seen.has(x)) return; else seen.add(x)
         if (_invertBindingContext(parse.ctx).has(x) && typeof x != 'boolean' && typeof x != 'string' && x != null) return uses.add(x)
-        if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x, false))
+        if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x))
         else if (x instanceof Map) x.forEach((v,k) => (mark(k), mark(v)))
         else if (_isArray(x)) x.forEach(mark)
         else if (x && !x[defines.key] && typeof x == 'object')
@@ -1621,8 +1620,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       if (!(el instanceof Node)) v = el, el = undefined
       else v = el.to
 
-      // Append a daintyEvaluator, executing `(_useAll (el v):describe)`.
-      menu.append(daintyEvaluator([_useAll, [typed, [el, v], describe]]))
+      // Append a daintyEvaluator, executing `(_logUses (el v):describe)`.
+      menu.append(daintyEvaluator([_logUses, [typed, [el, v], describe]]))
 
       return d
     },
@@ -1653,8 +1652,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       menu.addEventListener('click', evt => evt.target.tagName === 'BUTTON' && _getOuterContextMenu(evt.target) === menu && elemRemove(menu))
       menu.tabIndex = 0
 
-      // Append a daintyEvaluator, executing `(_useAll (el range v):contextMenu)`.
-      menu.append(daintyEvaluator([_useAll, [typed, [el, range, v], contextMenu]]))
+      // Append a daintyEvaluator, executing `(_logUses (el range v):contextMenu)`.
+      menu.append(daintyEvaluator([_logUses, [typed, [el, range, v], contextMenu]]))
 
       let inside = _getOuterContextMenu(el)
       if (_getOuterContextMenu(inside.parentNode) !== document.body) inside = document.body // Only one nesting layer.
@@ -1791,7 +1790,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         finish.env = env
 
         // Display all uses of `(Result UserDuration RealDuration EndTime):evaluator`.
-        el.append(daintyEvaluator([_useAll, [typed, [r, env[_id(userTime)], real, end], evaluator]]))
+        el.append(daintyEvaluator([_logUses, [typed, [r, env[_id(userTime)], real, end], evaluator]]))
         _smoothHeightPost(el, pre)
       })
       prompt.title = 'Click to remove this.'
@@ -1901,7 +1900,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
               ID = undefined, waiting && waiting.remove(), waiting = undefined
               if (!_isUnknown(result)) {
                 // Display all uses of `(Result):evaluator`.
-                elemInsert(pureOutput, daintyEvaluator([_useAll, [typed, [result], evaluator]]), pureOutput.lastChild)
+                elemInsert(pureOutput, daintyEvaluator([_logUses, [typed, [result], evaluator]]), pureOutput.lastChild)
               } else {
                 const el = elem('button', 'Evaluate')
                 elemValue(el, result)
@@ -2870,6 +2869,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
         _jobs.duration = _timeSince(start)
         _jobs.running = false
       }
+      finish.env = undefined
       if (DOM) {
         if (_jobs.expr.length) _jobsResume(_jobs.CPU ? Math.min(_jobs.duration / +_jobs.CPU.value - _jobs.duration, 1000) : 0)
         _jobs.display(_jobs.indicator)
@@ -4036,7 +4036,8 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           if (finished[0] !== rest && _isStruct(finished)) return result = finished
 
           // fast.parse can execute arbitrary things, so we limit that data format to our public interface.
-          if (finish.noSystem && lookup.parents.get(finished[0]) === System) error(`Tried to execute a system function`)
+          if (finish.noSystem && typeof finished[0] == 'function' && lookup.parents.get(finished[0]) === System)
+            error(`Tried to execute a system function`)
 
           // If nothing is deferred but something is unknown, and the function is user-defined, then we have a choice on whether to inline the function.
             // In the worst case, inlining could almost double the total function-body size on each inlining, but this is suitable for a REPL.
@@ -4250,7 +4251,7 @@ Read keys with \`lookup\`.`,
 
   deconstruct:{
     txt:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
-    call(v, allowPath = true) {
+    call(v, allowPath = false) {
       if (defines(v, deconstruct)) return defines(v, deconstruct)
       else if (_isArray(v)) return quote(v.slice())
 
@@ -4268,7 +4269,7 @@ Read keys with \`lookup\`.`,
       if (typeof document != ''+void 0) {
         // Not precise at all.
         if (v instanceof Node && 'to' in v) return v.to
-        if (v instanceof Element) return array(elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch)))
+        if (v instanceof Element) return array(elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch, true)))
         if (v instanceof Node) return v.textContent
       }
 
@@ -5071,7 +5072,7 @@ Uses \`bound\`, and partially-evaluates the result before returning.`,
     ],
     finish(f) {
       // Close over the current label-environment, by binding f's body.
-      if (_isFunction(f)) f = deconstruct(f, false)
+      if (_isFunction(f)) f = deconstruct(f)
       if (!_isArray(f) || f[0] !== _function) return
       const m = finish.env[_id(label)]
       let [trivial = false, b = _bindFunc(f, x => {
@@ -5081,7 +5082,7 @@ Uses \`bound\`, and partially-evaluates the result before returning.`,
         }
       })] = interrupt(closure)
       try {
-        const r = !trivial ? finish(b) : _unknown(array(closure, deconstruct(finish(b), false)))
+        const r = !trivial ? finish(b) : _unknown(array(closure, deconstruct(finish(b))))
         return r
       }
       catch (err) { if (err === interrupt) interrupt(closure, 2)(trivial, b);  throw err }
@@ -5438,7 +5439,7 @@ Infers structural terms where possible.`,
         if (!_isArray(a) && _isArray(defines(a, deconstruct))) {
           if (_isArray(b) || !_isArray(defines(b, deconstruct)))
             (!readonly ? error : errorFast)(a, "cannot be assigned", b)
-          a = deconstruct(a, false), b = deconstruct(b, false)
+          a = deconstruct(a), b = deconstruct(b)
         }
 
         if (_isArray(a) && a[0] !== _const) {
@@ -5571,7 +5572,7 @@ Infers structural terms where possible.`,
           if (n && _invertBindingContext(parse.ctx).has(f)) return set.add(f)
           if (++n > 9000) error('too big', [...set])
           if (set.has(f)) return; else set.add(f)
-          if (defines(f, deconstruct)) f = deconstruct(f, false)
+          if (defines(f, deconstruct)) f = deconstruct(f)
           if (typeof f == 'function') _highlightGlobalsInString(_unevalFunction(f)[1], s => !keywords.has(s) && set.add(parse.ctx.get(label(s))), true)
           if (f instanceof Map) f.forEach((v,k) => (handle(k), handle(v)))
           else if (_isArray(f)) f.forEach(handle)
@@ -6802,7 +6803,7 @@ Does not merge the parsed arrays.`,
           if (!_isArray(arr)) {
             if (typeof arr == 'string' || typeof arr == 'number') return
             if (arr instanceof Map || defines(arr, deconstruct))
-              deconstruction.set(arr, deconstruct(arr, false)), arr = deconstruction.get(arr)
+              deconstruction.set(arr, deconstruct(arr)), arr = deconstruction.get(arr)
             else throw "Cannot serialize a not-`deconstruct`ible not-an-array"
           }
           if (!_isArray(arr)) throw "All values must be string/number or Map or array or deconstruct to an array"
@@ -7155,7 +7156,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         if (x == null || typeof x == 'number' || typeof x == 'boolean' || typeof x == 'string') return
         seen.set(x, (seen.get(x) || 0) + 1)
         if (seen.get(x) !== 1) return
-        if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x, false))
+        if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x))
         else if (x instanceof Map) x.forEach((v,k) => (mark(k), mark(v)))
         else if (_isArray(x)) x.forEach(mark)
         else if (x && !x[defines.key] && typeof x == 'object')
@@ -7177,7 +7178,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
           write('__is('), write(typeof names.get(x) == 'number' ? ''+names.get(x) : str(names.get(x)), true), write(')')
         else if (!_isArray(x) && defines(x, deconstruct)) {
           // Deconstructed concepts become is(…) to evaluate on start.
-          const d = deconstruct(x, false)
+          const d = deconstruct(x)
           if (!_isArray(d) || typeof d[0] != 'function' || defines(d[0], finish)) throw "Must be a regular function"
           write('__is('), put(d), write(')')
         } else if (isFunc(x)) {
@@ -7354,7 +7355,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       names.forEach((name, v) => {
         if (_isArray(v) || defines(v, deconstruct) === undefined) if (!fill(v)) write('\n')
         if (!_isArray(v) && defines(v, deconstruct) !== undefined) {
-          const d = deconstruct(v, false)
+          const d = deconstruct(v)
           const code = defines(d, finish) === undefined ? d[0] : defines(d, finish)
           if (!_isArray(d) || typeof code != 'function') throw "Invalid deconstruction"
           let b = 0
@@ -7385,7 +7386,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         if (names.has(x)) return; else names.set(x, name = '$' + (n++).toString(36))
         try {
           if (_read.marks && _read.marks.has(x)) mark(_read.marks.get(x))
-          if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x, false))
+          if (!_isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x))
           else if (x instanceof Map) x.forEach((v,k) => (mark(k), mark(v)))
           else if (_isArray(x)) x.forEach(mark)
           else if (x && !x[defines.key] && typeof x == 'object')
@@ -7441,6 +7442,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   System:{
     txt:`A namespace for low-level functions that should not be called in user code, for safety.`,
     lookup:{
+      typed:__is(`typed`),
       interrupt:__is(`interrupt`),
       deconstruct:__is(`deconstruct`),
       jsEval:__is(`jsEval`),
@@ -7486,7 +7488,10 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   },
   compile:{
     txt:`Compiles a function to JS.`,
-    future:`In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out (by having a first-branch ref-count map that is decremented in sync with the main ref-count), so that all disposals are always hit.`,
+    future:[
+      `In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out (by having a first-branch ref-count map that is decremented in sync with the main ref-count), so that all disposals are always hit.`,
+      `In functions, catch \`_escapeToInterpretation\` and interpret args/body, with proper re-entrance, so that we can completely replace a function with its compiled version.`,
+    ],
     philosophy:`I am speed.`,
     buzzwords:`JIT-compiled`,
     call(opt, ...a) {
@@ -7618,7 +7623,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         // Go through the array-graph and mark the ref-count of each reachable node.
         refCount.set(x, (refCount.get(x) || 0) + 1)
         if (!_isArray(x) && _isArray(defines(x, deconstruct)))
-          return markRefCounts(deconstruct(x, false))
+          return markRefCounts(deconstruct(x))
         if (!_isArray(x) || refCount.get(x) !== 1) return
         if (x[0] === quote) return
         x.forEach(markRefCounts)
@@ -7691,7 +7696,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
           // If expecting a function, deconstruct both pattern and input.
           if (!_isArray(a) && _isArray(defines(a, deconstruct))) {
             write(`if(${outside(_isArray)}(${bVar})||!${outside(_isArray)}(${outside(defines)}(${bVar},${outside(deconstruct)})))${err}\n`, `since a deconstructs, b must too`)
-            a = deconstruct(a, false)
+            a = deconstruct(a)
             write(`${bVar}=${outside(deconstruct)}(${bVar},false)\n`, `deconstruct`)
           } else write(`if(!${outside(_isArray)}(${bVar}))${err}`, `expected an array`)
 
@@ -8122,7 +8127,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
 
     } else if (_isFunction(v) || typeof v == 'function' && (inp ? (d = !_isArray(v) && defines(v, input)) : (d = !_isArray(v) && defines(v, output)))) {
       // If a deconstructable function, add each of its inputs/output.
-      const f = d || deconstruct(v, false)
+      const f = d || deconstruct(v)
       if (inp) {
         if (!d)
           for (let j = 1; j < f.length-1; ++j)
@@ -8513,7 +8518,7 @@ For anything else, display the globals the expression binds to, and an expandabl
         if (backctx.has(v) || !_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
           return elem('div', [
             elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
-            elemCollapse(() => serialize(deconstruct(v, false), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
+            elemCollapse(() => serialize(deconstruct(v), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
           ])
       },
     },
@@ -8527,6 +8532,8 @@ For anything else, display the globals the expression binds to, and an expandabl
     txt:``,
     call() {
       // display a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled (in [disabled, ...] in the context)), shuffling between disabled-ness on input.
+        // Don't check-box if a context _wasMerged, just display.
+        // Collapse cycle backrefs.
         // And have the ability to drag elements, to re-order them.
     },
   },
@@ -8585,7 +8592,7 @@ For anything else, display the globals the expression binds to, and an expandabl
     // If a deconstructable function, or a JS function that defines `input`/`output`:
     } else if (_isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
-      const f = d || deconstruct(v, false)
+      const f = d || deconstruct(v)
       let [j = 0, k = d ? 0 : 1] = interrupt(_addUsesToContext)
       const endJ = inp ? values.length+1 : 1
       const endK = d ? f.length : f.length-1
@@ -8802,7 +8809,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   },
 
   _functionComposer(shape) {
-    const d = deconstruct(shape, false)
+    const d = deconstruct(shape)
     function impl(body) {
       const L = _id(label)
       const prev = finish.env[L];  finish.env[L] = _allocMap()
@@ -8828,7 +8835,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
       // If `wantedOutput` is a function, look for its output assuming its inputs and ctx then bind the function with the result.
       if (_isFunction(wantedOutput)) {
-        const d = deconstruct(wantedOutput, false)
+        const d = deconstruct(wantedOutput)
         const subCtx = array(either, ...d.slice(1,-1), ctx)
         _visitNode(subCtx, _functionComposer(wantedOutput), null, 0, use.var, null, then)
         return
@@ -8860,7 +8867,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
             nextArg = defines(v, input)[!actualArgs ? 0 : actualArgs.length]
           // Deconstructable functions have their inputs read.
           else if (_isFunction(v))
-            nextArg = deconstruct(v, false)[!actualArgs ? 1 : 1 + actualArgs.length]
+            nextArg = deconstruct(v)[!actualArgs ? 1 : 1 + actualArgs.length]
           // Native functions with enough argCount accept `inputs` in order if any, then `?`s.
           else
             nextArg = use.var
@@ -8896,10 +8903,10 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     },
   },
 
-  _useAll:{
+  _logUses:{
     txt:`Logs all \`use\`s of a value.`,
     call(value, ctx = CurrentUsage) {
-      let [ins = input(value, ctx), i = 1] = interrupt(_useAll)
+      let [ins = input(value, ctx), i = 1] = interrupt(_logUses)
       if (!ins) return
       const valueArray = _allocArray;  valueArray.push(value)
       try {
@@ -8908,7 +8915,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
         }
         _allocArray(ins)
-      } catch (err) { if (err === interrupt) interrupt(_useAll, 2)(ins, i);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_logUses, 2)(ins, i);  throw err }
       finally { _allocArray(valueArray) }
     },
   },
