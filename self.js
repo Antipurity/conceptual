@@ -1869,9 +1869,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
   evaluator:{
     txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
-    future:[
-      `In \`evaluator\`, should \`_useAll (Result User Real Report):evaluator\` daintily.`,
-    ],
     elem(tag, expr, then) {
       if (tag !== evaluator || typeof document == ''+void 0) return
       impure()
@@ -1988,7 +1985,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
   REPL:{
     txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
-    future:`When a result gets purified or computed (in purifyAndDisplay and evaluator), display every single \`output Result:evaluator\` right after it. Have \`?:evaluator->?\` "Input to N: ···" and "Output of M: ···" (throw if there are none) elem-displayers in CurrentUsage.`,
+    future:`Extract the editor itself into \`editor(initialString, lang, binds, onInput(expr), onEnter(expr))\`.`,
     elem(tag, lang, ctx) {
       if (tag !== REPL || typeof document == ''+void 0) return
       lang = lang || fancy, ctx = ctx || new Map(parse.ctx)
@@ -2102,6 +2099,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       }, 1)
       let height
       replInput.addEventListener('input', evt => {
+        if (_smoothHeight.disabled) return
         if (height) _smoothHeightPost(replInput, height).then(h => height = h)
         else height = _smoothHeightPre(replInput)
       })
@@ -5812,7 +5810,7 @@ Also wraps C-style strings in <string>.`,
 
   nameResult:{
     txt:`\`(nameResult Expr)\`: provides a list of suggestions for naming Expr. Used in \`serialize\` for more human-readable graph serializations.`,
-    call(func) { return typeof func == 'string' && +func !== +func && func.length < 20 ? array(func) : defines(func, nameResult  ) },
+    call(func) { return typeof func == 'string' && +func !== +func && func.length < 20 ? array(func) : _isArray(defines(func, nameResult)) ? defines(func, nameResult) : typeof defines(func, nameResult) == 'string' ? [defines(func, nameResult)] : null },
   },
 
   serialize:{
@@ -8205,19 +8203,24 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       if (!_structHash.dependent)
         _structHash.dependent = Symbol('dependent'), _structHash.context = Symbol('context')
       if (_isUnknown(x) && x.length == 2) x = x[1]
-      if (typeof x == 'function') return _structHash.dependent
       if (!_isArray(x) || !x.length || x[0] === _const) return x
+      if (typeof x[0] == 'function' || _isVar(x) || !_isArray(x[0]) && typeof defines(x[0], finish) == 'function')
+        return _structHash.dependent
       if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Usage) == 'function') return _structHash.context
-      if (_isVar(x)) return _structHash.dependent
-      x = x[x.length-1] // Go to last.
+
+      // Go to last.
+      x = x[x.length-1]
       if (_isUnknown(x) && x.length == 2) x = x[1]
-      if (typeof x == 'function') return _structHash.dependent
       if (!_isArray(x) || !x.length || x[0] === _const) return x
+      if (typeof x[0] == 'function' || _isVar(x) || !_isArray(x[0]) && typeof defines(x[0], finish) == 'function')
+        return _structHash.dependent
       if (x[0] === either || !_isArray(x[0]) && typeof defines(x[0], Usage) == 'function') return _structHash.context
-      if (_isVar(x)) return _structHash.dependent
-      x = x[0] // Go to first.
+
+      // Go to first.
+      x = x[0]
       if (_isUnknown(x) && x.length == 2) x = x[1]
       return typeof x == 'function' || _hasCallableParts(x) ? _structHash.dependent : x
+
       // .dependent, .context
     },
   },
@@ -8333,13 +8336,13 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     __is(`either`),
     {
       txt:`Describe context menu's items.`,
-      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v]) { log(describe(el, range)) },
+      input:__is(12341),
+      call([_typed, [el, range, v]]) { return describe(el) },
     },
     {
       txt:`Fetch URLs and try to display their contents.`,
-      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v]) {
+      input:__is(12341),
+      call([_typed, [el, range, v]]) {
         if (_isArray(v) && v[0] === elem && v[1] === url && typeof v[2] == 'string' && v.length == 3) {
           impure()
           const result = elem('div')
@@ -8359,58 +8362,58 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
             frame.src = v[2]
             elemInsert(result, frame)
           })
-          log(result)
+          return result
         }
       },
     },
     {
       txt:`If the cursor is in editor, present an option to replace the currently-selected contents with a link to the value.`,
-      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v]) {
+      input:__is(12341),
+      call([_typed, [el, range, v]]) {
         if (range && v !== undefined && _isEditable(range.commonAncestorContainer))
-          log(button(function linkToThis() { insertLinkTo(range, el) }))
+          return button(function linkToThis() { insertLinkTo(range, el) })
       },
     },
     {
       txt:`If we can expand all in the context element, then present that option.`,
-      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v]) { elemExpandAll(el, true) && log(button(function expandAll() { elemExpandAll(el) })) },
+      input:__is(12341),
+      call([_typed, [el, range, v]]) { return elemExpandAll(el, true) ? button(function expandAll() { elemExpandAll(el) }) : undefined },
     },
     {
       txt:`Present "To window" (for non-windows) or "Restore" (for windows — draggable absolutely-positioned elements).`,
-      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v]) {
+      input:__is(12341),
+      call([_typed, [el, range, v]]) {
         if (!_isEditable(el) && el !== document.documentElement) {
           if (!_getOuterWindow(el))
-            log(button(function toWindow() { elemToWindow(el) }))
+            return button(function toWindow() { elemToWindow(el) })
           else
-            log(button(function restore() { return _restoreWindow(_getOuterWindow(el)) }))
+            return button(function restore() { return _restoreWindow(_getOuterWindow(el)) })
         }
       },
     },
     {
       txt:`Present an option to hide the element.`,
-      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v]) { _getOuterWindow(el) !== el && log(button(function hide() { elemCollapse(el) })) },
+      input:__is(12341),
+      call([_typed, [el, range, v]]) { return _getOuterWindow(el) !== el ? button(function hide() { elemCollapse(el) }) : undefined },
     },
     {
       txt:`Present an option to hide the element and all elements after it on the same hierarchy level.`,
-      input:[__is(`typed`), __is(341531), __is(`contextMenu`)],
-      call(_typed, [el, range, v]) {
+      input:__is(12341),
+      call([_typed, [el, range, v]]) {
         if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET')
-          log(button(function hideToEnd() { elemCollapse(el, null) }))
+          return button(function hideToEnd() { elemCollapse(el, null) })
       },
     },
     {
       txt:`Display evaluation's result.`,
-      input:[__is(`typed`), __is(341531), __is(`evaluator`)],
-      call(_typed, [result]) { log(result) },
+      input:__is(78963),
+      call([_typed, [result]]) { return result !== undefined ? result : _onlyUndefined },
     },
     {
       txt:`Display the report on times taken.`,
-      input:[__is(`typed`), __is(341531), __is(`evaluator`)],
-      call(_typed, [result, user, real, end]) {
-        user != null && log(elem('time-report', [
+      input:__is(78963),
+      call([_typed, [result, user, real, end]]) {
+        if (user != null) return elem('time-report', [
           elemValue(elem('span', 'user'), userTime),
           elem('space', ' '),
           _formatNumber(user),
@@ -8422,17 +8425,47 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
           elemValue(elem('span', 'report'), serialize),
           elem('space', ' '),
           _formatNumber(_timeSince(end)),
-        ]))
+        ])
+      },
+    },
+    {
+      txt:`Display evaluation result's potential uses.`,
+      input:__is(78963),
+      call([_typed, [result]]) {
+        const ctx = input(result)
+        if (ctx) {
+          const lang = _langAt(), binds = _bindsAt()
+          return elem('div',
+            elem('unimportant', ['Input to', elem('number', ''+ctx.length-1), ': ']),
+            elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
+          )
+        }
+      },
+    },
+    {
+      txt:`Display potential ways to get evaluation result's.`,
+      input:__is(78963),
+      call([_typed, [result]]) {
+        const ctx = output(result)
+        if (ctx) {
+          const lang = _langAt(), binds = _bindsAt()
+          return elem('div',
+            elem('unimportant', ['Output of', elem('number', ''+ctx.length-1), ': ']),
+            elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
+          )
+        }
       },
     },
   ],
 
-  341531:[__is(`_var`)],
+  12341:[[__is(`typed`), [__is(`var`)], __is(`contextMenu`)]],
+  78963:[[__is(`typed`), [__is(`var`)], __is(`evaluator`)]],
 
   disableUsageElem:{
     txt:``,
     call() {
       // display a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled (in [disabled, ...] in the context)), shuffling between disabled-ness on input.
+        // And have the ability to drag elements, to re-order them.
     },
   },
 
@@ -8449,7 +8482,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       use:__is(`use`),
       get:__is(`get`),
     },
-    philosophy:`Optimization/approximation is like the Dark Side. It makes you much stronger, but even a single bit of reliance on it makes the development of perfect usage/analysis mechanisms unnecessary. It makes groups look like a few inspiring masters and a horde of interchangeable minions who they inspired. So until this is done, there are intentionally no such things here.`,
+    philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.`,
   },
 
   _addUsesToContext(result, as, v, ctx, values, inp) {
@@ -8808,8 +8841,10 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       if (!ins) return
       const valueArray = _allocArray;  valueArray.push(value)
       try {
-        for (; i < ins.length; ++i)
-          log(use(valueArray, ins[i], ctx))
+        for (; i < ins.length; ++i) {
+          const r = use(valueArray, ins[i], ctx)
+          r !== undefined && log(r !== _onlyUndefined ? r : undefined)
+        }
         _allocArray(ins)
       } catch (err) { if (err === interrupt) interrupt(_useAll, 2)(ins, i);  throw err }
       finally { _allocArray(valueArray) }
@@ -9099,8 +9134,9 @@ This is the default when no picker is specified.`,
     txt:`A \`With\` for \`picker\` that pauses execution and asks the user.`,
     future:[
       `Test this.`,
-      `Add a "Remember" checkbox (and maps from cause to the length and the choice).`,
-      `Have \`askUserElem()\` for inspecting the remembered choices.`,
+      `If \`_read.marks.has(cause)\` and it's not a function, find that in \`from\`; if it's a function, defer to that.`,
+      `Add a "Remember" checkbox (and maps from cause to the length and the choice), expandable into "Write the choosing function \`(function Next From Cause Extra)->?\` for this cause:".`,
+      `Have \`askUserElem(ctx = CurrentUsage)\` for inspecting the remembered choices.`,
     ],
     examples:[
       [
