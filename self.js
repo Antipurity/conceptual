@@ -2064,6 +2064,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       if (typeof name != 'string' && !_isDOM(name)) name = backctx.has(f) ? backctx.get(f) : f && f.displayName || f && f.name
       if (!name) name = 'Execute'
       if (typeof defines(f, button) == 'function') return defines(f, button)(f)
+      else if (typeof defines(f, button) == 'string') name = defines(f, button)
       if (f instanceof Node) return f
       if (typeof f != 'function') error("Cannot call not-a-function:", f)
 
@@ -5688,6 +5689,7 @@ Also wraps C-style strings in <string>.`,
     future:[
       `Fix serialization not associating elems with their correct values (particularly functions).`,
       `Style only after we fully have the struct, then lazily create/style the tree.`,
+      `Make all arrays \`(...?)\` that contain deconstructable values be deconstructed as \`(array ...?)\`, by returning a bool from \`deconstructed\`.`,
     ],
     philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.
 
@@ -6493,7 +6495,7 @@ And parsing is more than just assigning meaning to a string of characters (it's 
   },
 
   basic:{
-    txt:`A language for ordered-edge-list graphs.
+    txt:`A language for ordered-edge-list graphs. Text, numbers, structures, and connections.
 \`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a=2 a)\`.
 This is a {more space-efficient than binary} representation for graphs of arrays.`,
     buzzwords:`homoiconic`,
@@ -7111,11 +7113,16 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
     txt:`Converts Self to a human-readable form that pollutes the global scope on execution.`,
     examples:[
       [
-        `ToReadableJS true (defines Self lookup) '' 'document.body.appendChild(document.createElement(''div''))'`,
+        `ToReadableJS Self (jsEval '{markLines:true, into:'document.body.appendChild(document.createElement(''div'')))'}'`,
       ],
     ],
-    call(markLines = true, net = defines(Self, lookup), prefix = '', into = 'document.body') {
+    input:[__is(`Self`)],
+    call(net = Self, opt) {
+      net = defines(net, lookup) || net
+      if (net instanceof Map)
+        net = Object.fromEntries(net.entries().map(([k,v]) => _isLabel(k) ? [k[1], v] : [k, v]))
       if (!net || net[defines.key] || typeof net != 'object') throw "Invalid net"
+      const markLines = opt ? !!opt.markLines : true
       Object.keys(net).forEach(k => !_isValidIdentifier(k) && error('Not a valid JS identifier:', k))
       const seen = new Map
       mark(net)
@@ -7123,7 +7130,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       const names = new Map
       Object.keys(net).forEach(k => { seen.get(net[k]) !== 0 && names.set(net[k], k), seen.set(net[k], 0) })
       let s = [], nextName = 0, depth = 0, line = 1
-      prefix && write(prefix)
+      opt && typeof opt.prefix == 'string' && write(opt.prefix)
       write(`/* Code begins at the first \`})({\`, as methods that are bound to each other. _XXX methods are private and somewhat invisible. */\n`)
       write(`'use strict';\n`)
       write(`(function() {\n`)
@@ -7135,7 +7142,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       write(`  const obj = Object.create(is)\n`)
       write(`  return obj.is = name, obj\n`)
       write(`});\n`)
-      write(_unevalFunction(__base)[1].replace(/__INTO__/, into)+'\n')
+      write(_unevalFunction(__base)[1].replace(/__INTO__/, opt && opt.into || 'document.body')+'\n')
       write("__base({")
       ++depth
       Object.keys(net).forEach(k => {
@@ -7323,18 +7330,23 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
 
   ToScopedJS:{
     txt:`Converts Self to a form that has itself hidden in a scope.`,
-    call(markLines = true, net = defines(Self, lookup), prefix) {
+    input:[__is(`Self`)],
+    call(net = Self, opt) {
+      net = defines(net, lookup) || net
+      if (net instanceof Map)
+        net = Object.fromEntries(net.entries().map(([k,v]) => _isLabel(k) ? [k[1], v] : [k, v]))
       if (!net || net[defines.key] || typeof net != 'object') throw "Invalid net"
       if (!net[_id]) throw "Net must have _id"
       if (!net[label]) throw "Net must have label"
-      if (!net[concept]) throw "Net must have label"
+      if (!net[concept]) throw "Net must have concept"
+      const markLines = opt ? !!opt.markLines : true
       Object.keys(net).forEach(k => k[0] === '$' && error('$ is reserved for hidden names, use something other than', k))
       Object.keys(net).forEach(k => !_isValidIdentifier(k) && error('Not a valid JS identifier:', k))
       const names = new Map
       let n = 0
       mark(net)
       let s = [], line = 1
-      prefix && write(prefix)
+      opt && opt.prefix && write(opt.prefix)
       write(`'use strict';(()=>{\n`)
       write(`const __version = ${str(__version.replace(/[0-9]+$/, s => +s+1))}\n`)
       if (markLines) write(`const __line = function(line, func) { return __line.lines[''].push(line, func), func }\n`)
@@ -8217,11 +8229,11 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
   CurrentUsage:[
     __is(`either`),
     {
-      txt:`Propose to execute no-args functions.`,
+      txt:`Propose to execute functions that define \`button\`.`,
       input:__is(12341),
       call([_typed, [el, range, v]]) {
-        if (typeof v == 'function' && defines(v, argCount) === 0) {
-          const names = nameResult()
+        if (typeof v == 'function' && defines(v, button) !== undefined) {
+          const names = nameResult(v)
           return button(v, names && names[0])
         }
       },
@@ -8522,6 +8534,8 @@ For anything else, display the globals the expression binds to, and an expandabl
           ])
       },
     },
+    __is(`ToReadableJS`),
+    __is(`ToScopedJS`),
   ],
 
   12341:[[__is(`typed`), [__is(`var`)], __is(`contextMenu`)]],
@@ -8531,10 +8545,20 @@ For anything else, display the globals the expression binds to, and an expandabl
   disableUsageElem:{
     txt:``,
     call() {
-      // display a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled (in [disabled, ...] in the context)), shuffling between disabled-ness on input.
-        // Don't check-box if a context _wasMerged, just display.
-        // Collapse cycle backrefs.
-        // And have the ability to drag elements, to re-order them.
+      const el = elem('div')
+      display(CurrentUsage, el, _wasMerged(CurrentUsage)) // Should pull in from the current bindings.
+      return el
+
+      function display(v, into, immutable = _isArray(v) && v[0] === either && _wasMerged(v)) { // (That third arg should be computed each time.)
+        // Display a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled (in [disabled, ...] in the context)), shuffling between disabled-ness on input.
+          // Don't check-box if a context _wasMerged, just display.
+          // Collapse cycle backrefs.
+          // And have the ability to drag elements, to re-order them.
+        // Pattern-match:
+          // If seen before.
+          // If a context: checkbox if !immutable and recurse-into-<details>.
+          // If anything else: checkbox if !immutable.
+      }
     },
   },
 
