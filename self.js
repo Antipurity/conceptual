@@ -3949,8 +3949,6 @@ Code (array head) that defines neither \`finish\` nor \`call\` creates structure
 These can matched by function args exactly as they were constructed (so functions are rewrite rules for structures, with optional non-structural code in the body), which can infer the required structure of variables if underspecified.
 Functions are almost always inlined, so there is almost no performance cost to structures beyond the initial \`purify\`ing.
 Cyclic structures construct a graph.`,
-    future:`Create and cache the unbound repr, and only preserve results for nodes that need it.
-Or at least fix that unknowns-collision-in-inference bug and reclaim unknowns in maps again.`,
     nameResult:[
       `finished`,
     ],
@@ -5256,7 +5254,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
         const shouldMerge = f.every(_shouldMerge)
         const impl = function impl(...data) {
           // Cache if our calls are merged.
-          const v = shouldMerge && array(impl, ...data)
+          const v = shouldMerge && (_isArray(finish.v) && finish.v[0] === impl ? finish.v : array(impl, ...data))
           // Don't expose torn caching to other jobs.
           if (shouldMerge && call.locked.has(v) && call.locked.get(v) !== call.ID) throw interrupt
           // See if we have this call in cache.
@@ -5281,17 +5279,15 @@ Variables within non-\`closure\` functions will not be changed by application.`,
               case 0:
                 // Defer to the compiled version if we have already inferred everything.
                 if (!finish.pure) {
-                  try {
-                    if (impl.compiled === undefined)
-                      impl.compiled = 0
-                    else { // Only compile on the second visit.
-                      if (impl.compiled >= 0)
-                        impl.compiled = compile({cause:impl, markLines:true}, ...f.slice(1)),
-                        _id(impl), Object.freeze(impl)
-                      if (typeof impl.compiled == 'function')
-                        return result = impl.compiled(...data)
-                    }
-                  } catch (err) { if (err !== _escapeToInterpretation) throw err }
+                  if (impl.compiled === undefined)
+                    impl.compiled = 0
+                  else { // Only compile on the second visit.
+                    if (impl.compiled >= 0)
+                      impl.compiled = compile({cause:impl, markLines:true}, ...f.slice(1)),
+                      _id(impl), Object.freeze(impl)
+                    if (typeof impl.compiled == 'function')
+                      return result = impl.compiled(...data)
+                  }
                 }
                 stage = 1
               case 1:
@@ -7523,6 +7519,15 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
     future:[
       `In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out (by having a first-branch ref-count map that is decremented in sync with the main ref-count), so that all disposals are always hit.`,
       `In functions, catch \`_escapeToInterpretation\` and interpret args/body, with proper re-entrance, so that we can completely replace a function with its compiled version.`,
+        /*
+          try {
+            // Assign args for compilation.
+          } catch (err) {
+            if (err !== _escapeToInterpretation) throw err
+            // _assign args then finish body, to interpret it all.
+          }
+          // Do the body of the compilation.
+        */
     ],
     philosophy:`I am speed.`,
     buzzwords:`JIT-compiled`,
@@ -7579,34 +7584,53 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       const args = new Set
 
       write(`'use strict'\n`)
-      let funcBackpatch = write(`(FUNC PLACEHOLDER {\n`)
-      let varsBackpatch = write(`\n\n`)
+      const funcBackpatch = write(`(FUNC PLACEHOLDER {\n`)
+      const varsDeclarationBackpatch = write(`\n`)
+
+      if (a.length)
+        write(`try{\n`, `Assign args:`)
 
       // Compile assignment of args.
-      if (_findRest(a) < a.length-1) {
+      const restIndexInA = _findRest(a)
+      if (restIndexInA < a.length-1) {
         // a has …R: just assigning a single `...args` arg will suffice.
-        args.add('...args')
-        compileAssign(a, 'args')
-      } else if (_findRest(a) === a.length-1) {
-        // Put …R at the end, to not slice an array an extra time.
-        for (let i = 0; i < a.length-1; ++i) {
+        args.add('...args'), compileAssign(a, 'args')
+      } else {
+        // Put …R at the end and assign each arg before it, to not slice an array an extra time. If no …R is in a, assign each arg.
+        for (let i = 0; i < restIndexInA; ++i) {
           const arg = use(a[i], true)
           args.add(arg)
           compileAssign(a[i], arg)
           used(arg)
         }
-        args.add('...args')
-        compileAssign(a[a.length-1][1], 'args')
-      } else // If no …R is in a, assign each arg.
-        for (let i = 0; i < a.length; ++i) {
-          const arg = use(a[i], true)
-          args.add(arg)
-          compileAssign(a[i], arg)
-          used(arg)
+        if (restIndexInA < a.length)
+          args.add('...args'), compileAssign(a[restIndexInA][1], 'args')
+      }
+
+      // Handle interpretation if escaped.
+      if (a.length) {
+        write(`}catch(err){if(err!==${outside(_escapeToInterpretation)})throw err\n`, `Interpret if needed:`)
+        write(`let[LE=${outside(_allocMap)}()]=${outside(interrupt)}(${outside(cause)})\n`)
+        write(`try{\n`)
+        if (restIndexInA < a.length-1)
+          write(`${outside(_assign)}(${outside(a)},args)\n`)
+        else {
+          for (let i = 0; i < restIndexInA; ++i)
+            write(`${outside(_assign)}(${outside(a[i])},${use(a[i])})\n`)
+          if (restIndexInA < a.length)
+            write(`${outside(_assign)}(${outside(a[restIndexInA][1])},args)\n`)
         }
+        write(`return finish(${outside(body)})\n`)
+        write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},1)(LE),LE=null;throw err}\n`)
+        write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)})(LE)}`)
+        write(`}`)
+      }
 
       let nextStage = 1
-      let stageBackpatch = write(`while(true)switch(stage){case 0:\n`)
+      let needCleanLabelEnv = false
+      const varsUsedBackpatch = write(`\n\n`)
+      const labelEnvBackpatch = write(`\n`)
+      const stageBackpatch = write(`while(true)switch(stage){case 0:\n`)
         // Emulate goto with potential `interrupt`ions.
       const resultName = compileExpr(body, true)
       if (resultName)
@@ -7617,18 +7641,25 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       // Make the body able to interrupt and re-enter.
       const vars = new Array(nextVar).fill(0).map((_, i) => 'V' + i.toString(36)).filter(el => !args.has(el))
       vars.push(...new Array(nextThen).fill(0).map((_, i) => 'S' + i.toString(36)))
+      if (needCleanLabelEnv) vars.push(`LE`), s[labelEnvBackpatch] = `LE=${outside(_allocMap)}()\n`
       if (nextStage > 1 || vars.length) {
-        s[varsBackpatch] = `let[${nextStage > 1 ? 'stage=0,' : ''}${vars}]=${outside(interrupt)}(${outside(cause)})\ntry{\n`
+        s[varsDeclarationBackpatch] = `let ${nextStage > 1 ? 'stage,' : ''}${vars}\n`
+        const savePE = !needCleanLabelEnv ? '' : `;const PE=${outside(finish)}.env[${outside(_id(label))}];${outside(finish)}.env[${outside(_id(label))}]=LE`
+        s[varsUsedBackpatch] = `;[${nextStage > 1 ? 'stage=0,' : ''}${vars}]=${outside(interrupt)}(${outside(cause)})\n${savePE}try{\n`
         if (nextStage > 1) vars.unshift('stage')
         write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},${vars.length})(`)
-        // `if (err === interrupt) interrupt(cause, vars.length)(...)(...)(...); throw err`
+        // `if (err === interrupt) interrupt(cause, vars.length)(...)(...)(...); throw err`:
         for (let i = 0; i < vars.length; i += 4)
           vars[i] && write(vars[i]),
           vars[i+1] && write(',' + vars[i+1]),
           vars[i+2] && write(',' + vars[i+2]),
           vars[i+3] && write(',' + vars[i+3]),
           vars[i+4] && write(')(')
-        write(`); throw err}`)
+        write(`)`)
+        if (needCleanLabelEnv) write(`,LE=null`)
+        write(`; throw err}`)
+        if (needCleanLabelEnv)
+          write(`finally{LE!==null&&(LE.delete(${body}),${outside(_allocMap)}(LE)),${outside(finish)}.env[${outside(_id(label))}]=PE}`)
       }
       if (nextStage === 1) s[stageBackpatch] = '\n'
 
@@ -8025,6 +8056,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       function spillVars(inside) {
         const vars = getVars(inside, undefined, true)
         if (!vars) return
+        needCleanLabelEnv = true
         write(`${outside(finish)}.env[${_id(label)}]`)
         for (let v of vars.keys()) write(`.set(${outside(v)},${use(v)})`)
         write(`\n`, `spill vars`)
@@ -8855,14 +8887,16 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     const d = deconstruct(shape)
     function impl(body) {
       const L = _id(label)
-      const prev = finish.env[L];  finish.env[L] = _allocMap()
+      const [LE = _allocMap()] = interrupt(impl)
+      const PE = finish.env[L];  finish.env[L] = LE
       const prevInferred = _assign.inferred;  _assign.inferred = null
       try {
         assign(d[d.length-1], body)
         if (_assign.inferred) throw 'Wait, that\'s illegal'
         return defines(_function, finish).call(_function, ...bound(labelEnv, d.slice(1,-1)), body)
           // This re-partially-evaluates `body` though.
-      } finally { _allocMap(finish.env[L]), finish.env[L] = prev, _assign.inferred = prevInferred }
+      } catch (err) { if (err === interrupt) interrupt(impl, 1)(LE), LE = null;  throw err }
+      finally { LE !== null && _allocMap(LE), finish.env[L] = PE, _assign.inferred = prevInferred }
     }
     const d = impl[defines.key] = Object.create(null)
     d[_id(input)] = [d[d.length-1]]
