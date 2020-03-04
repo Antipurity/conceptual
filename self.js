@@ -241,7 +241,7 @@ __base({
   Numeric:{
     txt:`A namespace for some very primitive numeric-computation-related functionality.`,
     future:[
-      `Zero-overhead typed numeric operations (on i32/i64/f32/f64; const.… and +-*/ and some mathy stuff), compiling to Wasm and WebGL.`,
+      `Zero-overhead typed numeric operations (on i32/i64/f32/f64; const.… and +-*/ and some mathy stuff), compiling to Wasm and WebGPU.`,
       `(Dense dims data dtype strides) for dense mostly-numeric tensors.`,
       `Have a named-dimension decorator that re-orders dimensions for broadcasted operations as necessary.`,
     ],
@@ -272,7 +272,6 @@ __base({
   UI:{
     txt:`A namespace for user interface functionality.`,
     philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).`,
-    future:`Since ontransitionend events have proven unreliable, remove height after a timeout too.`,
     lookup:{
       log:__is(`log`),
       elem:__is(`elem`),
@@ -974,6 +973,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
           const el = evt.target.parentNode
           const pre = _smoothHeightPre(el)
           el.style.height = pre + 'px'
+          setTimeout(_removeHeight, 1000, el)
           const smooth = () => (el.removeEventListener('toggle', smooth), _updateBroken(el), _smoothHeightPost(el, pre))
           el.addEventListener('toggle', smooth)
         }
@@ -2240,6 +2240,11 @@ Return stopIteration to stop iteration.`,
     return _reflow.p = Promise.resolve().then(() => (_reflow.p = null, document.body.offsetWidth))
   },
 
+  _removeHeight(el) {
+    // ontransitionend does not always fire, so we have to also remove height on timeout..
+    el.style.removeProperty('height')
+  },
+
   _smoothHeightPre(el) { return !_smoothHeight.disabled && el instanceof Element && el.offsetHeight || 0 },
 
   _smoothHeightPost:{
@@ -2255,6 +2260,7 @@ Call this with the result of _smoothHeightPre to transition smoothly.`,
         if (pre !== post) {
           el.style.height = pre + 'px'
           _reflow().then(() => el.style.height = post + 'px')
+          setTimeout(_removeHeight, 1000, el)
         }
         return post
       })
@@ -2319,7 +2325,8 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
           if (doHeight) el.style.height = height
           el.style.opacity = 0, el.style.pointerEvents = 'none'
           if (doHeight)
-            _reflow().then(() => el.style.height = 0)
+            _reflow().then(() => el.style.height = 0),
+            setTimeout(_removeHeight, 1000, el)
           setTimeout(el => el.remove(), dur, el)
         } else el.remove()
         if (doHeight) _smoothHeightPost(from, pre)
@@ -8588,10 +8595,10 @@ For anything else, display the globals the expression binds to, and an expandabl
   75891:[[__is(`typed`), [__is(`var`)], __is(`describe`)]],
 
   _disabled:{
-    txt:`\`_disabled …?\`: a disabled-with-\`\` subcontext of a context.`,
+    txt:`\`_disabled …?\`: a disabled-with-\`inspectUsageElem\` subcontext of a context.`,
   },
 
-  disableUsageElem:{
+  inspectUsageElem:{
     txt:`Creates an element with checkboxes to disable/enable usage items (by moving them from/to a \`(_disabled …?)\` item).`,
     button:`Inspect usage context`,
     call(ctx = _bindingsAt().get(label('CurrentUsage'))) {
@@ -8602,6 +8609,7 @@ For anything else, display the globals the expression binds to, and an expandabl
       return display(null, ctx, elem('div'), _wasMerged(ctx))
 
       function checkbox(ctx, v, checked = ctx.indexOf(v) > 0) {
+        // Create a checkbox that shuffles `v` in/out of `ctx` when toggled.
         const el = elem('input')
         el.type = 'checkbox'
         el.checked = checked
@@ -8626,6 +8634,19 @@ For anything else, display the globals the expression binds to, and an expandabl
         }
         return el
       }
+      function typesOf(v) {
+        // Create a collapsed elem that contains the serialized types contained in `v`, or return null.
+        const T = types(v)
+        if (!T) return null
+        const elc = elemCollapse(() => {
+          const el = elem('div')
+          for (let i = 1; i < T.length; ++i)
+            el.append(elem('div', serialize(T[i], lang, binds, reducedCollapseDepth)))
+          return el
+        })
+        elc.title = `${T.length-1} structures inside`
+        return elc
+      }
       function display(ctx, v, into) {
         if (seenBefore.has(v)) // Collapse double-refs.
           return elemValue(elemCollapse(() => (seenBefore.delete(v), display(ctx, v, elem('div')))), v)
@@ -8638,19 +8659,23 @@ For anything else, display the globals the expression binds to, and an expandabl
           for (let i = 1; i < d.length; ++i) {
             if (_isArray(d[i]) && d[i][0] === _disabled && !_wasMerged(d[i]))
               { display(ctx, d[i], el); continue }
-            // Checkbox and value.
+            // Checkbox and types and value.
             const ch = elem('div')
             !immutable && ch.append(checkbox(ctx, d, true))
+            const T = typesOf(d[i])
+            T && ch.append(T)
             display(d, d[i], el)
             el.append(ch)
           }
           into.append(el)
-        } else if (_isArray(v) && v[0] === _disabled) {
-          for (let i = 1; i < v.length; ++i) {
+        } else if (_isArray(d = v) && v[0] === _disabled && !_wasMerged(v)) {
+          for (let i = 1; i < d.length; ++i) {
             // Disabled checkbox and value.
             const ch = elem('div')
-            ch.append(checkbox(ctx, v[i], false))
-            display(ctx, v[i], into)
+            ch.append(checkbox(ctx, d[i], false))
+            const T = typesOf(d[i])
+            T && ch.append(T)
+            display(ctx, d[i], into)
             into.append(ch)
           }
         } else
@@ -8664,14 +8689,80 @@ For anything else, display the globals the expression binds to, and an expandabl
   Usage:{
     txt:`A namespace for contextual structural enumeration and generation.`,
     lookup:{
-      current:__is(`CurrentUsage`),
       either:__is(`either`),
+      current:__is(`CurrentUsage`),
+      inspect:__is(`inspectUsageElem`),
+      types:__is(`types`),
       input:__is(`input`),
       output:__is(`output`),
       use:__is(`use`),
       get:__is(`get`),
     },
     philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.`,
+  },
+
+  types:{
+    txt:`\`(types Context)\`: returns all types contained in \`Context\` as inputs or outputs of functions, as a context.`,
+    call(v) {
+      // If not null, the result is disposable (via _allocArray(result)).
+      if (!types.already) types.already = new Set
+      const result = _allocArray();  result.push(either)
+      try {
+        _addTypesToContext(result, v)
+        if (result.length == 1) return _allocArray(result), null
+        return result
+      } finally { types.already.clear() }
+      // .already (to not add obvious duplicates)
+    },
+  },
+
+  _addTypesToContext(result, v) {
+    let d
+    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && _isFunction(d)) {
+      // If a macro, treat it as a call.
+      result = _addTypesToContext(result, d)
+    if (_isArray(v) && v[0] === array)
+      // If `array ...?`, treat it as v.slice(1).
+      v = v.slice(1)
+
+    } else if (_isArray(v) && v[0] === _if && v.length == 4) {
+      // If `if ? ? ?`, check both branches.
+      _addTypesToContext(result, v[2])
+      _addTypesToContext(result, v[3])
+      // I sure hope that no one is crazy enough to make the branches of an `if` cyclic, here and in `_addUsesToContext`.
+
+    // If `either ...?`, or defines `Usage` to be `either ...?`, or `try …?`:
+    } else if (_isArray(d = v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either || (d = _isTry(v))) {
+
+      // Check out this sub-context.
+      if (!_addUsesToContext.stack)
+        _addUsesToContext.stack = new Set, _addUsesToContext.checkStack = new Set
+      const stack = _addUsesToContext.stack
+      if (stack.has(d)) return null
+      stack.add(d)
+      try {
+        for (let i = 1; i < d.length; ++i) _addTypesToContext(result, d[i])
+      } finally { stack.delete(d) }
+
+    // If a deconstructable function, or a JS function that defines `input`/`output`:
+    } else if (_isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
+      // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
+      const f = d || deconstruct(v)
+      const endK = d ? f.length : f.length-1
+      for (let k = d ? 0 : 1; k < endK; ++k) {
+        // Try matching the arg to value.
+        if (_isArray(f[k]) && f[k][0] === rest)
+          error("Rest args are not permitted in usage contexts:", f[k], 'in', v)
+        // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
+        _addTypesToContext(result, f[k])
+      }
+      _addTypesToContext(result, _bindFunc(d ? f : f[f.length-1], _turnComputedIntoVars))
+
+    } else {
+      // Add a plain value, if non-trivial and non-var.
+      if (_isArray(v) && !_isVar(v) && !types.already.has(v))
+        result.push(v), types.already.add(v)
+    }
   },
 
   _addUsesToContext(result, as, v, ctx, values, inp) {
