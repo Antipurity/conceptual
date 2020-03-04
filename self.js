@@ -7516,19 +7516,6 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   },
   compile:{
     txt:`Compiles a function to JS.`,
-    future:[
-      `In compileIf, remember to dispose of values-in-first-branch when their first-branch ref-count runs out (by having a first-branch ref-count map that is decremented in sync with the main ref-count), so that all disposals are always hit.`,
-      `In functions, catch \`_escapeToInterpretation\` and interpret args/body, with proper re-entrance, so that we can completely replace a function with its compiled version.`,
-        /*
-          try {
-            // Assign args for compilation.
-          } catch (err) {
-            if (err !== _escapeToInterpretation) throw err
-            // _assign args then finish body, to interpret it all.
-          }
-          // Do the body of the compilation.
-        */
-    ],
     philosophy:`I am speed.`,
     buzzwords:`JIT-compiled`,
     call(opt, ...a) {
@@ -7548,6 +7535,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       if (!a.length) throw "Expected an expression to compile"
 
       let refCount = new Map // expr to nat
+      let phantomRefs = new Map // expr to nat
       markRefCounts(a)
       const body = a.pop()
       const loadVarsFromEnv = !a.length // true if label env can contain variable values that we'd need to load to local vars.
@@ -7716,12 +7704,17 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         // Decrement ref-count and mark the var as free if it won't be used anymore.
         if (!exprs.has(name)) return name && name[0] === 'V' && freeList.push(name)
         const expr = exprs.get(name)
-        if (refCount.get(expr) < times) errorStack("Freed more than used:", name, expr, s.join(''), nameToEnv)
+        if (refCount.get(expr) < times || phantomRefs.has(expr) && phantomRefs.get(expr) < times)
+          errorStack("Freed more than used:", name, expr, s.join(''), nameToEnv)
         refCount.set(expr, refCount.get(expr) - times)
-        if (!refCount.get(expr) || name !== names.get(expr)) {
+        if (phantomRefs.has(expr)) phantomRefs.set(expr, phantomRefs.get(expr) - times)
+        if (!refCount.get(expr) || phantomRefs.has(expr) && !phantomRefs.get(expr) || name !== names.get(expr)) {
           comments && (jumped ? (write(`// Dispose ${name}\n`), jumped = true) : write(`// Dispose ${name}\n`))
-          name === names.get(expr) && names.delete(expr), exprs.delete(name)
-          name === names.get(expr) && refCount.delete(expr)
+          if (phantomRefs.has(expr) && !phantomRefs.get(expr))
+            name === names.get(expr) && phantomRefs.delete(expr)
+          else
+            name === names.get(expr) && (names.delete(expr), exprs.delete(name)),
+            name === names.get(expr) && refCount.delete(expr)
           freeList.push(name)
         }
       }
@@ -7908,6 +7901,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
 
         function markA(x) {
           if (!_isArray(x)) return
+          phantomRefs.set(x, (phantomRefs.get(x) || 0) + 1) // Dispose of vars in both branches.
           if (x[0] === quote) return
           if (currentAncestors.has(common.get(x))) return
           if (uncertainStage.has(x) || names.has(x)) return
@@ -7941,10 +7935,6 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         used(cond)
         let result
         dynamicReturnWhenSeenTwice(x[2], x[3])
-        result = compileExpr(x[2])
-        into ? write(`${into}=`) : write(`return `)
-        if (into) write(`${result};stage=`), thenStage = write(`RESULT`), write(`;continue\n`)
-        jumped = true
 
         // Ensure that uncertain-if-computed args get computed once needed, in branches or afterwards.
         // Mark ref-counts in both branches, and for each node less than the global, mark it as uncertain, to be computed on demand.
@@ -7960,11 +7950,15 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         walk()
         refCount.clear();  refCount = prevRefs
 
-        used(names.get(x[2]))
+        result = compileExpr(x[2])
+        into ? write(`${into}=`) : write(`return `)
+        if (into) write(`${result};stage=`), thenStage = write(`RESULT`), write(`;continue\n`)
+        jumped = true
+        used(result)
         s[elseStage] = advanceStage(x[3]), result = compileExpr(x[3])
         into ? write(`${into}=`) : write(`return `)
         write(`${result}\n`)
-        used(names.get(x[3]))
+        used(result)
         if (into) s[thenStage] = advanceStage(x)
       }
       function compileLast(x, into) {
