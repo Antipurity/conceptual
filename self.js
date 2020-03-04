@@ -1179,6 +1179,15 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // Test all known examples.
       _test(env)
+
+      // Garbage-collect DOM elements.
+      let domgc = false
+      _listen(60000, () => {
+        if (domgc) return; else domgc = true
+        elemValue.obj = new WeakMap, elemValue.val.clear()
+        _schedule([_revisitElemValue, Self.into], _newExecutionEnv(), () => domgc = false)
+          // It is possible to observe not-fully-restored states, but that is fine for interface GC.
+      })
     },
   },
 
@@ -5972,7 +5981,6 @@ In theory, having symmetric parse+serialize allows updating the language of writ
 
   elemValue:{
     txt:`If el, remember that it is a viewer of v. If !el, return an array of all in-document viewers of v.`,
-    future:`Rarely collect !el.isConnected garbage in \`elemValue\`'s value-to-elems map.`,
     call(el, v) {
       if (!elemValue.empty) elemValue.empty = []
       if (typeof document == ''+void 0) return elemValue.empty
@@ -5989,7 +5997,21 @@ In theory, having symmetric parse+serialize allows updating the language of writ
         if (m.has(v) && !m.get(v).length) m.delete(v)
         return m.get(v) || elemValue.empty
       }
+      // .empty (just an always-empty array), .obj, .val
     },
+  },
+
+  _revisitElemValue(el) {
+    // Garbage-collects unneeded DOM elements.
+    // After replacing elemValue.obj (WeakMap) and elemValue.val (Map) with clean versions, call this on Self.into.
+    _checkInterrupt(_revisitElemValue)
+    let [ch] = interrupt(_revisitElemValue)
+    try {
+      if (ch === undefined && el instanceof Node && 'to' in el)
+        elemValue(el, el.to)
+      for (ch = el.firstChild; ch; ch = ch.nextSibling)
+        _revisitElemValue(ch)
+    } catch (err) { if (err === interrupt) interrupt(_revisitElemValue, 1)(ch);  throw err }
   },
 
   _valuedColor(v) {
