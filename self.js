@@ -2083,7 +2083,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       const backctx = _invertBindingContext(parse.ctx)
       if (typeof name != 'string' && !_isDOM(name)) name = backctx.has(f) ? backctx.get(f) : f && f.displayName || f && f.name
       if (!name) name = 'Execute'
-      if (typeof defines(f, button) == 'function') return defines(f, button)(f)
+      if (typeof defines(f, button) == 'function') return defines(f, button)()
       else if (typeof defines(f, button) == 'string') name = defines(f, button)
       if (f instanceof Node) return f
       if (typeof f != 'function') error("Cannot call not-a-function:", f)
@@ -8587,31 +8587,82 @@ For anything else, display the globals the expression binds to, and an expandabl
   78963:[[__is(`typed`), [__is(`var`)], __is(`evaluator`)]],
   75891:[[__is(`typed`), [__is(`var`)], __is(`describe`)]],
 
-  disableUsageElem:{
-    txt:``,
-    call() {
-      const el = elem('div')
-      display(CurrentUsage, el, _wasMerged(CurrentUsage)) // Should pull in from the current bindings.
-      return el
+  _disabled:{
+    txt:`\`_disabled …?\`: a disabled-with-\`\` subcontext of a context.`,
+  },
 
-      function display(v, into, immutable = _isArray(v) && v[0] === either && _wasMerged(v)) { // (That third arg should be computed each time.)
-        // Display a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled (in [disabled, ...] in the context)), shuffling between disabled-ness on input.
-          // Don't check-box if a context _wasMerged, just display.
-          // Collapse cycle backrefs.
-          // And have the ability to drag elements, to re-order them.
-        // Pattern-match:
-          // If seen before.
-          // If a context: checkbox if !immutable and recurse-into-<details>.
-          // If anything else: checkbox if !immutable.
+  disableUsageElem:{
+    txt:`Creates an element with checkboxes to disable/enable usage items (by moving them from/to a \`(_disabled …?)\` item).`,
+    button:`Inspect usage context`,
+    call(ctx = _bindingsAt().get(label('CurrentUsage'))) {
+      if (!ctx) error('Must declare CurrentUsage')
+      const seenBefore = new Set
+      const lang = _langAt(), binds = _bindingsAt()
+      const reducedCollapseDepth = {...serialize.displayed, collapseDepth:3}
+      return display(null, ctx, elem('div'), _wasMerged(ctx))
+
+      function checkbox(ctx, v, checked = ctx.indexOf(v) > 0) {
+        const el = elem('input')
+        el.type = 'checkbox'
+        el.checked = checked
+        el.onchange = () => {
+          let disabledI = 1
+          for (; disabledI < ctx.length; ++disabledI)
+            if (_isArray(ctx[disabledI]) && ctx[disabledI][0] === _disabled && !_wasMerged(ctx[disabledI])) break
+          let enabledI = 1
+          for (; enabledI < ctx.length; ++enabledI)
+            if (ctx[enabledI] === v) break
+          if (el.checked) {
+            // Remove from ctx[disabledI], add to ctx.
+            const j = ctx[disabledI].indexOf(v)
+            if (j >= 0) ctx[disabledI].splice(j,1)
+            ctx.push(v)
+            if (ctx[disabledI].length === 1) ctx.splice(disabledI, 1)
+          } else {
+            // Add to ctx[disabledI], remove from ctx.
+            if (disabledI === ctx.length) ctx.push([_disabled])
+            ctx[disabledI].push(v), ctx.splice(enabledI, 1)
+          }
+        }
+        return el
+      }
+      function display(ctx, v, into) {
+        if (seenBefore.has(v)) // Collapse double-refs.
+          return elemValue(elemCollapse(() => (seenBefore.delete(v), display(ctx, v, elem('div')))), v)
+        else seenBefore.add(v)
+        let d
+        if (_isArray(d = v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
+          const name = nameResult(d)
+          const el = elem('details', elem('summary', name ? name[0] : 'Context:'))
+          const immutable = _isArray(v) && v[0] === either && _wasMerged(v)
+          for (let i = 1; i < d.length; ++i) {
+            if (_isArray(d[i]) && d[i][0] === _disabled && !_wasMerged(d[i]))
+              { display(ctx, d[i], el); continue }
+            // Checkbox and value.
+            const ch = elem('div')
+            !immutable && ch.append(checkbox(ctx, d, true))
+            display(d, d[i], el)
+            el.append(ch)
+          }
+          into.append(el)
+        } else if (_isArray(v) && v[0] === _disabled) {
+          for (let i = 1; i < v.length; ++i) {
+            // Disabled checkbox and value.
+            const ch = elem('div')
+            ch.append(checkbox(ctx, v[i], false))
+            display(ctx, v[i], into)
+            into.append(ch)
+          }
+        } else
+          // Describe it.
+          into.append(serialize(v, lang, binds, reducedCollapseDepth))
+        return into
       }
     },
   },
 
   Usage:{
     txt:`A namespace for contextual structural enumeration and generation.`,
-    future:`Have \`disableUsageElem\` that displays a checkbox for each thing in \`CurrentUsage\`, recursively-in-<details> for contexts and concepts-that-define-\`disableUsageElem\` (checked if present, unchecked if disabled), shuffling between disabled-ness on input.`,
-
-        // Must also destroy the undeserved peace through that test of cruelty. Kill. It.
     lookup:{
       current:__is(`CurrentUsage`),
       either:__is(`either`),
