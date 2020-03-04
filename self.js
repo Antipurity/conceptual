@@ -1030,7 +1030,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         if (evt.propertyName !== 'height' || evt.target.tagName === 'SCROLL-HIGHLIGHT') return
         const el = repl.lastChild.previousSibling, top = el.getBoundingClientRect().top
         const d = document.documentElement, max = d.scrollHeight - d.clientHeight
-        atEnd && scrollTo(scrollX, max, atEnd = false)
+        atEnd && scrollY < max - d.clientHeight - 100 && scrollTo(scrollX, max, atEnd = false)
         atEnd = atEnd || scrollY && top <= innerHeight - 10
       }, passive)
       _listen('transitionend', evt => {
@@ -1039,7 +1039,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         _clearStyle(evt.target)
         if (evt.propertyName !== 'height') return
         const d = document.documentElement, max = d.scrollHeight - d.clientHeight
-        atEnd && scrollTo(scrollX, max, atEnd = false)
+        atEnd && scrollY < max - d.clientHeight - 100 && scrollTo(scrollX, max, atEnd = false)
       }, passive)
 
       // On .ctrlKey pointerdown on a value, insert a <collapsed> reference to it into selection if editable.
@@ -2654,7 +2654,7 @@ All these are automatically tested to be correct at launch.`,
         `In the past, humans and all they imply were the only source of everything in their world. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. The Singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it far off.`,
         `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
       ],
-      `Believing in lies… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
+      `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
       `All known heavens are little more than metaphors for death from trying to fly too close to the sun. But with a huge amount of effort, that could change: they could be metaphors for a heaven that actually succeeds at existing.`,
       `Did you ever hear the tragedy of Darth Plagueis the Wise?
@@ -2666,6 +2666,7 @@ He became so powerful, the only thing he was afraid of was losing his power, whi
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
       `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.
 I guess the solution is to bring so much diverse rightness that you start puking rainbows. It's even more difficult though! Why would anyone do that?`,
+      `Look at the span of this canvas, the close and future language. Fit to paint another world, no?`,
     ],
   },
 
@@ -7144,7 +7145,7 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
 
   Rewrite:{
     txt:`A namespace for rewriting Self's code to a different form.`,
-    future:`Pull the current context from current bindings unless passed explicitly (not a JS object from strings, but a Map from labels). Define \`output\` for rewrites for easy finding; have iframe/textarea/link acceptors of rewrites.
+    future:`Type output of ToReadableJS/ToScopedJS as Self for easy finding; have iframe/textarea/link acceptors of selves.
 Have ToGraph and ToHTML and ToExtension.`,
     lookup:{
       readableJS:__is(`ToReadableJS`),
