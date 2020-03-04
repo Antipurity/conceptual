@@ -4084,7 +4084,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           --finish.depth
           finished && finish.code.delete(finished[0])
           if (result !== interrupt && result !== _notFound)
-            _cache(m, !_isUnknown(v) ? v : _unknown(v), result)
+            _cache(m, v, !_isUnknown(result) ? result : _unknown(result))
           if (_isPromise(result))
             return !_awaitable(v) && error("Make", finished[0], "define", _await, "as true"), _promiseToDeferred(result)
         }
@@ -5306,13 +5306,13 @@ Variables within non-\`closure\` functions will not be changed by application.`,
             }
           } catch (err) { if (err === interrupt) interrupted = true, interrupt(impl, 3)(labels, stage, a);  throw err }
           finally {
-            if (!interrupted) _allocMap(labels)
+            if (!interrupted) labels.delete(f[f.length-1]), _allocMap(labels)
             finish.env[_id(label)] = prev
 
             if (shouldMerge) {
               if (!interrupted) call.locked.delete(v)
               if (!call.impure && result !== _notFound)
-                _cache(cache, !_isUnknown(v) ? v : _unknown(v), result)
+                _cache(cache, v, !_isUnknown(result) ? result : _unknown(result))
               else cache.delete(v)
             }
           }
@@ -8079,16 +8079,15 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
     },
   },
 
+  _reclaimUnknown(v) { if (_isUnknown(v)) _allocArray(v) },
+
   _allocMap:{
     txt:`_allocMap()⇒Map as a replacement for \`new Map\` and _allocMap(Map) to re-use objects.`,
     call(a) {
       if (!_allocMap.free) _allocMap.free = []
       if (!a) return _allocMap.free.length ? _allocMap.free.pop() : new Map
       if (!(a instanceof Map)) throw "Expected undefined or a Map"
-      // a.forEach(_reclaimUnknown)
-      // _reclaimUnknown(v) { if (_isUnknown(v)) _allocArray(v) },
-        // Seems to make `a→((function a:Int b:Int a+b:Int) a ((function n:Int m:Int n*m:Int) a a)) a=?:Int Int='Int'` return `^[^a+b:Int]→a:Int a=[quoted+b] quoted=^[quoted+b] b=[x*x] x=? Int='Int'`, for some reason?
-          // (Re-using memory would have been real good for performance, though.)
+      a.forEach(_reclaimUnknown)
       a.clear()
       _allocMap.free.push(a)
     },
