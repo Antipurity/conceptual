@@ -866,12 +866,12 @@ waiting {
 .code>* {display:block}
 
 node.code {display:table; font-family:monospace}
-.replInputContainer { display:table }
-.replInputContainer>:last-child[contenteditable] { min-height:1.2em; min-width: 1.2em; width:100%; display:table-cell }
-.replInputContainer.editable * { animation:none }
-.replInputContainer.editable { display:block }
-.replInputContainer.editable>:last-child[contenteditable] { min-height:1.2em; min-width: 1.2em; width:calc(100% - 2ch); display:inline-block }
-.replInputContainer.editable.hover>:last-child[contenteditable] { box-shadow:none }
+.editorContainer { display:table }
+.editorContainer>:last-child[contenteditable] { min-height:1.2em; min-width: 1.2em; width:100%; display:table-cell }
+.editorContainer.editable * { animation:none }
+.editorContainer.editable { display:block }
+.editorContainer.editable>:last-child[contenteditable] { min-height:1.2em; min-width: 1.2em; width:calc(100% - 2ch); display:inline-block }
+.editorContainer.editable.hover>:last-child[contenteditable] { box-shadow:none }
 prompt { width:2ch; color:red; float:left }
 prompt::before { content:'▶' /* > ⊱ ▶ */ }
 
@@ -1750,7 +1750,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       el.classList.add('code')
       const prompt = elem('prompt')
       const query = elem('span')
-      query.classList.add('replInputContainer')
+      query.classList.add('editorContainer')
       query.append(prompt)
       query.append(serialize(expr, _langAt(before), binds, serialize.displayed))
       const waiting = elem('waiting') // There should be some kind of `evaluationElem(ID)` for this…
@@ -1850,127 +1850,65 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     return backctx
   },
 
-  REPL:{
-    txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
-    future:`Extract the editor itself into \`editor(initialString, lang, binds, onInput(expr), onEnter(expr))\`.`,
-    elem(tag, lang, ctx) {
-      if (tag !== REPL || typeof document == ''+void 0) return
-      lang = lang || fancy, ctx = ctx || new Map(parse.ctx)
-      if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
-      if (!(ctx instanceof Map)) throw "Invalid binding context"
-      impure()
-      _invertBindingContext(ctx, true)
-
-      const env = _newExecutionEnv(finish.env)
-
-      const repl = elem('node')
-      repl.isREPL = true
-      elemValue(repl, array(elem, REPL, array(lang, ctx)))
-
-      // Display purified output.
-      const pureOutput = elem('div', elem('div'))
-      pureOutput.classList.add('code')
-      pureOutput.style.display = 'inline-block'
-      let ID, waiting
-      let purified
-      const purifyAndDisplay = _throttled(expr => {
-        if (msg === false && _isArray(expr) && expr[0] === jsEval && typeof expr[1] == 'string' && expr[2]) expr = [randomNat, 1]
-        const justClear = expr === purifyAndDisplay
-        const pre = _smoothHeightPre(pureOutput)
-        if (pureOutput.firstChild) {
-          for (let ch = pureOutput.firstChild; ch && ch.nextSibling; ch = ch.nextSibling)
-            if (!ch.removed)
-              elemRemove(ch, true, true, false)
-        }
-        if (ID !== undefined) _cancel(ID), waiting.remove(), ID = undefined, waiting = undefined
-        let promise
-        if (!justClear) promise = new Promise(then => {
-          const e = _newExecutionEnv(env)
-          e[_id(log)] = pureOutput.lastChild, finish.env = e
-          const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
-          if (bindAs) expr = expr[2]
-          ID = _schedule([purify, array(quote, expr)], e, result => {
-            if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
-              result = result[1] // Display errors too.
-            purified = result
-            if (bindAs) result = [_extracted, bindAs, result]
-
-            const pre = _smoothHeightPre(pureOutput)
-            try {
-              ID = undefined, waiting && waiting.remove(), waiting = undefined
-              if (!_isUnknown(result)) {
-                // Display all uses of `(Result):evaluator`.
-                elemInsert(pureOutput, daintyEvaluator([_logUses, [typed, [result], evaluator]]), pureOutput.lastChild)
-              } else {
-                const el = elem('button', 'Evaluate')
-                elemValue(el, result)
-                el.onclick = evaluate
-                pureOutput.insertBefore(el, pureOutput.lastChild)
-              }
-            } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
-          })
-          pureOutput.insertBefore(waiting = elem('waiting'), pureOutput.lastChild)
-          _smoothHeightPost(pureOutput, pre)
-        })
-        return promise
-      }, .1)
-
-      let replInput = elem('node')
-      replInput.contentEditable = true
-      replInput.spellcheck = false
+  editor:{
+    txt:`\`(editor ?:InitialString ?:Lang ?:Binds ?:OnInput ?:OnEnter) OnInput=(function ?:Expr ?:InvalidFlag ?) OnEnter=?:Expr->?:ClearInputFlag\`: creates a user-editable expression input.
+Don't do expensive synchronous tasks in \`OnInput\`.`,
+    call(initialString = '', lang = fancy, binds = parse.ctx, onInput, onEnter) {
+      if (typeof initialString != 'string') error('String expected, got', initialString)
+      if (!(binds instanceof Map)) error('Map expected, got', binds)
+      if (onInput && typeof onInput != 'function') error('Function or nothing expected, got', onInput)
+      if (onEnter && typeof onEnter != 'function') error('Function or nothing expected, got', onEnter)
+      const editor = elem('node')
+      editor.contentEditable = true
+      editor.spellcheck = false
+      // Set the initial string.
+      try { editor.append(parse(editor, lang, binds, parse.dom)[1]) }
+      catch (err) { editor.append(initialString) }
       // On any mutations inside, re-parse its contents, and show purified output.
       const obs = new MutationObserver(_throttled(record => {
         const s = getSelection()
-        const i = _saveCaret(replInput, s)
+        const i = _saveCaret(editor, s)
         try {
-          const [expr, styled] = parse(replInput, lang, ctx, parse.dom)
-          const pre = _smoothHeightPre(replInput)
-          while (replInput.firstChild) replInput.removeChild(replInput.firstChild)
-          replInput.append(structured(styled))
-          _smoothHeightPost(replInput, pre)
-          if (i !== undefined) _loadCaret(replInput, i, s)
-          purifyAndDisplay(bound(n => n instanceof Element && n.special ? n.to : undefined, expr))
+          const [expr, styled] = parse(editor, lang, binds, parse.dom)
+          const pre = _smoothHeightPre(editor)
+          while (editor.firstChild) editor.removeChild(editor.firstChild)
+          editor.append(structured(styled))
+          _smoothHeightPost(editor, pre)
+          if (i !== undefined) _loadCaret(editor, i, s)
+          onInput && onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false)
         } catch (err) {
           if (err instanceof Error) throw err
-          purifyAndDisplay(purifyAndDisplay)
+          onInput && onInput(undefined, true)
         }
         obs.takeRecords()
-      }, .2, () => purified = undefined))
-      obs.observe(replInput, { childList:true, subtree:true, characterData:true })
+      }, .2))
+      obs.observe(editor, { childList:true, subtree:true, characterData:true })
 
       const query = elem('span')
       elemValue(query, lang)
-      query.classList.add('replInputContainer')
+      query.classList.add('editorContainer')
       query.classList.add('editable')
       const prompt = elem('prompt')
       prompt.title = 'Click to clear this.'
-      prompt.onclick = () => _smoothHeight(replInput, () => replInput.textContent = '')
+      prompt.onclick = () => _smoothHeight(editor, () => editor.textContent = '')
       query.append(prompt)
-      query.append(replInput)
-      repl.classList.add('code')
-
-      const msg = defines(lang, REPL)
-      repl.append(elem('div', [structuredSentence('{A REPL} of language '), serialize(lang, basic, undefined, serialize.displayed), typeof msg == 'string' ? stringToDoc(': ' + msg) : elem('span')]))
-
-      repl.append(query)
-      repl.append(pureOutput)
-      env[_id(log)] = query
+      query.append(editor)
 
       const undo = [[]], redo = []
 
-      replInput.oninput = _throttled(() => {
+      editor.oninput = _throttled(() => {
         // Grow the undo buffer (and clear the redo buffer) on change.
-        if (!undo.length || undo[undo.length-1].map(el => _innerText(el).join('')).join('') !== _innerText(replInput).join(''))
-          redo.length = 0, undo.push(children(replInput)), undo.length > 4096 && (undo.splice(0, undo.length - 4096))
+        if (!undo.length || undo[undo.length-1].map(el => _innerText(el).join('')).join('') !== _innerText(editor).join(''))
+          redo.length = 0, undo.push(children(editor)), undo.length > 4096 && (undo.splice(0, undo.length - 4096))
         purified = undefined
-      }, 1)
+      }, .1)
       let height
-      replInput.addEventListener('input', evt => {
+      editor.addEventListener('input', evt => {
         if (_smoothHeight.disabled) return
-        if (height) _smoothHeightPost(replInput, height).then(h => height = h)
-        else height = _smoothHeightPre(replInput)
+        if (height) _smoothHeightPost(editor, height).then(h => height = h)
+        else height = _smoothHeightPre(editor)
       })
-      replInput.onkeydown = evt => {
+      editor.onkeydown = evt => {
         if (evt.altKey) return
 
         // Arrows in contenteditable move the caret like a buffoon, so we help them.
@@ -1986,8 +1924,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
           }
           const delta = !s.isCollapsed && !evt.shiftKey ? 0 : evt.key === 'ArrowLeft' ? -1 : 1
           if (!focusNode.nodeValue || focusOffset+delta < 0 || focusOffset+delta > focusNode.nodeValue.length) {
-            const i = _saveCaret(replInput, focusNode, focusOffset) + delta
-            const arr = _loadCaret(replInput, i)
+            const i = _saveCaret(editor, focusNode, focusOffset) + delta
+            const arr = _loadCaret(editor, i)
             if (evt.shiftKey)
               s.extend(...arr)
             else
@@ -1996,8 +1934,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
           }
         }
 
-        // On Escape, blur replInput (so hover-highlighting becomes available).
-        if (evt.key === 'Escape' && document.activeElement === replInput) replInput.blur()
+        // On Escape, blur editor (originally, so hover-highlighting becomes available, but now, just why not).
+        if (evt.key === 'Escape' && document.activeElement === editor) editor.blur()
 
         // Brackets do not enter their character, instead they surround something with that bracket.
         // '(' surrounds the selection in brackets. ')' surrounds the closest highlightable parent in brackets.
@@ -2018,42 +1956,124 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
         // On Ctrl+Z, pop one from undo.
         if (evt.key === 'z' && !evt.shiftKey && evt.ctrlKey && undo.length) {
-          if (undo[undo.length-1].map(el => el.innerText).join('') === replInput.innerText) undo.pop()
+          if (undo[undo.length-1].map(el => el.innerText).join('') === editor.innerText) undo.pop()
           if (undo.length)
-            redo.push(children(replInput)), children(replInput, undo.pop()), evt.preventDefault()
+            redo.push(children(editor)), children(editor, undo.pop()), evt.preventDefault()
         }
         // On Ctrl+Shift+Z, pop one from redo.
         if (evt.key === 'Z' && evt.shiftKey && evt.ctrlKey && redo.length)
-          undo.push(children(replInput)), children(replInput, redo.pop()), evt.preventDefault()
+          undo.push(children(editor)), children(editor, redo.pop()), evt.preventDefault()
       }
-      return repl
+      elemValue(query, array(editor, initialString, lang, binds, onInput, onEnter))
+      return query
 
       function evaluate(evt) {
-        const prev = finish.env
+        let clear = false
         try {
-          finish.env = env
-          let [expr, styled] = parse(replInput, lang, ctx)
+          const [expr] = parse(editor, lang, binds)
           evt.preventDefault()
-
-          log(elem(evaluator, bound(n => n instanceof Element && n.special ? n.to : undefined, expr)))
+          clear = onEnter ? onEnter(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false) : false
         } catch (err) {
           if (_isArray(err) && err[0] === 'give more') err = err[1]
           else evt.preventDefault()
           const el = elem('error', err instanceof Error ? [String(err), '\n', err.stack] : String(err))
           el.style.left = '1em'
           el.style.position = 'absolute'
-          return log(el), setTimeout(() => elemRemove(el), 1000)
-        } finally { finish.env = prev }
-        replInput.textContent = ''
-        purifyAndDisplay(purifyAndDisplay)
+          return elemInsert(query, el), setTimeout(elemRemove, 1000, el)
+        }
+        if (clear) editor.textContent = ''
+        onInput && onInput(undefined, true)
       }
-      function children(el, to) {
+      function children(el, to) { // Set children of `el` to `to`.
         const pre = _smoothHeightPre(el)
         if (!to) return [...el.childNodes].map(elemClone)
         while (el.firstChild) el.removeChild(el.firstChild)
         to.forEach(ch => el.appendChild(ch))
         _smoothHeightPost(el, pre)
       }
+    },
+  },
+
+  REPL:{
+    txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
+    lookup:{
+      editor:__is(`editor`),
+    },
+    elem(tag, lang, binds) {
+      if (tag !== REPL || typeof document == ''+void 0) return
+      lang = lang || fancy, binds = binds || new Map(parse.ctx)
+      if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
+      if (!(binds instanceof Map)) throw "Invalid binding context"
+      impure()
+      _invertBindingContext(binds, true)
+
+      const env = _newExecutionEnv(finish.env)
+
+      const repl = elem('node')
+      repl.isREPL = true
+      elemValue(repl, array(elem, REPL, array(lang, binds)))
+
+      // Display purified output.
+      const pureOutput = elem('div', elem('div'))
+      pureOutput.classList.add('code')
+      pureOutput.style.display = 'inline-block'
+      let ID, waiting, lastExpr
+      const purifyAndDisplay = _throttled((expr, clear) => {
+        if (msg === false && _isArray(expr) && expr[0] === jsEval && typeof expr[1] == 'string' && expr[2]) expr = [randomNat, 2]
+        const pre = _smoothHeightPre(pureOutput)
+        if (pureOutput.firstChild) {
+          for (let ch = pureOutput.firstChild; ch && ch.nextSibling; ch = ch.nextSibling)
+            if (!ch.removed)
+              elemRemove(ch, true, true, false)
+        }
+        if (ID !== undefined) _cancel(ID), waiting.remove(), ID = undefined, waiting = undefined
+        let promise
+        if (!clear) promise = new Promise(then => {
+          const e = _newExecutionEnv(env)
+          e[_id(log)] = pureOutput.lastChild, finish.env = e
+          const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
+          if (bindAs) expr = expr[2]
+          ID = _schedule([purify, array(quote, expr)], e, result => {
+            if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
+              result = result[1] // Display errors too.
+            if (bindAs) result = [_extracted, bindAs, result]
+
+            const pre = _smoothHeightPre(pureOutput)
+            try {
+              ID = undefined, waiting && waiting.remove(), waiting = undefined
+              if (!_isUnknown(result)) {
+                // Display all uses of `(Result):evaluator`.
+                elemInsert(pureOutput, daintyEvaluator([_logUses, [typed, [result], evaluator]]), pureOutput.lastChild)
+              } else {
+                const el = elem('button', 'Evaluate')
+                elemValue(el, result)
+                el.onclick = evaluateLast
+                pureOutput.insertBefore(el, pureOutput.lastChild)
+              }
+            } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
+          })
+          pureOutput.insertBefore(waiting = elem('waiting'), pureOutput.lastChild)
+          _smoothHeightPost(pureOutput, pre)
+        })
+        return promise
+      }, .1, expr => lastExpr = expr)
+
+      const evaluateLast = () => evaluate(lastExpr)
+      const evaluate = expr => {
+        const prev = finish.env;  finish.env = env
+        try { return log(elem(evaluator, expr)), true }
+        finally { finish.env = prev }
+      }
+      repl.classList.add('code')
+
+      const msg = defines(lang, REPL)
+      repl.append(elem('div', [structuredSentence('{A REPL} of language '), serialize(lang, basic, undefined, serialize.displayed), typeof msg == 'string' ? stringToDoc(': ' + msg) : elem('span')]))
+
+      const query = editor('', lang, binds, purifyAndDisplay, evaluate)
+      repl.append(query)
+      repl.append(pureOutput)
+      env[_id(log)] = query
+      return repl
     },
   },
 
