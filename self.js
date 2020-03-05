@@ -7210,7 +7210,6 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         `ToReadableJS Self (jsEval '{markLines:true, into:'document.body.appendChild(document.createElement(''div'')))'}'`,
       ],
     ],
-    output:[__is(`typed`), [__is(`var`)], __is(`Self`)],
     call(net = Self, opt) {
       net = defines(net, lookup) || net
       if (net instanceof Map)
@@ -7251,7 +7250,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       --depth
       write(`\n})\n`)
       write(`})()`)
-      return [typed, s.join(''), Self]
+      return s.join('')
 
       function mark(x) {
         if (x == null || typeof x == 'number' || typeof x == 'boolean' || typeof x == 'string') return
@@ -7435,7 +7434,6 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
 
   ToScopedJS:{
     txt:`Converts Self to a form that has itself hidden in a scope.`,
-    output:[__is(`typed`), [__is(`var`)], __is(`Self`)],
     call(net = Self, opt) {
       net = defines(net, lookup) || net
       if (net instanceof Map)
@@ -7495,7 +7493,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       if (markLines) write(`, __line.lines`)
       write(')')
       write(`\n})()`)
-      return [typed, s.join(''), Self]
+      return s.join('')
 
       function mark(x) {
         if (x == null || typeof x == 'string' || typeof x == 'number' || typeof x == 'boolean') return
@@ -8668,8 +8666,26 @@ For anything else, display the globals the expression binds to, and an expandabl
           ])
       },
     },
-    __is(`ToReadableJS`),
-    __is(`ToScopedJS`),
+    __is([
+      __is(`function`),
+      [
+        __is(`typed`),
+        [
+          __is(`ToReadableJS`),
+        ],
+        __is(`Self`),
+      ],
+    ]),
+    __is([
+      __is(`function`),
+      [
+        __is(`typed`),
+        [
+          __is(`ToScopedJS`),
+        ],
+        __is(`Self`),
+      ],
+    ]),
   ],
 
   12341:[[__is(`typed`), [__is(`var`)], __is(`contextMenu`)]],
@@ -9148,7 +9164,8 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         let i = d.indexOf(wantedOutput)
         if (i > 0) return d[i] !== undefined ? d[i] : _onlyUndefined
 
-        // _visitNode with each item.
+        // _visitNode with each item (unless we want anything at all, to stop exposed native functions from infinitely ballooning the search).
+        if (_isVar(wantedOutput)) return
         for (i = 1; i < d.length; ++i)
           _visitNode(ctx, d[i], wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then)
         return
