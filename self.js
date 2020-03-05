@@ -250,8 +250,8 @@ __base({
     txt:`A namespace for some very primitive numeric-computation-related functionality.`,
     future:[
       `Zero-overhead typed numeric operations (on i32/i64/f32/f64; const.… and +-*/ and some mathy stuff), compiling to Wasm and WebGPU.`,
-      `(Dense dims data dtype strides) for dense mostly-numeric tensors.`,
-      `Have a named-dimension decorator that re-orders dimensions for broadcasted operations as necessary.`,
+      `Have \`(reorderDims In NewOrder)\`. Have a named-dimension decorator that uses that.`,
+      `Have \`(Dense dims data dtype strides)\` for dense mostly-numeric tensors.`,
     ],
     lookup:{
       reduce:__is(`reduce`),
@@ -2776,8 +2776,8 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
         `(delay 1)*(delay 3)+(delay 4)*(delay 5)`,
       ],
     ],
-    call(x = 12) { return new Promise(then => setTimeout(then, 5000 + 1000 + Math.random()*4000, x)) },
     await:true,
+    call(x = 12) { return new Promise(then => setTimeout(then, 5000 + 1000 + Math.random()*4000, x)) },
   },
 
   race:{
@@ -2791,7 +2791,7 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
       try {
         for (; i < x.length; ++i) {
           // Why not do it in random order? Or some order that measures times and starts with the least-time one, or uses some other performance approximation.
-            // It doesn't matter right now.
+            // It doesn't really matter now.
           const v = finish(x[i])
           if (_isPromise(v)) {
             if ('result' in v && !_isError(v.result)) return v.result
@@ -5078,9 +5078,18 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
     call(...msg) { throw array(error, ...msg, 'at', _resolveStack()) },
   },
 
+  parseURL:{
+    txt:`\`(parseURL URL)\` or \`(parseURL URL Lang Binds)\`: fetches and parses the contents at URL.`,
+    await:true,
+    call(url, lang = fancy, binds = parse.ctx) {
+      return fetch(url, {mode:'cors'}).then(r => r.arrayBuffer())
+      .then(buf => new TextDecoder().decode(new Uint8Array(buf)))
+      .then(txt => parse(txt, lang, binds, {sourceURL:url}))
+    },
+  },
+
   _resolveStack:{
     txt:`If lines are marked, this resolves the JS stack trace to the network's functions.`,
-    future:`Have \`(parseURL URL)\` that parses with a sourceURL.`,
     call(stack = new Error().stack || '') {
       if (!_resolveStack.functions) _resolveStack.functions = Object.create(null)
       if (!_resolveStack.location) _resolveStack.location = new WeakMap
@@ -8383,7 +8392,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
           impure()
           const result = elem('div')
           result.classList.add('resizable')
-  
+
           fetch(v[2], {mode:'cors'})
           .catch(r => elemInsert(result, serialize(jsRejected(r), fancy, undefined, serialize.displayed)))
           .then(r => r.arrayBuffer())
