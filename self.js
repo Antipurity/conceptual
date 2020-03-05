@@ -26,12 +26,14 @@ function __base(net) {
   function preload(from, into) {
     // Pre-create objects/functions to be filled by `load`, so that arbitrary order of definitions is permitted.
     Object.keys(from).forEach(k => {
-      if (from[k] && Object.getPrototypeOf(from[k]) === Object.prototype) {
+      if (from[k] instanceof Map) {
+        into[k] = new Map
+        return
+      } else if (from[k] && Object.getPrototypeOf(from[k]) === Object.prototype) {
         if (into[k] === undefined) into[k] = objectFor(from[k])
         if (typeof into[k] == 'function') into[k].displayName = k
         return
-      }
-      else if (Array.isArray(from[k])) {
+      } else if (Array.isArray(from[k])) {
         if (into[k] === undefined) into[k] = []
         return
       }
@@ -62,7 +64,13 @@ function __base(net) {
       else if (!(from.is in net)) throw new Error("Not a link to an existing thing: "+from.is)
       else return load(net[from.is], globals[from.is])
     }
-    if (from && Object.getPrototypeOf(from) === Object.prototype) {
+    if (from instanceof Map) {
+      // Load keys and values.
+      if (into === undefined) into = new Map
+      env.set(from, into)
+      from.forEach((v,k) => into.set(load(k), load(v)))
+      return into
+    } else if (from && Object.getPrototypeOf(from) === Object.prototype) {
       // Load object values: turn {…} into {[defines.key]:{…}}, as a notational convenience.
       if (into === undefined) into = objectFor(from)
       env.set(from, into)
@@ -383,6 +391,8 @@ Label-binding environment is not preserved.`,
   Self:{
     txt:`A namespace for every function here. Project's GitHub page: https://github.com/Antipurity/conceptual`,
     future:[
+      `\`(while VarsGuard ChangeVars …RememberNodes)\`, auto-inferring \`RememberNodes\` if not present, for efficient loops.`,
+      `Compile-to-wasm functions that manipulate structures and call/finish native functions.`,
       `Zero-overhead {local {immutable-seeming mutable memory} management} (like an image that is drawn on, or an array sorted in-place): \`(Resource OnDisposal OnClone Value)\` and an \`argClone\` marker (index of what to clone), analyzing the graph on compilation to minimize cloning and dispose right after the last use.`,
       `Global immediately-freeing memory management (for resources that are quite expensive and/or should really be released): ref-counting (with shared ref-counters for cycles) of objects with \`dispose\`.`,
     ],
@@ -2348,6 +2358,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     txt:`A splash of magical particles.`,
     philosophy:`Most people create programming languages to improve performance for specific cases or to prove their way of thinking superior to others, but I actually just wanted to be a wizard and use a PL to enhance my craft.`,
     call(x,y,w,h, n = Math.sqrt(w*h)/10) {
+      if (_smoothHeight.disabled) return
       const into = document.createElement('div')
       into.style.left = x + 'px'
       into.style.top = y + 'px'
@@ -2771,7 +2782,6 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
 
   race:{
     txt:`Finishing \`(race …Exprs)\`: returns the first expression that returns instead of being deferred. The opposite of regular multiple-promise handling, which waits for all to join.`,
-    future:`On each return-to-\`race\` (initial entry or interrupt or promise), \`pick\` the index and remove it from exprs and run it. Save interrupt states (if any) too.`,
     nameResult:[
       `firstOf`,
     ],
@@ -2781,6 +2791,7 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
       try {
         for (; i < x.length; ++i) {
           // Why not do it in random order? Or some order that measures times and starts with the least-time one, or uses some other performance approximation.
+            // It doesn't matter right now.
           const v = finish(x[i])
           if (_isPromise(v)) {
             if ('result' in v && !_isError(v.result)) return v.result
@@ -2857,6 +2868,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
   },
 
   _doJob(expr, env, then, ID) {
+    // One iteration of the interpreter loop.
     const microstart = env[_id(realTime)] = _timeSince()
     if (_isDeferred(expr))
       expr = _deferredPrepare(expr, env, then, ID)
@@ -2868,18 +2880,38 @@ If any promises the job depends on have a method .cancel, calls those.`,
     interrupt.started = microstart // So that we can interrupt on timeout.
     _jobs.reEnter = true // So that code can specify custom _schedule overrides.
     let v, interrupted
+
+    if (typeof document != ''+void 0 && env[_id(_checkInterrupt)] !== undefined)
+      _highlightOriginal(env[_id(_checkInterrupt)], false)
+    if (typeof document != ''+void 0 && _isArray(env[_id(log)]))
+      env[_id(log)] = env[_id(log)][0].nextSibling, env[_id(log)].previousSibling.remove()
     try { v = finish(expr) }
     catch (err) {
       if (err === interrupt) interrupted = true
       else v = jsRejected(err)
     }
+    if (typeof document != ''+void 0 && interrupted && env[_id(_checkInterrupt)] !== undefined) {
+      // Highlight the last-executed expr.
+      _highlightOriginal(env[_id(_checkInterrupt)], true)
+      const ints = env[_id(interrupt)]
+      let d
+      if (env[_id(log)] && ints && ints.length && (d = defines(ints[ints.length - ints[ints.length-1] - 2], interrupt))) {
+        // Allow the top-most interrupt stack's function to define `interrupt` with a function that takes saved interrupt state and returns a DOM element.
+        let el
+        try { el = d.apply(undefined, ints.slice(-ints[ints.length-1] - 1, -1)) }
+        catch (err) {}
+        if (_isDOM(el))
+          elemInsert(env[_id(log)].parentNode, el, env[_id(log)]), env[_id(log)] = [el]
+      }
+    } else env[_id(_checkInterrupt)] = undefined
+
     finish.env = env
     env[_id(userTime)] += _timeSince(env[_id(realTime)])
 
     if (_isPromise(v)) v = 'result' in v ? v.result : _promiseToDeferred(v)
     if (interrupted) // Re-schedule.
       _jobs.reEnter === true ? _schedule(expr, env, then, ID) : _jobs.reEnter(expr, env, then, ID)
-    else if (_highlightOriginal(finish.env[_id(_checkInterrupt)], false), _isDeferred(v)) // Make promises know we're here.
+    else if (_highlightOriginal(env[_id(_checkInterrupt)], false), _isDeferred(v)) // Make promises know we're here.
       _deferredResult(v, env, then, ID)
     else // We have our result.
       Promise.resolve(v).then(then)
@@ -2887,7 +2919,6 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _jobs:{
     txt:`The interpreter loop. Most of it is about dealing with deferred stuff. Use _schedule to do stuff with it.`,
-    future:`Make functions define \`interrupt\` with a function that accepts caused-by-this-function interrupt state and returns what _jobs should display (deleting if already logged). The top-most interrupt cause is \`ints[ints.length - ints[ints.length-1] - 2]\`, and the state slice is \`ints.slice(-ints[ints.length-1] - 1, -1)\`.`,
     call() {
       const DOM = typeof document != ''+void 0
       if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
@@ -5049,35 +5080,50 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   _resolveStack:{
     txt:`If lines are marked, this resolves the JS stack trace to the network's functions.`,
-    future:`Have _resolveStack.location (a Map from expr to [sourceURL, line, column]) and further lookup the expr or its _cameFrom there. Have parse fill that.
-Have _resolveStack check against document.location if document exists, and filter out things that don't fit.
-Have \`(readFile URL)\` that preserves that.`,
+    future:`Have \`(parseURL URL)\` that parses with a sourceURL.`,
     call(stack = new Error().stack || '') {
+      if (!_resolveStack.functions) _resolveStack.functions = Object.create(null)
+      if (!_resolveStack.location) _resolveStack.location = new WeakMap
       return stack.trim().split('\n').map(L => {
         const loc = /(?: \(|@)(.+):(\d+):(\d+)\)?$/.exec(L)
         if (!loc) return L
-        const sourceURL = loc[1]
-        let main = Initialize
-        if (_resolveStack.functions[sourceURL]) {
-          main = _resolveStack.functions[sourceURL]
-        }
-        // Else look up globals' lines.
-        const line = +loc[2], column = +loc[3]
+        let sourceURL = loc[1]
+        const main = _resolveStack.functions[sourceURL] || Initialize
+        let line = +loc[2], column = +loc[3]
+        if (column !== column) return
         const lines = main.lines
         if (lines) {
-          let i
-          for (i = 0; i < lines.length; i += 2)
-            if (lines[i] >= line) break
+          // let i
+          // for (i = 0; i < lines.length; i += 2) // Who needs binary search lol
+          //   if (lines[i] >= line) break
+          let l = 0, r = lines.length>>>1
+          while (l < r) {
+            const m = (l+r)>>>1
+            if (lines[m<<1] < line) l = m+1
+            else r = m
+          }
+          let i = l<<1
+          if (lines[i] < line) ++i
           const sub = lines[i-1]
-          if (main === Initialize && typeof sub == 'function') {
+          if (main === Initialize && typeof sub == 'function' && (typeof document == ''+void 0 || sourceURL === String(document.location))) {
             const localLine = line - lines[i-2], str = _unevalFunction(sub)[1].split('\n')[localLine]
             return [sub, str.slice(0, column) + '/* here */' + str.slice(column)]
-          } else
-            return main
+          } else {
+            // Look up the original sourceURL:line:column in .location, or return (main sub).
+            const locs = _resolveStack.location
+            let s = sub
+            if (locs.has(s))
+              [sourceURL, line, column] = locs.get(s)
+            else if (_cameFrom.m && _cameFrom.m.has(s) && locs.has(s = _cameFrom.m.get(s)))
+              [sourceURL, line, column] = locs.get(s)
+            else if (_cameFrom.m && _cameFrom.m.has(s) && locs.has(s = _cameFrom.m.get(s)))
+              [sourceURL, line, column] = locs.get(s)
+            else return [main, sub]
+          }
         }
-        return loc[1]+':'+loc[2]+':'+loc[3]
-      })
-      // .functions (an object from sourceURL to function with .lines)
+        return sourceURL+':'+line+':'+column
+      }).filter(id)
+      // .functions (an object from sourceURL to function with .lines), .location (a WeakMap from expr to [sourceURL, line, column])
     },
   },
 
@@ -6045,7 +6091,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
 
   parse:{
     txt:`\`(parse String)\` or … or \`(parse String Language Bindings Options)\`: parses String into the graph represented by it, returning \`(Expr StyledInput)\`.`,
-    philosophy:`Options is a JS object like { style=false }.
+    philosophy:`Options is a JS object like { style=false, sourceURL='' }.
 And parsing is more than just assigning meaning to a string of characters (it's also styling and associating source positions).`,
     call(str, lang, ctx, opt) {
       if (typeof str == 'string') str = str ? [str] : []
@@ -6055,7 +6101,7 @@ And parsing is more than just assigning meaning to a string of characters (it's 
 
       if (!lang) lang = fancy
       const styles = opt && opt.style ? defines(lang, style) || style : undefined
-      const sourceURL = opt && opt.sourceURL
+      const sourceURL = opt && opt.sourceURL || ''
 
       let i = 0, lastI = 0
       const struct = styles && [], Unbound = styles && new Map
@@ -6109,6 +6155,7 @@ And parsing is more than just assigning meaning to a string of characters (it's 
             }
             localUpdate(i)
           }
+          if (sourceURL && _isArray(r)) lines.set(r, startLine), columns.set(r, startColumn)
           lastI = i
           return r
         } else if (f === _specialParsedValue) {
@@ -6135,12 +6182,14 @@ And parsing is more than just assigning meaning to a string of characters (it's 
       }
       match.notEnoughInfo = msg => { throw localI === str.length ? ['give more', msg] : msg }
 
+      let lines = sourceURL && new Map, columns = sourceURL && new Map
+
       const u = !lang ? match(parser.topLevel) : match(defines(lang, parse))
       if (localI < str.length) throw 'Superfluous characters at the end: ' + (typeof localS == 'string' ? localS.slice(i - curBegin) : '···')
 
       // Do binding with the original⇒copy map preserved so that we can style structure bottom-up properly.
-      const env = styles && new Map
-      const b = styles ? bound(ctx, u, true, env) : bound(ctx, u, true)
+      const env = (styles || sourceURL) && new Map
+      const b = styles || sourceURL ? bound(ctx, u, true, env) : bound(ctx, u, true)
       function styleNode(struct) {
         if (typeof document != ''+void 0 && struct instanceof Node) return struct
         let unb, v
@@ -6155,6 +6204,8 @@ And parsing is more than just assigning meaning to a string of characters (it's 
           if (struct.length == 1 && (_isArray(struct[0]) || typeof document != ''+void 0 && struct[0] instanceof Node))
             return struct[0]
         }
+        if (sourceURL && lines.has(unb))
+          (_resolveStack.location || (_resolveStack.location = new WeakMap)).set(v, [sourceURL, lines.get(unb), columns.get(unb)])
         const s = styles(struct, v, unb, ctx)
         if (typeof Element != ''+void 0 && s instanceof Element) elemValue(s, v)
         return s
@@ -6920,11 +6971,8 @@ Does not merge the parsed arrays.`,
       if (!finish.env[_id(interrupt)] || !finish.env[_id(interrupt)].length) {
         if (!_checkInterrupt.stepped) _checkInterrupt.stepped = true
         else if (_timeSince(interrupt.started, true) > 10) {
-          if (typeof document != ''+void 0) {
-            _highlightOriginal(finish.env[_id(_checkInterrupt)], false)
+          if (typeof document != ''+void 0)
             finish.env[_id(_checkInterrupt)] = cause
-            _highlightOriginal(finish.env[_id(_checkInterrupt)], true)
-          }
           throw interrupt
         }
       }
@@ -7145,7 +7193,7 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
 
   Rewrite:{
     txt:`A namespace for rewriting Self's code to a different form.`,
-    future:`Type output of ToReadableJS/ToScopedJS as Self for easy finding; have iframe/textarea/link acceptors of selves.
+    future:`Have iframe/textarea/link acceptors of selves.
 Have ToGraph and ToHTML and ToExtension.`,
     lookup:{
       readableJS:__is(`ToReadableJS`),
@@ -7162,7 +7210,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         `ToReadableJS Self (jsEval '{markLines:true, into:'document.body.appendChild(document.createElement(''div'')))'}'`,
       ],
     ],
-    input:[__is(`Self`)],
+    output:[__is(`typed`), [__is(`var`)], __is(`Self`)],
     call(net = Self, opt) {
       net = defines(net, lookup) || net
       if (net instanceof Map)
@@ -7203,7 +7251,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       --depth
       write(`\n})\n`)
       write(`})()`)
-      return s.join('')
+      return [typed, s.join(''), Self]
 
       function mark(x) {
         if (x == null || typeof x == 'number' || typeof x == 'boolean' || typeof x == 'string') return
@@ -7240,17 +7288,18 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
           write('['), ++depth // […]
           x.forEach(el => (write('\n'), put(el), write(',')))
           --depth, write('\n]')
-        } else if (x instanceof Map) {
-          write('{'), ++depth // {…} in definitions.
-          x.forEach((v,k) => (write('\n'), method(identifier(names.get(k)), v)))
-          --depth, write('\n}')
+        } else if (x instanceof Map) { // new Map([…])
+          if (!x.size) return write('new Map')
+          write('new Map(['), ++depth
+          x.forEach((v,k) => (write('\n['), put(k), write(','), put(v), write('],')))
+          --depth, write('\n])')
         } else if (x && !x[defines.key] && typeof x == 'object') {
           write('{'), ++depth // {…} in lookup.
           Object.keys(x).forEach(k => (write('\n'), method(identifier(k), x[k])))
           --depth, write('\n}')
         } else if (typeof x == 'function' || x && x[defines.key]) {
           // Functions get put as-is or as a definition of call.
-          let def = new Map
+          const def = new Map
           x[defines.key] && Object.keys(x[defines.key]).forEach(k => {
             const v = x[defines.key][k]
             if (v instanceof Map) throw "Only definitions can be Maps"
@@ -7260,10 +7309,12 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
           })
           if (def) {
             if (x === Self)
-              def = new Map(def), def.set(lookup, undefined)
+              def.set(lookup, undefined)
             if (typeof x == 'function')
-              def = new Map(def), def.set(call, func(x))
-            put(def)
+              def.set(call, func(x))
+            write('{'), ++depth // {…} in definitions.
+            def.forEach((v,k) => (write('\n'), method(identifier(names.get(k)), v)))
+            --depth, write('\n}')
           } else put(func(x))
         } else throw "Unknown value to put"
       }
@@ -7300,12 +7351,14 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
         function preload(from, into) {
           // Pre-create objects/functions to be filled by `load`, so that arbitrary order of definitions is permitted.
           Object.keys(from).forEach(k => {
-            if (from[k] && Object.getPrototypeOf(from[k]) === Object.prototype) {
+            if (from[k] instanceof Map) {
+              into[k] = new Map
+              return
+            } else if (from[k] && Object.getPrototypeOf(from[k]) === Object.prototype) {
               if (into[k] === undefined) into[k] = objectFor(from[k])
               if (typeof into[k] == 'function') into[k].displayName = k
               return
-            }
-            else if (Array.isArray(from[k])) {
+            } else if (Array.isArray(from[k])) {
               if (into[k] === undefined) into[k] = []
               return
             }
@@ -7336,7 +7389,13 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
             else if (!(from.is in net)) throw new Error("Not a link to an existing thing: "+from.is)
             else return load(net[from.is], globals[from.is])
           }
-          if (from && Object.getPrototypeOf(from) === Object.prototype) {
+          if (from instanceof Map) {
+            // Load keys and values.
+            if (into === undefined) into = new Map
+            env.set(from, into)
+            from.forEach((v,k) => into.set(load(k), load(v)))
+            return into
+          } else if (from && Object.getPrototypeOf(from) === Object.prototype) {
             // Load object values: turn {…} into {[defines.key]:{…}}, as a notational convenience.
             if (into === undefined) into = objectFor(from)
             env.set(from, into)
@@ -7376,7 +7435,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
 
   ToScopedJS:{
     txt:`Converts Self to a form that has itself hidden in a scope.`,
-    input:[__is(`Self`)],
+    output:[__is(`typed`), [__is(`var`)], __is(`Self`)],
     call(net = Self, opt) {
       net = defines(net, lookup) || net
       if (net instanceof Map)
@@ -7436,7 +7495,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
       if (markLines) write(`, __line.lines`)
       write(')')
       write(`\n})()`)
-      return s.join('')
+      return [typed, s.join(''), Self]
 
       function mark(x) {
         if (x == null || typeof x == 'string' || typeof x == 'number' || typeof x == 'boolean') return
@@ -7547,7 +7606,7 @@ The quining of functions can be tested by checking that the rewrite-of-a-rewrite
   compile:{
     txt:`Compiles a function to JS.`,
     philosophy:`I am speed.`,
-    buzzwords:`JIT-compiled`,
+    buzzwords:`compiled just-ahead-of-time`,
     call(opt, ...a) {
       // compile undefined ^(sum a 5)
       // compile undefined ^a 5
@@ -9349,8 +9408,9 @@ Use \`picker\` to override behavior.`,
       if (!_isUnknown(f))
         try { // Consult the current picker.
           ++pick.depth
+          impure()
           const i = f(pick, from, cause, extra)
-          if ((typeof i != 'number' || i !== i>>>0 || i >= _pickCount(from)) && !_isUnknown(i))
+          if (typeof i != 'number' || i !== i>>>0 || i >= _pickCount(from))
             error("Expected an index less than", _pickCount(from), "but got", i)
           return i
         }
@@ -9435,20 +9495,23 @@ This is the default when no picker is specified.`,
     call(next, from) { return !finish.pure ? randomNat(from) : _unknown([randomNat, _pickCount(from)]) },
   },
 
+  Choices:new Map,
+
   askUser:{
     txt:`A \`With\` for \`picker\` that pauses execution and asks the user.`,
     future:[
       `Test this.`,
-      `If \`_read.marks.has(cause)\` and it's not a function, find that in \`from\`; if it's a function, defer to that.`,
-      `Add a "Remember" checkbox (and maps from cause to the length and the choice), expandable into "Write the choosing function \`(function Next From Cause Extra)->?\` for this cause:".`,
+      `Add a "Remember" checkbox (and maps from cause to the length and the choice), expandable into "Write the decision function \`(function Next From Cause Extra)->?\` for this cause:".`,
       `Have \`askUserElem(ctx = CurrentUsage)\` for inspecting the remembered choices.`,
     ],
+    lookup:{
+      Choices:__is(`Choices`),
+    },
     examples:[
       [
         `(picker askUser (pick (1 2 3 4365)))`,
       ],
     ],
-    merge:true,
     call(next, from, cause, extra) {
       call.impure = true
       if (!askUser.got) askUser.got = new Map
@@ -9458,6 +9521,21 @@ This is the default when no picker is specified.`,
           return askUser.got.get(a) !== _notFound ? askUser.got.get(a) : next(from, cause, extra)
         } finally { askUser.got.delete(a, a = askUser.got.get(a)) }
 
+      // Remember from `Choices`.
+      if (Choices.has(cause)) {
+        let p = Choices.get(cause)
+        if (typeof p == 'function') // A decision procedure; defer to it.
+          return p(next, from, cause, extra)
+        if (_isArray(p) && p[0] === _disabled && p.length == 2)
+          p = p[1] // For escaping functions.
+        if (typeof from == 'number')
+          return p
+        // Find `p` in `from`.
+        const i = from.indexOf(p)
+        if (i <= 0) Choices.delete(cause)
+        else return i-1
+      }
+
       if (typeof document == ''+void 0) {
         // NodeJS.
         const rl = require('readline').createInterface({ input:process.stdin, output:process.stdout })
@@ -9465,12 +9543,9 @@ This is the default when no picker is specified.`,
         log('A choice from' + _pickCount(from), from)
         if (cause !== undefined) log('  Cause:', cause)
         if (extra !== undefined) log(extra)
-        let canRecord = finish.inFunction === 2
-        rl.question(!canRecord ? 'Pick one: ' : 'Pick one or `?`:', acceptChoice)
+        rl.question(acceptChoice)
         function acceptChoice(str) {
           const i = +str
-          if (canRecord && str === '?')
-            askUser.got.set(a, _unknown(array(pick, from, cause, extra))), _schedule(...job)
           if (!(i >= 0) || !(i < _pickCount(from)))
             rl.question('Must be a number from 0 to ' + _pickCount(from) + ': ', acceptChoice)
           else
@@ -9486,8 +9561,6 @@ This is the default when no picker is specified.`,
       if (extra !== undefined)
         el.append(serialize(extra, _langAt(), _bindingsAt(), serialize.displayed), elem('br'))
       el.append(elem('unimportant', 'Pick one:\n'))
-      if (finish.inFunction === 2)
-        el.append(elemValue(elem('button', 'Ask each time'), _unknown(array(pick, from, cause, extra))))
       el.append(elemValue(elem('button', 'Auto'), _notFound))
       if (_isArray(from)) {
         const table = elem('table')
