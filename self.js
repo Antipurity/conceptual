@@ -1759,6 +1759,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       const pause = elem('button', '⏸')
       pause.onclick = () => _pausedToStepper(..._cancel(ID))
       pause.title = `Pause execution`
+      el.append(pause)
       el.append(elem('waiting'))
       return el
     },
@@ -9590,8 +9591,7 @@ This is the default when no picker is specified.`,
     txt:`A \`With\` for \`picker\` that pauses execution and asks the user.`,
     future:[
       `Test this.`,
-      `Add a "Remember" checkbox (and maps from cause to the length and the choice), expandable into "Write the decision function \`(function Next From Cause Extra)->?\` for this cause:".`,
-      `Have \`ChoicesElem(ctx = CurrentUsage)\` for inspecting/modifying the remembered choices.`,
+      `Have \`ChoicesElem(ctx = CurrentUsage)\` for inspecting/modifying the remembered choices, and/or decision procedures, "Write the decision function \`(function Next From Cause Extra)->?\` for this cause:" editor.`,
     ],
     lookup:{
       Choices:__is(`Choices`),
@@ -9651,6 +9651,20 @@ This is the default when no picker is specified.`,
         el.append(serialize(extra, _langAt(), _bindingsAt(), serialize.displayed), elem('br'))
       el.append(elem('unimportant', 'Pick one:\n'))
       el.append(elemValue(elem('button', 'Auto'), _notFound))
+
+      // A "remember" checkbox.
+      let remember = false
+      const det = elem('details')
+      const sum = elem('summary')
+      const checkbox = elem('input')
+      checkbox.type = 'checkbox'
+      checkbox.oninput = checkbox.onchange = () => remember = checkbox.checked
+      checkbox.title = 'Remember the choice'
+      sum.append(checkbox)
+      det.append(sum)
+      el.append(det)
+
+      // A table of choices.
       if (_isArray(from)) {
         const table = elem('table')
         for (let i = 0; i < from.length; ++i) {
@@ -9667,7 +9681,11 @@ This is the default when no picker is specified.`,
       }
       let job
       el.onclick = evt => {
-        if (evt.target.tagName !== 'BUTTON' || !('to' in evt.target)) return
+        if (evt.target.tagName !== 'BUTTON' || !('to' in evt.target) || typeof evt.target.to != 'number') return
+        if (remember) {
+          const picked = typeof from == 'number' ? evt.target.to : from[evt.target.to-1]
+          Choices.set(cause, typeof picked != 'function' ? picked : array(_disabled, picked))
+        }
         askUser.got.set(a, evt.target.to), _schedule(...job)
         elemRemove(el), el.onclick = null
       }
