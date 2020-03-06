@@ -2654,7 +2654,7 @@ All these are automatically tested to be correct at launch.`,
       ],
       [
         `Modern "AI" stands for Approximate Imagination.`,
-        `Reward hacking isn't an AI issue (AI would be controlled by more than a static reward function, just like advanced humans), it's a human issue. Drugs and porn and unhealthy addictive habits are obvious, but it is so much more prevalent: art and pretty words, religion and everyday rituals, cooking and fashion — everything is stained in it (though it is a thing subjective to a viewer, impossible to unfailingly pin down). The brightest side of deliberated reward hacking is that (some of) it allows humans to move past their built-in limited ideas of what's good, and find their own meaning despite having been given one; the dark side is that the new ideas are often very wrong. Reward hacking can be both beautiful and grotesque. (Evolution has not caught up to modern society at all, so ugly effects are visible.)`,
+        `Reward hacking isn't an AI issue (AI would be controlled by more than a static reward function, just like advanced humans), it's a human issue. Drugs and porn and unhealthy addictive habits are obvious, but it is so much more prevalent: art and pretty words, religion and everyday rituals, cooking and fashion — everything is stained in it (though it is a thing subjective to a viewer, impossible to unfailingly pin down). The brightest side of deliberated reward hacking is that (some of) it allows humans to move past their built-in limited ideas of what's good, and find their own meaning despite having been given one; the dark side is that the new ideas are often very wrong. Reward hacking can be both beautiful and grotesque. (Evolution has not caught up to modern society at all, so ugly effects are visible. Static reward function plus very dynamic behavior equals trouble.)`,
         `Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about AI that's not in I, it's just somewhat more clear and efficient.`,
         `AI is usually considered as either slave or master (or transitioning to one of those). That's wrong. Intelligence is total generality, able to include everything, and including everything found useful. Both humans and AI can understand and propose with both words and actions, and consider a problem from every point of view.`,
         `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached. And you can't improve a mind's design beyond perfection (which is a shorthand for "cannot feasibly be noticeably improved anymore").`,
@@ -3027,6 +3027,8 @@ Don't ever re-use the same env in _schedule, use this instead.`,
       e[_id(userTime)] = undefined
       e[_id(realTime)] = undefined
       e[_id(pick)] = randomNat
+      e[_id(finish)] = 0
+      e[_id(step)] = undefined
       Object.seal(e)
       basedOn && Object.assign(e, basedOn)
       e[_id(userTime)] = 0
@@ -6978,10 +6980,16 @@ Does not merge the parsed arrays.`,
     txt:`Checks whether an interrupt is appropriate right now.`,
     call(cause) {
       if (!finish.env[_id(interrupt)] || !finish.env[_id(interrupt)].length) {
+        // If we stepped before (ensuring progress), and either we have worked for 10 ms or the nesting depth is as wanted by _pausedToStepper, interrupt.
         if (!_checkInterrupt.stepped) _checkInterrupt.stepped = true
         else if (_timeSince(interrupt.started, true) > 10) {
-          if (typeof document != ''+void 0)
-            finish.env[_id(_checkInterrupt)] = cause
+          finish.env[_id(_checkInterrupt)] = cause
+          finish.env[_id(finish)] = finish.depth
+          throw interrupt
+        } else if (finish.env[_id(step) !== undefined && finish.depth <= finish.env[_id(step)]]) {
+          finish.env[_id(_checkInterrupt)] = cause
+          finish.env[_id(finish)] = finish.depth
+          _jobs.reEnter = _pausedToStepper
           throw interrupt
         }
       }
@@ -6989,18 +6997,62 @@ Does not merge the parsed arrays.`,
     },
   },
 
+  step:{
+    txt:`\`(step)\`: pauses execution and displays stepping interface to the user.`,
+    finish() { _jobs.reEnter = _pausedToStepper;  throw interrupt },
+    merge:true,
+  },
+
+  _pausedToStepper:{
+    txt:`Pauses a job and displays its stepping interface: ▶ ▲ ⇉ ▼.
+Not for use inside that paused job.
+(Technically, we could use \`_continuation\` to save/restore execution states, and also have per-cause breakpoints, and also have a way of inspecting function state when interpreting, but debuggers are dime-a-dozen anyway, so who cares.)`,
+    call(expr, env, then, ID, before = env[_id(log)] || Self.into) {
+      _cancel(ID)
+      // Hide `before`, and insert a <div> with <button>s inside.
+      const el = elem('div')
+        const justRun = el('button', '▶')
+        justRun.onclick = () => onClick()
+        justRun.title = `Run normally`
+        const lessDepth = el('button', '▲')
+        lessDepth.onclick = () => onClick(-1)
+        lessDepth.title = `Step out
+(Decrease function call depth)`
+        const eqDepth = el('button', '⇉')
+        eqDepth.onclick = () => onClick(0)
+        eqDepth.title = `Step over
+(Equal function call depth)`
+        const moreDepth = el('button', '▼')
+        moreDepth.onclick = () => onClick(1)
+        moreDepth.title = `Step in
+(Increase function call depth)`
+        el.append(justRun, lessDepth, eqDepth, moreDepth)
+        elemValue(el, [expr, env, then, ID])
+      before.style.display = 'none'
+      before.parentNode.insertBefore(el, before)
+
+      function onClick(n) {
+        // Show style, remove interface, remember to interrupt again, and re-schedule the job.
+        justRun.onclick = lessDepth.onclick = eqDepth.onclick = moreDepth.onclick = null
+        before.style.removeProperty('display')
+        el.remove()
+        env[_id(step)] = n !== undefined ? env[_id(finish)]+n : undefined
+        _schedule(expr, env, then, ID)
+      }
+    },
+  },
+
   interrupt:{
     txt:`Used to make functions re-entrant in a non-interruptible host language, for better UX.`,
     future:[
-      `Have \`(step)\`, which pauses-to-buttons execution when finished.`,
-      `Have \`_pausedToStepper(expr, env, then, ID)\`, which logs "> /\ = \/" buttons (run, step out (finish.depth-1), step over (finish.depth), step into (finish.depth+1)). Also preserve finish.depth in env on interrupt.`,
-      `In \`interrupt\`, have \`finish.env[_id(step)]\` (null or a number), and if finish.depth is <= that, interrupt with _jobs.reEnter being _pausedToStepper.`,
-      `Add a "||" pause button to <waiting>, which does \`_pausedToStepper(_cancel(ID))\`.`,
+      `Have \`_pausedToStepper(expr, env, then, ID)\`, which logs "▶ ▲ ⇉ ▼" buttons (run, step out (finish.depth-1), step over (finish.depth), step into (finish.depth+1)).`,
+      `Add a "⏸" pause button to <waiting>, which does \`_pausedToStepper(..._cancel(ID))\`.`,
     ],
     lookup:{
       check:__is(`_checkInterrupt`),
       noInterrupt:__is(`noInterrupt`),
       continuation:__is(`_continuation`),
+      step:__is(`step`),
     },
     philosophy:`Termination checking (totality) is unnecessary if the host can just interrupt and continue. In fact, it is harmful to provide a false assurance of everything terminating in reasonable time.
 Interruption (and sandboxing) is absolutely essential for being able to actually use a program comfortably, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes, and/or heuristic-based totality guarantees.
@@ -7209,7 +7261,7 @@ Have ToGraph and ToHTML and ToExtension.`,
       scopedJS:__is(`ToScopedJS`),
     },
     philosophy:`Writing the system's code in a special style allows it to be viewed/modified in the system by the user, preserving anything they want in the process without external storage mechanisms.
-The quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite.`,
+The correctness of quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite.`,
   },
 
   ToReadableJS:{
@@ -8805,7 +8857,8 @@ For anything else, display the globals the expression binds to, and an expandabl
       use:__is(`use`),
       get:__is(`get`),
     },
-    philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.`,
+    philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
+All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. But that is not at all the regular programming style. Can you teach an old dog new tricks?`,
   },
 
   types:{
@@ -9173,14 +9226,15 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         let i = d.indexOf(wantedOutput)
         if (i > 0) return d[i] !== undefined ? d[i] : _onlyUndefined
 
-        // _visitNode with each item (unless we want anything at all, to stop exposed native functions from infinitely ballooning the search).
-        if (_isVar(wantedOutput)) return
+        // _visitNode with each item.
         for (i = 1; i < d.length; ++i)
           _visitNode(ctx, d[i], wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then)
         return
       }
 
       if (typeof v == 'function' && typeof defines(v, argCount) == 'number' && (!wantedInputs || defines(v, argCount) >= wantedInputs.length)) {
+        // Don't infinitely balloon the search if any native function is exposed.
+        if (_isVar(wantedOutput)) return
         if (!actualArgs || actualArgs.length < defines(v, argCount)) {
           let nextArg
           // `input`-defining functions get treated as if their inputs are as defined.
@@ -9528,7 +9582,7 @@ This is the default when no picker is specified.`,
     future:[
       `Test this.`,
       `Add a "Remember" checkbox (and maps from cause to the length and the choice), expandable into "Write the decision function \`(function Next From Cause Extra)->?\` for this cause:".`,
-      `Have \`askUserElem(ctx = CurrentUsage)\` for inspecting the remembered choices.`,
+      `Have \`ChoicesElem(ctx = CurrentUsage)\` for inspecting/modifying the remembered choices.`,
     ],
     lookup:{
       Choices:__is(`Choices`),
