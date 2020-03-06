@@ -1689,11 +1689,11 @@ Remember to quote the link unless you want to evaluate the insides.`,
       impure()
 
       // Evaluate the requested expression.
-      const result = elem('waiting')
+      const ID = _newJobId()
+      const result = _evaluationElem(ID)
       const el = elem('div', result)
       const env = _newExecutionEnv(finish.env)
       env[_id(log)] = el.lastChild
-      const ID = _newJobId()
       _doJob(expr, env, then || (() => !result.previousSibling ? el.remove() : result.remove()), ID)
       return el
     },
@@ -1752,6 +1752,18 @@ Remember to quote the link unless you want to evaluate the insides.`,
     },
   },
 
+  _evaluationElem:{
+    txt:`Creates and returns a pause-button and a waiting indicator.`,
+    call(ID) {
+      const el = elem('div')
+      const pause = elem('button', '⏸')
+      pause.onclick = () => _pausedToStepper(..._cancel(ID))
+      pause.title = `Pause execution`
+      el.append(elem('waiting'))
+      return el
+    },
+  },
+
   evaluator:{
     txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
@@ -1772,7 +1784,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       query.classList.add('editorContainer')
       query.append(prompt)
       query.append(serialize(expr, _langAt(before), binds, serialize.displayed))
-      const waiting = elem('waiting') // There should be some kind of `evaluationElem(ID)` for this…
+      let ID = _newJobId()
+      const waiting = _evaluationElem(ID)
       el.append(query)
       el.append(waiting)
 
@@ -1782,7 +1795,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       const start = _timeSince()
       if (_isArray(expr) && expr[0] === _extracted && expr.length == 3 && (_isLabel(expr[1]) || _invertBindingContext(binds).has(expr[1])))
         bindAs = _isLabel(expr[1]) ? expr[1] : label(_invertBindingContext(binds).get(expr[1])), expr = expr[2]
-      let ID = _schedule(expr, env, r => { // Got the result.
+      _schedule(expr, env, r => { // Got the result.
         ID = null
         const end = _timeSince(), real = _timeSince(start)
 
@@ -1811,7 +1824,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         // Display all uses of `(Result UserDuration RealDuration EndTime):evaluator`.
         el.append(daintyEvaluator([_logUses, [typed, [r, env[_id(userTime)], real, end], evaluator]]))
         _smoothHeightPost(el, pre)
-      })
+      }, ID)
       prompt.title = 'Click to remove this.'
       prompt.onclick = () => { // Remove the evaluator.
         _getOuterWindow(el) && _getOuterWindow(el).firstChild === el && _restoreWindow(_getOuterWindow(el))
@@ -2071,7 +2084,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
               }
             } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
           })
-          pureOutput.insertBefore(waiting = elem('waiting'), pureOutput.lastChild)
+          pureOutput.insertBefore(waiting = _evaluationElem(ID), pureOutput.lastChild)
           _smoothHeightPost(pureOutput, pre)
         })
         return promise
@@ -2844,9 +2857,9 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
   },
 
   _cancel:{
-    txt:`\`(_cancel JobId)\`: if the job is scheduled to run, cancels it. Returns true if cancelled, false if not.
+    txt:`\`(_cancel JobId)\`: if the job is scheduled to run, cancels it. Returns true (or the job if the second arg is true) if cancelled, false if not.
 If any promises the job depends on have a method .cancel, calls those.`,
-    call(ID) {
+    call(ID, returnJob = false) {
       for (let i = 0; i < _jobs.expr.length; i += 4)
         if (_jobs.expr[i+3] === ID) {
           const v = _jobs.expr[i]
@@ -2854,8 +2867,8 @@ If any promises the job depends on have a method .cancel, calls those.`,
             for (let j = 2; j < v.length; ++j)
               if (_isPromise(v[j]) && typeof v[j].cancel == 'function')
                 v[j].cancel()
-          _jobs.expr.splice(i, 4)
-          return true
+          if (returnJob) return _jobs.expr.splice(i, 4)
+          return _jobs.expr.splice(i, 4), true
         }
       call.locked.forEach((ownerID, v) => ownerID === ID && (call.cache.delete(v), call.locked.delete(v)))
       return false
@@ -7044,10 +7057,6 @@ Not for use inside that paused job.
 
   interrupt:{
     txt:`Used to make functions re-entrant in a non-interruptible host language, for better UX.`,
-    future:[
-      `Have \`_pausedToStepper(expr, env, then, ID)\`, which logs "▶ ▲ ⇉ ▼" buttons (run, step out (finish.depth-1), step over (finish.depth), step into (finish.depth+1)).`,
-      `Add a "⏸" pause button to <waiting>, which does \`_pausedToStepper(..._cancel(ID))\`.`,
-    ],
     lookup:{
       check:__is(`_checkInterrupt`),
       noInterrupt:__is(`noInterrupt`),
