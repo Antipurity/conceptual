@@ -772,7 +772,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   Extension:{
     txt:`Not implemented.`,
     future:[
-      `Into every page, inject a simple script that creates a fixed-position small button in a corner, that requests Self from the extension on click (that creates a REPL in the page's context).`,
+      `Have an action button, and inject a script with this js into null on click.`,
       `Allow some flavor of clicking (Shift+click) to refer to the page's elements, like an array of a table row's contents, or an image, or text content.`,
     ],
     call() { throw "Being a browser extension not supported for now" },
@@ -941,6 +941,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 .hover>time-report, time-report:hover { opacity:1; visibility:visible }
 
 .removed { margin:0 }`,
+    future:`If \`into\` is null, should make it a new draggable window with a close button.`,
     call(into = document.body) {
       Self.into = into
       into.classList.add('into')
@@ -961,7 +962,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // If our URL has `#…` at the end, parse and evaluate that command.
       function evalHash(hash) {
-        if (hash) elemInsert(into, elem(evaluator, parse(decodeURI(location.hash.slice(1)))[0]), into.firstChild)
+        if (hash) elemInsert(into, elem(evaluator, parse(decodeURI(location.hash.slice(1)))), into.firstChild)
       }
       evalHash(location.hash)
       _listen('hashchange', () => evalHash(location.hash))
@@ -1200,6 +1201,9 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
   NodeJS:{
     txt:`This should work. Presents a console REPL with outputs labeled sequentially.`,
+    future:[
+      `If input is redirected from a file, parse+execute it then exit. If output is redirected to a file, make sure that we log to there (without coloring).`,
+    ],
     call() {
       let ctx = parse.ctx, env = finish.env = _newExecutionEnv(finish.env)
       _test(env)
@@ -1215,7 +1219,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
           cmd = cmd.trim()
           try {
             log.did = false
-            const [expr, styled] = parse(cmd, fancy, ctx)
+            const expr = parse(cmd, fancy, ctx)
             opt.breakLength = out.columns
             if (out.isTTY && !log.did) {
               const lines = Math.ceil((cmd.length + prompt.length) / out.columns)
@@ -2000,7 +2004,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       function evaluate(evt) {
         let clear = false
         try {
-          const [expr] = parse(editor, lang, binds)
+          const expr = parse(editor, lang, binds)
           evt.preventDefault()
           clear = onEnter ? onEnter(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false) : false
         } catch (err) {
@@ -2614,7 +2618,7 @@ All these are automatically tested to be correct at launch.`,
           if (typeof a == 'string') return elem('div', stringToDoc(a))
           if (!_isArray(a)) throw "Examples must be arrays or comments"
           const from = parse(a[0], fancy, undefined, parse.dom)[1]
-          const to = a[1] ? parse(a[1])[0] : elemCollapse(() => elem(evaluator, from, to))
+          const to = a[1] ? parse(a[1]) : elemCollapse(() => elem(evaluator, from, to))
           return elem('div', [from, elem('span', '\n⇒ '), serialize(to, L, B, serialize.displayed)])
         })
         return r.length != 1 ? r : r[0]
@@ -4759,7 +4763,7 @@ Somewhat usable in a REPL.`,
       if (b === undefined) [a,b] = a instanceof Array ? a[0].split('=') : a.split('=')
       ++total
       try {
-        a = parse(a)[0], b = parse(b)[0]
+        a = parse(a), b = parse(b)
 
         const s = lookup(fast, 'serialize')(a, undefined, true)
         const p2 = lookup(fast, 'parse')(s)
@@ -5094,10 +5098,10 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
   parseURL:{
     txt:`\`(parseURL URL)\` or \`(parseURL URL Lang Binds)\`: fetches and parses the contents at URL.`,
     await:true,
-    call(url, lang = fancy, binds = parse.ctx) {
+    call(url, lang = fancy, binds = parse.ctx, style = false) {
       return fetch(url, {mode:'cors'}).then(r => r.arrayBuffer())
       .then(buf => new TextDecoder().decode(new Uint8Array(buf)))
-      .then(txt => parse(txt, lang, binds, {sourceURL:url}))
+      .then(txt => parse(txt, lang, binds, {style, sourceURL:url}))
     },
   },
 
@@ -6114,7 +6118,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
   parse:{
     txt:`\`(parse String)\` or … or \`(parse String Language Bindings Options)\`: parses String into the graph represented by it, returning \`(Expr StyledInput)\`.`,
     philosophy:`Options is a JS object like { style=false, sourceURL='' }.
-And parsing is more than just assigning meaning to a string of characters (it's also styling and associating source positions).`,
+And parsing is more than just extracting meaning from a string of characters (it's also styling and associating source positions).`,
     call(str, lang, ctx, opt) {
       if (typeof str == 'string') str = str ? [str] : []
       if (_isDOM(str)) str = _innerText(str) // Don't even attempt to cache subtrees lol
@@ -6234,7 +6238,7 @@ And parsing is more than just assigning meaning to a string of characters (it's 
       }
       styles && Unbound.set(struct, u)
       let styled = styles && styleNode(struct)
-      return [b, styled]
+      return styles ? [b, styled] : b
     },
   },
 
