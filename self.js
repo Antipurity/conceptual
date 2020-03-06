@@ -391,7 +391,7 @@ Label-binding environment is not preserved.`,
   Self:{
     txt:`A namespace for every function here. Project's GitHub page: https://github.com/Antipurity/conceptual`,
     future:[
-      `\`(while VarsGuard ChangeVars …RememberNodes)\`, auto-inferring \`RememberNodes\` if not present, for efficient loops.`,
+      `\`(while VarsList Condition ChangedVars …RememberNodes)\`, auto-staging \`RememberNodes\` correctly if not present, for efficient loops.`,
       `Compile-to-wasm functions that manipulate structures and call/finish native functions.`,
       `Zero-overhead {local {immutable-seeming mutable memory} management} (like an image that is drawn on, or an array sorted in-place): \`(Resource OnDisposal OnClone Value)\` and an \`argClone\` marker (index of what to clone), analyzing the graph on compilation to minimize cloning and dispose right after the last use.`,
       `Global immediately-freeing memory management (for resources that are quite expensive and/or should really be released): ref-counting (with shared ref-counters for cycles) of objects with \`dispose\`.`,
@@ -449,9 +449,6 @@ Evaluates as much as is possible, so manual pre-calculations of any kind are nev
     ],
     buzzwords:`partially-evaluating`,
     argCount:1,
-    lookup:{
-      impure:__is(`impure`),
-    },
     philosophy:`Though everything here is evaluated eagerly, inlining and partially-evaluating functions will drop unused args. This gives benefits of both eager and lazy evaluation.
 
 Staging (code generating code when not everything is known) is done in some native functions here (those that mention _isUnknown and do non-trivial things with it), but with proper partial evaluation, it seems worse than useless for non-native code (since every function inlining acts as its own staging, though not forced through any particular staging order).`,
@@ -7628,12 +7625,13 @@ The correctness of quining of functions can be tested by checking that the rewri
   System:{
     txt:`A namespace for low-level functions that should not be called in user code, for safety.`,
     lookup:{
-      typed:__is(`typed`),
       interrupt:__is(`interrupt`),
       deconstruct:__is(`deconstruct`),
       jsEval:__is(`jsEval`),
       compile:__is(`compile`),
       Rewrite:__is(`Rewrite`),
+      typed:__is(`typed`),
+      impure:__is(`impure`),
       ClearCaches:{
         txt:`When called, clears the oldest half of entries in every cache.`,
         argCount:0,
@@ -8868,7 +8866,7 @@ For anything else, display the globals the expression binds to, and an expandabl
       get:__is(`get`),
     },
     philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
-All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. But that is not at all the regular programming style. Can you teach an old dog new tricks?`,
+All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. But that is not at all the regular programming style. Very alien to me. Can an old dog be taught new tricks?`,
   },
 
   types:{
