@@ -1218,59 +1218,13 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
   NodeJS:{
     txt:`This should work. Presents a console REPL with outputs labeled sequentially.`,
     future:[
-      `Move NodeJS's REPL stuff to \`(elem REPL …?)\`.`,
       `If input is redirected from a file, parse+execute it then exit. If output is redirected to a file, make sure that we log to there (without coloring).`,
       `Allow specifying the language as a cmd-line arg.`,
     ],
     call() {
       let ctx = parse.ctx, env = finish.env = _newExecutionEnv(finish.env)
       _test(env)
-      console.log('ctrl-D or .exit to exit, (txt) for all functionality. a, `a`, "s", (0 1), (a=2 a).')
-      const repl = require('repl')
-      const prompt = '> ', coloredPrompt = _colored(prompt, 31) // red
-      const out = process.stdout
-      const opt = serialize.displayed = out.isTTY && out.hasColors() ? serialize.consoleColored : {maxDepth:3}
-      let n = 0
-      opt.breakLength = out.columns
-      repl.start({
-        eval(cmd, _jsContext, _filename, then) {
-          cmd = cmd.trim()
-          try {
-            log.did = false
-            const expr = parse(cmd, fancy, ctx)
-            opt.breakLength = out.columns
-            if (out.isTTY && !log.did) {
-              const lines = Math.ceil((cmd.length + prompt.length) / out.columns)
-              out.moveCursor(0, -lines)
-              out.clearScreenDown()
-              out.write(coloredPrompt + serialize(expr, fancy, undefined, {...opt, offset:1}) + '\n')
-            }
-            _schedule(expr, env, result => {
-              // If ctx contains result in values, set name to that; if not, create a new one.
-              let name
-              ctx.forEach((v,k) => v === result && (name = k))
-              if (!name) do { name = '#' + n++ } while (ctx.has(name))
-              if (!ctx.has(name))
-                (ctx = new Map(ctx)).set(name, quote(result))
-
-              then(null, _colored(name, 33) + ' = ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
-            })
-          } catch (err) {
-            if (_isArray(err) && err[0] === 'give more') then(new repl.Recoverable(err))
-            else console.log(typeof err == 'string' ? _colored(err, 31) : err), then() // red
-          }
-        },
-        writer: id,
-        completer: cmd => {
-          const arr = /[^`=\s\[\]]+$/.exec(cmd)
-          const begins = arr ? arr[0] : ''
-          const matches = []
-          ctx.forEach((_v,k) => k.slice(0, begins.length) === begins && matches.push(k))
-          return [matches, begins]
-        },
-        coloredPrompt,
-      }).on('reset', () => { ctx = parse.ctx, n = 0 })
-      // Cannot seem to react to SIGINT (and stop execution).
+      elem(REPL)
     },
   },
 
@@ -1302,6 +1256,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
   _colored(str, pre=39, post = 39) {
     // Style a string for ANSI terminals. See `man 4 console_codes`.
+    if (_colored.disabled) return str
     return typeof str != 'string' ? str : ('\x1b['+pre+'m') + str + ('\x1b['+post+'m')
   },
 
@@ -2051,13 +2006,67 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
     lookup:{
       editor:__is(`editor`),
     },
-    elem(tag, lang, binds) {
+    elem(tag, lang = fancy, binds = new Map(parse.ctx)) {
       if (tag !== REPL || typeof document == ''+void 0) return
-      lang = lang || fancy, binds = binds || new Map(parse.ctx)
       if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
       if (!(binds instanceof Map)) throw "Invalid binding context"
       impure()
-      _invertBindingContext(binds, true)
+
+      if (typeof document == ''+void 0) { // NodeJS
+        // Use the `repl` module to display colored prompts and command inputs/outputs.
+        const msg = defines(lang, REPL)
+        console.log('ctrl-D or .exit to exit.')
+        console.log('A ' + serialize(REPL, basic) + ' of language ' + serialize(lang, basic) + (typeof msg == 'string' ? ': ' + msg : ''))
+        const repl = require('repl')
+        const out = process.stdout
+        if (!out.isTTY || !out.hasColors()) _colored.disabled = true
+        const prompt = '> ', coloredPrompt = _colored(prompt, 31) // red
+        const opt = serialize.displayed = !_colored.disabled ? serialize.consoleColored : {maxDepth:3}
+        const originalBinds = binds
+        let n = 0
+        opt.breakLength = out.columns
+        repl.start({
+          eval(cmd, _jsContext, _filename, then) {
+            cmd = cmd.trim()
+            try {
+              log.did = false
+              const expr = parse(cmd, fancy, binds)
+              opt.breakLength = out.columns
+              if (out.isTTY && !log.did) {
+                const lines = Math.ceil((cmd.length + prompt.length) / out.columns)
+                out.moveCursor(0, -lines)
+                out.clearScreenDown()
+                out.write(coloredPrompt + serialize(expr, fancy, undefined, {...opt, offset:(promps.length+1)>>>1}) + '\n')
+              }
+              _schedule(expr, env, result => {
+                // If binds contain result in values, set name to that; if not, create a new one.
+                let name
+                binds.forEach((v,k) => v === result && (name = k))
+                if (!name) do { name = '#' + n++ } while (binds.has(name))
+                if (!binds.has(name))
+                  (binds = new Map(binds)).set(name, quote(result))
+  
+                then(null, _colored(name, 33) + ' = ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
+              })
+            } catch (err) {
+              if (_isArray(err) && err[0] === 'give more') then(new repl.Recoverable(err))
+              else console.log(typeof err == 'string' ? _colored(err, 31) : err), then() // red
+            }
+          },
+          writer: id,
+          completer: cmd => {
+            const arr = /[^`=\s\[\]]+$/.exec(cmd)
+            const begins = arr ? arr[0] : ''
+            const matches = []
+            binds.forEach((_v,k) => k.slice(0, begins.length) === begins && matches.push(k))
+            return [matches, begins]
+          },
+          coloredPrompt,
+        }).on('reset', () => { binds = originalBinds, n = 0 }) // .clear
+        // Cannot seem to react to SIGINT (and stop execution).
+        return
+      }
+      // Else Browser
 
       const env = _newExecutionEnv(finish.env)
 
