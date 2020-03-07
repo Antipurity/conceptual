@@ -780,8 +780,11 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     lookup:{Deinitialize:__is(`Deinitialize`)},
     call(type, listener, opt) {
       if (!Deinitialize.events) Deinitialize.events = [], Deinitialize.intervals = []
-      if (typeof type == 'number')
-        return void Deinitialize.intervals.push(setInterval(listener, type))
+      if (typeof type == 'number') {
+        const int = setInterval(listener, type)
+        if (int.unref) int.unref()
+        return void Deinitialize.intervals.push(int)
+      }
       addEventListener(type, listener, opt)
       Deinitialize.events.push(type, listener, opt)
     },
@@ -1216,15 +1219,23 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
   },
 
   NodeJS:{
-    txt:`This should work. Presents a console REPL with outputs labeled sequentially.`,
-    future:[
-      `If input is redirected from a file, parse+execute it then exit. If output is redirected to a file, make sure that we log to there (without coloring).`,
-    ],
+    txt:`Presents a console REPL with outputs labeled sequentially, or just reads and executes the whole file if redirected from it.
+Example: \`nodejs self.js basic <input.txt >output.txt\` will write the result of executing everything in \`input.txt\` (parsed with language \`basic\`) to \`output.txt\`.`,
+    future:`Test this.`,
     call() {
-      _test(finish.env = _newExecutionEnv(finish.env))
+      _test(finish.env = _newExecutionEnv())
       if (process.argv.length > 3) return console.log()
       const lang = process.argv[2] && parse.ctx.get(label(process.argv[2])) || fancy
-      elem(REPL, lang)
+      _langAt.lang = lang, _bindsAt.binds = parse.ctx
+      if (process.stdin.isTTY) // REPL for terminals.
+        elem(REPL, lang)
+      else { // Read+execute for files.
+        require('fs').readFile(process.stdin.fd, 'utf-8', (err, data) => {
+          if (err) throw err
+          const env = _newExecutionEnv()
+          _schedule(parse(data, lang), env, log)
+        })
+      }
     },
   },
 
@@ -1835,15 +1846,19 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
   _getOuterREPL(el) { return !el ? null : el.isREPL ? el : _getOuterREPL(el.parentNode) },
 
   _langAt(el) {
+    if (_langAt.lang) return _langAt.lang
     if (el === undefined) el = finish.env[_id(log)]
     el = _getOuterREPL(el)
     if (el && _isArray(el.to)) return el.to[2][0]
+    // .lang
   },
 
   _bindingsAt(el) {
+    if (_bindingsAt.binds) return _bindingsAt.binds
     if (el === undefined) el = finish.env[_id(log)]
     el = _getOuterREPL(el)
     if (el && _isArray(el.to)) return el.to[2][1]
+    // .binds
   },
 
   _invertBindingContext(ctx, clear = false) {
@@ -2047,6 +2062,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                 if (!name) do { name = '#' + n++ } while (binds.has(name))
                 if (!binds.has(name))
                   (binds = new Map(binds)).set(name, quote(result))
+                _bindsAt.binds = binds
   
                 then(null, _colored(name, 33) + ' = ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
               })
