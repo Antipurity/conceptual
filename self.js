@@ -961,7 +961,8 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         into.style.left = scrollX + innerWidth/2 + 'px'
         into.style.top = scrollY + innerHeight/2 + 'px'
         allowDragging(into)
-        document.documentElement.append(into)
+        const doc = document.documentElement
+        doc.attachShadow ? doc.attachShadow({mode:'closed'}).appendChild(into) : doc.append(into)
       }
       Self.into = into
 
@@ -7653,6 +7654,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       }
       write(`\nreturn Initialize.call(typeof self !== ''+void 0 ? self : typeof global !== ''+void 0 ? global : window, `), put(net)
       if (markLines) write(`, __line.lines`)
+      write(`, ${opt && opt.into || null}`)
       write(')')
       write(`\n})()`)
       return s.join('')
