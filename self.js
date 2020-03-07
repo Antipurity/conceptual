@@ -771,10 +771,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   Extension:{
     txt:`Not implemented.`,
-    future:[
-      `Have an action button, and inject a script with this js into null on click.`,
-      `Allow some flavor of clicking (Shift+click) to refer to the page's elements, like an array of a table row's contents, or an image, or text content.`,
-    ],
+    future:`Have an action button, and inject a script with this js into null on click.`,
     call() { throw "Being a browser extension not supported for now" },
   },
 
@@ -880,6 +877,7 @@ node.code {display:table; font-family:monospace}
 .editorContainer.editable.hover>:last-child[contenteditable] { box-shadow:none }
 prompt { width:2ch; color:red; float:left }
 prompt::before { content:'▶' /* > ⊱ ▶ */ }
+.editable>prompt::before { content:'⌨' }
 
 JobIndicator { width:1em; height:1em; margin:.2em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
 JobIndicator.yes { background-color:var(--highlight); animation: rotate 4s infinite linear, fadein .2s }
@@ -941,12 +939,25 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 .hover>time-report, time-report:hover { opacity:1; visibility:visible }
 
 .removed { margin:0 }`,
-    future:`If \`into\` is null, should make it a new draggable window with a close button.`,
     call(into = document.body) {
       Self.into = into
       into.classList.add('into')
       serialize.displayed = serialize.dom
       const passive = {passive:true}, passiveCapture = {passive:true, capture:true}
+
+      // If not inserting into a particular element, create a new close-able window for us.
+      if (into === null) {
+        into = elem('div')
+        const close = elem('button', '❌')
+        close.onclick = () => (delete finish.v, Deinitialize(), close.onclick = null)
+        into.append(close)
+        into.style.position = 'absolute'
+        into.style.left = scrollX + innerWidth/2 + 'px'
+        into.style.top = scrollY + innerHeight/2 + 'px'
+        allowDragging(into)
+        document.documentElement.append(into)
+      }
+      Self.into = into
 
       // Insert the style defined by code.
       const StyleElem = document.createElement('style')
@@ -967,10 +978,15 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       evalHash(location.hash)
       _listen('hashchange', () => evalHash(location.hash))
 
-      // On click, run \`(log (picker askUser (use (targetElem clientX clientY):'onclick')))\` daintily.
+      // On click, run `(log (picker askUser (use (targetElem clientX clientY):'clicked')))` (or typed as `clicked elsewhere`) daintily.
       _listen('click', evt => {
         finish.env = undefined
-        atCursor(daintyEvaluator([log, [picker, askUser, [use, [typed, [evt.target, evt.clientX, evt.clientY], 'onclick']]]]))
+        if (evt.shiftKey && !evt.ctrlKey && !evt.altKey && !Self.into.contains(evt.target)) {
+          // Shift+clicked outside of us.
+          atCursor(daintyEvaluator([log, [picker, askUser, [use, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked elsewhere']]]]))
+        } else if (!evt.shiftKey && !evt.ctrlKey && !evt.altKey && Self.into.contains(evt.target))
+          // Clicked inside of us.
+          atCursor(daintyEvaluator([log, [picker, askUser, [use, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked']]]]))
       }, passive)
 
       // Select the <node> under cursor on triple-click.
@@ -1202,7 +1218,9 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
   NodeJS:{
     txt:`This should work. Presents a console REPL with outputs labeled sequentially.`,
     future:[
+      `Move NodeJS's REPL stuff to \`(elem REPL …?)\`.`,
       `If input is redirected from a file, parse+execute it then exit. If output is redirected to a file, make sure that we log to there (without coloring).`,
+      `Allow specifying the language as a cmd-line arg.`,
     ],
     call() {
       let ctx = parse.ctx, env = finish.env = _newExecutionEnv(finish.env)
@@ -1433,7 +1451,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
     call(el) {
       impure()
       const pre = _smoothHeightPre(el)
-      el.style.position = 'relative'
+      el.style.position = 'relative' // So that .offsetLeft/Top refer to the same thing as position:absolute.
       const x = el.offsetLeft, y = el.offsetTop
       el.style.removeProperty('position'), _clearStyle(el)
       const menu = elem('div')
@@ -7871,7 +7889,8 @@ The correctness of quining of functions can be tested by checking that the rewri
         if (!refCount.get(expr) || phantomRefs.has(expr) && !phantomRefs.get(expr) || name !== names.get(expr)) {
           comments && (jumped ? (write(`// Dispose ${name}\n`), jumped = true) : write(`// Dispose ${name}\n`))
           if (phantomRefs.has(expr) && !phantomRefs.get(expr))
-            name === names.get(expr) && phantomRefs.delete(expr)
+            name === names.get(expr) && phantomRefs.delete(expr),
+            !refCount.get(expr) && error("Invalid phantom-refs allocation (too much)")
           else
             name === names.get(expr) && (names.delete(expr), exprs.delete(name)),
             name === names.get(expr) && refCount.delete(expr)
@@ -8870,7 +8889,7 @@ For anything else, display the globals the expression binds to, and an expandabl
       get:__is(`get`),
     },
     philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
-All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. But that is not at all the regular programming style. Very alien to me. Can an old dog be taught new tricks?`,
+All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. Programming languages must be described in an understandable and searchable and optimizable format, not given one measly implementation of. But that is not at all the regular programming style. Very alien to me. Can an old dog be taught new tricks?`,
   },
 
   types:{
@@ -9488,6 +9507,7 @@ Use \`picker\` to override behavior.`,
     philosophy:`Intended to be a target for future developments in structural learning, so that choices can be improved.`,
     future:`Index-based per-cause choice optimization (a base that could optimize more advanced optimizer families):
 \`pick.best Result→Measure Expr\`, blending estimated-measures of all choices made during evaluation into Measure.
+    (Wouldn't we like to store that measure in the decision procedure, and have all those pickers alter the decision procedures? But how to make that both efficient, and not step on each other? If we make these things claim unclaimed causes, wouldn't they interfere massively?)
 \`pick.sample Result→ProbabilityAdjustment Expr\`, adding probability to all.
 \`best Metric Expr Repeats=2\`, \`journal\`ing everything and commiting the best.
 "Freeze all all choices but one, which is changed every 50 ms". (A generative function family would be a more complete solution here.)`,
