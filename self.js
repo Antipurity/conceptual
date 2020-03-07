@@ -1219,12 +1219,12 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
     txt:`This should work. Presents a console REPL with outputs labeled sequentially.`,
     future:[
       `If input is redirected from a file, parse+execute it then exit. If output is redirected to a file, make sure that we log to there (without coloring).`,
-      `Allow specifying the language as a cmd-line arg.`,
     ],
     call() {
-      let ctx = parse.ctx, env = finish.env = _newExecutionEnv(finish.env)
-      _test(env)
-      elem(REPL)
+      _test(finish.env = _newExecutionEnv(finish.env))
+      if (process.argv.length > 3) return console.log()
+      const lang = process.argv[2] && parse.ctx.get(label(process.argv[2])) || fancy
+      elem(REPL, lang)
     },
   },
 
@@ -2012,6 +2012,8 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       if (!(binds instanceof Map)) throw "Invalid binding context"
       impure()
 
+      const env = _newExecutionEnv(finish.env)
+
       if (typeof document == ''+void 0) { // NodeJS
         // Use the `repl` module to display colored prompts and command inputs/outputs.
         const msg = defines(lang, REPL)
@@ -2038,7 +2040,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                 out.clearScreenDown()
                 out.write(coloredPrompt + serialize(expr, fancy, undefined, {...opt, offset:(promps.length+1)>>>1}) + '\n')
               }
-              _schedule(expr, env, result => {
+              _schedule(expr, _newExecutionEnv(env), result => {
                 // If binds contain result in values, set name to that; if not, create a new one.
                 let name
                 binds.forEach((v,k) => v === result && (name = k))
@@ -2067,8 +2069,6 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         return
       }
       // Else Browser
-
-      const env = _newExecutionEnv(finish.env)
 
       const repl = elem('node')
       repl.isREPL = true
