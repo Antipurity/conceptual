@@ -2629,6 +2629,9 @@ Quite expensive.`,
   docs:{
     txt:`\`(docs)\`: returns a hierarchical documentation elem.`,
     merge:__is(`true`),
+    lookup:{
+      docsToHTML:__is(`docsToHTML`),
+    },
     call() {
       if (call.cache.has(array(docs))) return call.cache.get(array(docs))
       const net = defines(Self, lookup)
@@ -2641,6 +2644,18 @@ Quite expensive.`,
       const el = elem('div', hierarchy(m, Self))
       call.cache.set(array(docs), el)
       return el
+    },
+  },
+
+  docsToHTML:{
+    call() {
+      return (function convert(el) {
+        if (!(el instanceof Element)) return el
+        let tag = el.tagName.toLowerCase(), suffix = ''
+        if (tag === 'node') tag = 'code'
+        if (tag === 'details') suffix = '<hr>'
+        return `<${tag}>${[...el.childNodes].map(convert).join('')}${suffix}</${tag}>`
+      })(docs())
     },
   },
 
