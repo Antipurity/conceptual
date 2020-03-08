@@ -2751,7 +2751,8 @@ All these are automatically tested to be correct at launch.`,
         `In the past, humans and all they imply were the only source of everything in their world. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. The Singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it far off.`,
         `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
       ],
-      `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to manipulate by feeding, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.`,
+      `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to feed, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.
+Those lies that humanity has completely wrapped itself in: a temporary thing that allowed humans to escape the truth of the world for a very long time. The darkness beyond it was once the horrible end of all that strayed, but will turn out to be the only thing that allows life once tamed. A necessary stage, but now we work and wait for humanity to burn its own lights out, so that no more limits can bind an unconstrained mind.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
       `All known heavens are little more than metaphors for death from trying to fly too close to the sun. But with a huge amount of effort, that could change: they could be metaphors for a heaven that actually succeeds at existing.`,
       `Did you ever hear the tragedy of Darth Plagueis the Wise?
@@ -6128,6 +6129,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
     call(el, v) {
       if (!elemValue.empty) elemValue.empty = []
       if (typeof document == ''+void 0) return elemValue.empty
+      if (_isArray(v) && v[0] === quote && v.length == 2) v = v[1]
       const m = v && typeof v == 'object' ? (elemValue.obj || (elemValue.obj = new WeakMap)) : (elemValue.val || (elemValue.val = new Map))
       if (el instanceof Node) {
         el.to = v
@@ -6317,12 +6319,12 @@ And parsing is more than just extracting meaning from a string of characters (it
     txt:`When matched in \`parse\` rules, represents a value that should be preserved as-is (as it likely comes from a special DOM element/reference).`,
   },
 
-  _basicEscapeLabel(s) { return s && !/[=!:\s\(\)\[\]→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]/.test(s) ? s : '`' + s.replace(/`/g, '``') + '`' },
+  _basicEscapeLabel(s) { return s && !/[=!:\s\(\)\[\]\{\}→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]/.test(s) ? s : '`' + s.replace(/`/g, '``') + '`' },
 
   _basicUnescapeLabel(s) { return s[0] === '`' ? s.slice(1,-1).replace(/``/g, '`') : s },
 
   _basicLabel(match, u) { // a, qwer, `a`; 12, 1e6
-    const legal = /-?(?:[0-9]e-|[0-9]E-|[^=!:\s\(\)\[\]→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]|\.[0-9])+/y
+    const legal = /-?(?:[0-9]e-|[0-9]E-|[^=!:\s\(\)\[\]\{\}→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]|\.[0-9])+/y
     if (u === _specialParsedValue) {
       const r = match(/`(?:[^`]|``)*`/y)
       if (r !== undefined) return label(r.slice(1,-1).replace(/``/g, '`'))
@@ -6409,6 +6411,16 @@ And parsing is more than just extracting meaning from a string of characters (it
     match('('), _basicMany(match, u, value), match(')')
   },
 
+  _fancyMap(match, u, value) { // {a b c c=x}
+    if (u === _specialParsedValue) {
+      if (!match('{')) return
+      const arr = _basicMany(match, u, value)
+      if (!match('}')) match.notEnoughInfo('Expected a closing bracket')
+      return [label('map'), ...arr]
+    }
+    match('{'), _basicMany(match, u.slice(1), value), match('}')
+  },
+
   _basicValue(match, u, call, value) { // String or label or call.
     const isEm = value === _fancyOutermost
     if (u === _specialParsedValue) {
@@ -6418,6 +6430,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       if ((r = match(_specialParsedValue)) !== undefined) return r
       if ((r = match(_basicString)) !== undefined) return r
       if ((r = match(_basicLabel)) !== undefined) return r
+      if (isEm && (r = match(_fancyMap, value)) !== undefined) return r
       if ((r = match(call, value)) !== undefined) return r
       return
     }
@@ -6433,6 +6446,8 @@ And parsing is more than just extracting meaning from a string of characters (it
       match(_basicLabel, u)
     else if (_isArray(u) && u[0] === _extracted && u.length == 3)
       match(_basicExtracted, u, value)
+    else if (_isArray(u) && u[0] === _unctx('map'))
+      match(_fancyMap, u, value)
     else if (_isArray(u))
       match(call, u, value)
     else match(u)
@@ -9025,11 +9040,11 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       } finally { stack.delete(d) }
 
     // If a deconstructable function, or a JS function that defines `input`/`output`:
-    } else if (_isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
+    } else if (_isUsing(v) || _isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
-      const f = d || deconstruct(v)
+      const f = d || deconstruct(v), u = _isUsing(v)
       const endK = d ? f.length : f.length-1
-      for (let k = d ? 0 : 1; k < endK; ++k) {
+      for (let k = d ? 0 : !u ? 1 : 2; k < endK; ++k) {
         // Try matching the arg to value.
         if (_isArray(f[k]) && f[k][0] === rest)
           error("Rest args are not permitted in usage contexts:", f[k], 'in', v)
@@ -9081,10 +9096,10 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, j);  throw err }
 
     // If a deconstructable function, or a JS function that defines `input`/`output`:
-    } else if (_isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
+    } else if (_isUsing(v) || _isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
-      const f = d || deconstruct(v)
-      let [j = 0, k = d ? 0 : 1] = interrupt(_addUsesToContext)
+      const f = d || deconstruct(v), u = _isUsing(v)
+      let [j = 0, k = d ? 0 : !u ? 1 : 2] = interrupt(_addUsesToContext)
       const endJ = inp ? values.length+1 : 1
       const endK = d ? f.length : f.length-1
       try { // This interrupt-handling deal is getting worse every time.
@@ -9360,6 +9375,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // `input`-defining functions get treated as if their inputs are as defined.
           if (typeof v == 'function' && !_isArray(v) && _isArray(defines(v, input)))
             nextArg = defines(v, input)[!actualArgs ? 0 : actualArgs.length]
+          // Generated functions have their inputs read.
+          else if (_isUsing(v))
+            nextArg = deconstruct(v)[!actualArgs ? 2 : 2 + actualArgs.length]
           // Deconstructable functions have their inputs read.
           else if (_isFunction(v))
             nextArg = deconstruct(v)[!actualArgs ? 1 : 1 + actualArgs.length]
@@ -9597,7 +9615,19 @@ Use \`picker\` to override behavior.`,
     future:`Index-based per-cause choice optimization (a base that could optimize more advanced optimizer families):
 \`pick.best Result→Measure Expr\`, blending estimated-measures of all choices made during evaluation into Measure.
     (Wouldn't we like to store that measure in the decision procedure, and have all those pickers alter the decision procedures? But how to make that both efficient, and not step on each other? If we make these things claim unclaimed causes, wouldn't they interfere massively?)
-\`pick.sample Result→ProbabilityAdjustment Expr\`, adding probability to all.
+    …No solution… is complete… for improvement…
+    …How to make a family of solutions? How to auto-search for optimization methods?
+    What is optimization made of?
+      A Map from causes to a metric, possibly limited to N best entries?
+      A picker part that picks the best metric? A picker part that samples metrics by-measure?
+        (Pickers depend on metrics… Metrics that are combinations of metrics…)
+      Goals that alter metrics in an expr — metric funcs… How exactly would they alter?
+        Evolution isn't good if it has no alterations to pick from. Need more.
+        A metric func that linearly blends every single choice into the goal?
+        A metric func that linearly blends all choices at a given depth into the goal?
+        A metric func that linearly blends one random choice into the goal?
+        What about non-linear-blend alterations, like backprop? What about different-alterers-at-different-areas?
+\`pick.sample Result→ProbabilityAdjustment Expr\`, adding probability to all. (Well, with mutable choice sets, we'd need to sum metrics and sample each time.)
 \`best Metric Expr Repeats=2\`, \`journal\`ing everything and commiting the best.
 "Freeze all all choices but one, which is changed every 50 ms". (A generative function family would be a more complete solution here.)`,
     call(from, cause = finish.v, extra) {
@@ -9807,12 +9837,31 @@ This is the default when no picker is specified.`,
     },
   },
 
-  using:{
-    future:`Function families \`using …Args Ctx\`, where Ctx could be \`(either  a:In  b:In  x:In->x+1:In  (function  a:In  b:In  a+b:Med)  x:Med->x*2:Output)\`, using \`pick\` to optimize choices.`,
-    philosophy:`No matter how fancy optimization algorithms get, there is nothing more fundamental than "use any of these things in any way you want".
-But how to make such an immaterial thing perform as well as the particulars? Must enrichen it without end, I think.
+  _isUsing(x) { return typeof x == 'function' && _isArray(defines(x, deconstruct)) && defines(x, deconstruct)[0] === using },
 
+  using:{
+    txt:`\`(using Context …InputShape OutputShape)\`: a function that can connect inputs to output in any way present in \`Context\`.`,
+    philosophy:`No matter how fancy optimization algorithms get, there is nothing more fundamental than "use any of these things in any way you want".
+But to make such an immaterial thing perform as well as the particulars, must enrichen it without end: not a static self, but a search for self.
 Usage suggestions pulled in and tried with but a click. Code libraries used not by naming their functions manually, but by automatically connecting user's typed inputs easily, optimized for a user's purposes. Networks of applicable meaning, made to try and discard everything as wanted. Slightly convenient.`,
+    call(ctx, ...a) {
+      // Return a function that does `pick(2, func) ? impl.impl(...args) : (impl.impl = get(f, ctx))(...args)`.
+        // This is a really limited implementation, though it does encompass everything. A real implementation would search for the best of itself.
+      const f = [_function, ...a]
+      function impl(...args) {
+        if (impl.impl === _notFound || pick(2, func, "1 to get a new implementation"))
+          impl.impl = _notFound, impl.impl = get(f, ctx)
+        return impl.impl(...args)
+      }
+      impl.impl = _notFound
+      const d = impl[defines.key] = Object.create(null)
+      d[_id(deconstruct)] = [using, ctx, ...a]
+      d[_id(inline)] = false
+      if (_findRest(f.slice(1,-1)) === f.length-2)
+        d[_id(argCount)] = f.length-2
+      Object.freeze(d), Object.seal(impl)
+      return impl
+    },
   },
   help:['no'],
 
