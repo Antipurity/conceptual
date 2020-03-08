@@ -16,6 +16,8 @@ function __base(net) {
   preload(net, globals)
   load(net, globals, true)
   Object.keys(net).forEach(k => k && +k === +k && delete net[k])
+  if (net.interrupt) net.interrupt.noInterrupt = false
+  if (net.finish) delete net.finish.v
 
   return Initialize.call(globals, net, typeof __line != ''+void 0 ? __line.lines : undefined)
 
@@ -27,24 +29,26 @@ function __base(net) {
     // Pre-create objects/functions to be filled by `load`, so that arbitrary order of definitions is permitted.
     Object.keys(from).forEach(k => {
       if (from[k] instanceof Map) {
-        into[k] = new Map
+        if (into[k] === undefined) into[k] = new Map
         return
       } else if (from[k] && Object.getPrototypeOf(from[k]) === Object.prototype) {
         if (into[k] === undefined) into[k] = objectFor(from[k])
         if (typeof into[k] == 'function') into[k].displayName = k
         return
       } else if (Array.isArray(from[k])) {
-        if (into[k] === undefined) into[k] = []
+        if (into[k] === undefined && +k !== +k) into[k] = []
         return
       }
-      if (into[k] !== from[k]) into[k] = from[k]
+      if (into[k] !== from[k] && +k !== +k) into[k] = from[k]
     })
     if (from.defines) into.defines.key = defKey
     if (from._read) into._read.marks = new Map
+    if (from.finish && from._newExecutionEnv) into.finish.env = _newExecutionEnv()
+    if (from.interrupt) into.interrupt.noInterrupt = true
     Object.keys(from).forEach(k => {
       if (from[k] && Object.getPrototypeOf(from[k]) === __is) {
         if (Array.isArray(from[k].is)) { // Evaluate arrays.
-          const m = from[k].is.map(load)
+          const m = from[k].is.map(x => load(x))
           defines(m[0], finish) && (m[0] = defines(m[0], finish))
           return from[k] = into[k] = m[0].call(...m)
         }
@@ -60,7 +64,7 @@ function __base(net) {
     if (env.has(from)) return env.get(from)
     if (from && Object.getPrototypeOf(from) === __is) {
       // Look up symbols in the network.
-      if (Array.isArray(from.is)) return from = from.is.map(load), defines(from[0], finish) && (from[0] = defines(from[0], finish)), from[0].call(...from)
+      if (Array.isArray(from.is)) return from = from.is.map(x => load(x)), defines(from[0], finish) && (from[0] = defines(from[0], finish)), from[0].call(...from)
       else if (!(from.is in net)) throw new Error("Not a link to an existing thing: "+from.is)
       else return load(net[from.is], globals[from.is])
     }
@@ -86,7 +90,7 @@ function __base(net) {
         }
         return d && (into[defKey] = into !== Self ? Object.freeze(d) : d), into
       } else {
-        for (let k of Object.keys(from)) {
+        for (let k of Object.keys(from)) if (+k !== +k) {
           const loaded = load(from[k], into[k])
           if (loaded !== into[k]) into[k] = loaded
           from[k] = into[k]
@@ -397,6 +401,7 @@ Label-binding environment is not preserved.`,
       `Global immediately-freeing memory management (for resources that are quite expensive and/or should really be released): ref-counting (with shared ref-counters for cycles) of objects with \`dispose\`.`,
     ],
     lookup:__is(`undefined`),
+    philosophy:`An old painting of deceit and rot.`,
   },
 
   scope:{
@@ -1045,9 +1050,8 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       _listen('pointercancel', cancelContextMenu, passiveCapture)
 
       // Close not-containing-target <context-menu>s on a click elsewhere.
-      const closeMenus = evt => !_isEditable(evt.target) && [...document.querySelectorAll('context-menu')].filter(el => !el.contains(evt.target)).forEach(elemRemove)
       const closeMenus = evt => {
-        if (_isEditable(evt.target)) return
+        if (_isEditable(evt.target) || !atCursor.opened) return
         const bad = atCursor.opened.filter(el => !el.contains(evt.target))
         atCursor.opened = atCursor.opened.filter(el => el.contains(evt.target))
         bad.forEach(elemRemove)
@@ -3001,7 +3005,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     else if (_highlightOriginal(env[_id(_checkInterrupt)], false), _isDeferred(v)) // Make promises know we're here.
       _deferredResult(v, env, then, ID)
     else // We have our result.
-      Promise.resolve(v).then(then)
+      try { then(v) } catch (err) { console.error(err) }
   },
 
   _jobs:{
@@ -6150,12 +6154,13 @@ In theory, having symmetric parse+serialize allows updating the language of writ
   _revisitElemValue(el) {
     // Garbage-collects unneeded DOM elements.
     // After replacing elemValue.obj (WeakMap) and elemValue.val (Map) with clean versions, call this on Self.into.
-    _checkInterrupt(_revisitElemValue)
     let [ch] = interrupt(_revisitElemValue)
     try {
+      _checkInterrupt(_revisitElemValue)
       if (ch === undefined && el instanceof Node && 'to' in el)
         elemValue(el, el.to)
-      for (ch = el.firstChild; ch; ch = ch.nextSibling)
+      if (ch === undefined) ch = el.firstChild
+      for (; ch; ch = ch.nextSibling)
         _revisitElemValue(ch)
     } catch (err) { if (err === interrupt) interrupt(_revisitElemValue, 1)(ch);  throw err }
   },
@@ -7080,6 +7085,7 @@ Does not merge the parsed arrays.`,
   _checkInterrupt:{
     txt:`Checks whether an interrupt is appropriate right now.`,
     call(cause) {
+      if (interrupt.noInterrupt) return
       if (!finish.env[_id(interrupt)] || !finish.env[_id(interrupt)].length) {
         // If we stepped before (ensuring progress), and either we have worked for 10 ms or the nesting depth is as wanted by _pausedToStepper, interrupt.
         if (!_checkInterrupt.stepped) _checkInterrupt.stepped = true
@@ -7213,6 +7219,8 @@ Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2
       finish.env[_id(interrupt)].push(cause)
 
       return interrupt.populate
+
+      // .noInterrupt
     },
   },
 
@@ -7533,8 +7541,10 @@ The correctness of quining of functions can be tested by checking that the rewri
         preload(net, globals)
         load(net, globals, true)
         Object.keys(net).forEach(k => k && +k === +k && delete net[k])
+        if (net.interrupt) net.interrupt.noInterrupt = false
+        if (net.finish) delete net.finish.v
 
-        return Initialize.call(globals, net, typeof __line != ''+void 0 ? __line.lines : undefined, __INTO__)
+        return Initialize.call(globals, net, typeof __line != ''+void 0 ? __line.lines : undefined)
 
         function objectFor(x) {
           // Load {call(){}} into a trivially-callable function, as a notational convenience.
@@ -7544,24 +7554,26 @@ The correctness of quining of functions can be tested by checking that the rewri
           // Pre-create objects/functions to be filled by `load`, so that arbitrary order of definitions is permitted.
           Object.keys(from).forEach(k => {
             if (from[k] instanceof Map) {
-              into[k] = new Map
+              if (into[k] === undefined) into[k] = new Map
               return
             } else if (from[k] && Object.getPrototypeOf(from[k]) === Object.prototype) {
               if (into[k] === undefined) into[k] = objectFor(from[k])
               if (typeof into[k] == 'function') into[k].displayName = k
               return
             } else if (Array.isArray(from[k])) {
-              if (into[k] === undefined) into[k] = []
+              if (into[k] === undefined && +k !== +k) into[k] = []
               return
             }
-            if (into[k] !== from[k]) into[k] = from[k]
+            if (into[k] !== from[k] && +k !== +k) into[k] = from[k]
           })
           if (from.defines) into.defines.key = defKey
           if (from._read) into._read.marks = new Map
+          if (from.finish && from._newExecutionEnv) into.finish.env = _newExecutionEnv()
+          if (from.interrupt) into.interrupt.noInterrupt = true
           Object.keys(from).forEach(k => {
             if (from[k] && Object.getPrototypeOf(from[k]) === __is) {
               if (Array.isArray(from[k].is)) { // Evaluate arrays.
-                const m = from[k].is.map(load)
+                const m = from[k].is.map(x => load(x))
                 defines(m[0], finish) && (m[0] = defines(m[0], finish))
                 return from[k] = into[k] = m[0].call(...m)
               }
@@ -7577,7 +7589,7 @@ The correctness of quining of functions can be tested by checking that the rewri
           if (env.has(from)) return env.get(from)
           if (from && Object.getPrototypeOf(from) === __is) {
             // Look up symbols in the network.
-            if (Array.isArray(from.is)) return from = from.is.map(load), defines(from[0], finish) && (from[0] = defines(from[0], finish)), from[0].call(...from)
+            if (Array.isArray(from.is)) return from = from.is.map(x => load(x)), defines(from[0], finish) && (from[0] = defines(from[0], finish)), from[0].call(...from)
             else if (!(from.is in net)) throw new Error("Not a link to an existing thing: "+from.is)
             else return load(net[from.is], globals[from.is])
           }
@@ -7603,7 +7615,7 @@ The correctness of quining of functions can be tested by checking that the rewri
               }
               return d && (into[defKey] = into !== Self ? Object.freeze(d) : d), into
             } else {
-              for (let k of Object.keys(from)) {
+              for (let k of Object.keys(from)) if (+k !== +k) {
                 const loaded = load(from[k], into[k])
                 if (loaded !== into[k]) into[k] = loaded
                 from[k] = into[k]
@@ -7929,7 +7941,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         if (needCleanLabelEnv) write(`,LE=null`)
         write(`; throw err}`)
         if (needCleanLabelEnv)
-          write(`finally{LE!==null&&(LE.delete(${body}),${outside(_allocMap)}(LE)),${outside(finish)}.env[${outside(_id(label))}]=PE}`)
+          write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)}(LE)),${outside(finish)}.env[${outside(_id(label))}]=PE}`)
       }
       if (nextStage === 1) s[stageBackpatch] = '\n'
 
@@ -8388,7 +8400,6 @@ The correctness of quining of functions can be tested by checking that the rewri
     },
   },
 
-  _reclaimUnknown(v) { if (_isUnknown(v)) _allocArray(v) },
 
   _allocMap:{
     txt:`_allocMap()⇒Map as a replacement for \`new Map\` and _allocMap(Map) to re-use objects.`,
@@ -8396,7 +8407,8 @@ The correctness of quining of functions can be tested by checking that the rewri
       if (!_allocMap.free) _allocMap.free = []
       if (!a) return _allocMap.free.length ? _allocMap.free.pop() : new Map
       if (!(a instanceof Map)) throw "Expected undefined or a Map"
-      a.forEach(_reclaimUnknown)
+      // a.forEach(_reclaimUnknown)
+  // _reclaimUnknown(v) { if (_isUnknown(v)) _allocArray(v) },
       a.clear()
       _allocMap.free.push(a)
     },
@@ -9315,16 +9327,16 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   },
 
   _functionComposer(shape) {
-    const d = deconstruct(shape)
+    const dec = deconstruct(shape)
     function impl(body) {
       const L = _id(label)
       const [LE = _allocMap()] = interrupt(impl)
       const PE = finish.env[L];  finish.env[L] = LE
       const prevInferred = _assign.inferred;  _assign.inferred = null
       try {
-        assign(d[d.length-1], body)
+        assign(dec[dec.length-1], body)
         if (_assign.inferred) throw 'Wait, that\'s illegal'
-        return defines(_function, finish).call(_function, ...bound(labelEnv, d.slice(1,-1)), body)
+        return defines(_function, finish).call(_function, ...bound(labelEnv, dec.slice(1,-1)), body)
           // This re-partially-evaluates `body` though.
       } catch (err) { if (err === interrupt) interrupt(impl, 1)(LE), LE = null;  throw err }
       finally { LE !== null && _allocMap(LE), finish.env[L] = PE, _assign.inferred = prevInferred }
@@ -9463,7 +9475,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
             const i = pick(values, us, 'The graph node to search next') // No one needs to know about all the nodes's extra stuff. Probably. …For now.
             if (i !== i>>>0) error('Expected an index, got', i)
             node = nodes[i]
-            ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], arr.pop()
+            ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], nodes.pop()
             ;[values[values.length-1], values[i+1]] = [values[i+1], values[values.length-1]], values.pop()
           }
           _checkInterrupt()
