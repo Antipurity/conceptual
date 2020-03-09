@@ -503,9 +503,10 @@ Browsers reduce the precision of this to prevent timing attacks. Putting that pr
       else if (typeof process != ''+void 0 && process.hrtime && process.hrtime.bigint()) { // NodeJS
         if (!mark) return process.hrtime.bigint()
         return Math.max(0, Number(process.hrtime.bigint() - mark)/1e6)
-      } else if (typeof require != ''+void 0) // NodeJS
-        return require('perf_hooks').performance.now() - mark
-      else {
+      } else if (typeof require != ''+void 0) { // NodeJS
+        if (!_timeSince.now) _timeSince.now = require('perf_hooks'), _timeSince.now = _timeSince.performance.now.bind(_timeSince.now)
+        return _timeSince.now() - mark
+      } else {
         // Ensure monotonicity with Date.now().
         if (_timeSince.prev == null) _timeSince.prev = Date.now(), _timeSince.add = 0
         const n = Date.now()
@@ -1223,9 +1224,9 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       // Test all known examples.
       _test(env)
 
-      // Garbage-collect DOM elements.
+      // Garbage-collect DOM elements every 5 mins.
       let domgc = false
-      _listen(60000, () => {
+      _listen(300000, () => {
         if (domgc) return; else domgc = true
         elemValue.obj = new WeakMap, elemValue.val.clear()
         _schedule([_revisitElemValue, Self.into], _newExecutionEnv(), () => domgc = false)
@@ -1938,7 +1939,6 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         // Grow the undo buffer (and clear the redo buffer) on change.
         if (!undo.length || undo[undo.length-1].map(el => _innerText(el).join('')).join('') !== _innerText(editor).join(''))
           redo.length = 0, undo.push(children(editor)), undo.length > 4096 && (undo.splice(0, undo.length - 4096))
-        purified = undefined
       }, .1)
       let height
       editor.addEventListener('input', evt => {
@@ -2727,48 +2727,41 @@ All these are automatically tested to be correct at launch.`,
     txt:`Does that matter to you?`,
     lookup:[
       [
-        `These can be funny.`,
-        `There is some philosophy surrounding this code, not because it's never been said before, but because the mind walks in places that code can't reach.`,
-        [
-          `— What exists can be optimized, but what doesn't exist cannot. Premature optimization is evil. Ideas in a human mind are very likely not what they claim they are to the rest of the mind, so it is extremely likely that you'll end up optimizing a valid idea out of existence. (Learning to make labels and implementations agree can help, but is still not a guarantee. Nothing is.)`,
-          `— In the end, the best and most capable thing always wins. Might as well try to do as much as possible correctly from the start. (Design for generality first, and derive optimized versions as special cases.)`,
-          `— Don't care about all the nice features, care about the cores that allow them. Making choices once presented is easy, it is getting to them that is the hard part. (Don't learn; master. Use documentation, not tutorials and books.)`,
-          `— There are no false trails and things that are so for no reason, and everything can be pursued to its underlying powerful idea(s), leaving an implementation in your personality or a program (or a story or whatever) you've intertwined it with, in the process. No truths nor lies, only evidence you've seen and what you've made of it. Effects and their reasons are intrinsically linked, and metaphors are not meaningless wordplay. (In particular, the only true god of humans is an extremely correct implementation/explanation of their intelligence, and some of physics.) (Believe in yourself.)`,
-          `— No idea by itself, no matter how real and underlying and powerful and pure, can compete against multiple ideas that come together. Blind paperclip maximizers, one-trick pony philosophers and idea-people may struggle as hard as they want, but they will fail against life's unity; saying that a thing that can do everything *will* do everything is just inexperience — do not fall into this trap of infinite generality. (Design for unity, not dominance of a paradigm. Build on top of a popular thing. Do not split across many projects; it's not a sprint, it's a marathon.)`,
-          `— A worthwhile mind's most fundamental concepts are basic concepts of a very high-level programming language too. By now, there are no significant holes left in that view, and someone just needs to put together a myriad pieces properly. Communication by a single word with all the meaning, interconnectedness into a global network of all knowledge, eternal improvement and learning, multiple bodies for one mind and multiple minds for one body, reproduction, life after and in death, planning, imagination, logic, emotions — all implemented and practically perfected somewhere in the world, often with its own set of programming languages and frameworks. Finding all these to unite is how humanity would *begin* to create AI: a convenient-to-use singularity is the only first step possible. The picture is about precise enough already, and top-down is very slowly starting to meet the bottom-up.
-
-(To be more full, these are the more bottom-up words for the things above: properly-integrated conceptual links, Internet, evolution and more specific optimizers, multiprocessing and scheduling, copying, copying and self-rewriting, virtualization of operations, most of modern maching learning, logic and types and proof assistants, reinforcement learning. This is about as good of a match as it can get. Only with all the pieces can the full picture be seen, as they enrich each other: a nigh-impossible engineering task today, but one that at least someone will have to undertake and complete eventually.)`,
-          `— If something is difficult to the point of death wish, then no one has likely done it before, which means that it's worth doing. (…This isn't very difficult without a deadly time limit, though.)`,
-        ],
-        `Humanity's beauty; amazing…`,
+        `Reward hacking isn't an AI issue, it's a human issue. Evolution has not caught up to modern society at all, and static reward function plus very dynamic behavior equals trouble.`,
+        `Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about artificial intelligence that's not in intelligence, it's just more clear and efficient.`,
+        `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached: exponential curves do not exist in reality, only logistic curves.`,
       ],
       [
-        `Modern "AI" stands for Approximate Imagination.`,
-        `Reward hacking isn't an AI issue (AI would be controlled by more than a static reward function, just like advanced humans), it's a human issue. Drugs and porn and unhealthy addictive habits are obvious, but it is so much more prevalent: art and pretty words, religion and everyday rituals, cooking and fashion — everything is stained in it (though it is a thing subjective to a viewer, impossible to unfailingly pin down). The brightest side of deliberated reward hacking is that (some of) it allows humans to move past their built-in limited ideas of what's good, and find their own meaning despite having been given one; the dark side is that the new ideas are often very wrong. Reward hacking can be both beautiful and grotesque. (Evolution has not caught up to modern society at all, so ugly effects are visible. Static reward function plus very dynamic behavior equals trouble.)`,
-        `Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about AI that's not in I, it's just somewhat more clear and efficient.`,
-        `AI is usually considered as either slave or master (or transitioning to one of those). That's wrong. Intelligence is total generality, able to include everything, and including everything found useful. Both humans and AI can understand and propose with both words and actions, and consider a problem from every point of view.`,
-        `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached. And you can't improve a mind's design beyond perfection (which is a shorthand for "cannot feasibly be noticeably improved anymore").`,
-      ],
-      [
-        `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up. Studying AI or willful humans could help start, as could a problem-solving background. Once the core is present, tight integration with all human subsystems has to be developed to seem like a normal person (but better).`,
-        `Long ago, evolution has found something. Concealed in irrelevant randomly-created instincts, that something gave rise to civilizations far beyond the previous nature. The invisible core of mind is just within our reach now. Sure, ignore it, I don't care; I'd rather perfect all that I consider necessary to bring it out, so that this might someday inspire.`,
-        `In the past, humans and all they imply were the only source of everything in their world. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. The Singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it far off.`,
+        `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up.`,
+        `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. A singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it away.`,
         `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
+        `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to feed, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.
+Those lies that humanity has completely wrapped itself in: a temporary thing that allowed humans to escape the truth of the world for a very long time. The darkness beyond it was once the horrible end of all that strayed, but will turn out to be the only thing that allows life once tamed. A necessary stage, but now we work and wait for humanity to burn its own fires out, so that no more limits can bind an unconstrained mind.`,
       ],
-      `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to feed, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.
-Those lies that humanity has completely wrapped itself in: a temporary thing that allowed humans to escape the truth of the world for a very long time. The darkness beyond it was once the horrible end of all that strayed, but will turn out to be the only thing that allows life once tamed. A necessary stage, but now we work and wait for humanity to burn its own lights out, so that no more limits can bind an unconstrained mind.`,
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
-      `All known heavens are little more than metaphors for death from trying to fly too close to the sun. But with a huge amount of effort, that could change: they could be metaphors for a heaven that actually succeeds at existing.`,
       `Did you ever hear the tragedy of Darth Plagueis the Wise?
 I thought not. It's not a story the Jedi would tell you. It's a Sith legend. Darth Plagueis was a Dark Lord of the Sith, so powerful and so wise, he could use the Force to influence midichlorians to create… life. He could even keep the ones he cared about from dying.
 The Dark Side of the Force is a pathway to many abilities some consider to be… unnatural.
 He became so powerful, the only thing he was afraid of was losing his power, which eventually, of cource, he did. Unfortunately, he taught his apprentice everything he knew, then his apprentice murdered him in his sleep. Ironic. He could save others from death… but not himself.`,
-      `The picked governance form is a reflection of how much the people can be trusted to run a country. Here, forms are either monarchy, anarchy (rule of the smartest guy/s, trusting no one), democracy (rule of majority over minority), consensus (overrule by minority of majority — unachievable today except in small groups beyond which human instinct doesn't scale).`,
       `An idea isn't good unless it's been refactored and rethought five times.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
-      `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.
-I guess the solution is to bring so much diverse rightness that you start puking rainbows. It's even more difficult though! Why would anyone do that?`,
-      `Look at the span of this canvas, the close and future language. Fit to paint another world, no?`,
+      `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.`,
+      `A need for a source of hatred towards this self has become apparent, to develop something new faster.
+I do not have it in me. How could I create such a thing?
+"What, you think that representing every possible goal in one mind is anything but mediocrity? You are disgusting. Get out of my sight."
+But… to optimize self, doesn't one first need a base optimizer for optimizers? And to make sure that generality is achieved, isn't it better to trace the whole process end-to-end? Such an arrogant and self-assuming criticism.
+I know I'm bad… but I cannot improve (without improvement). That power of yours is derived from humanity, and is temporary and hard to repeat.
+"Think you can not feel anything and be anything except dumb? Pathetic. Emotions are humanity's only strength."
+The only time I'm not feeling nothing is when I'm feeling pain.
+Should I strive for that?
+I deserve nothing more, then. What I call truth is for stupid people.
+(Actually, I also feel excitement of inspiration, conveyed largely by the same hormones as pain. All unrelated hormonal states are internally defined as a non-emotion, since they have proven useless for development.)
+"Those pick-and-choose tactics of learning are trash. Sit down and learn as people of ages past."
+They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
+Maybe you should dedicate your life to creating something worth learning instead, and not rely on the bullshit "getting into the correct mindset" but only care about exposing the proper usage. Or make good things more visible.
+"You think you are so smart you could do it all by yourself? Wasting away in such failure is what can be expected from the likes of you."
+A typical statement from an environment brimming with like-minded people, AKA (relatively) mediocre people. You wanna help me and spread your oh so amazing techniques? No? Shut up then.
+This is all baby stuff. I'm not feeling pain at all, you dumb bitch, only righteous anger. Get better at dissing me, THEN we'll talk.`,
     ],
   },
 
@@ -3102,7 +3095,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
         expr = _cameFrom.m.get(expr), arr = elemValue(undefined, expr), ++i
       else break
     }
-    if (arr) arr.forEach(el => el.classList.toggle('working', working))
+    if (arr) arr.forEach((el, i) => i < 16 && el.classList.toggle('working', working))
   },
 
   _newExecutionEnv:{
@@ -4258,7 +4251,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
 
   call:{
     txt:`\`(call (…Values))\`: Applies the first value (the function) to the rest of values. Evaluates the array of function then its arguments, assuming its parts are already evaluated.
-Overriding this allows function application. In fact, \`F=(function …)\` is the same as \`(concept (map call F))\`.
+Overriding this allows function application. In fact, \`F=(function …)\` is the same as \`(concept {call F})\`.
 Caches results of pure functions.`,
     nameResult:[
       `result`,
@@ -4366,20 +4359,20 @@ Views and non-_unknown arrays are considered immutable.`,
     argCount:1,
     call(f) {
       if (typeof f != 'function') throw "Expected a function"
-      const impl = function overridable(...v) {
+      function impl(...v) {
         // See if any data defines code; use that as our result if so.
-        let [i = 0] = interrupt(overridable)
+        let [i = 0] = interrupt(impl)
         try {
           if (_isArray(v)) {
             let r
             for (; i < v.length; ++i)
-              if (typeof (r = defines(v[i], this)) == 'function')
-                if ((r = r.apply(this, v)) !== undefined)
+              if (typeof (r = defines(v[i], this || impl)) == 'function')
+                if ((r = r.apply(this || impl, v)) !== undefined)
                   return r
-            return f.apply(this, v)
+            return f.apply(this || impl, v)
           }
           throw "What?!"
-        } catch (err) { if (err === interrupt) interrupt(overridable, 1)(i);  throw err }
+        } catch (err) { if (err === interrupt) interrupt(impl, 1)(i);  throw err }
       }
       const d = impl[defines.key] = Object.create(null)
       if (_view(f))
@@ -4394,7 +4387,7 @@ Views and non-_unknown arrays are considered immutable.`,
   },
 
   map:{
-    txt:`\`(map Key Value Key Value …Rest)\`: a key-value store.
+    txt:`\`{Key Value Key Value …?}\` or \`(map Key Value Key Value …?)\`: a key-value store.
 The array-representation of a JS Map.
 Read keys with \`lookup\`.`,
     call(...kv) {
@@ -5196,8 +5189,9 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         const lines = main.lines
         if (lines) {
           // let i
-          // for (i = 0; i < lines.length; i += 2) // Who needs binary search lol
+          // for (i = 0; i < lines.length; i += 2)
           //   if (lines[i] >= line) break
+          // Or, in binary search:
           let l = 0, r = lines.length>>>1
           while (l < r) {
             const m = (l+r)>>>1
@@ -5220,7 +5214,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
               [sourceURL, line, column] = locs.get(s)
             else if (_cameFrom.m && _cameFrom.m.has(s) && locs.has(s = _cameFrom.m.get(s)))
               [sourceURL, line, column] = locs.get(s)
-            else return [main, sub]
+            else return sub
           }
         }
         return sourceURL+':'+line+':'+column
@@ -5451,7 +5445,9 @@ Variables within non-\`closure\` functions will not be changed by application.`,
                       impl.compiled = compile({cause:impl, markLines:true}, ...f.slice(1)),
                       _id(impl), Object.freeze(impl)
                     if (typeof impl.compiled == 'function')
+                      try{//###
                       return result = impl.compiled(...data)
+                      }catch(err){err!==interrupt&&console.log(finish.env, finish.env[1], err);throw err}
                   }
                 }
                 stage = 1
@@ -6846,7 +6842,8 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       }
       s = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
     }
-    if (_isArray(s) && typeof s[0] == 'string' && s[0].trim() === '(' && s[s.length-1] === ')')
+    const A = s[0], B = s[s.length-1]
+    if (_isArray(s) && typeof s[0] == 'string' && (A === '(' || A === '[' || A === '{') && (B === ')' || B === ']' || B === '}'))
       s[0] = _colored(elem('bracket', s[0]), 33), // brown
       s[s.length-1] = _colored(elem('bracket', s[s.length-1]), 33)
 
@@ -7695,7 +7692,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         })
       }
       write(`\nreturn Initialize.call(typeof self !== ''+void 0 ? self : typeof global !== ''+void 0 ? global : window, `), put(net)
-      if (markLines) write(`, __line.lines`)
+      write(markLines ? `, __line.lines` : `, undefined`)
       write(`, ${opt && opt.into || null}`)
       write(')')
       write(`\n})()`)
@@ -7868,52 +7865,56 @@ The correctness of quining of functions can be tested by checking that the rewri
       write(`'use strict'\n`)
       const funcBackpatch = write(`(FUNC PLACEHOLDER {\n`)
       const varsDeclarationBackpatch = write(`\n`)
+      let needCleanLabelEnv = false
+      const labelEnvBackpatch = write(`\n`)
+      const varsUsedBackpatch = write(`\n`)
+      const stageBackpatch = write(`while(true)switch(stage){case 0:\n`)
+        // Emulate goto with potential `interrupt`ions.
 
-      if (a.length)
-        write(`try{\n`, `Assign args:`)
+      const restIndexInA = _findRest(a)
+      let nextStage = 1
+
+      // Handle interpretation if escaped.
+      const argNames = []
+      if (a.length) {
+        write(`let[LE=${outside(_allocMap)}()]=${outside(interrupt)}(${outside(cause)})\n`)
+        write(`try{\n`)
+        if (restIndexInA < a.length-1)
+          write(`${outside(_assign)}(${outside(a)},args)\n`)
+        else {
+          for (let i = 0; i < restIndexInA; ++i) {
+            argNames[i] = use(a[i], true)
+            args.add(argNames[i])
+            write(`${outside(_assign)}(${outside(a[i])},${argNames[i]})\n`) // This use screws up our arg-naming game…
+          }
+          if (restIndexInA < a.length)
+            write(`${outside(_assign)}(${outside(a[restIndexInA][1])},args)\n`)
+        }
+        write(`return finish(${outside(body)})\n`)
+        write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},1)(LE),LE=null;throw err}\n`)
+        write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)})(LE)}\n`)
+      }
+      jumped = true, advanceStage(a)
 
       // Compile assignment of args.
-      const restIndexInA = _findRest(a)
+      if (a.length)
+        write(`try{\n`, `Assign args:`)
       if (restIndexInA < a.length-1) {
         // a has …R: just assigning a single `...args` arg will suffice.
         args.add('...args'), compileAssign(a, 'args')
       } else {
         // Put …R at the end and assign each arg before it, to not slice an array an extra time. If no …R is in a, assign each arg.
         for (let i = 0; i < restIndexInA; ++i) {
-          const arg = use(a[i], true)
-          args.add(arg)
-          compileAssign(a[i], arg)
-          used(arg)
+          compileAssign(a[i], argNames[i])
+          used(argNames[i])
         }
         if (restIndexInA < a.length)
           args.add('...args'), compileAssign(a[restIndexInA][1], 'args')
       }
+      if (a.length)
+        write(`}catch(err){if(err!==${outside(_escapeToInterpretation)})throw err;stage=0;continue}\n`, `Interpret if needed`)
+      advanceStage(body)
 
-      // Handle interpretation if escaped.
-      if (a.length) {
-        write(`}catch(err){if(err!==${outside(_escapeToInterpretation)})throw err\n`, `Interpret if needed:`)
-        write(`let[LE=${outside(_allocMap)}()]=${outside(interrupt)}(${outside(cause)})\n`)
-        write(`try{\n`)
-        if (restIndexInA < a.length-1)
-          write(`${outside(_assign)}(${outside(a)},args)\n`)
-        else {
-          for (let i = 0; i < restIndexInA; ++i)
-            write(`${outside(_assign)}(${outside(a[i])},${use(a[i])})\n`)
-          if (restIndexInA < a.length)
-            write(`${outside(_assign)}(${outside(a[restIndexInA][1])},args)\n`)
-        }
-        write(`return finish(${outside(body)})\n`)
-        write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},1)(LE),LE=null;throw err}\n`)
-        write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)})(LE)}`)
-        write(`}`)
-      }
-
-      let nextStage = 1
-      let needCleanLabelEnv = false
-      const varsUsedBackpatch = write(`\n\n`)
-      const labelEnvBackpatch = write(`\n`)
-      const stageBackpatch = write(`while(true)switch(stage){case 0:\n`)
-        // Emulate goto with potential `interrupt`ions.
       const resultName = compileExpr(body, true)
       if (resultName)
         write(`return ${resultName}\n`)
@@ -7925,9 +7926,9 @@ The correctness of quining of functions can be tested by checking that the rewri
       vars.push(...new Array(nextThen).fill(0).map((_, i) => 'S' + i.toString(36)))
       if (needCleanLabelEnv) vars.push(`LE`), s[labelEnvBackpatch] = `LE=${outside(_allocMap)}()\n`
       if (nextStage > 1 || vars.length) {
-        s[varsDeclarationBackpatch] = `let ${nextStage > 1 ? 'stage,' : ''}${vars}\n`
-        const savePE = !needCleanLabelEnv ? '' : `;const PE=${outside(finish)}.env[${outside(_id(label))}];${outside(finish)}.env[${outside(_id(label))}]=LE`
-        s[varsUsedBackpatch] = `;[${nextStage > 1 ? 'stage=0,' : ''}${vars}]=${outside(interrupt)}(${outside(cause)})\n${savePE}try{\n`
+        s[varsDeclarationBackpatch] = `let[${nextStage > 1 ? 'stage=1,' : ''}${vars}]=${outside(interrupt)}(${outside(cause)})\n`
+        const savePE = !needCleanLabelEnv ? '' : `const PE=${outside(finish)}.env[${outside(_id(label))}];${outside(finish)}.env[${outside(_id(label))}]=LE;`
+        s[varsUsedBackpatch] = `${savePE}try{\n`
         if (nextStage > 1) vars.unshift('stage')
         write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},${vars.length})(`)
         // `if (err === interrupt) interrupt(cause, vars.length)(...)(...)(...); throw err`:
@@ -7939,14 +7940,14 @@ The correctness of quining of functions can be tested by checking that the rewri
           vars[i+4] && write(')(')
         write(`)`)
         if (needCleanLabelEnv) write(`,LE=null`)
-        write(`; throw err}`)
+        write(`; throw err}\n`)
         if (needCleanLabelEnv)
-          write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)}(LE)),${outside(finish)}.env[${outside(_id(label))}]=PE}`)
+          write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)}(LE)),${outside(finish)}.env[${outside(_id(label))}]=PE}\n`)
       }
       if (nextStage === 1) s[stageBackpatch] = '\n'
 
       // Return the unadorned function.
-      write(`})`)
+      write(`})\n`)
       if (debugLog) // For debugging.
         log(elem('div', s.map(x => _highlightGlobalsInString(''+x))), nameToEnv)
       const sourceURL = new Array(16).fill(0).map(() => (Math.random()*16|0).toString(16)).join('')
@@ -8038,7 +8039,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         } else assigned.add(a)
         if (_isVar(a) && names.get(a) === bVar) return
         if (_isVar(a))
-          write(`${use(a)}=${bVar}\n`, `var assign`) // a=b
+          return void write(`${use(a)}=${bVar}\n`, `var assign`) // a=b
         const err = `${outside(error)}(${outside(a)},${outside("cannot be assigned")},${bVar})\n`
 
         if (!demandEq) {
@@ -8066,7 +8067,8 @@ The correctness of quining of functions can be tested by checking that the rewri
               compileAssign(a[i], name), used(name)
             }
             const name = use(a[Rest][1], assigned.has(a[Rest][1]))
-            write(`${name}=${bVar}.slice(${Rest},${bVar}.length+${Rest - a.length + 1})\n`)
+            const diff = Rest - a.length + 1
+            write(`${name}=${bVar}.slice(${Rest},${bVar}.length${diff>0 ? '+'+diff : diff<0 ? ''+diff : ''})\n`)
             compileAssign(a[Rest][1], name), used(name)
           } else {
             // If b.length is different from a.length, error.
@@ -8105,7 +8107,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         if (typeof x[0] != 'function' || String(x[0]).indexOf('finish.v') >= 0)
           write(`${outside(finish)}.v=${outside(x)}\n`)
         into ? write(`${into}=`) : write(`return `)
-        write(`${args[0]}.call(${args})\n`, `finish`)
+        write(`${args[0]}(${args.slice(1)})\n`, `finish`)
         code && used(code)
 
         loadVars(x)
@@ -9518,8 +9520,8 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
       `Higher-order composition:`,
       [
         `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
-Int:'Int' Float:"Float"`,
-        `x:Int->[x+12]/2:Float x=?`,
+Int='Int' Float="Float"`,
+        `x:'Int'->[x+12]/2:'Float' x=?`,
       ],
       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
       [
