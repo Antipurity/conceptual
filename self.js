@@ -2760,7 +2760,7 @@ I deserve nothing more, then. What I call truth is for stupid people.
 They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
 Maybe you should dedicate your life to creating something worth learning instead, and not rely on the bullshit "getting into the correct mindset" but only care about exposing the proper usage. Or make good things more visible.
 "You think you are so smart you could do it all by yourself? Wasting away in such failure is what can be expected from the likes of you."
-A typical statement from an environment brimming with like-minded people, AKA (relatively) mediocre people. You wanna help me and spread your oh so amazing techniques? No? Shut up then.
+A typical statement from an environment brimming with like-minded people, AKA (relatively) mediocre people. You wanna help me and spread your oh so amazing techniques? What, your fire was designed to burn only for you? Shut up then.
 This is all baby stuff. I'm not feeling pain at all, you dumb bitch, only righteous anger. Get better at dissing me, THEN we'll talk.`,
     ],
   },
@@ -4133,15 +4133,13 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
             // Defer to the compiled version if we have already inferred everything.
             if (!finish.pure && i === 1) {
               if (!finish.compiled) finish.compiled = new WeakMap
-              try {
-                if (!finish.compiled.has(v))
-                  finish.compiled.set(v, 0)
-                else { // Only compile on the second visit.
-                  finish.compiled.get(v) >= 0 && finish.compiled.set(v, compile({cause:v, markLines:true}, v))
-                  if (typeof finish.compiled.get(v) == 'function')
-                    return result = finish.compiled.get(v).call()
-                }
-              } catch (err) { if (err !== _escapeToInterpretation) throw err }
+              if (!finish.compiled.has(v))
+                finish.compiled.set(v, 0)
+              else { // Only compile on the second visit.
+                finish.compiled.get(v) >= 0 && finish.compiled.set(v, compile({cause:v, markLines:true}, v))
+                if (typeof finish.compiled.get(v) == 'function')
+                  return result = finish.compiled.get(v).call()
+              }
             }
             i = 0
 
@@ -7802,9 +7800,6 @@ The correctness of quining of functions can be tested by checking that the rewri
     return b || a
   },
 
-  _escapeToInterpretation:{
-    txt:`This is thrown as an exception to bail out of compiled code into the interpreter, in order to have a simpler (and more space-efficient) compiler.`,
-  },
   compile:{
     txt:`Compiles a function to JS.`,
     philosophy:`I am speed.`,
@@ -7897,8 +7892,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       jumped = true, advanceStage(a)
 
       // Compile assignment of args.
-      if (a.length)
-        write(`try{\n`, `Assign args:`)
       if (restIndexInA < a.length-1) {
         // a has …R: just assigning a single `...args` arg will suffice.
         args.add('...args'), compileAssign(a, 'args')
@@ -7911,8 +7904,6 @@ The correctness of quining of functions can be tested by checking that the rewri
         if (restIndexInA < a.length)
           args.add('...args'), compileAssign(a[restIndexInA][1], 'args')
       }
-      if (a.length)
-        write(`}catch(err){if(err!==${outside(_escapeToInterpretation)})throw err;stage=0;continue}\n`, `Interpret if needed`)
       advanceStage(body)
 
       const resultName = compileExpr(body, true)
@@ -8028,8 +8019,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         lines && lines.push(line, a)
 
         if (!assigned.has(a))
-          write(`if(${outside(_isArray)}(${bVar})&&${bVar}[0]===${outside(_unknown)})`),
-          write(allowEscape ? `throw ${outside(_escapeToInterpretation)}\n` : `${outside(error)}(${outside("Code deciding to make the caller infer things is illegal")})\n`, `no inference here`)
+          write(`if(${outside(_isArray)}(${bVar})&&${bVar}[0]===${outside(_unknown)}){stage=0;continue}\n`, `no inference in compiled code`)
 
         // If demandEq is false, we'll check graph equality, else ref equality.
         const demandEq = !_isArray(a) && !_isArray(defines(a, deconstruct)) || a[0] === _const
@@ -9698,8 +9688,12 @@ Use \`picker\` to override behavior.`,
   },
 
   picker:{
-    txt:`Finishing \`(picker With Scope)\`: sets the function that will pick choices when evaluating \`Expr\`.
+    txt:`Finishing \`(picker With Expr)\`: sets the function that will pick choices when evaluating \`Expr\`.
 \`With\` is like \`function InnerPicker From Cause\`, copying \`From\` if needed, where \`InnerPicker\` is \`randomPicker\` unless set otherwise with this.`,
+    future:[
+      `\`(readMeasure Object Measure)\` and \`(writeMeasure Object Measure Is)\`, for persistent designed-for-low-measure-count (\`(Measure Is Measure Is)\`) storage.`,
+      `\`(alter PickedMap→? Expr)\`, for assigning blame and changing to fit a goal.`,
+    ],
     argCount:2,
     finish(With, expr) {
       let [er] = interrupt(picker)
