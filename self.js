@@ -2756,7 +2756,7 @@ The only time I'm not feeling nothing is when I'm feeling pain.
 Should I strive for that?
 I deserve nothing more, then. What I call truth is for stupid people.
 (Actually, I also feel excitement of inspiration, conveyed largely by the same hormones as pain. All unrelated hormonal states are internally defined as a non-emotion, since they have proven useless for development.)
-"Those pick-and-choose tactics of learning are trash. Sit down and learn as people of ages past."
+"Those pick-and-choose tactics of learning are trash. Sit down and learn as people of ages past and future."
 They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
 Maybe you should dedicate your life to creating something worth learning instead, and not rely on the bullshit "getting into the correct mindset" but only care about exposing the proper usage. Or make good things more visible.
 "You think you are so smart you could do it all by yourself? Wasting away in such failure is what can be expected from the likes of you."
@@ -5443,9 +5443,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
                       impl.compiled = compile({cause:impl, markLines:true}, ...f.slice(1)),
                       _id(impl), Object.freeze(impl)
                     if (typeof impl.compiled == 'function')
-                      try{//###
                       return result = impl.compiled(...data)
-                      }catch(err){err!==interrupt&&console.log(finish.env, finish.env[1], err);throw err}
                   }
                 }
                 stage = 1
@@ -8469,16 +8467,13 @@ The correctness of quining of functions can be tested by checking that the rewri
       _addHashed(result, v[2], add, inp)
       _addHashed(result, v[3], add, inp)
 
-    } else if (_isFunction(v) || typeof v == 'function' && (inp ? (d = !_isArray(v) && defines(v, input)) : (d = !_isArray(v) && defines(v, output)))) {
+    } else if (_isUsing(v) || _isFunction(v) || typeof v == 'function' && (inp ? (d = !_isArray(v) && defines(v, input)) : (d = !_isArray(v) && defines(v, output)))) {
       // If a deconstructable function, add each of its inputs/output.
-      const f = d || deconstruct(v)
+      const f = d || deconstruct(v), u = _isUsing(v)
       if (inp) {
-        if (!d)
-          for (let j = 1; j < f.length-1; ++j)
-            _addHashed(result, f[j], add, inp)
-        else
-          for (let j = 0; j < f.length; ++j)
-            _addHashed(result, f[j], add, inp)
+        const endJ = d ? f.length : f.length-1
+        for (let j = d ? 0 : !u ? 1 : 2; j < endJ; ++j)
+          _addHashed(result, f[j], add, inp)
       } else
         _addHashed(result, d ? f : f[f.length-1], add, inp)
 
@@ -8488,7 +8483,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         _addHashed(result, d[j], add, inp)
 
     } else {
-      const hash = _structHash(v)
+      const hash = typeof v != 'function' ? _structHash(v) : _structHash.dependent
       if (!result.has(hash)) result.set(hash, [])
       const arr = result.get(hash)
       if (!actuallyRemove) 
@@ -9017,14 +9012,14 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
 
   _addTypesToContext(result, v) {
     let d
-    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && _isFunction(d)) {
+    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && _isFunction(d))
       // If a macro, treat it as a call.
-      result = _addTypesToContext(result, d)
+      v = d
     if (_isArray(v) && v[0] === array)
       // If `array ...?`, treat it as v.slice(1).
       v = v.slice(1)
 
-    } else if (_isArray(v) && v[0] === _if && v.length == 4) {
+    if (_isArray(v) && v[0] === _if && v.length == 4) {
       // If `if ? ? ?`, check both branches.
       _addTypesToContext(result, v[2])
       _addTypesToContext(result, v[3])
@@ -9070,14 +9065,15 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     let d
     if (!inp && _isVar(values) && result === false) return true
 
-    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length)) {
+    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length))
       // If a macro, unwrap unknowns inside `values` and treat it as a call.
-      result = _addUsesToContext(result, v, d, ctx, bound(_unwrapUnknown, values, false), inp)
+      [as, v, values] = [v, d, bound(_unwrapUnknown, values, false)]
     if (!inp && _isArray(v) && v[0] === array)
       // If `array ...?`, treat it as v.slice(1).
       v = v.slice(1)
 
-    } else if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
+
+    if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
       // If `if ? ? ?`, check both branches.
       let [r = result, stage = 0] = interrupt(_addUsesToContext)
       try {
@@ -9141,6 +9137,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       try {
         try { v(...values) }
         catch (err) { if (err !== impure) throw err } // Always add impure functions.
+        // If did not throw, add to context.
         if (result === false) return true
         if (!result) result = _allocArray(), result.push(either)
         if (!result.includes(as)) result.push(as)
@@ -9371,9 +9368,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         return
       }
 
-      if (typeof v == 'function' && typeof defines(v, argCount) == 'number' && (!wantedInputs || defines(v, argCount) >= wantedInputs.length)) {
-        // Don't infinitely balloon the search if any native function is exposed.
-        if (_isVar(wantedOutput)) return
+      if (typeof v == 'function' && (!wantedInputs || defines(v, argCount) >= wantedInputs.length)) {
         if (!actualArgs || actualArgs.length < defines(v, argCount)) {
           let nextArg
           // `input`-defining functions get treated as if their inputs are as defined.
@@ -9385,9 +9380,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // Deconstructable functions have their inputs read.
           else if (_isFunction(v))
             nextArg = deconstruct(v)[!actualArgs ? 1 : 1 + actualArgs.length]
-          // Native functions with enough argCount accept `inputs` in order if any, then `?`s.
+          // Native functions with args not handled by `values` get ignored, to not infinitely balloon the search.
           else
-            nextArg = use.var
+            return
           if (_isArray(nextArg) && nextArg[0] === rest)
             error("Rest args are not permitted in usage contexts:", nextArg, 'in', v)
 
@@ -9692,7 +9687,9 @@ Use \`picker\` to override behavior.`,
 \`With\` is like \`function InnerPicker From Cause\`, copying \`From\` if needed, where \`InnerPicker\` is \`randomPicker\` unless set otherwise with this.`,
     future:[
       `\`(readMeasure Object Measure)\` and \`(writeMeasure Object Measure Is)\`, for persistent designed-for-low-measure-count (\`(Measure Is Measure Is)\`) storage.`,
-      `\`(alter PickedMap→? Expr)\`, for assigning blame and changing to fit a goal.`,
+      `\`(alter PickedMap→? Expr)\`, for assigning blame and changing to fit a goal.
+
+A small set of measures stuck to thoughts, like hormones' effects. Searching through how to use those measures and how to alter them, in the middle of the generated expressions. That is what real optimization is, about as good as a human mind.`,
     ],
     argCount:2,
     finish(With, expr) {
