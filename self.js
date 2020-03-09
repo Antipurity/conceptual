@@ -856,7 +856,7 @@ extracted.hover { background-color:var(--background); position:sticky; top:.3em;
 scroll-highlight { position:fixed; right:0; z-index:13; box-shadow:var(--highlight) 0 0 .2em .2em; will-change:transform }
 
 waiting {
-  display: block;
+  display: inline-block;
   width: 1.5em;
   height: 1.5em;
   margin: .5em;
@@ -1001,6 +1001,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // On click, run `(log (picker askUser (use (targetElem clientX clientY):'clicked')))` (or typed as `clicked elsewhere`) daintily.
       _listen('click', evt => {
+        return // ###
         finish.env = undefined
         if (evt.shiftKey && !evt.ctrlKey && !evt.altKey && !Self.into.contains(evt.target)) {
           // Shift+clicked outside of us.
@@ -3985,6 +3986,7 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
       q1 = (i < 32 ? 1 << i : 2 ** i) - q0;
       do { q0 = _randomBits(i & 31) } while (q0 >= q1);
       return q0 % n
+      // .oldn, .oldi
     },
   },
 
@@ -9060,10 +9062,12 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   },
 
   _addUsesToContext(result, as, v, ctx, values, inp) {
+    // ### Interrupts are definitely not handled well here. But where?
+      // Should we try making as/v/values into variables restored on interrupt?
     // The result of this (and `input`/`output`) can and should be `_allocArray(?)`d.
+    if (!inp && _isVar(values) && result === false) return true
     _checkInterrupt()
     let d
-    if (!inp && _isVar(values) && result === false) return true
 
     if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length))
       // If a macro, unwrap unknowns inside `values` and treat it as a call.
@@ -9079,20 +9083,18 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       try {
         if (stage === 0)
           r = _addUsesToContext(r, as, v[2], ctx, values, inp), stage = 1
-        if (stage === 1)
-          r = _addUsesToContext(r, as, v[3], ctx, values, inp)
-        return r
+        return _addUsesToContext(r, as, v[3], ctx, values, inp)
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, stage);  throw err }
 
     } else if (d = _isTry(v)) {
-      // If `try ...?`, add each sub-function if appropriate.
+      // If `try ...?` (a wannabe context), add each sub-function if appropriate.
       let [r = result, j = 1] = interrupt(_addUsesToContext)
       try {
         for (; j < d.length; ++j) {
           r = _addUsesToContext(r, v, d[j], ctx, values, inp)
           if (r === true) return r
         }
-        result = r
+        return result = r
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, j);  throw err }
 
     // If a deconstructable function, or a JS function that defines `input`/`output`:
@@ -9136,8 +9138,8 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       // Native functions bear no hint of the required structure, so the only thing we can do is call them and see if an error arises.
       try {
         try { v(...values) }
-        catch (err) { if (err !== impure) throw err } // Always add impure functions.
-        // If did not throw, add to context.
+        catch (err) { if (err !== impure) throw err }
+        // If did not throw or is impure when we are pure, add to context.
         if (result === false) return true
         if (!result) result = _allocArray(), result.push(either)
         if (!result.includes(as)) result.push(as)
@@ -9153,47 +9155,50 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       const stack = result !== false ? _addUsesToContext.stack : _addUsesToContext.checkStack
       if (stack.has(v)) return null
       if (_isVar(values)) return result === false ? v.length > 1 : v ? v.slice() : v
-      let [r = result, i = 0, j = 0, k = 0] = interrupt(_addUsesToContext)
+      let [direct, dep, subctx, r = result, i = 0, j = 0, k = 0] = interrupt(_addUsesToContext)
       stack.add(v)
       try {
         // Lookup in _structHash(values[0]) and _structHash.dependent and _structHash.context.
-        const a = _hashes(v, false, inp) // This hopefully won't change from under us, between interrupts.
-        let direct, hash
-        if (inp)
-          for (let j = 0; j < values.length; ++j) {
-            // Pick the smallest-subcontext of values' hashes, for speed.
-            const h = _structHash(values[j]), d = a.get(h)
-            if (!d || !direct || d.length < direct.length) hash = h, direct = d
-            if (!d) break
-          }
-        else hash = _structHash(values), direct = a.get(hash)
-        if (hash === _structHash.dependent) direct = v
+        if (subctx === undefined) {
+          const a = _hashes(v, false, inp)
+          let hash
+          if (inp)
+            for (let j = 0; j < values.length; ++j) {
+              // Pick the smallest-subcontext of values' hashes, for speed.
+              const h = _structHash(values[j]), d = a.get(h)
+              if (!d || !direct || d.length < direct.length) hash = h, direct = d
+              if (!d) break
+            }
+          else hash = _structHash(values), direct = a.get(hash)
+          if (hash === _structHash.dependent) direct = v
+          dep = hash !== _structHash.dependent && a.get(_structHash.dependent)
+          subctx = hash !== _structHash.context && a.get(_structHash.context) || null
+        }
 
         if (direct)
           for (; i < direct.length; ++i) {
             r = _addUsesToContext(r, direct[i], direct[i], ctx, values, inp)
             if (r === true) return true
           }
-        const dep = hash !== _structHash.dependent && a.get(_structHash.dependent)
         if (dep)
           for (; j < dep.length; ++j) {
             r = _addUsesToContext(r, dep[j], dep[j], ctx, values, inp)
             if (r === true) return true
           }
-        const subcontext = hash !== _structHash.context && a.get(_structHash.context)
-        if (subcontext)
-          for (; k < subcontext.length; ++k) {
-            r = _addUsesToContext(r, subcontext[k], subcontext[k], ctx, values, inp)
+        if (subctx)
+          for (; k < subctx.length; ++k) {
+            r = _addUsesToContext(r, subctx[k], subctx[k], ctx, values, inp)
             if (r === true) return true
           }
         return r ? merge(r) : null
-      } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 4)(r, i, j, k);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 7)(direct, dep, subctx, r)(i, j, k);  throw err }
       finally { stack.delete(v) }
 
     } else if (!inp) {
       // If a plain value fits the output shape, add it.
       try {
         _assign(v, values, true)
+        if (result === false) result = true
         if (!result) result = _allocArray(), result.push(either)
         if (!result.includes(as)) result.push(as)
       } catch (err) {}
@@ -9269,44 +9274,44 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   },
 
   use:{
-    txt:`\`use Inputs Function Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
+    txt:`\`use Function Inputs Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     examples:[
+      // ###
       `Select the proper semantic type in a bank of knowledge:`,
       [
-        `use (15:'AnalysisResult') undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x)))`,
+        `use undefined (15:'AnalysisResult') (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x)))`,
         `1:'Action'`,
       ],
-      `Can find args in \`Context\``,
+      `Can find args in \`Context\`:`,
       [
-        `use (either 1:2 2:3) (function a:2 b:3 a+b:5)`,
+        `use (function a:2 b:3 a+b:5) undefined (either 1:2 2:3)`,
         `3:5`,
       ],
       `Take some, find some:`,
       [
-        `use (either 5:Int) (function 0 x:Int 1 x:Int) (0 1) Int='Int'`,
+        `use (function 0 x:Int 1 x:Int) (0 1) (either 5:Int) Int='Int'`,
         `5:'Int'`,
       ],
       `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
       [
-        `use (either 5:Int x:Int->0 x:Int->x x:Int->2*x) (function 0 x:Int 5 x:Int) Int='Int'`,
+        `use (function 0 x:Int 5 x:Int) undefined (either 0 5 5:Int x:Int->0 x:Int->x x:Int->2*x) Int='Int'`,
         `5:'Int'`,
       ],
     ],
-    call(inputs, v, ctx = CurrentUsage) {
-      if (!use.var) use.var = [_var]
-      const r = _search(undefined, ctx, v !== undefined ? v : use.var, inputs, false)
+    call(v, inputs, ctx = CurrentUsage) { // Why are inputs the first arg?
+      const r = _search(undefined, ctx, v !== undefined ? v : ctx, inputs, undefined)
       const result = r[0]
       _allocArray(r[1][0]), _allocArray(r[1][2]), _allocArray(r[1]), _allocArray(r)
       return result
+      // .var
     },
   },
 
   _visitNode:{
     txt:`Remembers to visit the node in this graph search.`,
-    call(ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then) {
-      // With 8 bytes for array length and 8 bytes per array item, this is (usually) 1 cache line.
-      const node = array(ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then)
+    call(ctx, v, wantedInputs, wantedOutput, actualArgs, then) {
+      const node = array(ctx, v, wantedInputs, wantedOutput, actualArgs, then)
       if (!_search.visited.has(node)) {
         _search.nodes.push(node)
         _search.visited.add(node)
@@ -9340,13 +9345,14 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   _handleNode:{
     txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
     call(node) {
-      const [ctx, v, wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then] = node
+      // log(node)
+      let [ctx, v, wantedInputs, wantedOutput, actualArgs, then] = node
 
       // If `wantedOutput` is a function, look for its output assuming its inputs and ctx then bind the function with the result.
       if (_isFunction(wantedOutput)) {
         const d = deconstruct(wantedOutput)
         const subCtx = array(either, ...d.slice(1,-1), ctx)
-        _visitNode(subCtx, _functionComposer(wantedOutput), null, 0, use.var, null, then)
+        _visitNode(subCtx, _functionComposer(wantedOutput), null, use.var, null, then)
         return
       }
 
@@ -9360,11 +9366,14 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       if (_isArray(d = v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either || (d = _isTry(v))) {
         // If `v` contains `wantedOutput` as-is, return that.
         let i = d.indexOf(wantedOutput)
-        if (i > 0) return d[i] !== undefined ? d[i] : _onlyUndefined
+        if (i > 0) {
+          if (then) _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], d[i]] : [d[i]], then[5])
+          else return d[i] !== undefined ? d[i] : _onlyUndefined
+        }
 
         // _visitNode with each item.
         for (i = 1; i < d.length; ++i)
-          _visitNode(ctx, d[i], wantedInputs, wantedInputsIndex, wantedOutput, actualArgs, then)
+          _visitNode(ctx, d[i], wantedInputs, wantedOutput, actualArgs, then)
         return
       }
 
@@ -9380,28 +9389,43 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // Deconstructable functions have their inputs read.
           else if (_isFunction(v))
             nextArg = deconstruct(v)[!actualArgs ? 1 : 1 + actualArgs.length]
-          // Native functions with args not handled by `values` get ignored, to not infinitely balloon the search.
+          // Native functions get their args either handled by `values` or non-function-derived `?`.
           else
-            return
+            nextArg = use.var
           if (_isArray(nextArg) && nextArg[0] === rest)
             error("Rest args are not permitted in usage contexts:", nextArg, 'in', v)
 
           try {
             // If nextArg is handled by wantedInputs, move the input to actualArgs.
-            _assign(nextArg, wantedInputs[wantedInputsIndex], true)
-            _visitNode(ctx, v, wantedInputs, wantedInputsIndex+1, use.var, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], then)
+            _assign(nextArg, wantedInputs[0], true)
+            // log('Handled by input', nextArg)
+            _visitNode(ctx, v, wantedInputs.length > 1 ? wantedInputs.slice(1) : null, use.var, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], then)
+            return
           } catch (err) {
             // If the arg is not in `wantedInputs`, generate it from context.
-            _visitNode(ctx, output(nextArg), null, 0, nextArg, null, node)
+            let outs
+            interrupt.noInterrupt = true
+            outs = output(nextArg, ctx)
+            interrupt.noInterrupt = false
+            // log('Searching in context', outs, 'for', nextArg, 'to fill', v)
+            if (outs)
+              for (let i = 1; i < outs.length; ++i)
+                if (!_isVar(wantedOutput) || typeof outs[i] != 'function') // Don't infinitely balloon the search.
+                  _visitNode(ctx, outs[i], null, nextArg, null, node)
+            return
           }
         } else { // Our args are complete. Apply the function.
           if (wantedInputs) return // Have to consume all wantedInputs.
           if (isMacro) actualArgs = bound(_unwrapUnknown, actualArgs, false).slice()
-          const nodes = _search.nodes // Safeguard against an inner search.
+          // Safeguard against an inner search.
+          const nodes = _search.nodes, visited = _search.visited, values = _search.values
           const prevInferred = _assign.inferred;  _assign.inferred = null
-          try { v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return }
+          // log('Completed function', v, actualArgs)
+          try {
+            v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return
+          }
           catch (err) { if (err === interrupt) throw err; return }
-          finally { _assign.inferred = prevInferred; _search.nodes = nodes }
+          finally { _assign.inferred = prevInferred; _search.nodes = nodes, _search.visited = visited, _search.values = values }
         }
       }
 
@@ -9409,7 +9433,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       try { // (Can't interrupt.)
         if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
         // If `then`, add to args, else return from this graph search.
-        if (then) _visitNode(then[0], then[1], then[2], then[3], then[4], then[5] ? [...then[5], v] : [v], then[6])
+        if (then) _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], v] : [v], then[5])
         else return v !== undefined ? v : _onlyUndefined
       } catch (err) {} // No forward search here. Backward search should be enough.
     },
@@ -9423,7 +9447,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       const valueArray = _allocArray;  valueArray.push(value)
       try {
         for (; i < ins.length; ++i) {
-          const r = use(valueArray, ins[i], ctx)
+          const r = use(ins[i], valueArray, ctx)
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
         }
         _allocArray(ins)
@@ -9435,8 +9459,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   _search:{
     txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results; do not re-use the same one) or throws.`,
     philosophy:`A higher-order potentially-optimizable search.
-Nothing unthinkable. Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that. All the best things in the world are too impractical to always use.`,
+Nothing unthinkable. Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that.`,
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
+      // ### We need to comment out all tests except one, and log everything we can.
       ctx === CurrentUsage && impure()
       if (!use.var) use.var = [_var]
 
@@ -9447,25 +9472,26 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
         nodes = _allocArray(), visited = new Set, values = _allocArray()
         values.push(either)
         _search.nodes = nodes, _search.visited = visited, _search.values = values
-        _visitNode(ctx, v, inputs, 0, out !== undefined ? out : use.var, null, null)
+        _visitNode(ctx, v, inputs, out !== undefined ? out : use.var, null, null)
       } else if (!nodes) {
         // Restore from continuation.
         [nodes, visited, values] = cont, _allocArray(cont)
         _search.nodes = nodes, _search.visited = visited, _search.values = values
-      }
+      } else
+        _search.nodes = nodes, _search.visited = visited, _search.values = values
 
       try {
-        while (nodes.length) {
+        while (node !== undefined || nodes.length) {
           // Pick a node and handle it, and return if needed.
             // (If the picker chooses by the best measure, then this is quadratic time complexity. If it special-cases this particular usage pattern (pick and swap-with-end and add some new choices at the end), it could be made linear.)
           if (node === undefined) {
-            const i = pick(values, us, 'The graph node to search next') // No one needs to know about all the nodes's extra stuff. Probably. …For now.
+            const i = 0 // pick(values, us, 'The graph node to search next') // No one needs to know about all the nodes's extra stuff. Probably. …For now.
             if (i !== i>>>0) error('Expected an index, got', i)
             node = nodes[i]
             ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], nodes.pop()
             ;[values[values.length-1], values[i+1]] = [values[i+1], values[values.length-1]], values.pop()
           }
-          _checkInterrupt()
+          _checkInterrupt(us)
           const r = _handleNode(node)
           if (r !== undefined) {
             const a = _allocArray(), cont = _allocArray()
@@ -9479,7 +9505,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
         error(v, 'is definitely not in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 4)(node, nodes, visited, values);  throw err }
 
-      // _search.nodes (the current array of nodes)
+      // .nodes (the current array of nodes), .visited (the set of nodes visited in this search), .values (a context of values of nodes, for `pick`ing the next one)
     },
   },
 
@@ -9492,65 +9518,66 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
     txt:`\`get OutputShape\` or \`get OutputShape Context\`: creates a structured value from \`Context\` (\`CurrentUsage\` by default).
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
     examples:[
-      `Trivial finding:`,
-      [
-        `get ?:1 (either 0:1 0:2)`,
-        `0:1`,
-      ],
-      `First-order composition:`,
-      [
-        `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
-        `4:10`,
-      ],
-      `Higher-order composition:`,
-      [
-        `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
-Int='Int' Float="Float"`,
-        `x:'Int'->[x+12]/2:'Float' x=?`,
-      ],
-      `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
-      [
-        `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
-        `('Next' 9)`,
-      ],
-      `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
-      [
-        `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
-sum='Sum' quote='Next'`,
-        `^^^# quote='Next'`,
-      ],
-      [
-        `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
-sum='Sum' quote='Next'`,
-        `error X+^^^0->X 'is definitely not in' (either A+0->A A+^B->^[A+B]) X=#
-sum='Sum' quote='Next'`,
-      ],
-      `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-      [
-        `get  X*^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=#
-mult='Times' sum='Sum' quote='Next'`,
-        `X*^0->X  X=#
-mult='Times' quote='Next'`,
-      ],
-      `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-      [
-        `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
-mult='Times' sum='Sum' quote='Next'`,
-        `0*^^0->0
-mult='Times' quote='Next'`,
-      ],
-      `Can create a function from context as an arg:`,
-      [
-        `get
-(function assessIndex j (assessIndex j))
-  assessIndex = i:(Index n)->goal:Measure
-(either Dataset Goal)
-  Dataset = i:(Index 100)->i+70:Image
-  Goal = i:Image->1000-i:Measure
-Index='Index' Image='Image' Measure='Measure'`,
-        `(function f j (f j))
-  f = i:('Index' 100)->1000-[i+70]:'Measure'`,
-      ],
+      // ###
+//       `Trivial finding:`,
+//       [
+//         `get ?:1 (either 0:1 0:2)`,
+//         `0:1`,
+//       ],
+//       `First-order composition:`,
+//       [
+//         `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
+//         `4:10`,
+//       ],
+//       `Higher-order composition:`,
+//       [
+//         `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
+// Int='Int' Float="Float"`,
+//         `x:'Int'->[x+12]/2:'Float' x=?`,
+//       ],
+//       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
+//       [
+//         `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
+//         `('Next' 9)`,
+//       ],
+//       `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
+//       [
+//         `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
+// sum='Sum' quote='Next'`,
+//         `^^^# quote='Next'`,
+//       ],
+//       [
+//         `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
+// sum='Sum' quote='Next'`,
+//         `error X+^^^0->X 'is definitely not in' (either A+0->A A+^B->^[A+B]) X=#
+// sum='Sum' quote='Next'`,
+//       ],
+//       `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+//       [
+//         `get  X*^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=#
+// mult='Times' sum='Sum' quote='Next'`,
+//         `X*^0->X  X=#
+// mult='Times' quote='Next'`,
+//       ],
+//       `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+//       [
+//         `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
+// mult='Times' sum='Sum' quote='Next'`,
+//         `0*^^0->0
+// mult='Times' quote='Next'`,
+//       ],
+//       `Can create a function from context as an arg:`,
+//       [
+//         `get
+// (function assessIndex j (assessIndex j))
+//   assessIndex = i:(Index n)->goal:Measure
+// (either Dataset Goal)
+//   Dataset = i:(Index 100)->i+70:Image
+//   Goal = i:Image->1000-i:Measure
+// Index='Index' Image='Image' Measure='Measure'`,
+//         `(function f j (f j))
+//   f = i:('Index' 100)->1000-[i+70]:'Measure'`,
+//       ],
     ],
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
@@ -9638,10 +9665,11 @@ Use \`picker\` to override behavior.`,
       if (!_isUnknown(f))
         try { // Consult the current picker.
           ++pick.depth
-          impure()
+          if (f !== randomPicker) impure()
           const i = f(pick, from, cause, extra)
-          if (typeof i != 'number' || i !== i>>>0 || i >= _pickCount(from))
-            error("Expected an index less than", _pickCount(from), "but got", i)
+          if (!_isUnknown(i))
+            if (typeof i != 'number' || i !== i>>>0 || i >= _pickCount(from))
+              error("Expected an index less than", _pickCount(from), "but got", i)
           return i
         }
         finally { --pick.depth }
@@ -9687,7 +9715,9 @@ Use \`picker\` to override behavior.`,
 \`With\` is like \`function InnerPicker From Cause\`, copying \`From\` if needed, where \`InnerPicker\` is \`randomPicker\` unless set otherwise with this.`,
     future:[
       `\`(readMeasure Object Measure)\` and \`(writeMeasure Object Measure Is)\`, for persistent designed-for-low-measure-count (\`(Measure Is Measure Is)\`) storage.`,
+      `Pickers \`(bestMeasure Measure)\` and \`(sampleMeasure Measure)\`.`,
       `\`(alter PickedMap→? Expr)\`, for assigning blame and changing to fit a goal.
+Linear blend to goal of measures, add goal to measures, backprop to number variables. Fixate on one choice to alter. Make a measure that is a weighted sum of measures.
 
 A small set of measures stuck to thoughts, like hormones' effects. Searching through how to use those measures and how to alter them, in the middle of the generated expressions. That is what real optimization is, about as good as a human mind.`,
     ],
