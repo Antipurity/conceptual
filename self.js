@@ -2761,7 +2761,7 @@ I deserve nothing more, then. What I call truth is for stupid people.
 They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
 Maybe you should dedicate your life to creating something worth learning instead, and not rely on the bullshit "getting into the correct mindset" but only care about exposing the proper usage. Or make good things more visible.
 "You think you are so smart you could do it all by yourself? Wasting away in such failure is what can be expected from the likes of you."
-A typical statement from an environment brimming with like-minded people, AKA (relatively) mediocre people. You wanna help me and spread your oh so amazing techniques? What, your fire was designed to burn only for you? Shut up then.
+A typical statement from an environment brimming with like-minded people, AKA (relatively) mediocre people. You wanna help me and spread your oh so amazing techniques? What, your fire was designed to burn only for you? Be constructive or shut up.
 This is all baby stuff. I'm not feeling pain at all, you dumb bitch, only righteous anger. Get better at dissing me, THEN we'll talk.`,
     ],
   },
@@ -2961,7 +2961,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     finish.env = env, call.ID = ID
     finish.pure = false, finish.inFunction = 0, finish.noSystem = false, finish.depth = 0
     call.impure = false, _assign.inferred = undefined
-    _checkInterrupt.stepped = false // So that a step always passes even if we immediately interrupt.
+    _checkInterrupt.step = 0 // So that a step always happens even if we immediately interrupt.
     interrupt.started = microstart // So that we can interrupt on timeout.
     _jobs.reEnter = true // So that code can specify custom _schedule overrides.
     let v, interrupted
@@ -4199,7 +4199,14 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
 
           // Do the call with evaluated args.
           if (!record || doInline)
-            try { return finish.v = v, _checkArgCount(finished), result = call(finished, v, true), result }
+            try {
+              finish.v = v, _checkArgCount(finished)
+              // return result = call(finished, v, true)
+              let r = defines(finished, call)
+              if (typeof r == 'function' && (finished[0] !== rest || finished.length != 2))
+                return _checkInterrupt(v), r = r.call(...finished), _allocArray(finished), result = r
+              return result = finished
+            }
             catch (err) { if (err !== impure) throw err }
 
           // Record the call.
@@ -4251,8 +4258,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
 
   call:{
     txt:`\`(call (…Values))\`: Applies the first value (the function) to the rest of values. Evaluates the array of function then its arguments, assuming its parts are already evaluated.
-Overriding this allows function application. In fact, \`F=(function …)\` is the same as \`(concept {call F})\`.
-Caches results of pure functions.`,
+Defining this allows function application. In fact, \`F=(function …)\` is the same as \`(concept {call F})\`.`,
     nameResult:[
       `result`,
     ],
@@ -5151,7 +5157,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   errorFast:{
     txt:`Faster error-throwing, for things unlikely to be shown to the user.`,
-    call(...x) { if (!errorFast.e) errorFast.e = error(`An error has occured.`);  throw errorFast.e },
+    call() { if (!errorFast.e) errorFast.e = error(`An error has occured.`);  throw errorFast.e },
   },
 
   errorIn:{
@@ -7082,20 +7088,22 @@ Does not merge the parsed arrays.`,
     call(cause) {
       if (interrupt.noInterrupt) return
       if (!finish.env[_id(interrupt)] || !finish.env[_id(interrupt)].length) {
-        // If we stepped before (ensuring progress), and either we have worked for 10 ms or the nesting depth is as wanted by _pausedToStepper, interrupt.
-        if (!_checkInterrupt.stepped) _checkInterrupt.stepped = true
+        // If we stepped enough (ensuring progress), and either we have worked for 10 ms or the nesting depth is as wanted by _pausedToStepper, interrupt.
+        if (finish.env[_id(step)]) --finish.env[_id(step)], ++_checkInterrupt.step
         else if (_timeSince(interrupt.started, true) > 10) {
+          finish.env[_id(step)] = _checkInterrupt.step + 1 // Ensure progress.
           finish.env[_id(_checkInterrupt)] = cause
           finish.env[_id(finish)] = finish.depth
           throw interrupt
         } else if (finish.env[_id(step) !== undefined && finish.depth <= finish.env[_id(step)]]) {
+          finish.env[_id(step)] = _checkInterrupt.step + 1
           finish.env[_id(_checkInterrupt)] = cause
           finish.env[_id(finish)] = finish.depth
           _jobs.reEnter = _pausedToStepper
           throw interrupt
-        }
+        } else _checkInterrupt.step = 0
       }
-      // .stepped (Boolean)
+      // .step (the counter of interrupt checks, for fully consistent restoration)
     },
   },
 
@@ -7215,7 +7223,7 @@ Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2
 
       return interrupt.populate
 
-      // .noInterrupt
+      // .tmp, .populate, .noInterrupt
     },
   },
 
@@ -8428,6 +8436,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     call(x) {
       if (!_structHash.dependent)
         _structHash.dependent = Symbol('dependent'), _structHash.context = Symbol('context')
+      if (typeof x == 'function') return _structHash.dependent
       if (_isUnknown(x) && x.length == 2) x = x[1]
       if (!_isArray(x) || !x.length || x[0] === _const) return x
       if (typeof x[0] == 'function' || _isVar(x) || !_isArray(x[0]) && typeof defines(x[0], finish) == 'function')
@@ -8485,7 +8494,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         _addHashed(result, d[j], add, inp)
 
     } else {
-      const hash = typeof v != 'function' ? _structHash(v) : _structHash.dependent
+      const hash = _structHash(v)
       if (!result.has(hash)) result.set(hash, [])
       const arr = result.get(hash)
       if (!actuallyRemove) 
@@ -9062,8 +9071,6 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   },
 
   _addUsesToContext(result, as, v, ctx, values, inp) {
-    // ### Interrupts are definitely not handled well here. But where?
-      // Should we try making as/v/values into variables restored on interrupt?
     // The result of this (and `input`/`output`) can and should be `_allocArray(?)`d.
     if (!inp && _isVar(values) && result === false) return true
     _checkInterrupt()
@@ -9071,7 +9078,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
 
     if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length))
       // If a macro, unwrap unknowns inside `values` and treat it as a call.
-      [as, v, values] = [v, d, bound(_unwrapUnknown, values, false)]
+      [v, values] = [d, bound(_unwrapUnknown, values, false)]
     if (!inp && _isArray(v) && v[0] === array)
       // If `array ...?`, treat it as v.slice(1).
       v = v.slice(1)
@@ -9094,7 +9101,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
           r = _addUsesToContext(r, v, d[j], ctx, values, inp)
           if (r === true) return r
         }
-        return result = r
+        return r
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(r, j);  throw err }
 
     // If a deconstructable function, or a JS function that defines `input`/`output`:
@@ -9145,7 +9152,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
         if (!result.includes(as)) result.push(as)
       } catch (err) { if (err === interrupt) throw err }
 
-    // If `either ...?`, or defines `Usage` to be `either ...?`:
+    // If `either …?`, or defines `Usage` to be `either …?`:
     } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
 
       // Check out this sub-context.
@@ -9153,7 +9160,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       if (!_addUsesToContext.stack)
         _addUsesToContext.stack = new Set, _addUsesToContext.checkStack = new Set
       const stack = result !== false ? _addUsesToContext.stack : _addUsesToContext.checkStack
-      if (stack.has(v)) return null
+      if (stack.has(v)) return result
       if (_isVar(values)) return result === false ? v.length > 1 : v ? v.slice() : v
       let [direct, dep, subctx, r = result, i = 0, j = 0, k = 0] = interrupt(_addUsesToContext)
       stack.add(v)
@@ -9269,7 +9276,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
         `either ?:1→?:Int Int='Int'`,
       ],
     ],
-    philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code.`,
+    philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code. Doesn't mean that this impl is good tho; an infinite search for impls is much better.`,
     call(value, ctx = CurrentUsage) { return ctx === CurrentUsage && impure(), _addUsesToContext(null, ctx, ctx, ctx, value, false) },
   },
 
@@ -9277,29 +9284,29 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     txt:`\`use Function Inputs Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     examples:[
-      // ###
       `Select the proper semantic type in a bank of knowledge:`,
       [
-        `use undefined (15:'AnalysisResult') (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x)))`,
+        `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
         `1:'Action'`,
       ],
       `Can find args in \`Context\`:`,
       [
-        `use (function a:2 b:3 a+b:5) undefined (either 1:2 2:3)`,
+        `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
         `3:5`,
       ],
       `Take some, find some:`,
       [
-        `use (function 0 x:Int 1 x:Int) (0 1) (either 5:Int) Int='Int'`,
+        `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
         `5:'Int'`,
       ],
       `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
       [
-        `use (function 0 x:Int 5 x:Int) undefined (either 0 5 5:Int x:Int->0 x:Int->x x:Int->2*x) Int='Int'`,
+        `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
         `5:'Int'`,
       ],
+      `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
     ],
-    call(v, inputs, ctx = CurrentUsage) { // Why are inputs the first arg?
+    call(v, ctx = CurrentUsage, inputs) {
       const r = _search(undefined, ctx, v !== undefined ? v : ctx, inputs, undefined)
       const result = r[0]
       _allocArray(r[1][0]), _allocArray(r[1][2]), _allocArray(r[1]), _allocArray(r)
@@ -9342,6 +9349,15 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     return impl
   },
 
+  _outputIsStructured(v) {
+    if (typeof v == 'function' && !_isArray(v) && _isArray(defines(v, output)))
+      return true
+    else if (_isUsing(v) || _isFunction(v))
+      return v = deconstruct(v), !_hasCallableParts(v[v.length-1], true) && !_isVar(v[v.length-1])
+    else
+      return false
+  },
+
   _handleNode:{
     txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
     call(node) {
@@ -9367,7 +9383,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         // If `v` contains `wantedOutput` as-is, return that.
         let i = d.indexOf(wantedOutput)
         if (i > 0) {
-          if (then) _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], d[i]] : [d[i]], then[5])
+          if (then) return void _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], d[i]] : [d[i]], then[5])
           else return d[i] !== undefined ? d[i] : _onlyUndefined
         }
 
@@ -9404,13 +9420,12 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           } catch (err) {
             // If the arg is not in `wantedInputs`, generate it from context.
             let outs
-            interrupt.noInterrupt = true
             outs = output(nextArg, ctx)
-            interrupt.noInterrupt = false
             // log('Searching in context', outs, 'for', nextArg, 'to fill', v)
             if (outs)
               for (let i = 1; i < outs.length; ++i)
-                if (!_isVar(wantedOutput) || typeof outs[i] != 'function') // Don't infinitely balloon the search.
+                // To prevent infinite ballooning of search, don't visit functions if we want unstructured input, and don't visit functions with non-structured output.
+                if (typeof outs[i] != 'function' || !_isVar(nextArg) && _outputIsStructured(outs[i]))
                   _visitNode(ctx, outs[i], null, nextArg, null, node)
             return
           }
@@ -9423,8 +9438,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // log('Completed function', v, actualArgs)
           try {
             v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return
-          }
-          catch (err) { if (err === interrupt) throw err; return }
+          } catch (err) { if (err === interrupt) throw err; return }
           finally { _assign.inferred = prevInferred; _search.nodes = nodes, _search.visited = visited, _search.values = values }
         }
       }
@@ -9433,9 +9447,9 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       try { // (Can't interrupt.)
         if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
         // If `then`, add to args, else return from this graph search.
-        if (then) _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], v] : [v], then[5])
+        if (then) return void _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], v] : [v], then[5])
         else return v !== undefined ? v : _onlyUndefined
-      } catch (err) {} // No forward search here. Backward search should be enough.
+      } catch (err) {}
     },
   },
 
@@ -9447,7 +9461,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       const valueArray = _allocArray;  valueArray.push(value)
       try {
         for (; i < ins.length; ++i) {
-          const r = use(ins[i], valueArray, ctx)
+          const r = use(ins[i], ctx, valueArray)
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
         }
         _allocArray(ins)
@@ -9485,7 +9499,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
           // Pick a node and handle it, and return if needed.
             // (If the picker chooses by the best measure, then this is quadratic time complexity. If it special-cases this particular usage pattern (pick and swap-with-end and add some new choices at the end), it could be made linear.)
           if (node === undefined) {
-            const i = 0 // pick(values, us, 'The graph node to search next') // No one needs to know about all the nodes's extra stuff. Probably. …For now.
+            const i = pick(values, us, 'The graph node to search next') // No one needs to know about all the nodes's extra stuff. Probably. …For now.
             if (i !== i>>>0) error('Expected an index, got', i)
             node = nodes[i]
             ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], nodes.pop()
