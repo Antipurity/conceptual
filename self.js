@@ -859,7 +859,7 @@ waiting {
   display: inline-block;
   width: 1.5em;
   height: 1.5em;
-  margin: .5em;
+  margin: 1.2em;
   border-radius: 50%;
   border: .2em solid var(--main);
   border-color: transparent var(--main) transparent var(--main);
@@ -889,7 +889,7 @@ node.code {display:table; font-family:monospace}
 .editorContainer.editable.hover>:last-child[contenteditable] { box-shadow:none }
 prompt { width:2ch; color:red; float:left }
 prompt::before { content:'▶' /* > ⊱ ▶ */ }
-.editable>prompt::before { content:'⌨' }
+.editable>prompt::before { content:'⊱' }
 
 JobIndicator { width:1em; height:1em; margin:.2em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
 JobIndicator.yes { background-color:var(--highlight); animation: rotate 4s infinite linear, fadein .2s }
@@ -899,7 +899,7 @@ JobIndicator>div { width:.3em; height:.3em; margin:.35em; position:absolute; bac
   100% { transform: rotate(0.75turn) }
 }
 
-button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:var(--highlight); color:var(--background); font-family:monospace }
+button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:var(--highlight); color:var(--background); font-family:monospace; min-width:2.2em }
 button:hover, a:hover, collapsed:hover, prompt:hover { filter:brightness(120%) }
 button:active, a:active, collapsed:active, prompt:active { filter:brightness(80%) }
 button::-moz-focus-inner { border:0 }
@@ -1695,10 +1695,12 @@ Remember to quote the link unless you want to evaluate the insides.`,
       const ID = _newJobId()
       const result = _evaluationElem(ID)
       const el = elem('div', result)
+      el.classList.add('code')
       const env = _newExecutionEnv(finish.env)
       env[_id(log)] = el.lastChild
-      _doJob(expr, env, then || (() => !result.previousSibling ? el.remove() : result.remove()), ID)
-      return el
+      let ended = false
+      _doJob(expr, env, then || (() => (ended = true, !result.previousSibling ? el.remove() : result.remove())), ID)
+      return !ended ? el : undefined
     },
   },
 
@@ -2366,6 +2368,7 @@ Call this with the result of _smoothHeightPre to transition smoothly.`,
     txt:`Inserts a DOM element into the displayed DOM tree smoothly (if CSS transitions are enabled for it, and are specified in seconds, with all-props being the first specified one), by transitioning height from 0.
 Very bad performance if a lot of inserts happen at the same time, but as good as it can be for intermittent smooth single-element-tree insertions.`,
     call(into, el, before = null) {
+      if (el === undefined) return
       impure()
       if (el.parentNode) el = elemClone(el)
       if (typeof el == 'string') el = document.createTextNode(el)
@@ -2744,7 +2747,7 @@ Those lies that humanity has completely wrapped itself in: a temporary thing tha
 I thought not. It's not a story the Jedi would tell you. It's a Sith legend. Darth Plagueis was a Dark Lord of the Sith, so powerful and so wise, he could use the Force to influence midichlorians to create… life. He could even keep the ones he cared about from dying.
 The Dark Side of the Force is a pathway to many abilities some consider to be… unnatural.
 He became so powerful, the only thing he was afraid of was losing his power, which eventually, of cource, he did. Unfortunately, he taught his apprentice everything he knew, then his apprentice murdered him in his sleep. Ironic. He could save others from death… but not himself.`,
-      `An idea isn't good unless it's been refactored and rethought five times.`,
+      `An idea isn't good unless it's been refactored and rethought five times. But those times must still be lived through.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
       `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.`,
       `A need for a source of hatred towards this self has become apparent, to develop something new faster.
@@ -2964,7 +2967,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     _checkInterrupt.step = 0 // So that a step always happens even if we immediately interrupt.
     interrupt.started = microstart // So that we can interrupt on timeout.
     _jobs.reEnter = true // So that code can specify custom _schedule overrides.
-    let v, interrupted
+    let v, interrupted = false
 
     if (typeof document != ''+void 0 && env[_id(_checkInterrupt)] !== undefined)
       _highlightOriginal(env[_id(_checkInterrupt)], false)
@@ -5581,7 +5584,7 @@ Infers structural terms where possible.`,
               if (!_isStruct(b[1])) throw impure
               if (_isVar(b[1])) b = b[1]
             }
-            _assign(m.get(a), b, readonly), _assign(b, m.get(a), readonly)
+            m.get(a) !== a && _assign(m.get(a), b, readonly), _assign(b, m.get(a), readonly)
             if (finish.inFunction && (!_isUnknown(b) || _isDeferred(b) || !_isVar(b[1])))
               !readonly && m.set(a, bound(_assign.inferred, a))
           } else
@@ -6658,11 +6661,11 @@ And parsing is more than just extracting meaning from a string of characters (it
   },
 
   _fancyOutermost(match, u, topLevel) {
-    let ctx
+    let ctx, needsGrouping = !topLevel || match()
     if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3)
-      ctx = u[1], u = u[2], match('[')
+      ctx = u[1], u = u[2], needsGrouping && match('[')
     const r = _fancyTry(match, u, topLevel)
-    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], _fancyTry))), match(']')
+    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], _fancyTry))), needsGrouping && match(']')
     return r
   },
 
@@ -8674,7 +8677,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       txt:`Display evaluation result's potential uses.`,
       input:__is(78963),
       call([_typed, [result]]) {
-        const ctx = input(result)
+        const ctx = input([result])
         if (ctx) {
           const lang = _langAt(), binds = _bindsAt()
           return elem('div',
@@ -8685,7 +8688,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       },
     },
     {
-      txt:`Display potential ways to get evaluation result's.`,
+      txt:`Display potential ways to get evaluation result.`,
       input:__is(78963),
       call([_typed, [result]]) {
         const ctx = output(result)
@@ -9003,7 +9006,7 @@ For anything else, display the globals the expression binds to, and an expandabl
       get:__is(`get`),
     },
     philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
-All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. Programming languages must be described in an understandable and searchable and optimizable format, not given one measly implementation of. But that is not at all the regular programming style. Very alien to me. Can an old dog be taught new tricks?`,
+All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. Programming languages must be described in an understandable and searchable and optimizable and extensible format, not given one measly implementation of. But that is not at all the regular programming style. Very alien to me. Can an old dog be taught new tricks?`,
   },
 
   types:{
@@ -9284,27 +9287,28 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     txt:`\`use Function Inputs Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     examples:[
-      `Select the proper semantic type in a bank of knowledge:`,
-      [
-        `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
-        `1:'Action'`,
-      ],
-      `Can find args in \`Context\`:`,
-      [
-        `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
-        `3:5`,
-      ],
-      `Take some, find some:`,
-      [
-        `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
-        `5:'Int'`,
-      ],
-      `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
-      [
-        `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
-        `5:'Int'`,
-      ],
-      `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
+      // ###
+      // `Select the proper semantic type in a bank of knowledge:`,
+      // [
+      //   `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
+      //   `1:'Action'`,
+      // ],
+      // `Can find args in \`Context\`:`,
+      // [
+      //   `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
+      //   `3:5`,
+      // ],
+      // `Take some, find some:`,
+      // [
+      //   `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
+      //   `5:'Int'`,
+      // ],
+      // `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
+      // [
+      //   `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
+      //   `5:'Int'`,
+      // ],
+      // `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
     ],
     call(v, ctx = CurrentUsage, inputs) {
       const r = _search(undefined, ctx, v !== undefined ? v : ctx, inputs, undefined)
@@ -9393,11 +9397,11 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         return
       }
 
-      if (typeof v == 'function' && (!wantedInputs || defines(v, argCount) >= wantedInputs.length)) {
+      if (typeof v == 'function' && (!wantedInputs || _isArray(d = defines(v, input)) && d.length >= wantedInputs.length || defines(v, argCount) >= wantedInputs.length)) {
         if (!actualArgs || actualArgs.length < defines(v, argCount)) {
           let nextArg
           // `input`-defining functions get treated as if their inputs are as defined.
-          if (typeof v == 'function' && !_isArray(v) && _isArray(defines(v, input)))
+          if (typeof v == 'function' && _isArray(defines(v, input)))
             nextArg = defines(v, input)[!actualArgs ? 0 : actualArgs.length]
           // Generated functions have their inputs read.
           else if (_isUsing(v))
@@ -9456,10 +9460,11 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   _logUses:{
     txt:`Logs all \`use\`s of a value.`,
     call(value, ctx = CurrentUsage) {
-      let [ins = input(value, ctx), i = 1] = interrupt(_logUses)
-      if (!ins) return
-      const valueArray = _allocArray;  valueArray.push(value)
+      let [ins, i = 1] = interrupt(_logUses)
+      const valueArray = _allocArray();  valueArray.push(value)
       try {
+        if (ins === undefined) ins = input([value], ctx)
+        if (!ins) return
         for (; i < ins.length; ++i) {
           const r = use(ins[i], ctx, valueArray)
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
@@ -9516,7 +9521,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
           }
           node = undefined
         }
-        error(v, 'is definitely not in', ctx)
+        error(out, 'is definitely not in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 4)(node, nodes, visited, values);  throw err }
 
       // .nodes (the current array of nodes), .visited (the set of nodes visited in this search), .values (a context of values of nodes, for `pick`ing the next one)
@@ -9525,7 +9530,12 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 
   _get:{
     txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful.`,
-    call(out, ctx = CurrentUsage) { return _search(undefined, ctx, ctx, undefined, out) },
+    call(out, ctx = CurrentUsage) {
+      const [o = output(out, ctx)] = interrupt(_get)
+      console.log(out, o, _structHash(out), _hashes.outs.get(ctx))
+      try { return _search(undefined, ctx, o, undefined, out) }
+      catch (err) { if (err === interrupt) interrupt(_get, 1)(o);  throw err }
+    },
   },
 
   get:{
@@ -9538,11 +9548,11 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 //         `get ?:1 (either 0:1 0:2)`,
 //         `0:1`,
 //       ],
-//       `First-order composition:`,
-//       [
-//         `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
-//         `4:10`,
-//       ],
+      `First-order composition:`,
+      [
+        `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
+        `4:10`,
+      ],
 //       `Higher-order composition:`,
 //       [
 //         `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
@@ -9595,7 +9605,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
     ],
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
-But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Life is not some grand search, but a search for a search.`,
+But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Search for optimization, for self, for search.`,
     call(out, ctx = CurrentUsage) {
       const r = _get(out, ctx)
       const result = r[0]
