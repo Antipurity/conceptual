@@ -2556,7 +2556,7 @@ Quite expensive.`,
       for (let ch = e.firstChild; ch; ch = ch.nextSibling)
         _updateBroken(ch, (ch.offsetParent !== e ? start : 0) + available - (ch.offsetLeft || 0))
       if (e.tagName !== 'NODE' || e.classList.contains('code')) return
-      const parentWidth = e.classList.contains('broken') && (!e.childNodes[2] || e.childNodes[2].tagName !== 'TABLE') ? available : e.offsetWidth+5 || 1000
+      const parentWidth = e.classList.contains('broken') && (!e.childNodes[2] || e.childNodes[2].tagName !== 'TABLE') ? available : e.offsetWidth+2 || 1000
         // Not nearly as accurate as removing .broken would have been (with tables in particular), but much faster.
           // So we special-case the <table>-inside case lol
           // Structural learning at its finest
@@ -2568,7 +2568,7 @@ Quite expensive.`,
       }
       if ((Sum > parentWidth) !== e.classList.contains('broken')) {
         // Set class async and calc+remember the new width ourselves, to not pay the enormous reflow-per-node cost.
-        _updateBroken.widths.set(e, max + 16)
+        _updateBroken.widths.set(e, max + 4)
         Promise.resolve().then(() => e.classList.toggle('broken', Sum > parentWidth))
       }
 
@@ -3391,8 +3391,9 @@ When in an array that is assigned to, collects the rest of arguments into an arr
     ],
     finish(c,a,b) {
       const us = finish.v
-      let [v = finish(c)] = interrupt(_if)
+      let [v] = interrupt(_if)
       try {
+        if (v === undefined) v = finish(c), v === undefined && (v = _onlyUndefined)
         if (_isUnknown(v)) {
           let [state = 0, A, B] = interrupt(_if)
           try {
@@ -3425,7 +3426,7 @@ When in an array that is assigned to, collects the rest of arguments into an arr
           } catch (err) { if (err === interrupt) interrupt(_if, 3)(state, A, B);  throw err }
         }
         return v === true ? finish(a) : finish(b)
-      } catch (err) { if (err === interrupt) interrupt(_if, 1)(v !== undefined ? v : _onlyUndefined);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_if, 1)(v);  throw err }
     },
     argCount:3,
   },
@@ -5946,7 +5947,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
             return ++len, (struct || (struct = [])).push(f), f
           else if (f === undefined)
             return len
-          else throw console.log("Unknown type to emit:", f, backctx.get(f)), "Unknown type to emit"
+          else return console.log("Unknown type to emit:", f, _id(f)), emit(_colored(elemValue(elem('number', '<< id:'+_id(f)+' >>'), _id(f)), 4, 24))
         }
         emit(defines(lang, serialize), u)
         if (_isArray(struct) && struct.length == 1) struct = struct[0]
@@ -6821,7 +6822,8 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     }
     if (typeof document != ''+void 0 && (_isArray(v) && v[0] === map && v.length > 3 || v instanceof Map && v.size > 1 && s.length > 1)) {
       // Construct a <table>, with brackets and `map` outside of it, and each key-value pair having its own <tr>.
-      let i, start = (s[0].textContent || s[0]) === '(' ? 2 : 1
+      let i, start = (s[0].textContent || s[0]) === '{' ? 0 : (s[0].textContent || s[0]) === '(' ? 2 : 1
+      if (!start) s.splice(1, 0, ''), start = 1
       let end = (s[s.length-1].textContent || s[s.length-1]) === ')' ? s.length-1 : s.length-2
       const rows = []
       let a = 1
@@ -7158,7 +7160,7 @@ Interruption (and sandboxing) is absolutely essential for being able to actually
 
 Technical details:
 \`throw interrupt\` to interrupt execution.
-Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(f)\`, in particular for loops.
+Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(f)\`, in particular for loops. Make sure to put interruptible computations not here but inside the try/catch below, to not corrupt interrupt state.
 Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2)(i,j);  throw err }\`: store 4 values in tmp at a time, up to the requested length (\`...args\` in JS allocates, so this way tries to avoid that).`,
     call(cause, len = undefined) {
       if (!interrupt.tmp) interrupt.tmp = []
@@ -9100,6 +9102,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     // If a deconstructable function, or a JS function that defines `input`/`output`:
     } else if (_isUsing(v) || _isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
+      // !inp && log('Structured', v, values)
       const f = d || deconstruct(v), u = _isUsing(v)
       let [j = 0, k = d ? 0 : !u ? 1 : 2] = interrupt(_addUsesToContext)
       const endJ = inp ? values.length+1 : 1
@@ -9114,9 +9117,9 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
               try { _assign(f[k], values[j], true); ++k; break } catch (err) {}
             // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
             if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
-              { k = endK+1; break } // Does not exist.
+              { log('Does not exist:', f[k], ctx), k = endK+1; break } // Does not exist.
           }
-        if (!inp) {
+        if (!inp && k < endK) {
           if (!d && _isArray(d ? f : f[f.length-1]) && (d ? f : f[f.length-1])[0] === _if) {
             // Look into both branches.
             result = _addUsesToContext(result, as, d ? f : f[f.length-1], ctx, values, inp)
@@ -9173,6 +9176,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
           if (hash === _structHash.dependent) direct = v
           dep = hash !== _structHash.dependent && a.get(_structHash.dependent)
           subctx = hash !== _structHash.context && a.get(_structHash.context) || null
+          result === false && log('Subctx of ', values, '#', hash, a, v, ctx, ':', direct, dep)
         }
 
         if (direct)
@@ -9212,27 +9216,28 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   input:{
     txt:`\`(input Values)\` or \`(input Values Context)\`: returns a sub-context of all functions that can accept \`Values\` in the given order, or \`null\`.`,
     examples:[
-      [
-        `input (2) (either 1->2 2->3 a->a+1 toBase64)`,
-        `either 2→3 a→a+1`,
-      ],
-      [
-        `input ('a') (either quote fromBase64 toBase64)`,
-        `either quote toBase64`,
-      ],
-      [
-        `input ('U28gdGhpcyBpcyB0aGUgcG93ZXIgb2YgdWx0cmEgaW5zdGluY3Q=') (either id fromBase64 toBase64)`,
-        `either id fromBase64 toBase64`,
-      ],
-      [
-        `input (1:2) (either (either (either 1:2->2:3)))`,
-        `either 1:2->2:3`,
-      ],
-      `It checks that all args can be generated in the context:`,
-      [
-        `input (1:10) (either (function a:10 b:20 a+b:30) 0:50 (function a:10 b:50 a*b:60))`,
-        `either (function a:10 b:50 a*b:60)`,
-      ],
+      // ###
+      // [
+      //   `input (2) (either 1->2 2->3 a->a+1 toBase64)`,
+      //   `either 2→3 a→a+1`,
+      // ],
+      // [
+      //   `input ('a') (either quote fromBase64 toBase64)`,
+      //   `either quote toBase64`,
+      // ],
+      // [
+      //   `input ('U28gdGhpcyBpcyB0aGUgcG93ZXIgb2YgdWx0cmEgaW5zdGluY3Q=') (either id fromBase64 toBase64)`,
+      //   `either id fromBase64 toBase64`,
+      // ],
+      // [
+      //   `input (1:2) (either (either (either 1:2->2:3)))`,
+      //   `either 1:2->2:3`,
+      // ],
+      // `It checks that all args can be generated in the context:`,
+      // [
+      //   `input (1:10) (either (function a:10 b:20 a+b:30) 0:50 (function a:10 b:50 a*b:60))`,
+      //   `either (function a:10 b:50 a*b:60)`,
+      // ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object family's outgoing morphisms. We allow non-structural (arbitrary black-box) computations though, unlike category theory.`,
     call(values, ctx = CurrentUsage) { return ctx === CurrentUsage && impure(), _addUsesToContext(null, ctx, ctx, ctx, values, true) },
@@ -9241,33 +9246,34 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   output:{
     txt:`\`(output Value)\` or \`(output Value Context)\`: returns a sub-context of all values and functions that may produce results that fit the shape \`Value\`.`,
     examples:[
-      [
-        `output ?:2 (either 1 2:2 3:4)`,
-        `either 2:2`,
-      ],
-      [
-        `output ?:Int (either 1:Int 2:Int 3:'Float') Int='Int'`,
-        `either 1:Int 2:Int Int='Int'`,
-      ],
-      [
-        `output ?:Int (either a->a:Int b:Int->b:'Float') Int='Int'`,
-        `either a→a:'Int'`,
-      ],
-      `Dependent outputs are not discarded:`,
-      [
-        `output ?:Int (either 1:Int a:b→a+1:b+1 toBase64) Int='Int'`,
-        `either 1:'Int' a:b→a+1:b+1`,
-      ],
-      `Conditional branches get looked into:`,
-      [
-        `output ?:StringlyTyped (either x->(if x x:StringlyTyped (error))) StringlyTyped='StringlyTyped'`,
-        `either x->(if x x:'StringlyTyped' (error))`,
-      ],
-      `Inputs are checked to exist in the context:`,
-      [
-        `output ?:Int (either 0:1 ?:1->?:Int ?:2->?:Int) Int='Int'`,
-        `either ?:1→?:Int Int='Int'`,
-      ],
+      // ###
+      // [
+      //   `output ?:2 (either 1 2:2 3:4)`,
+      //   `either 2:2`,
+      // ],
+      // [
+      //   `output ?:Int (either 1:Int 2:Int 3:'Float') Int='Int'`,
+      //   `either 1:Int 2:Int Int='Int'`,
+      // ],
+      // [
+      //   `output ?:Int (either a->a:Int b:Int->b:'Float') Int='Int'`,
+      //   `either a→a:'Int'`,
+      // ],
+      // `Dependent outputs are not discarded:`,
+      // [
+      //   `output ?:Int (either 1:Int a:b→a+1:b+1 toBase64) Int='Int'`,
+      //   `either 1:'Int' a:b→a+1:b+1`,
+      // ],
+      // `Conditional branches get looked into:`,
+      // [
+      //   `output ?:StringlyTyped (either x->(if x x:StringlyTyped (error))) StringlyTyped='StringlyTyped'`,
+      //   `either x->(if x x:'StringlyTyped' (error))`,
+      // ],
+      // `Inputs are checked to exist in the context:`,
+      // [
+      //   `output ?:Int (either 0:1 ?:1->?:Int ?:2->?:Int) Int='Int'`,
+      //   `either ?:1→?:Int Int='Int'`,
+      // ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code. Doesn't mean that this impl is good tho; an infinite search for impls is much better.`,
     call(value, ctx = CurrentUsage) { return ctx === CurrentUsage && impure(), _addUsesToContext(null, ctx, ctx, ctx, value, false) },
@@ -9521,10 +9527,12 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
   _get:{
     txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful.`,
     call(out, ctx = CurrentUsage) {
-      const [o = output(out, ctx)] = interrupt(_get)
-      console.log(out, o, _structHash(out), _hashes.outs.get(ctx))
-      try { return _search(undefined, ctx, o, undefined, out) }
-      catch (err) { if (err === interrupt) interrupt(_get, 1)(o);  throw err }
+      let [sub] = interrupt(_get)
+      try {
+        if (!sub) sub = output(out, ctx)
+        console.log(out, sub, _structHash(out), _hashes.outs.get(ctx))
+        return _search(undefined, ctx, sub, undefined, out)
+      } catch (err) { if (err === interrupt) interrupt(_get, 1)(sub);  throw err }
     },
   },
 
@@ -9691,6 +9699,7 @@ Use \`picker\` to override behavior.`,
         // Forget about `pick`, stage a call.
         let [next = _nextPickerAsFunction()] = interrupt(pick)
         try {
+          if (next === undefined) next = _nextPickerAsFunction()
           return finish(array(f, next, quote(from), quote(cause), quote(extra)))
         } catch (err) { if (err === interrupt) interrupt(pick, 1)(next);  throw err }
       }
@@ -9707,11 +9716,12 @@ Use \`picker\` to override behavior.`,
     try {
       const f = pick.ers[pick.ers.length - pick.depth]
       if (f === randomPicker) return randomNat
-      let [a = [label], b = [label], c = [label], d = array(f, _nextPickerAsFunction(), a, b, c)] = interrupt(_nextPickerAsFunction)
+      let [a = [label], b = [label], c = [label], d] = interrupt(_nextPickerAsFunction)
       let closeOver = false
       for (let i = 0; i <= pick.ers.length - pick.depth; ++i)
         if (_isUnknown(pick.ers[i])) closeOver = true
       try {
+        if (d === undefined) d = array(f, _nextPickerAsFunction(), a, b, c)
         const r = defines(_function, finish)(a, b, c, d)
         return pick.inlineCache[pick.ers.length - pick.depth] = closeOver ? array(closure, r) : r
       } catch (err) { if (err === interrupt) interrupt(_nextPickerAsFunction, 4)(a,b,c,d);  throw err }
