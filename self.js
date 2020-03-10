@@ -2502,57 +2502,24 @@ Return a promise to measure non-sync time.`,
 
   undefined:undefined,
 
-  _var:{
-    txt:`Finishing \`?\` or \`(var)\`: A unique assignable variable.
-Unlike a label, this returns itself when evaluated without having been assigned.`,
-    examples:[
-      [
-        `a a a=(var)`,
-        `a a a=(var)`,
-      ],
-      [
-        `(var) (var)`,
-        `(var) (var)`,
-      ],
-      [
-        `(a→a 5) a=(var)`,
-        `5`,
-      ],
-    ],
-    nameResult:[
-      `x`,
-      `y`,
-      `z`,
-      `w`,
-      `a`,
-      `b`,
-      `c`,
-      `d`,
-      `variable`,
-    ],
-    argCount:0,
-  },
-
-  var:__is(`_var`),
-
   _const:{
-    txt:`\`(const)\`: A new unique object with no inner structure, only good for ref-equality checks.`,
+    txt:`\`#\` or \`(const)\`: A new unique object with no inner structure, only good for ref-equality checks.`,
     examples:[
       [
-        `(a a a=(const))`,
-        `(a a a=(const))`,
+        `(a a a=#)`,
+        `(a a a=#)`,
       ],
       [
-        `((const) (const))`,
-        `((const) (const))`,
+        `(# #)`,
+        `(# #)`,
       ],
       [
-        `(a→a a) a=(const)`,
-        `(const)`,
+        `(a→a a) a=#`,
+        `#`,
       ],
       [
-        `(a→a 5) a=(const)`,
-        `error (const) 'cannot be assigned' 5`,
+        `(a→a 5) a=#`,
+        `error # 'cannot be assigned' 5`,
       ],
     ],
     nameResult:[
@@ -2564,7 +2531,7 @@ Unlike a label, this returns itself when evaluated without having been assigned.
 
   const:__is(`_const`),
 
-  _isVar(x) { return _isLabel(x) || _isArray(x) && x[0] === _var && x.length == 1 },
+  _isVar(x) { return _isArray(x) && x[0] === label },
 
   _updateBroken:{
     txt:`Ensure that e either contains no soft line breaks directly inside of it, or its every child is on its own line (CSS class .broken).
@@ -3631,10 +3598,10 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
   },
 
   label:{
-    txt:`\`(label Name)\`: represents a name that can be bound or assigned. Equal-name labels are bound to the same thing within the same binding.
-Evaluating an unbound label results in \`(error)\`; evaluating a bound label results in its value, in the current function call.`,
+    txt:`\`Name\` or \`(label "Name")\`, or \`?\` or \`(label)\`: represents a variable that can be bound or assigned.
+Equal-name labels are bound to the same thing within the same binding. Each unnamed label is unique.
+Evaluating a bound label results in its value, in the current function call. Evaluating an unbound named label results in an \`(error)\`.`,
     future:`Fix \`a a=(0 (a) a)\` not serializing correctly.`,
-    argCount:1,
     examples:[
       [
         `a a=1`,
@@ -3652,9 +3619,33 @@ Evaluating an unbound label results in \`(error)\`; evaluating a bound label res
         `x→(sum \`x\` 1)`,
         `x→(sum x 1)`,
       ],
+      `Unnamed labels do not throw when evaluated:`,
+      [
+        `a a a=?`,
+        `a a a=?`,
+      ],
+      [
+        `? ?`,
+        `? ?`,
+      ],
+      [
+        `(a→a 5) a=?`,
+        `5`,
+      ],
+    ],
+    nameResult:[
+      `x`,
+      `y`,
+      `z`,
+      `w`,
+      `a`,
+      `b`,
+      `c`,
+      `d`,
+      `variable`,
     ],
     merge:__is(`true`),
-    finish(l) { error("An unassigned label", (_isLabel(finish.v) && finish.v[1] === l) ? finish.v : l, "was evaluated") },
+    finish(l) { if (typeof l == 'string') error("An unassigned label", (_isLabel(finish.v) && finish.v[1] === l) ? finish.v : l, "was evaluated") },
     call(name) {
       // Return a label array.
       if (!label.s) label.s = {}
@@ -4133,7 +4124,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
         let [finished, i = 1, record] = interrupt(finish)
         ++finish.depth
         try {
-          if (!v.length || v[0] === _const || v[0] === _var) return result = v
+          if (!v.length || v[0] === _const || v[0] === label && v.length == 1) return result = v
           if (finished === undefined) {
             // Defer to the compiled version if we have already inferred everything.
             if (!finish.pure && i === 1) {
@@ -4955,7 +4946,7 @@ Putting all variables in a single global namespace allows for easy development. 
         return bound.env.set(v, bound.cyclic ? _doBinding(r) : r), bound.env.get(v)
       }
     }
-    if (_isArray(v) && (v[0] === _const || v[0] === _var)) return v
+    if (_isArray(v) && (v[0] === _const || v[0] === label && v.length == 1)) return v
     // Copy the array and bind its parts.
     if (_isArray(v)) {
       let copy, changed = false, pushedCtx = false
@@ -4986,7 +4977,7 @@ Putting all variables in a single global namespace allows for easy development. 
             changed = true, copy[i] = r
         }
       } finally { if (pushedCtx) bound.innerCtxs.pop() }
-      if (_isArray(copy) && (copy[0] === _const || copy[0] === _var)) return copy
+      if (_isArray(copy) && (copy[0] === _const || copy[0] === label && copy.length == 1)) return copy
       copy = changed ? _maybeMerge(copy) : v // This doesn't actually merge cycles.
       bound.env.set(v, v = !bound.rewrite ? copy : bound.rewrite(copy))
     }
@@ -5507,7 +5498,6 @@ Variables within non-\`closure\` functions will not be changed by application.`,
     lookup:{
       purify:__is(`purify`),
       closure:__is(`closure`),
-      var:__is(`var`),
       const:__is(`const`),
       id:__is(`id`),
       try:__is(`_try`),
@@ -5608,7 +5598,7 @@ Infers structural terms where possible.`,
             if (_isVar(x)) {
               if (m && m.get(x) == null) return
               !m && (m = new Map)
-              const v = [_var]
+              const v = [label]
               !m.has(x) && m.set(x, v)
               m.set(v, null)
               _assign(x, v, readonly)
@@ -6432,7 +6422,7 @@ And parsing is more than just extracting meaning from a string of characters (it
   _basicValue(match, u, call, value) { // String or label or call.
     const isEm = value === _fancyOutermost
     if (u === _specialParsedValue) {
-      if (isEm && match('?')) return [label('var')]
+      if (isEm && match('?')) return [label('label')]
       if (isEm && match('#')) return [label('const')]
       let r
       if ((r = match(_specialParsedValue)) !== undefined) return r
@@ -6442,7 +6432,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       if ((r = match(call, value)) !== undefined) return r
       return
     }
-    else if (isEm && _isArray(u) && u[0] === _var && u.length == 1)
+    else if (isEm && _isArray(u) && u[0] === label && u.length == 1)
       match('?')
     else if (isEm && _isArray(u) && u[0] === _const && u.length == 1)
       match('#')
@@ -6843,7 +6833,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
         if (s[i+3].nodeName === 'EXTRACTED') break
         const row = elem('tr', [elem('td', [s[i], s[i+1]]), elem('td', [s[i+2], s[i+3]])])
         if (_isArray(v)) elemValue(row, array(rest, array(v[++a], v[++a])))
-        else elemValue(row, [_var])
+        else elemValue(row, [label])
         rows.push(row)
         i += 4
       }
@@ -7027,7 +7017,7 @@ Does not merge the parsed arrays.`,
             else throw "Cannot serialize a not-`deconstruct`ible not-an-array"
           }
           if (!_isArray(arr)) throw "All values must be string/number or Map or array or deconstruct to an array"
-          if (arr[0] === label && typeof arr[1] === 'string' && arr.length === 2) {
+          if (arr[0] === label && typeof arr[1] === 'string' && arr.length == 2) {
             if (/[\x80-\ue000]/.test(arr[1])) throw "An exotic label to "+arr[1]+" detected"
             return
           }
@@ -8299,7 +8289,7 @@ The correctness of quining of functions can be tested by checking that the rewri
           if (firstTime || _isVar(x)) {
             if (loadVarsFromEnv && _isVar(x) && (!firstTime || uncertainThen.has(x))) {
               const e = `${outside(finish)}.env[${_id(label)}]`
-              const onUnassigned = x[0] === label ? `(${outside(finish)}.v=${outside(x)},${outside(defines(label, finish))}(${outside(x[1])}))` : outside(x)
+              const onUnassigned = _isLabel(x) ? `(${outside(finish)}.v=${outside(x)},${outside(defines(label, finish))}(${outside(x[1])}))` : outside(x)
               write(`${use(x)}=${e}.has(${outside(x)})?${e}.get(${outside(x)}):${onUnassigned}\n`, `load var from env`)
             }
             return use(x)
@@ -8897,9 +8887,9 @@ For anything else, display the globals the expression binds to, and an expandabl
     ]),
   ],
 
-  12341:[[__is(`typed`), [__is(`var`)], __is(`contextMenu`)]],
-  78963:[[__is(`typed`), [__is(`var`)], __is(`evaluator`)]],
-  75891:[[__is(`typed`), [__is(`var`)], __is(`describe`)]],
+  12341:[[__is(`typed`), [__is(`label`)], __is(`contextMenu`)]],
+  78963:[[__is(`typed`), [__is(`label`)], __is(`evaluator`)]],
+  75891:[[__is(`typed`), [__is(`label`)], __is(`describe`)]],
 
   _disabled:{
     txt:`\`_disabled …?\`: a disabled-with-\`inspectUsageElem\` subcontext of a context.`,
@@ -9439,7 +9429,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // Safeguard against an inner search.
           const nodes = _search.nodes, visited = _search.visited, values = _search.values
           const prevInferred = _assign.inferred;  _assign.inferred = null
-          // log('Completed function', v, actualArgs)
+          log('Applying function', v, ...actualArgs)
           try {
             v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return
           } catch (err) { if (err === interrupt) throw err; return }
@@ -9482,7 +9472,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
       // ### We need to comment out all tests except one, and log everything we can.
       ctx === CurrentUsage && impure()
-      if (!use.var) use.var = [_var]
+      if (!use.var) use.var = [label]
 
       const us = finish.v
       let [node, nodes, visited, values] = interrupt(_search)
@@ -9616,7 +9606,7 @@ But for practical usage? If an algorithm wants a lower bound on the solution or 
 
   _turnComputedIntoVars(x) {
     if (_isArray(x) && !_isArray(x[0]) && (defines(x[0], finish) !== undefined || defines(x[0], call) !== undefined))
-      return [_var]
+      return [label]
   },
 
 
@@ -9628,7 +9618,7 @@ But for practical usage? If an algorithm wants a lower bound on the solution or 
   // zzz:{
   //   // output (either zzz) ?:15
   //   call() { return [typed, Math.random(), 15] },
-  //   output:[__is(`typed`), [__is(`var`)], 15],
+  //   output:[__is(`typed`), [__is(`label`)], 15],
   // },
 
   _clearStyle(el) {
@@ -9717,7 +9707,7 @@ Use \`picker\` to override behavior.`,
     try {
       const f = pick.ers[pick.ers.length - pick.depth]
       if (f === randomPicker) return randomNat
-      let [a = [_var], b = [_var], c = [_var], d = array(f, _nextPickerAsFunction(), a, b, c)] = interrupt(_nextPickerAsFunction)
+      let [a = [label], b = [label], c = [label], d = array(f, _nextPickerAsFunction(), a, b, c)] = interrupt(_nextPickerAsFunction)
       let closeOver = false
       for (let i = 0; i <= pick.ers.length - pick.depth; ++i)
         if (_isUnknown(pick.ers[i])) closeOver = true
