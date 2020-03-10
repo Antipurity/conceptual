@@ -841,6 +841,7 @@ input[type=range]::-moz-focus-outer { border:0 }
 .hover {box-shadow:var(--highlight) 0 0 .1em .1em}
 .working {box-shadow:var(--highlight) 0 0 .1em .1em inset}
 bracket {color:saddlebrown}
+.into.dark bracket {color:royalblue}
 string {color:darkgreen; display:inline-block}
 string>string { filter:brightness(150%) }
 .into.dark string {color: limegreen}
@@ -1005,10 +1006,10 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         finish.env = undefined
         if (evt.shiftKey && !evt.ctrlKey && !evt.altKey && !Self.into.contains(evt.target)) {
           // Shift+clicked outside of us.
-          atCursor(daintyEvaluator([log, [picker, askUser, [use, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked elsewhere']]]]))
+          atCursor(daintyEvaluator([log, [picker, askUser, [use, [quote, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked elsewhere']]]]]))
         } else if (!evt.shiftKey && !evt.ctrlKey && !evt.altKey && Self.into.contains(evt.target))
           // Clicked inside of us.
-          atCursor(daintyEvaluator([log, [picker, askUser, [use, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked']]]]))
+          atCursor(daintyEvaluator([log, [picker, askUser, [use, [quote, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked']]]]]))
       }, passive)
 
       // Select the <node> under cursor on triple-click.
@@ -1242,9 +1243,11 @@ Example: \`nodejs self.js basic <input.txt >output.txt\` will write the result o
     future:`Test this.`,
     call() {
       _test(finish.env = _newExecutionEnv())
-      if (process.argv.length > 3) return console.log()
+      if (process.argv.length > 3) return console.log(`Usage:
+nodejs self.js
+nodejs self.js basic`)
       const lang = process.argv[2] && parse.ctx.get(label(process.argv[2])) || fancy
-      _langAt.lang = lang, _bindsAt.binds = parse.ctx
+      _langAt.lang = lang, _bindingsAt.binds = parse.ctx
       if (process.stdin.isTTY) // REPL for terminals.
         elem(REPL, lang)
       else { // Read+execute for files.
@@ -1564,6 +1567,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   log:{
     txt:`\`(log …Values)\`: For debugging; logs to the current DOM node or console.`,
+    future:`Be sensitive to finish.depth, by grouping logs of the same-or-more depth into a single <details>.`,
     call(...x) {
       log.did = true, impure.impure = true
       try {
@@ -1581,7 +1585,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
         } else
           console.log(str)
         if (x.length == 1) return x[0]
-      } catch (err) { if (err !== impure) console.log(err), console.log(...x) }
+      } catch (err) { if (err !== impure) console.log(err, err.stack), console.log(...x) }
       finally { impure.impure = false }
       // log.did (for not erasing parts of a log in a terminal in NodeJS)
     },
@@ -1637,15 +1641,12 @@ Remember to quote the link unless you want to evaluate the insides.`,
     txt:`Creates an element that describes a value.`,
     call(el) {
       if (typeof document == ''+void 0) return
-      const d = document.createElement('div')
       let v
       if (!(el instanceof Node)) v = el, el = undefined
       else v = el.to
 
-      // Append a daintyEvaluator, executing `(_logUses (el v):describe)`.
-      menu.append(daintyEvaluator([_logUses, [typed, [el, v], describe]]))
-
-      return d
+      // Append a daintyEvaluator, executing `(_logUses (el ^v):describe)`.
+      return daintyEvaluator([_logUses, [quote, [typed, [el, v], describe]]])
     },
   },
 
@@ -1675,7 +1676,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       menu.tabIndex = 0
 
       // Append a daintyEvaluator, executing `(_logUses (el range v):contextMenu)`.
-      menu.append(daintyEvaluator([_logUses, [typed, [el, range, v], contextMenu]]))
+      menu.append(daintyEvaluator([_logUses, [quote, [typed, [el, range, v], contextMenu]]]))
 
       let inside = _getOuterContextMenu(el)
       if (_getOuterContextMenu(inside.parentNode) !== document.body) inside = document.body // Only one nesting layer.
@@ -1687,7 +1688,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   daintyEvaluator:{
     txt:`\`(daintyEvaluator Expr)\`: returns an element that will evaluate the expression and display its \`log\`s if any.`,
-    call(expr, then) {
+    call(expr) {
       if (typeof document == ''+void 0) return
       impure()
 
@@ -1699,7 +1700,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       const env = _newExecutionEnv(finish.env)
       env[_id(log)] = el.lastChild
       let ended = false
-      _doJob(expr, env, then || (() => (ended = true, !result.previousSibling ? el.remove() : result.remove())), ID)
+      _doJob(expr, env, () => (!result.previousSibling ? (ended = true, el.remove()) : result.remove()), ID)
       return !ended ? el : undefined
     },
   },
@@ -1719,28 +1720,24 @@ Remember to quote the link unless you want to evaluate the insides.`,
       el.style.position = 'absolute'
       const xOk = x < innerWidth * .8, yOk = y < innerHeight * .8
       x -= r.left, y -= r.top
-      let w, h
-      if (!xOk || !yOk) {
-        document.documentElement.appendChild(el)
-        w = el.offsetWidth, h = el.offsetHeight
-        document.documentElement.removeChild(el)
-        // (A translate-100% transform would have worked too.)
-      }
       if (xOk && yOk) { // Open to bottom-right
         el.style.left = x + 'px'
         el.style.top = y + 'px'
         el.style.borderRadius = '0 1em 1em 1em'
       } else if (xOk) { // Open to top-right
         el.style.left = x + 'px'
-        el.style.top = y - h + 'px'
+        el.style.top = y + 'px'
+        el.style.transform = 'translate(0, -100%)'
         el.style.borderRadius = '1em 1em 1em 0'
       } else if (yOk) { // Open to bottom-left
-        el.style.left = x - w + 'px'
+        el.style.left = x + 'px'
         el.style.top = y + 'px'
+        el.style.transform = 'translate(-100%, 0)'
         el.style.borderRadius = '1em 0 1em 1em'
       } else { // Open to top-left
-        el.style.left = x - w + 'px'
-        el.style.top = y - h + 'px'
+        el.style.left = x + 'px'
+        el.style.top = y + 'px'
+        el.style.transform = 'translate(-100%, -100%)'
         el.style.borderRadius = '1em 1em 0 1em'
       }
       el.style.maxWidth = innerWidth - parseFloat(el.style.left) - 16 + 'px'
@@ -1828,7 +1825,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         finish.env = env
 
         // Display all uses of `(Result UserDuration RealDuration EndTime):evaluator`.
-        el.append(daintyEvaluator([_logUses, [typed, [r, env[_id(userTime)], real, end], evaluator]]))
+        el.append(daintyEvaluator([_logUses, [quote, [typed, [r, env[_id(userTime)], real, end], evaluator]]]))
         _smoothHeightPost(el, pre)
       }, ID)
       prompt.title = 'Click to remove this.'
@@ -2081,7 +2078,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                 if (!name) do { name = '#' + n++ } while (binds.has(name))
                 if (!binds.has(name))
                   (binds = new Map(binds)).set(name, quote(result))
-                _bindsAt.binds = binds
+                _bindingsAt.binds = binds
   
                 then(null, _colored(name, 33) + ' = ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
               })
@@ -2139,7 +2136,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
               ID = undefined, waiting && waiting.remove(), waiting = undefined
               if (!_isUnknown(result)) {
                 // Display all uses of `(Result):evaluator`.
-                elemInsert(pureOutput, daintyEvaluator([_logUses, [typed, [result], evaluator]]), pureOutput.lastChild)
+                elemInsert(pureOutput, daintyEvaluator([_logUses, [quote, [typed, [result], evaluator]]]), pureOutput.lastChild)
               } else {
                 const el = elem('button', 'Evaluate')
                 elemValue(el, result)
@@ -8389,7 +8386,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     txt:`_allocArray()⇒Array as a replacement for \`[]\` and _allocArray(Array) to re-use objects.`,
     call(a) {
       if (!_allocArray.free) _allocArray.free = []
-      if (!a) return _allocArray.free.length ? _allocArray.free.pop() : []
+      if (!a) return [] // ### _allocArray.free.length ? _allocArray.free.pop() : []
       if (!_isArray(a)) throw "Expected undefined or an array"
       a.length = 0
       _allocArray.free.push(a)
@@ -8672,11 +8669,11 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       call([_typed, [result]]) {
         const ctx = input([result])
         if (ctx) {
-          const lang = _langAt(), binds = _bindsAt()
-          return elem('div',
-            elem('unimportant', ['Input to', elem('number', ''+ctx.length-1), ': ']),
+          const lang = _langAt(), binds = _bindingsAt()
+          return elem('div', [
+            elem('unimportant', ['Input to ', elem('number', ''+(ctx.length-1)), ': ']),
             elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
-          )
+          ])
         }
       },
     },
@@ -8686,11 +8683,11 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       call([_typed, [result]]) {
         const ctx = output(result)
         if (ctx) {
-          const lang = _langAt(), binds = _bindsAt()
-          return elem('div',
-            elem('unimportant', ['Output of', elem('number', ''+ctx.length-1), ': ']),
+          const lang = _langAt(), binds = _bindingsAt()
+          return elem('div', [
+            elem('unimportant', ['Output of ', elem('number', ''+(ctx.length-1)), ': ']),
             elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
-          )
+          ])
         }
       },
     },
@@ -9123,7 +9120,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
             stack.add(v)
             try {
               if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
-                { k = endK+1; break } // Does not exist.
+                { log('Does not exist:', f[k]), k = endK+1; break } // Does not exist.
             } finally { stack.delete(v);  if (prev) stack.add(ctx) }
           }
         if (!inp && k < endK) {
@@ -9288,27 +9285,27 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     txt:`\`use Function Inputs Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     examples:[
-      `Select the proper semantic type in a bank of knowledge:`,
-      [
-        `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
-        `1:'Action'`,
-      ],
+      // `Select the proper semantic type in a bank of knowledge:`,
+      // [
+      //   `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
+      //   `1:'Action'`,
+      // ],
       `Can find args in \`Context\`:`,
       [
         `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
         `3:5`,
       ],
-      `Take some, find some:`,
-      [
-        `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
-        `5:'Int'`,
-      ],
-      `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
-      [
-        `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
-        `5:'Int'`,
-      ],
-      `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
+      // `Take some, find some:`,
+      // [
+      //   `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
+      //   `5:'Int'`,
+      // ],
+      // `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
+      // [
+      //   `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
+      //   `5:'Int'`,
+      // ],
+      // `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
     ],
     call(v, ctx = CurrentUsage, inputs) {
       const r = _search(undefined, ctx, v !== undefined ? v : ctx, inputs, undefined)
@@ -9358,7 +9355,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       return true
     else if (_isUsing(v) || _isFunction(v)) {
       v = deconstruct(v), v = v[v.length-1]
-      return !_isArray(v) || !_isVar(v) && (!_isArray(v[0]) && defines(v[0], finish) === undefined && defines(v[0], call) === undefined || !_hasCallableParts(v[0]))
+      return !_isArray(v) || !_isVar(v) && (!_isArray(v[0]) && defines(v[0], finish) === undefined && defines(v[0], call) === undefined || _isArray(v[0]) && !_hasCallableParts(v[0]))
     } else
       return false
   },
@@ -9373,11 +9370,12 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       if (_isFunction(wantedOutput)) {
         const d = deconstruct(wantedOutput)
         const subCtx = array(either, ...d.slice(1,-1), ctx)
+        log('higher-order', subCtx, wantedOutput)
         _visitNode(subCtx, _functionComposer(wantedOutput), null, use.var, null, then)
         return
       }
 
-      let d, isMacro = false
+      let d, isMacro = false, args
       if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function')
         // If a macro, (remember to) unwrap unknowns inside `actualArgs` and treat it as a call.
         v = d, isMacro = true
@@ -9394,12 +9392,13 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
         // _visitNode with each item.
         for (i = 1; i < d.length; ++i)
+          log('visiting', d[i]),
           _visitNode(ctx, d[i], wantedInputs, wantedOutput, actualArgs, then)
         return
       }
 
-      if (typeof v == 'function' && (!wantedInputs || _isArray(d = defines(v, input)) && d.length >= wantedInputs.length || defines(v, argCount) >= wantedInputs.length)) {
-        if (!actualArgs || actualArgs.length < defines(v, argCount)) {
+      if (typeof v == 'function' && (!wantedInputs || _isArray(d = defines(v, input)) && (args = d.length) >= wantedInputs.length || (args = defines(v, argCount)) >= wantedInputs.length)) {
+        if (!actualArgs || actualArgs.length < args) {
           let nextArg
           // `input`-defining functions get treated as if their inputs are as defined.
           if (typeof v == 'function' && _isArray(defines(v, input)))
@@ -9419,7 +9418,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           try {
             // If nextArg is handled by wantedInputs, move the input to actualArgs.
             _assign(nextArg, wantedInputs[0], true)
-            // log('Handled by input', nextArg)
+            // log('Handled by input', nextArg, v)
             _visitNode(ctx, v, wantedInputs.length > 1 ? wantedInputs.slice(1) : null, use.var, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], then)
             return
           } catch (err) {
@@ -9429,7 +9428,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
             // log('Searching in context', outs, 'for', nextArg, 'to fill', v, _outputIsStructured(outs[1]))
             if (outs)
               for (let i = 1; i < outs.length; ++i)
-                // To prevent infinite ballooning of search, don't visit functions if we want unstructured input, and don't visit functions with non-structured output.
+                // To prevent infinite ballooning of search, don't visit functions if we want unstructured nextArg, and don't visit functions with non-structured output.
                 if (typeof outs[i] != 'function' || !_isVar(nextArg) && _outputIsStructured(outs[i]))
                   _visitNode(ctx, outs[i], null, nextArg, null, node)
             return
@@ -9443,7 +9442,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // log('Applying function', v, ...actualArgs)
           try {
             v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return
-          } catch (err) { if (err === interrupt) throw err; return }
+          } catch (err) { if (err === interrupt) throw err; console.log(err); return }
           finally { _assign.inferred = prevInferred; _search.nodes = nodes, _search.visited = visited, _search.values = values }
         }
       }
@@ -9453,7 +9452,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
         // If `then`, add to args, else return from this graph search.
         if (then) return void _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], v] : [v], then[5])
-        else return v !== undefined ? v : _onlyUndefined
+        else return log('FOUND', v, node, console.log(...ctx)), v !== undefined ? v : _onlyUndefined
       } catch (err) {}
     },
   },
@@ -9464,11 +9463,14 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       let [ins, i = 1] = interrupt(_logUses)
       const valueArray = _allocArray();  valueArray.push(value)
       try {
-        if (ins === undefined) ins = input([value], ctx)
+        if (ins === undefined) ins = input([value], ctx), log(ins, ctx), console.log(...ins)
         if (!ins) return
         for (; i < ins.length; ++i) {
           const r = use(ins[i], ctx, valueArray)
+          r && console.log(ins[i], r)
+          try{
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
+          }catch(err){console.log(err)}
         }
         _allocArray(ins)
       } catch (err) { if (err === interrupt) interrupt(_logUses, 2)(ins, i);  throw err }
@@ -9522,7 +9524,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
           }
           node = undefined
         }
-        error(out, 'is definitely not in', ctx)
+        error(out !== undefined ? out : v, 'is definitely not in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 4)(node, nodes, visited, values);  throw err }
 
       // .nodes (the current array of nodes), .visited (the set of nodes visited in this search), .values (a context of values of nodes, for `pick`ing the next one)
@@ -9530,11 +9532,12 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
   },
 
   _get:{
-    txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful.`,
+    txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful (so that the _search can be continued).`,
     call(out, ctx = CurrentUsage) {
       let [sub] = interrupt(_get)
       try {
-        if (!sub) sub = output(out, ctx)
+        if (!sub) sub = typeof out != 'function' ? output(out, ctx) : ctx
+        if (!sub) error(out, 'is definitely not in', ctx)
         return _search(undefined, ctx, sub, undefined, out)
       } catch (err) { if (err === interrupt) interrupt(_get, 1)(sub);  throw err }
     },
@@ -9545,65 +9548,65 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
     examples:[
       // ###
-      `Trivial finding:`,
-      [
-        `get ?:1 (either 0:1 0:2)`,
-        `0:1`,
-      ],
-      `First-order composition:`,
-      [
-        `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
-        `4:10`,
-      ],
-      `Higher-order composition:`,
-      [
-        `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
-Int='Int' Float="Float"`,
-        `x:'Int'->[x+12]/2:'Float' x=?`,
-      ],
-      `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
-      [
-        `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
-        `('Next' 9)`,
-      ],
-      `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
-      [
-        `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
-sum='Sum' quote='Next'`,
-        `^^^# quote='Next'`,
-      ],
-      [
-        `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
-sum='Sum' quote='Next'`,
-        `error X+^^^0->X 'is definitely not in' (either A+0->A A+^B->^[A+B]) X=#
-sum='Sum' quote='Next'`,
-      ],
-      `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-      [
-        `get  X*^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=#
-mult='Times' sum='Sum' quote='Next'`,
-        `X*^0->X  X=#
-mult='Times' quote='Next'`,
-      ],
-      `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-      [
-        `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
-mult='Times' sum='Sum' quote='Next'`,
-        `0*^^0->0
-mult='Times' quote='Next'`,
-      ],
-      `Can create a function from context as an arg:`,
-      [
-        `get
-(function assessIndex j (assessIndex j))
-  assessIndex = i:(Index n)->?:Measure
-(either Dataset Goal)
-  Dataset = i:(Index 100)->i+70:Image
-  Goal = i:Image->1000-i:Measure
-Index='Index' Image='Image' Measure='Measure'`,
-        `(function f j (f j))
-  f = i:('Index' 100)->1000-[i+70]:'Measure'`,
-      ],
+//       `Trivial finding:`,
+//       [
+//         `get ?:1 (either 0:1 0:2)`,
+//         `0:1`,
+//       ],
+//       `First-order composition:`,
+//       [
+//         `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
+//         `4:10`,
+//       ],
+//       `Higher-order composition:`,
+//       [
+//         `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
+// Int='Int' Float="Float"`,
+//         `x:'Int'->[x+12]/2:'Float' x=?`,
+//       ],
+//       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
+//       [
+//         `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
+//         `('Next' 9)`,
+//       ],
+//       `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
+//       [
+//         `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
+// sum='Sum' quote='Next'`,
+//         `^^^# quote='Next'`,
+//       ],
+//       [
+//         `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
+// sum='Sum' quote='Next'`,
+//         `error X+^^^0->X 'is definitely not in' (either A+0->A A+^B->^[A+B]) X=#
+// sum='Sum' quote='Next'`,
+//       ],
+//       `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+//       [
+//         `get  X*^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=#
+// mult='Times' sum='Sum' quote='Next'`,
+//         `X*^0->X  X=#
+// mult='Times' quote='Next'`,
+//       ],
+//       `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+//       [
+//         `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
+// mult='Times' sum='Sum' quote='Next'`,
+//         `0*^^0->0
+// mult='Times' quote='Next'`,
+//       ],
+//       `Can create a function from context as an arg:`,
+//       [
+//         `get
+// (function assessIndex j (assessIndex j))
+//   assessIndex = i:(Index n)->?:Measure
+// (either Dataset Goal)
+//   Dataset = i:(Index 100)->i+70:Image
+//   Goal = i:Image->1000-i:Measure
+// Index='Index' Image='Image' Measure='Measure'`,
+//         `(function f j (f j))
+//   f = i:('Index' 100)->1000-[i+70]:'Measure'`,
+//       ],
     ],
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
