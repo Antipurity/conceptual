@@ -2556,7 +2556,8 @@ Quite expensive.`,
       for (let ch = e.firstChild; ch; ch = ch.nextSibling)
         _updateBroken(ch, (ch.offsetParent !== e ? start : 0) + available - (ch.offsetLeft || 0))
       if (e.tagName !== 'NODE' || e.classList.contains('code')) return
-      const parentWidth = e.classList.contains('broken') && (!e.childNodes[2] || e.childNodes[2].tagName !== 'TABLE') ? available : e.offsetWidth+2 || 1000
+      const noTableInside = !e.childNodes[1] || !e.childNodes[2] || e.childNodes[1].tagName !== 'TABLE' && e.childNodes[2].tagName !== 'TABLE'
+      const parentWidth = e.classList.contains('broken') && noTableInside ? available : e.offsetWidth+2 || 1000
         // Not nearly as accurate as removing .broken would have been (with tables in particular), but much faster.
           // So we special-case the <table>-inside case lol
           // Structural learning at its finest
@@ -5513,8 +5514,8 @@ Variables within non-\`closure\` functions will not be changed by application.`,
   _isFunc(x) { return _isArray(x) && x[0] === _function },
 
   _isStruct(x) {
-    // Returns whether calling x would return x.
-    return !_isArray(x) || _isVar(x) || !_isArray(x[0]) && defines(x[0], finish) === undefined && defines(x[0], call) === undefined || !_hasCallableParts(x)
+    // Returns whether evaluating `x` would never change the structure of `x` (whether head cannot be call/finisher).
+    return !_isArray(x) || _isVar(x) || !_isArray(x[0]) && defines(x[0], finish) === undefined && defines(x[0], call) === undefined || _isArray(x[0]) && !_hasCallableParts(x[0])
   },
 
   _assign:{
@@ -9068,7 +9069,6 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   _addUsesToContext(result, as, v, ctx, values, inp) {
     // The result of this (and `input`/`output`) can and should be `_allocArray(?)`d.
     if (!inp && _isVar(values) && result === false) return true
-    _checkInterrupt()
     let d
 
     if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length))
@@ -9102,12 +9102,12 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     // If a deconstructable function, or a JS function that defines `input`/`output`:
     } else if (_isUsing(v) || _isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
-      // !inp && log('Structured', v, values)
       const f = d || deconstruct(v), u = _isUsing(v)
       let [j = 0, k = d ? 0 : !u ? 1 : 2] = interrupt(_addUsesToContext)
       const endJ = inp ? values.length+1 : 1
       const endK = d ? f.length : f.length-1
       try { // This interrupt-handling deal is getting worse every time.
+        _checkInterrupt(v)
         for (; j < endJ; ++j)
           for (; k < endK; ++k) {
             // Try matching the arg to value.
@@ -9116,8 +9116,15 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
             if (inp && j < values.length)
               try { _assign(f[k], values[j], true); ++k; break } catch (err) {}
             // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
-            if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
-              { log('Does not exist:', f[k], ctx), k = endK+1; break } // Does not exist.
+            const stack = result !== false ? _addUsesToContext.stack : _addUsesToContext.checkStack
+            if (stack.has(v)) return result
+            const prev = stack.has(ctx)
+            if (prev) stack.delete(ctx) // Those cyclicity checks add hilarious amounts of complexity to the simplest things.
+            stack.add(v)
+            try {
+              if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
+                { k = endK+1; break } // Does not exist.
+            } finally { stack.delete(v);  if (prev) stack.add(ctx) }
           }
         if (!inp && k < endK) {
           if (!d && _isArray(d ? f : f[f.length-1]) && (d ? f : f[f.length-1])[0] === _if) {
@@ -9161,6 +9168,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       let [direct, dep, subctx, r = result, i = 0, j = 0, k = 0] = interrupt(_addUsesToContext)
       stack.add(v)
       try {
+        _checkInterrupt(v)
         // Lookup in _structHash(values[0]) and _structHash.dependent and _structHash.context.
         if (subctx === undefined) {
           const a = _hashes(v, false, inp)
@@ -9176,7 +9184,6 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
           if (hash === _structHash.dependent) direct = v
           dep = hash !== _structHash.dependent && a.get(_structHash.dependent)
           subctx = hash !== _structHash.context && a.get(_structHash.context) || null
-          result === false && log('Subctx of ', values, '#', hash, a, v, ctx, ':', direct, dep)
         }
 
         if (direct)
@@ -9216,28 +9223,27 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   input:{
     txt:`\`(input Values)\` or \`(input Values Context)\`: returns a sub-context of all functions that can accept \`Values\` in the given order, or \`null\`.`,
     examples:[
-      // ###
-      // [
-      //   `input (2) (either 1->2 2->3 a->a+1 toBase64)`,
-      //   `either 2→3 a→a+1`,
-      // ],
-      // [
-      //   `input ('a') (either quote fromBase64 toBase64)`,
-      //   `either quote toBase64`,
-      // ],
-      // [
-      //   `input ('U28gdGhpcyBpcyB0aGUgcG93ZXIgb2YgdWx0cmEgaW5zdGluY3Q=') (either id fromBase64 toBase64)`,
-      //   `either id fromBase64 toBase64`,
-      // ],
-      // [
-      //   `input (1:2) (either (either (either 1:2->2:3)))`,
-      //   `either 1:2->2:3`,
-      // ],
-      // `It checks that all args can be generated in the context:`,
-      // [
-      //   `input (1:10) (either (function a:10 b:20 a+b:30) 0:50 (function a:10 b:50 a*b:60))`,
-      //   `either (function a:10 b:50 a*b:60)`,
-      // ],
+      [
+        `input (2) (either 1->2 2->3 a->a+1 toBase64)`,
+        `either 2→3 a→a+1`,
+      ],
+      [
+        `input ('a') (either quote fromBase64 toBase64)`,
+        `either quote toBase64`,
+      ],
+      [
+        `input ('U28gdGhpcyBpcyB0aGUgcG93ZXIgb2YgdWx0cmEgaW5zdGluY3Q=') (either id fromBase64 toBase64)`,
+        `either id fromBase64 toBase64`,
+      ],
+      [
+        `input (1:2) (either (either (either 1:2->2:3)))`,
+        `either 1:2->2:3`,
+      ],
+      `It checks that all args can be generated in the context:`,
+      [
+        `input (1:10) (either (function a:10 b:20 a+b:30) 0:50 (function a:10 b:50 a*b:60))`,
+        `either (function a:10 b:50 a*b:60)`,
+      ],
     ],
     philosophy:`If value/function contexts are categories, then this enumerates an object family's outgoing morphisms. We allow non-structural (arbitrary black-box) computations though, unlike category theory.`,
     call(values, ctx = CurrentUsage) { return ctx === CurrentUsage && impure(), _addUsesToContext(null, ctx, ctx, ctx, values, true) },
@@ -9246,36 +9252,35 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   output:{
     txt:`\`(output Value)\` or \`(output Value Context)\`: returns a sub-context of all values and functions that may produce results that fit the shape \`Value\`.`,
     examples:[
-      // ###
-      // [
-      //   `output ?:2 (either 1 2:2 3:4)`,
-      //   `either 2:2`,
-      // ],
-      // [
-      //   `output ?:Int (either 1:Int 2:Int 3:'Float') Int='Int'`,
-      //   `either 1:Int 2:Int Int='Int'`,
-      // ],
-      // [
-      //   `output ?:Int (either a->a:Int b:Int->b:'Float') Int='Int'`,
-      //   `either a→a:'Int'`,
-      // ],
-      // `Dependent outputs are not discarded:`,
-      // [
-      //   `output ?:Int (either 1:Int a:b→a+1:b+1 toBase64) Int='Int'`,
-      //   `either 1:'Int' a:b→a+1:b+1`,
-      // ],
-      // `Conditional branches get looked into:`,
-      // [
-      //   `output ?:StringlyTyped (either x->(if x x:StringlyTyped (error))) StringlyTyped='StringlyTyped'`,
-      //   `either x->(if x x:'StringlyTyped' (error))`,
-      // ],
-      // `Inputs are checked to exist in the context:`,
-      // [
-      //   `output ?:Int (either 0:1 ?:1->?:Int ?:2->?:Int) Int='Int'`,
-      //   `either ?:1→?:Int Int='Int'`,
-      // ],
+      [
+        `output ?:2 (either 1 2:2 3:4)`,
+        `either 2:2`,
+      ],
+      [
+        `output ?:Int (either 1:Int 2:Int 3:'Float') Int='Int'`,
+        `either 1:Int 2:Int Int='Int'`,
+      ],
+      [
+        `output ?:Int (either a->a:Int b:Int->b:'Float') Int='Int'`,
+        `either a→a:'Int'`,
+      ],
+      `Dependent outputs are not discarded:`,
+      [
+        `output ?:Int (either 1:Int a:b→a+1:b+1 toBase64) Int='Int'`,
+        `either 1:'Int' a:b→a+1:b+1`,
+      ],
+      `Conditional branches get looked into:`,
+      [
+        `output ?:StringlyTyped (either x->(if x x:StringlyTyped (error))) StringlyTyped='StringlyTyped'`,
+        `either x->(if x x:'StringlyTyped' (error))`,
+      ],
+      `Inputs are checked to exist in the context:`,
+      [
+        `output ?:Int (either 0:1 ?:1->?:Int ?:2->?:Int) Int='Int'`,
+        `either ?:1→?:Int Int='Int'`,
+      ],
     ],
-    philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code. Doesn't mean that this impl is good tho; an infinite search for impls is much better.`,
+    philosophy:`If value/function contexts are categories, then this enumerates an object family's incoming morphisms. Doesn't mean that this is a subservient implementation of a grander theory. In realms close in fundamentality to PLs, everything can be done in terms of each other, and there's no base difference between an explanation in words in formulas and computer code. Doesn't mean that this impl is good tho; an infinite search for impls is much better (though to search for search, a serviceable search is needed).`,
     call(value, ctx = CurrentUsage) { return ctx === CurrentUsage && impure(), _addUsesToContext(null, ctx, ctx, ctx, value, false) },
   },
 
@@ -9283,28 +9288,27 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     txt:`\`use Function Inputs Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     examples:[
-      // ###
-      // `Select the proper semantic type in a bank of knowledge:`,
-      // [
-      //   `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
-      //   `1:'Action'`,
-      // ],
-      // `Can find args in \`Context\`:`,
-      // [
-      //   `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
-      //   `3:5`,
-      // ],
-      // `Take some, find some:`,
-      // [
-      //   `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
-      //   `5:'Int'`,
-      // ],
-      // `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
-      // [
-      //   `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
-      //   `5:'Int'`,
-      // ],
-      // `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
+      `Select the proper semantic type in a bank of knowledge:`,
+      [
+        `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
+        `1:'Action'`,
+      ],
+      `Can find args in \`Context\`:`,
+      [
+        `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
+        `3:5`,
+      ],
+      `Take some, find some:`,
+      [
+        `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
+        `5:'Int'`,
+      ],
+      `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
+      [
+        `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
+        `5:'Int'`,
+      ],
+      `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
     ],
     call(v, ctx = CurrentUsage, inputs) {
       const r = _search(undefined, ctx, v !== undefined ? v : ctx, inputs, undefined)
@@ -9352,9 +9356,10 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   _outputIsStructured(v) {
     if (typeof v == 'function' && !_isArray(v) && _isArray(defines(v, output)))
       return true
-    else if (_isUsing(v) || _isFunction(v))
-      return v = deconstruct(v), !_hasCallableParts(v[v.length-1], true) && !_isVar(v[v.length-1])
-    else
+    else if (_isUsing(v) || _isFunction(v)) {
+      v = deconstruct(v), v = v[v.length-1]
+      return !_isArray(v) || !_isVar(v) && (!_isArray(v[0]) && defines(v[0], finish) === undefined && defines(v[0], call) === undefined || !_hasCallableParts(v[0]))
+    } else
       return false
   },
 
@@ -9421,7 +9426,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
             // If the arg is not in `wantedInputs`, generate it from context.
             let outs
             outs = output(nextArg, ctx)
-            // log('Searching in context', outs, 'for', nextArg, 'to fill', v)
+            // log('Searching in context', outs, 'for', nextArg, 'to fill', v, _outputIsStructured(outs[1]))
             if (outs)
               for (let i = 1; i < outs.length; ++i)
                 // To prevent infinite ballooning of search, don't visit functions if we want unstructured input, and don't visit functions with non-structured output.
@@ -9435,7 +9440,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // Safeguard against an inner search.
           const nodes = _search.nodes, visited = _search.visited, values = _search.values
           const prevInferred = _assign.inferred;  _assign.inferred = null
-          log('Applying function', v, ...actualArgs)
+          // log('Applying function', v, ...actualArgs)
           try {
             v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return
           } catch (err) { if (err === interrupt) throw err; return }
@@ -9530,7 +9535,6 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
       let [sub] = interrupt(_get)
       try {
         if (!sub) sub = output(out, ctx)
-        console.log(out, sub, _structHash(out), _hashes.outs.get(ctx))
         return _search(undefined, ctx, sub, undefined, out)
       } catch (err) { if (err === interrupt) interrupt(_get, 1)(sub);  throw err }
     },
@@ -9541,65 +9545,65 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
     examples:[
       // ###
-//       `Trivial finding:`,
-//       [
-//         `get ?:1 (either 0:1 0:2)`,
-//         `0:1`,
-//       ],
+      `Trivial finding:`,
+      [
+        `get ?:1 (either 0:1 0:2)`,
+        `0:1`,
+      ],
       `First-order composition:`,
       [
         `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
         `4:10`,
       ],
-//       `Higher-order composition:`,
-//       [
-//         `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
-// Int='Int' Float="Float"`,
-//         `x:'Int'->[x+12]/2:'Float' x=?`,
-//       ],
-//       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
-//       [
-//         `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
-//         `('Next' 9)`,
-//       ],
-//       `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
-//       [
-//         `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
-// sum='Sum' quote='Next'`,
-//         `^^^# quote='Next'`,
-//       ],
-//       [
-//         `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
-// sum='Sum' quote='Next'`,
-//         `error X+^^^0->X 'is definitely not in' (either A+0->A A+^B->^[A+B]) X=#
-// sum='Sum' quote='Next'`,
-//       ],
-//       `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-//       [
-//         `get  X*^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=#
-// mult='Times' sum='Sum' quote='Next'`,
-//         `X*^0->X  X=#
-// mult='Times' quote='Next'`,
-//       ],
-//       `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-//       [
-//         `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
-// mult='Times' sum='Sum' quote='Next'`,
-//         `0*^^0->0
-// mult='Times' quote='Next'`,
-//       ],
-//       `Can create a function from context as an arg:`,
-//       [
-//         `get
-// (function assessIndex j (assessIndex j))
-//   assessIndex = i:(Index n)->goal:Measure
-// (either Dataset Goal)
-//   Dataset = i:(Index 100)->i+70:Image
-//   Goal = i:Image->1000-i:Measure
-// Index='Index' Image='Image' Measure='Measure'`,
-//         `(function f j (f j))
-//   f = i:('Index' 100)->1000-[i+70]:'Measure'`,
-//       ],
+      `Higher-order composition:`,
+      [
+        `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
+Int='Int' Float="Float"`,
+        `x:'Int'->[x+12]/2:'Float' x=?`,
+      ],
+      `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
+      [
+        `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
+        `('Next' 9)`,
+      ],
+      `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
+      [
+        `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
+sum='Sum' quote='Next'`,
+        `^^^# quote='Next'`,
+      ],
+      [
+        `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
+sum='Sum' quote='Next'`,
+        `error X+^^^0->X 'is definitely not in' (either A+0->A A+^B->^[A+B]) X=#
+sum='Sum' quote='Next'`,
+      ],
+      `Prove that for all \`X\`, \`X*1\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+      [
+        `get  X*^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=#
+mult='Times' sum='Sum' quote='Next'`,
+        `X*^0->X  X=#
+mult='Times' quote='Next'`,
+      ],
+      `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+      [
+        `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
+mult='Times' sum='Sum' quote='Next'`,
+        `0*^^0->0
+mult='Times' quote='Next'`,
+      ],
+      `Can create a function from context as an arg:`,
+      [
+        `get
+(function assessIndex j (assessIndex j))
+  assessIndex = i:(Index n)->?:Measure
+(either Dataset Goal)
+  Dataset = i:(Index 100)->i+70:Image
+  Goal = i:Image->1000-i:Measure
+Index='Index' Image='Image' Measure='Measure'`,
+        `(function f j (f j))
+  f = i:('Index' 100)->1000-[i+70]:'Measure'`,
+      ],
     ],
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
