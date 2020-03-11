@@ -148,8 +148,9 @@ __base({
       // Mark lookup.parents of globals.
       lookup.parents = new Map
       function markParents(x, p) {
-        if (lookup.parents.has(x) || x === Self || !x || typeof x != 'object' && typeof x != 'function') return
+        if (lookup.parents.has(x) || x === Self) return
         if (p !== undefined) lookup.parents.set(x, p)
+        if (!x || typeof x != 'object' && typeof x != 'function') return
         if (p === undefined && backctx.has(x) && backctx.get(x)[0] === '_') lookup.parents.set(x, System)
         if (x instanceof Map) {
           x.forEach(v => markParents(v, p))
@@ -1144,7 +1145,7 @@ details>div { display:table-row }
 details>div>* { display:table-cell; padding-left:2ch }
 
 time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:hidden }
-.hover>time-report, time-report:hover { opacity:1; visibility:visible }
+.hover>div.code>time-report, time-report:hover { opacity:1; visibility:visible }
 
 .removed { margin:0 }`,
     call(into = document.body) {
@@ -1774,12 +1775,14 @@ Remember to quote the link unless you want to evaluate the insides.`,
           str = serialize(x.length > 1 ? x : x[0], _langAt(into), _bindingsAt(into), serialize.displayed)
         else str = x[0]
         if (into) {
+          if (str.parentNode) str = elemClone(str)
           const pre = _smoothHeightPre(into.parentNode)
           if (typeof str == 'string') str = document.createTextNode(str)
-          if (!into.parentNode) console.log(into, _id(into))
+          const wasMax = scrollY >= document.documentElement.scrollHeight - innerHeight - 5
           into.parentNode.insertBefore(str, into)
           _updateBroken(into.parentNode)
           _smoothHeightPost(into.parentNode, pre)
+          if (wasMax) scrollBy(0, 1000)
         } else
           console.log(str)
         if (x.length == 1) return x[0]
@@ -2026,6 +2029,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       stringToDoc:__is(`stringToDoc`),
       expandAll:__is(`elemExpandAll`),
       insertLinkTo:__is(`insertLinkTo`),
+      atCursor:__is(`atCursor`),
     },
     _logAll:[
       {
@@ -2201,6 +2205,9 @@ Remember to quote the link unless you want to evaluate the insides.`,
   evaluator:{
     txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
+    lookup:{
+      daintyEvaluator:__is(`daintyEvaluator`),
+    },
     _logAll:[
       {
         txt:`Display evaluation's result.`,
@@ -2227,12 +2234,24 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       {
         txt:`Display evaluation result's potential uses.`,
         call([result]) {
-          const ctx = input([result], CurrentUsage)
-          if (ctx) {
-            const lang = _langAt(), binds = _bindingsAt()
+          let ctx = input([result], CurrentUsage)
+          if (ctx && (ctx = ctx.filter(x => x !== result)).length > 1) {
+            const lang = _langAt(), binds = _bindingsAt(), env = finish.env
             return elem('div', [
               elem('unimportant', ['Input to ', elem('number', ''+(ctx.length-1)), ': ']),
-              elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
+              elemValue(elemCollapse(() => {
+                const el = elem('table')
+                el.style.display = 'inline-table'
+                for (let i = 1; i < ctx.length; ++i) {
+                  const to = elemCollapse(() => (finish.env = env, elem(evaluator, [picker, askUser, [use, quote(ctx[i]), [quote, CurrentUsage], quote([result])]], to)))
+                  el.append(elem('tr', [
+                    elem('td', serialize(ctx[i], lang, binds, serialize.displayed)),
+                    elem('td', to)
+                  ]))
+                }
+                elemValue(el, ctx)
+                return el
+              }), ctx),
             ])
           }
         },
@@ -2240,12 +2259,20 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       {
         txt:`Display potential ways to get evaluation result.`,
         call([result]) {
-          const ctx = output(result, CurrentUsage)
-          if (ctx) {
-            const lang = _langAt(), binds = _bindingsAt()
+          let ctx = output(result, CurrentUsage)
+          if (ctx && (ctx = ctx.filter(x => x !== result)).length > 1) {
+            const lang = _langAt(), binds = _bindingsAt(), env = finish.env
             return elem('div', [
               elem('unimportant', ['Output of ', elem('number', ''+(ctx.length-1)), ': ']),
-              elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
+              elemValue(elemCollapse(() => {
+                const el = elem('node')
+                for (let i = 1; i < ctx.length; ++i)
+                  el.append(elem('div', serialize(ctx[i], lang, binds, serialize.displayed)))
+                const to = elemCollapse(() => (finish.env = env, elem(evaluator, [picker, askUser, [get, quote(result), [quote, CurrentUsage]]], to)))
+                el.append(to)
+                elemValue(el, ctx)
+                return el
+              }), ctx),
             ])
           }
         },
@@ -2258,7 +2285,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
       if (!evaluator.none) evaluator.none = Symbol('none')
       let result = evaluator.none
-      const binds = _bindingsAt(before)
+      const lang = _langAt(before), binds = _bindingsAt(before)
       let bindAs = null, prevBinding = evaluator.none
 
       const el = elem('div')
@@ -2267,48 +2294,12 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       const query = elem('span')
       query.classList.add('editorContainer')
       query.append(prompt)
-      query.append(serialize(expr, _langAt(before), binds, serialize.displayed))
+      query.append(serialize(expr, lang, binds, serialize.displayed))
       let ID = _newJobId()
       const waiting = _evaluationElem(ID)
       el.append(query)
       el.append(waiting)
 
-      // Evaluate the requested expression.
-      const env = _newExecutionEnv(finish.env)
-      env[_id(log)] = waiting
-      const start = _timeSince()
-      if (_isArray(expr) && expr[0] === _extracted && expr.length == 3 && (_isLabel(expr[1]) || _invertBindingContext(binds).has(expr[1])))
-        bindAs = _isLabel(expr[1]) ? expr[1] : label(_invertBindingContext(binds).get(expr[1])), expr = expr[2]
-      _schedule(expr, env, r => { // Got the result.
-        ID = null
-        const end = _timeSince(), real = _timeSince(start)
-
-        if (binds) { // Add result to bindings or CurrentUsage.
-          if (_isLabel(bindAs)) {
-            const L = label(bindAs[1])
-            const q = quote(r)
-            if (binds.has(L))
-              prevBinding = !parse.ctx.has(L) || parse.ctx.get(L) === q ? binds.get(L) : parse.ctx.get(L)
-            binds.set(L, q)
-            _invertBindingContext(binds, true)
-            r = [_extracted, !_isArray(q) ? L : q, !_isArray(q) ? q : q === r ? q.slice() : r]
-          } else if (!(r instanceof Error) && !_isError(r) && r != null) {
-            const CurrentUsage = binds.get(label('CurrentUsage'))
-            if (r !== CurrentUsage && _isArray(CurrentUsage) && CurrentUsage[0] === either && !_wasMerged(CurrentUsage))
-              result = r, _addUsage(CurrentUsage, result)
-          }
-        }
-
-        const pre = _smoothHeightPre(el)
-        waiting.remove()
-        // Merge `_updateBroken` of both logged children into one.
-        _updateBroken(el)
-        finish.env = env
-
-        // Display `_logAll evaluator (Result UserDuration RealDuration EndTime)`.
-        el.append(daintyEvaluator([_logAll, evaluator, [quote, [r, env[_id(userTime)], real, end]]]))
-        _smoothHeightPost(el, pre)
-      }, ID)
       prompt.title = 'Click to remove this.'
       prompt.onclick = () => { // Remove the evaluator.
         _getOuterWindow(el) && _getOuterWindow(el).firstChild === el && _restoreWindow(_getOuterWindow(el))
@@ -2323,13 +2314,54 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
             else binds.delete(L)
             _invertBindingContext(binds, true)
           } else if (r !== evaluator.none) {
-            const CurrentUsage = binds.get(label('CurrentUsage'))
-            if (r !== CurrentUsage && _isArray(CurrentUsage) && CurrentUsage[0] === either && !_wasMerged(CurrentUsage))
-              _removeUsage(CurrentUsage, r)
+            const cu = binds.get(label('CurrentUsage'))
+            if (r !== cu && _isArray(cu) && cu[0] === either && !_wasMerged(cu))
+              _removeUsage(cu, r)
           }
         }
       }
       elemValue(el, array(elem, evaluator, expr, then))
+
+      // Evaluate the requested expression.
+      const env = _newExecutionEnv(finish.env)
+      env[_id(log)] = waiting
+      const start = _timeSince()
+      if (_isArray(expr) && expr[0] === _extracted && expr.length == 3 && (_isLabel(expr[1]) || _invertBindingContext(binds).has(expr[1])))
+        bindAs = _isLabel(expr[1]) ? expr[1] : label(_invertBindingContext(binds).get(expr[1])), expr = expr[2]
+      const prev = finish.env
+      _langAt.lang = lang, _bindingsAt.binds = binds
+      _doJob(expr, env, r => { // Got the result.
+        ID = null
+        const end = _timeSince(), real = _timeSince(start)
+
+        if (binds) { // Add result to bindings or CurrentUsage.
+          if (_isLabel(bindAs)) {
+            const L = label(bindAs[1])
+            const q = quote(r)
+            if (binds.has(L))
+              prevBinding = !parse.ctx.has(L) || parse.ctx.get(L) === q ? binds.get(L) : parse.ctx.get(L)
+            binds.set(L, q)
+            _invertBindingContext(binds, true)
+            r = [_extracted, !_isArray(q) ? L : q, !_isArray(q) ? q : q === r ? q.slice() : r]
+          } else if (!(r instanceof Error) && !_isError(r) && r != null) {
+            const cu = binds.get(label('CurrentUsage'))
+            if (r !== cu && _isArray(cu) && cu[0] === either && !_wasMerged(cu))
+              result = r, _addUsage(cu, result)
+          }
+        }
+
+        const pre = _smoothHeightPre(el)
+        waiting.remove()
+        // Merge `_updateBroken` of both logged children into one.
+        _updateBroken(el)
+        finish.env = env
+
+        // Display `_logAll evaluator ^(Result UserDuration RealDuration EndTime)`.
+        el.append(daintyEvaluator([_logAll, evaluator, [quote, [r, env[_id(userTime)], real, end]]]))
+        _smoothHeightPost(el, pre)
+      }, ID)
+      finish.env = prev
+      _langAt.lang = null, _bindingsAt.binds = null
       return el
     },
   },
@@ -2348,7 +2380,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     if (!finish.env) return fancy
     if (el === undefined) el = finish.env[_id(log)]
     el = _getOuterREPL(el)
-    if (el && _isArray(el.to)) return el.to[2][0]
+    if (el && _isArray(el.to)) return el.to[2]
     // .lang
   },
 
@@ -2356,8 +2388,9 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     if (_bindingsAt.binds) return _bindingsAt.binds
     if (!finish.env) return parse.ctx
     if (el === undefined) el = finish.env[_id(log)]
+    const PREV = el
     el = _getOuterREPL(el)
-    if (el && _isArray(el.to)) return el.to[2][1]
+    if (el && _isArray(el.to)) return el.to[3]
     // .binds
   },
 
@@ -2586,8 +2619,8 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       // Else Browser
 
       const repl = elem('node')
-      repl.isREPL = true
-      elemValue(repl, array(elem, REPL, array(lang, binds)))
+      repl.isREPL = true, repl.classList.add('REPL')
+      elemValue(repl, array(elem, REPL, lang, binds))
 
       // Display purified output.
       const pureOutput = elem('div', elem('div'))
@@ -2609,7 +2642,9 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
           e[_id(log)] = pureOutput.lastChild, finish.env = e
           const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
           if (bindAs) expr = expr[2]
-          ID = _schedule([purify, array(quote, expr)], e, result => {
+          pureOutput.insertBefore(waiting = _evaluationElem(ID), pureOutput.lastChild)
+          _langAt.lang = lang, _bindingsAt.binds = binds
+          _doJob([purify, array(quote, expr)], e, result => {
             if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
               result = result[1] // Display errors too.
             if (bindAs) result = [_extracted, bindAs, result]
@@ -2628,9 +2663,9 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
               }
             } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
           })
-          pureOutput.insertBefore(waiting = _evaluationElem(ID), pureOutput.lastChild)
+          _langAt.lang = null, _bindingsAt.binds = null
           _smoothHeightPost(pureOutput, pre)
-        })
+        }, ID = _newJobId())
         return promise
       }, .1, expr => lastExpr = expr)
 
@@ -3106,11 +3141,15 @@ Quite expensive.`,
   docsToHTML:{
     call() {
       return (function convert(el) {
-        if (!(el instanceof Element)) return el
+        if (!(el instanceof Element)) return el.nodeValue
+        if (!el.firstChild) return ''
         let tag = el.tagName.toLowerCase(), suffix = ''
         if (tag === 'node') tag = 'code'
+        if (tag === 'known') tag = 'b'
         if (tag === 'details') suffix = '<hr>'
-        return `<${tag}>${[...el.childNodes].map(convert).join('')}${suffix}</${tag}>`
+        if (tag === 'space' || tag === 'span') tag = ''
+        const start = tag ? `<${tag}>` : '', end = tag ? `</${tag}>` : ''
+        return `${start}${[...el.childNodes].map(convert).join('')}${suffix}${end}`
       })(docs())
     },
   },
@@ -6174,7 +6213,7 @@ Infers structural terms where possible.`,
   },
 
   elemClone(el) {
-    console.log('clone')
+    // console.log('clone')
     const copy = el.cloneNode(false)
     if ('to' in el) elemValue(copy, el.to)
     if (el.special) copy.special = el.special, copy.special(el, copy)
@@ -6354,6 +6393,7 @@ Also wraps C-style strings in <string>.`,
     txt:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes Expr into a string or a DOM tree (that can be parsed to retrieve the original structure).`,
     future:[
       `Fix serialization not associating elems with their correct values (particularly functions).`,
+      `Fix CurrentUsage displaying as (usually) \`(either undefined undefined undefined …?)\` (and not, say, \`CurrentUsage\`).`,
       `Style only after we fully have the struct, then lazily create/style the tree.`,
       `Make all arrays \`(...?)\` that contain deconstructable values be deconstructed as \`(array ...?)\`, by returning a bool from \`deconstructed\`.`,
     ],
@@ -8960,8 +9000,8 @@ The correctness of quining of functions can be tested by checking that the rewri
 
     if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
       // If `if ? ? ?`, add both branches.
-      _addHashed(result, v[2], add, inp)
-      _addHashed(result, v[3], add, inp)
+      _addHashed(result, v[2], add, inp, actuallyRemove)
+      _addHashed(result, v[3], add, inp, actuallyRemove)
 
     } else if (_isUsing(v) || _isFunction(v) || typeof v == 'function' && (inp ? (d = !_isArray(v) && defines(v, input)) : (d = !_isArray(v) && defines(v, output)))) {
       // If a deconstructable function, add each of its inputs/output.
@@ -8969,14 +9009,14 @@ The correctness of quining of functions can be tested by checking that the rewri
       if (inp) {
         const endJ = d ? f.length : f.length-1
         for (let j = d ? 0 : !u ? 1 : 2; j < endJ; ++j)
-          _addHashed(result, f[j], add, inp)
+          _addHashed(result, f[j], add, inp, actuallyRemove)
       } else
-        _addHashed(result, d ? f : f[f.length-1], add, inp)
+        _addHashed(result, d ? f : f[f.length-1], add, inp, actuallyRemove)
 
     } else if (d = _isTry(v)) {
       // Add each sub-function.
       for (let j = 1; j < d.length; ++j)
-        _addHashed(result, d[j], add, inp)
+        _addHashed(result, d[j], add, inp, actuallyRemove)
 
     } else {
       const hash = _structHash(v)
@@ -8986,7 +9026,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         !arr.includes(add) && arr.push(add)
       else {
         const i = arr.indexOf(add)
-        i>0 && arr.splice(i,1)
+        i>=0 && arr.splice(i,1)
       }
 
     }
@@ -9008,7 +9048,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     txt:`Removes an item from a usage context.`,
     call(ctx, v) {
       if (_wasMerged(ctx)) error(ctx, "was merged")
-      const i = ctx.indexOf(v)
+      const i = ctx.indexOf(v, 1)
       if (i <= 0) return
       ctx.splice(i,1)
       if (_hashes.ins.has(ctx))
@@ -9065,30 +9105,28 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       const seenBefore = new Set
       const lang = _langAt(), binds = _bindingsAt()
       const reducedCollapseDepth = {...serialize.displayed, collapseDepth:3}
-      return display(null, ctx, elem('div'), _wasMerged(ctx))
+      return display(ctx, ctx, elem('div'))
 
       function checkbox(ctx, v, checked = ctx.indexOf(v) > 0) {
         // Create a checkbox that shuffles `v` in/out of `ctx` when toggled.
         const el = elem('input')
         el.type = 'checkbox'
         el.checked = checked
+        el.title = 'Enabled?'
         el.onchange = () => {
           let disabledI = 1
           for (; disabledI < ctx.length; ++disabledI)
             if (_isArray(ctx[disabledI]) && ctx[disabledI][0] === _disabled && !_wasMerged(ctx[disabledI])) break
-          let enabledI = 1
-          for (; enabledI < ctx.length; ++enabledI)
-            if (ctx[enabledI] === v) break
           if (el.checked) {
             // Remove from ctx[disabledI], add to ctx.
-            const j = ctx[disabledI].indexOf(v)
-            if (j >= 0) ctx[disabledI].splice(j,1)
-            ctx.push(v)
-            if (ctx[disabledI].length === 1) ctx.splice(disabledI, 1)
+            const j = disabledI < ctx.length ? ctx[disabledI].indexOf(v, 1) : -1
+            if (j > 0) ctx[disabledI].splice(j,1)
+            _addUsage(ctx, v)
+            if (ctx[disabledI].length === 1) _removeUsage(ctx, ctx[disabledI])
           } else {
             // Add to ctx[disabledI], remove from ctx.
-            if (disabledI === ctx.length) ctx.push([_disabled])
-            ctx[disabledI].push(v), ctx.splice(enabledI, 1)
+            if (disabledI === ctx.length) _addUsage(ctx, [_disabled]), disabledI = ctx.length-1
+            ctx[disabledI].push(v), _removeUsage(ctx, v)
           }
         }
         return el
@@ -9120,10 +9158,10 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
               { display(ctx, d[i], el); continue }
             // Checkbox and types and value.
             const ch = elem('div')
-            !immutable && ch.append(checkbox(ctx, d, true))
+            !immutable && ch.append(checkbox(ctx, d[i], true))
             const T = typesOf(d[i])
             T && ch.append(T)
-            display(d, d[i], el)
+            display(d, d[i], ch)
             el.append(ch)
           }
           into.append(el)
@@ -9134,7 +9172,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
             ch.append(checkbox(ctx, d[i], false))
             const T = typesOf(d[i])
             T && ch.append(T)
-            display(ctx, d[i], into)
+            display(ctx, d[i], ch)
             into.append(ch)
           }
         } else
@@ -9156,6 +9194,8 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       output:__is(`output`),
       use:__is(`use`),
       get:__is(`get`),
+      pick:__is(`pick`),
+      using:__is(`using`),
     },
     philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
 All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. Programming languages must be described in an understandable and searchable and optimizable and extensible format, not given one measly implementation of. But that is not at all the regular programming style. Very alien to me. Can an old dog be taught new tricks?`,
@@ -9451,28 +9491,27 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     txt:`\`use Function Inputs Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     examples:[
-      // ### Unhand these:
-      // `Select the proper semantic type in a bank of knowledge:`,
-      // [
-      //   `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
-      //   `1:'Action'`,
-      // ],
-      // `Can find args in \`Context\`:`,
-      // [
-      //   `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
-      //   `3:5`,
-      // ],
-      // `Take some, find some:`,
-      // [
-      //   `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
-      //   `5:'Int'`,
-      // ],
-      // `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
-      // [
-      //   `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
-      //   `5:'Int'`,
-      // ],
-      // `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
+      `Select the proper semantic type in a bank of knowledge:`,
+      [
+        `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
+        `1:'Action'`,
+      ],
+      `Can find args in \`Context\`:`,
+      [
+        `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
+        `3:5`,
+      ],
+      `Take some, find some:`,
+      [
+        `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
+        `5:'Int'`,
+      ],
+      `Don't do this (arbitrarily-computed (non-structural) values are not hashed, so performance of finding them suffers):`,
+      [
+        `use (function 0 x:Int 5 x:Int) (either 5:Int x:Int->0 x:Int->5 x:Int->x x:Int->2*x) Int='Int'`,
+        `5:'Int'`,
+      ],
+      `(\`5\` has to be provided structurally in the context (so \`x:Int->x\` and \`5:Int\` won't do to produce \`5\`), so that the search does not have to compose non-structured functions, which will infinitely balloon it.)`,
     ],
     call(v, ctx = CurrentUsage, inputs) {
       const r = _search(undefined, ctx, v !== undefined ? v : ctx, inputs, undefined)
@@ -9545,7 +9584,6 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       if (_isFunction(wantedOutput)) {
         const d = deconstruct(wantedOutput)
         const subCtx = array(either, ...bound(x => !_isVar(x) ? undefined : _unknown(x), d.slice(1,-1), false), ctx)
-        log('higher-order', subCtx, wantedOutput)
         _visitNode(subCtx, _functionComposer(wantedOutput), null, use.var, null, then)
         return
       }
@@ -9630,7 +9668,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
         // If `then`, add to args, else return from this graph search.
         if (then) return void _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], v] : [v], then[5])
-        else return log('FOUND', v, node), v !== undefined ? v : _onlyUndefined
+        else return v !== undefined ? v : _onlyUndefined
       } catch (err) {}
     },
   },
@@ -9656,7 +9694,6 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
     philosophy:`A potentially-optimizable search.
 Nothing unthinkable. Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that.`,
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
-      // ### We need to comment out all tests except one, and log everything we can.
       ctx === CurrentUsage && impure()
       if (!use.var) use.var = [label]
 
@@ -9723,28 +9760,28 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
     txt:`\`get OutputShape Context\` or \`get OutputShape\`: searches for a structured value from \`Context\` and all contexts used in dynamically-scoped parent searches.
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
     examples:[
-      // ###
-//       `Trivial finding:`,
-//       [
-//         `get ?:1 (either 0:1 0:2)`,
-//         `0:1`,
-//       ],
-//       `First-order composition:`,
-//       [
-//         `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
-//         `4:10`,
-//       ],
-//       `Higher-order composition:`,
-//       [
-//         `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
-// Int='Int' Float="Float"`,
-//         `x:'Int'->[x+12]/2:'Float' x=?`,
-//       ],
-//       `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
-//       [
-//         `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
-//         `('Next' 9)`,
-//       ],
+      `Trivial finding:`,
+      [
+        `get ?:1 (either 0:1 0:2)`,
+        `0:1`,
+      ],
+      `First-order composition:`,
+      [
+        `get ?:10 (either  0:1  x:1->x:3  x:3->x+4:2  x:2->x:10)`,
+        `4:10`,
+      ],
+      `Higher-order composition:`,
+      [
+        `get ?:Int->?:Float (either  x:Int->x+12:34  y:34->y/2:Float)
+Int='Int' Float="Float"`,
+        `x:'Int'->[x+12]/2:'Float' x=?`,
+      ],
+      `Can give structure to values dynamically (\`x-1\` is a computation on machine numbers, not a structural rewrite):`,
+      [
+        `get (Next ?) (either 10 x->(Next x-1)) Next='Next'`,
+        `('Next' 9)`,
+      ],
+      // Frankly, who cares about the things below.
 //       `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
 //       [
 //         `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
@@ -9764,13 +9801,13 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 //         `X*^0->X  X=#
 // mult='Times' quote='Next'`,
 //       ],
-      `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-      [
-        `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
-mult='Times' sum='Sum' quote='Next'`,
-        `0*^^0->0
-mult='Times' quote='Next'`,
-      ],
+//       `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+//       [
+//         `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
+// mult='Times' sum='Sum' quote='Next'`,
+//         `0*^^0->0
+// mult='Times' quote='Next'`,
+//       ],
 //       `Can create a function from context as an arg:`,
 //       [
 //         `get
@@ -9785,7 +9822,7 @@ mult='Times' quote='Next'`,
 //       ],
     ],
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
-Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
+Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those). …It doesn't actually work here, though; oh well.
 But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Search for optimization, for self, for search.`,
     call(out, ctx) {
       const r = _get(out, ctx)
