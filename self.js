@@ -3148,7 +3148,7 @@ Quite expensive.`,
         if (tag === 'known') tag = 'b'
         if (tag === 'details') suffix = '<hr>'
         if (tag === 'space' || tag === 'span') tag = ''
-        const start = tag ? `<${tag}>` : '', end = tag ? `</${tag}>` : ''
+        const start = tag ? `<${tag}${tag === 'details' && el.open ? ' open' : ''}>` : '', end = tag ? `</${tag}>` : ''
         return `${start}${[...el.childNodes].map(convert).join('')}${suffix}${end}`
       })(docs())
     },
