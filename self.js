@@ -209,6 +209,198 @@ __base({
       repeat:__is(`repeat`),
       Branching:__is(`Branching`),
     },
+    philosophy:`It could be simpler to understand this much simpler language with much the same ideas.
+
+;="A simple pattern-matching core: evaluation on graphs (to not need let-bindings), transformation, backtracking.
+Presumed to exist on top of a stage that gets rid of syntax and creates bound graphs."
+
+Globals={
+
+  "quote" (concept {txt "\`^x\` or \`(quote x)\`: when \`eval\`uated, returns \`x\`."})
+  "label" (concept {txt "\`x\` or \`(label 'x')\`, or \`?\` or \`(label)\`: a label that can remember bindings. Parsing makes all equal-string-ID labels the same object in memory."})
+
+
+
+  "eval" eval eval=(js "(x, binds) => {
+    // (This is \`finish\` in the bigger lang, with \`binds\` stored in \`finish.env[_id(label)]\`.)
+    if (Array.isArray(x)) {
+      // Evaluate each graph node once, in a given function call. Remember bindings.
+      if (binds.has(x)) return binds.get(x)
+
+      if (x[0] === quote) return x[1] // Quoting stops evaluation.
+      if (x[0] === label) return x // Labels self-evaluate.
+      if (x[0] === func) return func(x[1], x[2]) // Functions do not partially-evaluate here.
+
+      // Evaluate each array item.
+      const y = _arrayCache.length ? _arrayCache.pop() : [];  y.length = x.length
+      for (let i = 0; i < x.length; ++i) y[i] = eval(x[i], binds)
+
+      // Functions get called, structures get built.
+      if (typeof y[0] == 'function') {
+        if (y.length != 2) binds.set(x, x = y[0].call(...y))
+        else binds.set(x, x = y[0].call(y[0], y[1]))
+        return _reuseArray(y), x
+      }
+      return binds.set(x, y), y
+    }
+    return x
+  }" Globals)
+  "assign" (js "(a, b, binds) => {
+    // Assign \`b\` to \`a\`, returning an updated version of \`binds\` (a Map that makes \`a\` into \`b\`).
+
+    // Always succeed in assigning greater things.
+    if (Array.isArray(b) && b[0] === label) return
+    if (binds && binds.has(a)) {
+      // Previously-assigned things must be ref-equal. (No unification in this simple core language.)
+      if (binds.get(a) !== b) throw 'Expected the same value'
+    } else if (Array.isArray(a)) {
+      // Bind labels.
+      if (a[0] === label) return _oneKeyMap(a,b)
+
+      if (!Array.isArray(b)) throw 'Expected an array'
+      if (a.length != b.length) throw 'Lengths differ'
+
+      // Assign each array element.
+      for (let i = 0; i < a.length; ++i) binds = _uniteMaps(binds, assign(a[i], b[i], binds))
+      // Make \`a->a a=?:Int\` instantly refer to the argument when evaluated.
+      ;(binds || (binds = _mapCache.length ? _mapCache.pop() : new Map)).set(a, b)
+      return binds
+    } else if (a !== b) throw 'Expected the same object'
+  }" Globals)
+
+
+
+  "func" (concept {
+    txt "\`A->B\` or \`(func A B)\` is a transformation from \`A\` to \`B\`: a function that, when called \`(A->B C)\`, matches \`A\` to \`C\` and evaluates \`B\` if successful.
+    Arrays must match per-element, vars (labels like \`x\` and \`?\`) remember the matched value, consts (\`#\` or concepts or any other objects) must be ref-equal."
+    eval (js "(a, b) => {
+      const f = c => {
+        const m = assign(a, c) || new Map
+        return c = eval(b, m), m.clear(), _mapCache.push(m), c
+      }
+      f.inputs = [a]
+      f.outputs = [(function struct(x) {
+          if (Array.isArray(x)) {
+            if (typeof x[0] == 'function') return [label]
+            if (Array.isArray(x[0])) {
+              if (x[0][0] === first || x[0][0] === label) return [label]
+              if (x[0][0] === func) return struct(x[0][2])
+            }
+            return x.map(struct)
+          } else return x
+        })(b)]
+      return f
+    }" Globals)
+  })
+
+  "first" (concept {
+    txt "\`A|…?\` or \`(first A …?)\` is a function that attempts to call each sub-function with the one arg in order, returning the first success or failing."
+    eval (js "(...f) => {
+      // (This is \`try\` in the bigger lang.)
+      const g = c => {
+        for (let i = 0; i < f.length; ++i)
+          try { return f[i](c) }
+          catch (err) { if (err instanceof Error) throw err }
+        throw 'None fit'
+      }
+      g.inputs = [], g.outputs = []
+      for (let i = 0; i < f.length; ++i)
+        g.inputs.push(...f[i].inputs), g.outputs.push(...f[i].outputs)
+      return g
+    }" Globals)
+  })
+
+
+
+  "get" (concept {
+    txt "\`get Shape Context\` or \`get Shape\` (to get from the current outer context): generates an instance of \`OutputShape\` by applying functions from the global context zero or more times and taking values from context.
+      To get multiple values, \`get X\` multiple times in body."
+    eval (js "(out, ctx = get.ctx) => {
+      const prevCtx = get.ctx;  get.ctx = ctx
+      try {
+        const nodes = [[out, ctx, undefined, null]]
+        while (nodes.length) {
+          const i = Math.floor(Math.random()*nodes.length)
+          const node = nodes[i]
+          ;[nodes[i], nodes[nodes.length-1]] = [nodes[nodes.length-1], nodes[i]], nodes.pop()
+          const [out, f, arg, then] = node
+
+          if (Array.isArray(f) && f[0] === either) {
+            // If f is a context, add every item.
+            for (let j = 1; j < f.length; ++j) {
+              const next = _arrayCache.length ? _arrayCache.pop() : []
+              next.push(out, f[j], arg, then)
+              nodes.push(next)
+            }
+            _reuseArray(node)
+          }
+          else if (typeof f == 'function') {
+            if (!f.inputs) continue
+            // If f is a function, look for its one arg in context.
+            if (arg === undefined) {
+              // Don't bother generating inputs if the output is definitely not assignable.
+              let k = 0
+              for (; k < f.outputs.length; ++k) {
+                try { _reuseMap(assign(out, f.outputs[k])); break }
+                catch (err) { if (err instanceof Error) throw err }
+              }
+
+              // Generate input then call us.
+              if (k < f.outputs.length)
+                for (let j = 0; j < f.inputs.length; ++j) {
+                  const next = _arrayCache.length ? _arrayCache.pop() : []
+                  next.push(f.inputs[j], ctx, undefined, node)
+                  nodes.push(next)
+                }
+            } else {
+              // Check that the function's output fits the shape, then return it (to \`then\` or globally).
+              const v = f(arg)
+              try { _reuseMap(assign(out, v)) }
+              catch (err) { if (err instanceof Error) throw err; _reuseArray(node) }
+              if (!then) return v
+              const next = _arrayCache.length ? _arrayCache.pop() : []
+              next.push(then[0], then[1], v, then[3])
+              nodes.push(next)
+            }
+          } else {
+            // Try assigning, and if ok, return it (to \`then\` or globally).
+            try {
+              _reuseMap(assign(out, f))
+              if (!then) return f
+              const next = _arrayCache.length ? _arrayCache.pop() : []
+              next.push(then[0], then[1], f, then[3])
+              nodes.push(next)
+            } catch (err) { if (err instanceof Error) throw err; _reuseArray(node) }
+          }
+        }
+        throw 'Ran out'
+      } finally { get.ctx = prevCtx }
+    }" Globals)
+  })
+
+  "either" (concept { txt "\`(either …Values)\`: a usage context." })
+
+
+
+  "_oneKeyMap" (js "(k,v) => {
+    const m = _mapCache.length ? _mapCache.pop() : new Map
+    m.set(k,v)
+    return m
+  }" Globals)
+  "_uniteMaps" (js "(a,b) => {
+    if (!a || !b || a === b) return a || b
+    const m = _mapCache.length ? _mapCache.pop() : new Map
+    a.forEach(_copyKey, m)
+    b.forEach(_copyKey, m)
+    _reuseMap(b) // Free b (since it was created by us and for us, with _oneKeyMap).
+    return m
+  }" Globals)
+  "_copyKey" (js "function(v,k) { this.set(k,v) }" Globals)
+  "_mapCache" (js "[]" Globals)
+  "_arrayCache" (js "[]" Globals)
+  "_reuseMap" (js "y => y && (y.clear(), _mapCache.push(y))" Globals)
+  "_reuseArray" (js "y => y && (y.length = 0, _arrayCache.push(y))" Globals)
+}`,
   },
 
   Branching:{
@@ -286,7 +478,7 @@ __base({
     philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).`,
     lookup:{
       log:__is(`log`),
-      elem:__is(`elem`),
+      disableBindings:__is(`disableBindingsElem`),
       REPL:__is(`REPL`),
       evaluator:__is(`evaluator`),
       contextMenu:__is(`contextMenu`),
@@ -294,9 +486,7 @@ __base({
       button:__is(`button`),
       files:__is(`files`),
       url:__is(`url`),
-      structured:__is(`structured`),
-      structuredSentence:__is(`structuredSentence`),
-      disableBindings:__is(`disableBindingsElem`),
+      elem:__is(`elem`),
     },
   },
 
@@ -333,7 +523,7 @@ Label-binding environment is not preserved.`,
       try {
         while (true) {
           v = finish(expr)
-          if (_isUnknown(v)) return v[1] = _cameFrom(array(repeat, v[1], iterations), us), v
+          if (_isUnknown(v)) return _stage(_cameFrom(array(repeat, v[1], iterations), us), v)
           _checkInterrupt(us)
           newLabel.clear()
           done = true
@@ -464,7 +654,7 @@ Staging (code generating code when not everything is known) is done in some nati
       try {
         const r = finish(x)
         if (!_isUnknown(r) || !_isDeferred(r)) return r
-        else return r[1] = array(purify, r[1]), r
+        else return _stage(array(purify, r[1]), r)
       }
       catch (err) { if (err !== interrupt) return _unknown(jsRejected(err)); else throw err }
       finally { finish.pure = prev }
@@ -540,7 +730,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     call(x, add = 0) {
       const start = memorySince()
       const v = finish(x)
-      if (_isUnknown(v)) return v[1] = [time, v[1], add + memorySince(start)], v
+      if (_isUnknown(v)) return _stage([time, v[1], add + memorySince(start)], v)
       return [v, memorySince(start) + add]
     },
   },
@@ -592,7 +782,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
           else result = f.call(f, result, v)
           if (_isArray(result) && result[0] === stopIteration) return result[1]
 
-          if (_isUnknown(result)) return result[1] = array(reduce, quote(f), a.slice(i), result[1]), result
+          if (_isUnknown(result)) return _stage(array(reduce, quote(f), a.slice(i), result[1]), result)
         }
       } catch (err) { if (err === interrupt) interrupt(reduce, 2)(result, i);  throw err }
       return result
@@ -628,7 +818,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
           if (_isUnknown(r)) {
             if (!record) {
               for (let k=0; k<i; ++k) result[k] = quote(result[k])
-              record = r
+              record = _unknown(r)
             } else
               record.push(...r.slice(2))
             r = r[1]
@@ -693,7 +883,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
             if (_isUnknown(r)) {
               if (!record) {
                 for (let k=0; k < results.length; ++k) results[k] = quote(results[k])
-                record = r
+                record = _unknown(r)
               } else
                 record.push(...r.slice(2))
               r = r[1]
@@ -775,8 +965,13 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     call(a,b) { return _isVar(a) || _isVar(b) ? array(_divide, a, b) : _toNumber(a) / _toNumber(b) },
   },
 
+  OnShiftClickOutside:[
+    __is(`either`),
+    // Accepting [target, X, Y].
+  ],
+
   Extension:{
-    txt:`Not implemented.`,
+    txt:`Not implemented. Or is it?`,
     future:`Have an action button, and inject a script with this js into null on click.`,
     call() { throw "Being a browser extension not supported for now" },
   },
@@ -816,7 +1011,7 @@ Supported browsers: modern Chrome and Firefox.`,
     lookup:{
       icon:__is(`BrowserIconURL`),
     },
-    style:`body * {transition: all .2s, margin 0s, padding 0s; vertical-align: top; box-sizing: border-box; animation: fadein .2s; font-family: monospace}
+    style:`.into * {transition: all .2s, margin 0s, padding 0s; vertical-align: top; box-sizing: border-box; animation: fadein .2s; font-family: monospace}
 
 @keyframes fadein { from {opacity:0} }
 
@@ -828,7 +1023,7 @@ Supported browsers: modern Chrome and Firefox.`,
   --highlight:royalblue;
   --main:black;
 }
-.into.noTransitions * { transition: none !important }
+.into.noTransitions * { transition: none !important; animation: none !important }
 .into.dark {
   --background:rgb(15,15,15);
   --highlight:rgb(225, 110, 65);
@@ -1002,14 +1197,12 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // On click, run `(log (picker askUser (use (targetElem clientX clientY):'clicked')))` (or typed as `clicked elsewhere`) daintily.
       _listen('click', evt => {
-        return // ###
         finish.env = undefined
         if (evt.shiftKey && !evt.ctrlKey && !evt.altKey && !Self.into.contains(evt.target)) {
           // Shift+clicked outside of us.
-          atCursor(daintyEvaluator([log, [picker, askUser, [use, [quote, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked elsewhere']]]]]))
-        } else if (!evt.shiftKey && !evt.ctrlKey && !evt.altKey && Self.into.contains(evt.target))
-          // Clicked inside of us.
-          atCursor(daintyEvaluator([log, [picker, askUser, [use, [quote, [typed, [evt.target, evt.clientX, evt.clientY], 'clicked']]]]]))
+          const ctx = OnShiftClickOutside
+          atCursor(daintyEvaluator([log, [picker, askUser, [[[lookup, ctx, [sum, [pick, ctx], 1]]], [quote, [evt.target, evt.clientX, evt.clientY]]]]]))
+        }
       }, passive)
 
       // Select the <node> under cursor on triple-click.
@@ -1567,7 +1760,11 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   log:{
     txt:`\`(log …Values)\`: For debugging; logs to the current DOM node or console.`,
-    future:`Be sensitive to finish.depth, by grouping logs of the same-or-more depth into a single <details>.`,
+    future:`Be sensitive to finish.depth, by grouping all previous logs of greater depth into a single <details>.`,
+    lookup:{
+      structured:__is(`structured`),
+      structuredSentence:__is(`structuredSentence`),
+    },
     call(...x) {
       log.did = true, impure.impure = true
       try {
@@ -1579,13 +1776,14 @@ Remember to quote the link unless you want to evaluate the insides.`,
         if (into) {
           const pre = _smoothHeightPre(into.parentNode)
           if (typeof str == 'string') str = document.createTextNode(str)
+          if (!into.parentNode) console.log(into, _id(into))
           into.parentNode.insertBefore(str, into)
           _updateBroken(into.parentNode)
           _smoothHeightPost(into.parentNode, pre)
         } else
           console.log(str)
         if (x.length == 1) return x[0]
-      } catch (err) { if (err !== impure) console.log(err, err.stack), console.log(...x) }
+      } catch (err) { if (err !== impure) console.log(err, err && err.stack), console.log('When trying to log', ...x) }
       finally { impure.impure = false }
       // log.did (for not erasing parts of a log in a terminal in NodeJS)
     },
@@ -1629,24 +1827,191 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   _getOuterContextMenu(el) { return !el ? document.body : (el.tagName === 'CONTEXT-MENU' ? el : _getOuterContextMenu(el.parentNode)) },
 
-  escapeLabel(name, lang = _langAt() || fancy) {
-    return typeof defines(lang, escapeLabel) == 'function' ? defines(lang, escapeLabel)(name) : name
+  _escapeLabel(name, lang = _langAt() || fancy) {
+    return typeof defines(lang, _escapeLabel) == 'function' ? defines(lang, _escapeLabel)(name) : name
   },
 
-  unescapeLabel(repr, lang = _langAt() || fancy) {
-    return typeof defines(lang, escapeLabel) == 'function' ? defines(lang, escapeLabel)(repr) : repr
+  _unescapeLabel(repr, lang = _langAt() || fancy) {
+    return typeof defines(lang, _unescapeLabel) == 'function' ? defines(lang, _unescapeLabel)(repr) : repr
   },
 
   describe:{
     txt:`Creates an element that describes a value.`,
+    _logAll:[
+      {
+        txt:`Allow renaming labels.`,
+        call([el, v]) {
+          if (el && el.classList.contains('label')) {
+            // Allow renaming labels.
+            const inp = elem('input')
+            inp.type = 'text'
+            let prev = _unescapeLabel(el.textContent, el), updating = false
+            inp.value = prev
+            const updateGlobal = _throttled(() => (_updateBroken(document.body), updating = false), .05)
+            const editor = _isEditable(el)
+            inp.oninput = _throttled(() => {
+              if (inp.value && +inp.value === +inp.value) return
+              let arr = elemValue(undefined, el.to)
+              if (!arr && editor) // Restore ourselves when we've lost it because it's cyclic.
+                arr = [...editor.querySelectorAll('.label')].filter(x => _unescapeLabel(x.textContent, x) === prev)
+              if (_isArray(arr))
+                for (let i = 0; i < arr.length; ++i)
+                  if (arr[i].classList.contains('label') && _unescapeLabel(arr[i].textContent, arr[i]) === prev)
+                    arr[i].textContent = _escapeLabel(inp.value, arr[i])
+              prev = inp.value
+              if (!updating) setTimeout(updateGlobal, 0), updating = true
+            }, .2)
+            return inp
+          }
+        },
+      },
+  
+      {
+        txt:`For globals, display the owner namespace (if any) (even if the property name does not match) and the global binding.
+  For numbers, display a slider from 0 to 2*number for easy adjusting.
+  For strings, display them in a <textarea> for easy editing and copying.
+  For anything else, display the globals the expression binds to, and an expandable basic definition.`,
+        call([el, v]) {
+          // For globals, a short definition of what we were called on.
+          if (_invertBindingContext(parse.ctx).has(v)) {
+            // For globals, display the owner namespace (if any) (even if the property name does not match) and the global.
+            const global = serialize(v, fancy, undefined, serialize.displayed), p = lookup.parents.get(v) || Self
+            return p ? elem('div', [elem('unimportant', [serialize(p, fancy, undefined, serialize.displayed), '.']), global]) : global
+          } else if (typeof v == 'number' && isFinite(v) && el && v === +el.textContent && _isEditable(el)) {
+            // Display a slider from 0 to 2*number for easy adjusting.
+            const range = elem('input', ''+v)
+            range.type = 'range'
+            range.min = v > 0 ? 0 : 2*v
+            range.max = v > 0 ? 2*v : 0
+            range.step = .01
+            range.value = v
+            let i = elemValue(undefined, el.to).indexOf(el)
+            range.oninput = () => {
+              if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
+              if (!el) return
+              el.replaceWith(el = elemValue(elem('number', ''+range.value), el.to = +range.value))
+              i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
+            }
+            return range
+          } else if (typeof v == 'string') {
+            // Display strings in a <textarea> for easy editing and copying.
+            const area = elem('textarea', v)
+            if (!_isEditable(el))
+              area.readOnly = true
+            else if (el) {
+              let i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
+              area.oninput = _throttled(() => {
+                if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
+                if (!el) return
+                el.replaceWith(el = serialize(area.value, fancy, undefined, serialize.displayed))
+                elemValue(area, el.to = area.value)
+                i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
+              }, .1)
+            }
+            return elemValue(area, v)
+          } else
+            // Display the globals the expression binds to, and an expandable basic definition.
+            return elem('div', [
+              permissionsElem(v),
+              elem('div', [
+                elemValue(elem('unimportant', 'Basically: '), basic),
+                elemValue(elemCollapse(() => _collapsedSerialization(v)), v),
+              ]),
+            ])
+        },
+      },
+      {
+        txt:`Docstring.`,
+        call([el, v]) {
+          if (!_isArray(v) && typeof defines(v, txt) == 'string')
+            return elem('div', stringToDoc(defines(v, txt)))
+        },
+      },
+      {
+        txt:`Examples.`,
+        call([el, v]) {
+          if (!_isArray(v) && _isArray(defines(v, examples)))
+            return elem('div', [
+              elemValue(elem('unimportant', 'Examples: '), examples),
+              elemCollapse(() => serialize(examples(v), fancy, undefined, serialize.displayed))
+            ])
+        },
+      },
+
+      {
+        txt:`A \`_read\` mark if present.`,
+        call([el, v]) {
+          if (_read.marks && _read.marks.has(v))
+            return elem('div', [
+              elemValue(elem('unimportant', 'Marked: '), _read),
+              elemCollapse(() => serialize(_read.marks.get(v), fancy, undefined, serialize.displayed))
+            ])
+        },
+      },
+
+      {
+        txt:`A table for \`lookup\`s.`,
+        call([el, v]) {
+          const backctx = _invertBindingContext(parse.ctx)
+          if (!_isArray(v) && defines(v, lookup)) {
+            const row = ([k,v]) => {
+              let ve
+              if (!backctx.has(v))
+                ve = elemValue(elemCollapse(() => serialize(v, fancy, undefined, serialize.displayed)), v)
+              else
+                ve = serialize(v, fancy, undefined, serialize.displayed)
+              return elem('tr', [elem('td', elem('span', k)), elem('td', ve)])
+            }
+            // For `Self`, only display public functionality without lookup.parents (displaying all bindings is too much).
+            let a
+            if (v !== Self) a = lookup(v).map(k => [k, lookup(v, k)])
+            else a = [...backctx].filter(([v,k]) => v && v !== true && k[0] !== '_' && !lookup.parents.has(v)).map(([v,k])=>[k,v])
+  
+            return elem('div', [
+              elemValue(elem('unimportant', 'Namespace for:'), lookup),
+              elem('table', a.length <= 16 ? a.map(row) : [a.slice(0,16).map(row), elemCollapse(() => a.slice(16).map(row))]),
+            ])
+          }
+        },
+      },
+      {
+        txt:`For globals, the list of back-refs.`,
+        call([el, v]) {
+          const backctx = _invertBindingContext(parse.ctx)
+          if (backctx.has(v)) {
+            const Refd = refd(v)
+            if (Refd && Refd.length)
+              return elem('div', [
+                elemValue(elem('unimportant', [
+                  'Used in ',
+                  elemValue(elem('number', ''+Refd.length), Refd.length),
+                  Refd.length != 1 ? ' other globals: ' : ' other global: ',
+                ]), refd),
+                elemCollapse(() => serialize(Refd, fancy, undefined, serialize.displayed))
+              ])
+          }
+        },
+      },
+      {
+        txt:`The full deconstruction if a non-array.`,
+        call([el, v]) {
+          const backctx = _invertBindingContext(parse.ctx)
+          if (backctx.has(v) || !_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
+            return elem('div', [
+              elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
+              elemCollapse(() => serialize(deconstruct(v), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
+            ])
+        },
+      },
+    ],
     call(el) {
       if (typeof document == ''+void 0) return
       let v
       if (!(el instanceof Node)) v = el, el = undefined
       else v = el.to
 
-      // Append a daintyEvaluator, executing `(_logUses (el ^v):describe)`.
-      return daintyEvaluator([_logUses, [quote, [typed, [el, v], describe]]])
+      // Append a daintyEvaluator, executing `(_logAll describe ^(el v))`.
+      return daintyEvaluator([_logAll, describe, [quote, [el, v]]])
     },
   },
 
@@ -1662,6 +2027,80 @@ Remember to quote the link unless you want to evaluate the insides.`,
       expandAll:__is(`elemExpandAll`),
       insertLinkTo:__is(`insertLinkTo`),
     },
+    _logAll:[
+      {
+        txt:`Propose to execute functions that define \`button\`.`,
+        call([el, range, v]) {
+          if (typeof v == 'function' && defines(v, button) !== undefined) {
+            const names = nameResult(v)
+            return button(v, names && names[0])
+          }
+        },
+      },
+      {
+        txt:`Describe context menu's items.`,
+        call([el, range, v]) { return describe(el) },
+      },
+      {
+        txt:`Fetch URLs and try to display their contents.`,
+        call([el, range, v]) {
+          if (_isArray(v) && v[0] === elem && v[1] === url && typeof v[2] == 'string' && v.length == 3) {
+            impure()
+            const result = elem('div')
+            result.classList.add('resizable')
+  
+            fetch(v[2], {mode:'cors'})
+            .catch(r => elemInsert(result, serialize(jsRejected(r), fancy, undefined, serialize.displayed)))
+            .then(r => r.arrayBuffer())
+            .then(r => new TextDecoder().decode(new Uint8Array(r)))
+            .then(r => {
+              try {
+                elemInsert(result, serialize(JSON.parse(r), fancy, undefined, serialize.displayed))
+              } catch (err) { elemInsert(result, lookup(fast, 'parse')(r)) }
+            })
+            .catch(() => {
+              const frame = elem('iframe')
+              frame.src = v[2]
+              elemInsert(result, frame)
+            })
+            return result
+          }
+        },
+      },
+      {
+        txt:`If the cursor is in editor, present an option to replace the currently-selected contents with a link to the value.`,
+        call([el, range, v]) {
+          if (range && v !== undefined && _isEditable(range.commonAncestorContainer))
+            return button(function linkToThis() { insertLinkTo(range, el) })
+        },
+      },
+      {
+        txt:`If we can expand all in the context element, then present that option.`,
+        call([el, range, v]) { return elemExpandAll(el, true) ? button(function expandAll() { elemExpandAll(el) }) : undefined },
+      },
+      {
+        txt:`Present "To window" (for non-windows) or "Restore" (for windows — draggable absolutely-positioned elements).`,
+        call([el, range, v]) {
+          if (!_isEditable(el) && el !== document.documentElement) {
+            if (!_getOuterWindow(el))
+              return button(function toWindow() { elemToWindow(el) })
+            else
+              return button(function restore() { return _restoreWindow(_getOuterWindow(el)) })
+          }
+        },
+      },
+      {
+        txt:`Present an option to hide the element.`,
+        call([el, range, v]) { return _getOuterWindow(el) !== el ? button(function hide() { elemCollapse(el) }) : undefined },
+      },
+      {
+        txt:`Present an option to hide the element and all elements after it on the same hierarchy level.`,
+        call([el, range, v]) {
+          if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET')
+            return button(function hideToEnd() { elemCollapse(el, null) })
+        },
+      },
+    ],
     call(el, range, evt) {
       impure()
       if (!el && evt.target === document.documentElement) el = evt.target
@@ -1675,8 +2114,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       menu.addEventListener('click', evt => evt.target.tagName === 'BUTTON' && _getOuterContextMenu(evt.target) === menu && elemRemove(menu))
       menu.tabIndex = 0
 
-      // Append a daintyEvaluator, executing `(_logUses (el range v):contextMenu)`.
-      menu.append(daintyEvaluator([_logUses, [quote, [typed, [el, range, v], contextMenu]]]))
+      // Append a daintyEvaluator, executing `(_logAll contextMenu ^(el range v))`.
+      menu.append(daintyEvaluator([_logAll, contextMenu, [quote, [el, range, v]]]))
 
       let inside = _getOuterContextMenu(el)
       if (_getOuterContextMenu(inside.parentNode) !== document.body) inside = document.body // Only one nesting layer.
@@ -1700,19 +2139,21 @@ Remember to quote the link unless you want to evaluate the insides.`,
       const env = _newExecutionEnv(finish.env)
       env[_id(log)] = el.lastChild
       let ended = false
+      const prev = finish.env
       _doJob(expr, env, () => (!result.previousSibling ? (ended = true, el.remove()) : result.remove()), ID)
+      finish.env = prev
       return !ended ? el : undefined
     },
   },
 
   atCursor:{
     txt:`Positions an element at cursor.`,
-    call(el, pointerEvt = atCursor.lastEvt, inside = document.documentElement) {
+    call(el, pointerEvt = atCursor.lastEvt, inside = document.body) {
       let x = pointerEvt ? pointerEvt.clientX : 0, y = pointerEvt ? pointerEvt.clientY : 0
       if (el.parentNode) error('Only position new elements at cursor')
       if (!inside.isConnected) error('Only position elements inside the visible document')
       impure()
-      const r = inside.getBoundingClientRect()
+      const r = (inside !== document.body ? inside : document.documentElement).getBoundingClientRect()
 
       if (!atCursor.opened) atCursor.opened = []
 
@@ -1720,31 +2161,21 @@ Remember to quote the link unless you want to evaluate the insides.`,
       el.style.position = 'absolute'
       const xOk = x < innerWidth * .8, yOk = y < innerHeight * .8
       x -= r.left, y -= r.top
+      el.style.left = x + 'px'
+      el.style.top = y + 'px'
       if (xOk && yOk) { // Open to bottom-right
-        el.style.left = x + 'px'
-        el.style.top = y + 'px'
         el.style.borderRadius = '0 1em 1em 1em'
       } else if (xOk) { // Open to top-right
-        el.style.left = x + 'px'
-        el.style.top = y + 'px'
         el.style.transform = 'translate(0, -100%)'
         el.style.borderRadius = '1em 1em 1em 0'
       } else if (yOk) { // Open to bottom-left
-        el.style.left = x + 'px'
-        el.style.top = y + 'px'
         el.style.transform = 'translate(-100%, 0)'
         el.style.borderRadius = '1em 0 1em 1em'
       } else { // Open to top-left
-        el.style.left = x + 'px'
-        el.style.top = y + 'px'
         el.style.transform = 'translate(-100%, -100%)'
         el.style.borderRadius = '1em 1em 0 1em'
       }
       el.style.maxWidth = innerWidth - parseFloat(el.style.left) - 16 + 'px'
-      if (inside !== document.documentElement) {
-        el.style.left = parseFloat(el.style.left) - r.left - scrollX + 'px'
-        el.style.top = parseFloat(el.style.top) - r.top - scrollY + 'px'
-      }
       inside.append(el)
 
       // Remove on clicking/focusing elsewhere.
@@ -1770,6 +2201,56 @@ Remember to quote the link unless you want to evaluate the insides.`,
   evaluator:{
     txt:`\`(elem evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
+    _logAll:[
+      {
+        txt:`Display evaluation's result.`,
+        call([result]) { return result !== undefined ? result : _onlyUndefined },
+      },
+      {
+        txt:`Display the report on times taken.`,
+        call([result, user, real, end]) {
+          if (user != null) return elem('time-report', [
+            elemValue(elem('span', 'user'), userTime),
+            elem('space', ' '),
+            _formatNumber(user),
+            ', ',
+            elemValue(elem('span', 'real'), realTime),
+            elem('space', ' '),
+            _formatNumber(real),
+            ', ',
+            elemValue(elem('span', 'report'), serialize),
+            elem('space', ' '),
+            _formatNumber(_timeSince(end)),
+          ])
+        },
+      },
+      {
+        txt:`Display evaluation result's potential uses.`,
+        call([result]) {
+          const ctx = input([result], CurrentUsage)
+          if (ctx) {
+            const lang = _langAt(), binds = _bindingsAt()
+            return elem('div', [
+              elem('unimportant', ['Input to ', elem('number', ''+(ctx.length-1)), ': ']),
+              elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
+            ])
+          }
+        },
+      },
+      {
+        txt:`Display potential ways to get evaluation result.`,
+        call([result]) {
+          const ctx = output(result, CurrentUsage)
+          if (ctx) {
+            const lang = _langAt(), binds = _bindingsAt()
+            return elem('div', [
+              elem('unimportant', ['Output of ', elem('number', ''+(ctx.length-1)), ': ']),
+              elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
+            ])
+          }
+        },
+      },
+    ],
     elem(tag, expr, then) {
       if (tag !== evaluator || typeof document == ''+void 0) return
       impure()
@@ -1824,8 +2305,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         _updateBroken(el)
         finish.env = env
 
-        // Display all uses of `(Result UserDuration RealDuration EndTime):evaluator`.
-        el.append(daintyEvaluator([_logUses, [quote, [typed, [r, env[_id(userTime)], real, end], evaluator]]]))
+        // Display `_logAll evaluator (Result UserDuration RealDuration EndTime)`.
+        el.append(daintyEvaluator([_logAll, evaluator, [quote, [r, env[_id(userTime)], real, end]]]))
         _smoothHeightPost(el, pre)
       }, ID)
       prompt.title = 'Click to remove this.'
@@ -1864,6 +2345,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
   _langAt(el) {
     if (_langAt.lang) return _langAt.lang
+    if (!finish.env) return fancy
     if (el === undefined) el = finish.env[_id(log)]
     el = _getOuterREPL(el)
     if (el && _isArray(el.to)) return el.to[2][0]
@@ -1872,6 +2354,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
   _bindingsAt(el) {
     if (_bindingsAt.binds) return _bindingsAt.binds
+    if (!finish.env) return parse.ctx
     if (el === undefined) el = finish.env[_id(log)]
     el = _getOuterREPL(el)
     if (el && _isArray(el.to)) return el.to[2][1]
@@ -2135,8 +2618,8 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
             try {
               ID = undefined, waiting && waiting.remove(), waiting = undefined
               if (!_isUnknown(result)) {
-                // Display all uses of `(Result):evaluator`.
-                elemInsert(pureOutput, daintyEvaluator([_logUses, [quote, [typed, [result], evaluator]]]), pureOutput.lastChild)
+                // Display `_logAll evaluator (Result)`.
+                elemInsert(pureOutput, daintyEvaluator([_logAll, evaluator, [quote, [result]]]), pureOutput.lastChild)
               } else {
                 const el = elem('button', 'Evaluate')
                 elemValue(el, result)
@@ -2759,7 +3242,7 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
             }
             throw interrupt
           }
-          return r[1] = array(_await, r[1]), r
+          return _stage(array(_await, r[1]), r)
         }
         return r
       } catch (err) { if (err === interrupt) interrupt(_await, 1)(doing !== undefined ? doing : _onlyUndefined); throw err }
@@ -2767,6 +3250,7 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
     lookup:{
       delay:__is(`delay`),
       race:__is(`race`),
+      parseURL:__is(`parseURL`),
     },
     call(...awaitables) {
       // Allow JS functions to stop themselves and re-enter when promises settle.
@@ -3131,7 +3615,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
           try {
             const v = finish(branches[i])
             if (_isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-              return v[1] = _cameFrom(array(first, v[1], ...branches.slice(i+1)), us), v
+              return _stage(_cameFrom(array(first, v[1], ...branches.slice(i+1)), us), v)
             return v
           } catch (err) { if (err === interrupt) throw err }
         }
@@ -3173,7 +3657,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
         for (; i < branches.length-1; ++i) {
           const v = finish(branches[i])
           if (_isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-            return v[1] = _cameFrom(array(last, v[1], ...branches.slice(i+1)), us), v
+            return _stage(_cameFrom(array(last, v[1], ...branches.slice(i+1)), us), v)
         }
         return finish(branches[branches.length-1])
       } catch (err) { if (err === interrupt) interrupt(last, 1)(i);  throw err }
@@ -3212,7 +3696,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
               if (typeof defines(f, argCount) == 'number' && defines(f, argCount) != data.length) continue
               const v = f.apply(f, data)
               if (_isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-                return v[1] = _cameFrom(array(first, v[1], _cameFrom(array(_cameFrom(array(_try, ...functions.slice(i+1)), us), ...data), us)), us), v
+                return _stage(_cameFrom(array(first, v[1], _cameFrom(array(_cameFrom(array(_try, ...functions.slice(i+1)), us), ...data), us)), us), v)
               return v
             } catch (err) { if (err === interrupt) throw err }
           return functions[functions.length-1].apply(functions[functions.length-1], data)
@@ -3278,7 +3762,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
           for (; i < f.length; ++i) {
             v = _isArray(v) && v[0] === rest && _isArray(v[1]) && v.length == 2 ? f[i].apply(f[i], v[1]) : f[i].call(f[i], v)
             if (i+1 < f.length && _isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-              return v[1] = _cameFrom(array(_cameFrom(array(compose, ...f.slice(0,i)), us), v[1]), us), v
+              return _stage(_cameFrom(array(_cameFrom(array(compose, ...f.slice(0,i)), us), v[1]), us), v)
           }
           return v
         } catch (err) { if (err === interrupt) interrupt(doInOrder, 2)(i,v);  throw err }
@@ -3405,9 +3889,10 @@ When in an array that is assigned to, collects the rest of arguments into an arr
             if (_isUnknown(A)) v.push(...A.slice(2)), A = A[1]
             if (_isUnknown(B)) v.push(...B.slice(2)), B = B[1]
             if (A === B && state === 2) // (if A B B) => A,B
-              return v[1] = finish(_cameFrom(array(last, v[1], A), us)), v
+              return _stage(finish(_cameFrom(array(last, v[1], A), us)), v)
             state = 3
             // If A and B construct the same structure except for one part, lift that structure to result.
+            v = _unknown(v)
             let inner = v[1] = [_if, v[1], A, B], encountered = _allocArray()
             while (_isArray(A) && _isArray(B) && !_isVar(A) && (!_isArray(A[0]) || !_hasCallableParts(A[0])) && !encountered.includes(A)) {
               const i = _unequalIndex(A,B)
@@ -3671,6 +4156,14 @@ Check _isUnknown to materialize the inner structure but only on demand.`,
   },
 
   _isUnknown(v) { return _isArray(v) && v[0] === _unknown },
+
+  _stage(expr, reason) {
+    // When we get an _isUnknown value and want to immediately stage some code for later, pass that as `reason` to here.
+    const a = _allocArray()
+    a.push(_unknown, expr)
+    if (_isUnknown(reason)) for (let i = reason.length-1; i >= 2; --i) a[i] = reason[i]
+    return a
+  },
 
   _isDeferred(v) { return _isUnknown(v) && v.length > 2 },
 
@@ -4216,7 +4709,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           --finish.depth
           finished && finish.code.delete(finished[0])
           if (result !== interrupt && result !== _notFound)
-            _cache(m, v, !_isUnknown(result) ? result : _unknown(result))
+            _cache(m, v, result)
           if (_isPromise(result))
             return !_awaitable(v) && error("Make", finished[0], "define", _await, "as true"), _promiseToDeferred(result)
         }
@@ -4898,7 +5391,7 @@ Putting all variables in a single global namespace allows for easy development. 
       try {
         switch (stage) {
           case 0: a = finish(ctx), stage = 1
-            if (_isUnknown(a)) return a[1] = array(bound, a, v), a
+            if (_isUnknown(a)) return _stage(array(bound, a[1], v), a)
           case 1: a = bound(a, v), stage = 2
           case 2: return finish(a)
         }
@@ -5466,7 +5959,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
             if (shouldMerge) {
               if (!interrupted) call.locked.delete(v)
               if (!call.impure && result !== _notFound)
-                _cache(cache, v, !_isUnknown(result) ? result : _unknown(result))
+                _cache(cache, v, result)
               else cache.delete(v)
             }
           }
@@ -5538,12 +6031,12 @@ Infers structural terms where possible.`,
             const prev = finish.inFunction;  finish.inFunction = 1
             try { A = purify(a) }
             finally { finish.inFunction = prev }
-            if (_isDeferred(A)) return A[1] = array(_assign, A[1], b), A
+            if (_isDeferred(A)) return _stage(array(_assign, A[1], b), A)
             if (_isUnknown(A)) A = A[1]
             ++stage
           case 1:
             B = finish(b)
-            if (_isUnknown(B)) return B[1] = array(_assign, _hasCycles(A) || _hasCallableParts(A, true) ? array(quote, A) : A, B[1]), B
+            if (_isUnknown(B)) return _stage(array(_assign, _hasCycles(A) || _hasCallableParts(A, true) ? array(quote, A) : A, B[1]), B)
             ++stage
           case 2:
             return _assign(A,B)
@@ -5987,8 +6480,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
         return lengths.set(el, originalLen), el
       }
       function styleLabel(name, u, v) {
-        // unescapeLabel(name, lang) would be great.
-        return styleNode(typeof name != 'string' || /^[^=!:\s\(\)→>\+\-\*\/\&\|\.'"`\,\\]+$/.test(name) ? name : '`' + name.replace(/`/g, '``') + '`', u, v)
+        return styleNode(_escapeLabel(name, lang), u, v)
       }
       function nameAllocator(x, free) {
         if (free === undefined) {
@@ -6710,8 +7202,8 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     serialize:__is(`_basicTopLevel`),
     REPL:`\`(txt)\` for {all functionality}, \`(examples)\` for {all tests}.`,
     insertLinkTo:__is(`_basicLinkTo`),
-    escapeLabel:__is(`_basicEscapeLabel`),
-    unescapeLabel:__is(`_basicUnescapeLabel`),
+    _escapeLabel:__is(`_basicEscapeLabel`),
+    _unescapeLabel:__is(`_basicUnescapeLabel`),
   },
 
   fancy:{
@@ -6722,8 +7214,8 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     serialize:__is(`_fancyTopLevel`),
     REPL:`\`(docs)\` for {all functionality}, \`(examples)\` for {all tests}.`,
     insertLinkTo:__is(`_basicLinkTo`),
-    escapeLabel:__is(`_basicEscapeLabel`),
-    unescapeLabel:__is(`_basicUnescapeLabel`),
+    _escapeLabel:__is(`_basicEscapeLabel`),
+    _unescapeLabel:__is(`_basicUnescapeLabel`),
     examples:[
       `Binary operators must have the same whitespace characters before and after:`,
       [
@@ -8386,7 +8878,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     txt:`_allocArray()⇒Array as a replacement for \`[]\` and _allocArray(Array) to re-use objects.`,
     call(a) {
       if (!_allocArray.free) _allocArray.free = []
-      if (!a) return [] // ### _allocArray.free.length ? _allocArray.free.pop() : []
+      if (!a) return _allocArray.free.length ? _allocArray.free.pop() : []
       if (!_isArray(a)) throw "Expected undefined or an array"
       a.length = 0
       _allocArray.free.push(a)
@@ -8559,337 +9051,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
 
   CurrentUsage:[
     __is(`either`),
-    {
-      txt:`Propose to execute functions that define \`button\`.`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) {
-        if (typeof v == 'function' && defines(v, button) !== undefined) {
-          const names = nameResult(v)
-          return button(v, names && names[0])
-        }
-      },
-    },
-    {
-      txt:`Describe context menu's items.`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) { return describe(el) },
-    },
-    {
-      txt:`Fetch URLs and try to display their contents.`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) {
-        if (_isArray(v) && v[0] === elem && v[1] === url && typeof v[2] == 'string' && v.length == 3) {
-          impure()
-          const result = elem('div')
-          result.classList.add('resizable')
-
-          fetch(v[2], {mode:'cors'})
-          .catch(r => elemInsert(result, serialize(jsRejected(r), fancy, undefined, serialize.displayed)))
-          .then(r => r.arrayBuffer())
-          .then(r => new TextDecoder().decode(new Uint8Array(r)))
-          .then(r => {
-            try {
-              elemInsert(result, serialize(JSON.parse(r), fancy, undefined, serialize.displayed))
-            } catch (err) { elemInsert(result, lookup(fast, 'parse')(r)) }
-          })
-          .catch(() => {
-            const frame = elem('iframe')
-            frame.src = v[2]
-            elemInsert(result, frame)
-          })
-          return result
-        }
-      },
-    },
-    {
-      txt:`If the cursor is in editor, present an option to replace the currently-selected contents with a link to the value.`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) {
-        if (range && v !== undefined && _isEditable(range.commonAncestorContainer))
-          return button(function linkToThis() { insertLinkTo(range, el) })
-      },
-    },
-    {
-      txt:`If we can expand all in the context element, then present that option.`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) { return elemExpandAll(el, true) ? button(function expandAll() { elemExpandAll(el) }) : undefined },
-    },
-    {
-      txt:`Present "To window" (for non-windows) or "Restore" (for windows — draggable absolutely-positioned elements).`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) {
-        if (!_isEditable(el) && el !== document.documentElement) {
-          if (!_getOuterWindow(el))
-            return button(function toWindow() { elemToWindow(el) })
-          else
-            return button(function restore() { return _restoreWindow(_getOuterWindow(el)) })
-        }
-      },
-    },
-    {
-      txt:`Present an option to hide the element.`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) { return _getOuterWindow(el) !== el ? button(function hide() { elemCollapse(el) }) : undefined },
-    },
-    {
-      txt:`Present an option to hide the element and all elements after it on the same hierarchy level.`,
-      input:__is(12341),
-      call([_typed, [el, range, v]]) {
-        if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET')
-          return button(function hideToEnd() { elemCollapse(el, null) })
-      },
-    },
-    {
-      txt:`Display evaluation's result.`,
-      input:__is(78963),
-      call([_typed, [result]]) { return result !== undefined ? result : _onlyUndefined },
-    },
-    {
-      txt:`Display the report on times taken.`,
-      input:__is(78963),
-      call([_typed, [result, user, real, end]]) {
-        if (user != null) return elem('time-report', [
-          elemValue(elem('span', 'user'), userTime),
-          elem('space', ' '),
-          _formatNumber(user),
-          ', ',
-          elemValue(elem('span', 'real'), realTime),
-          elem('space', ' '),
-          _formatNumber(real),
-          ', ',
-          elemValue(elem('span', 'report'), serialize),
-          elem('space', ' '),
-          _formatNumber(_timeSince(end)),
-        ])
-      },
-    },
-    {
-      txt:`Display evaluation result's potential uses.`,
-      input:__is(78963),
-      call([_typed, [result]]) {
-        const ctx = input([result])
-        if (ctx) {
-          const lang = _langAt(), binds = _bindingsAt()
-          return elem('div', [
-            elem('unimportant', ['Input to ', elem('number', ''+(ctx.length-1)), ': ']),
-            elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
-          ])
-        }
-      },
-    },
-    {
-      txt:`Display potential ways to get evaluation result.`,
-      input:__is(78963),
-      call([_typed, [result]]) {
-        const ctx = output(result)
-        if (ctx) {
-          const lang = _langAt(), binds = _bindingsAt()
-          return elem('div', [
-            elem('unimportant', ['Output of ', elem('number', ''+(ctx.length-1)), ': ']),
-            elemCollapse(() => serialize(ctx, lang, binds, serialize.displayed)),
-          ])
-        }
-      },
-    },
-
-    {
-      txt:`Allow renaming labels.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        if (el && el.classList.contains('label')) {
-          // Allow renaming labels.
-          const inp = elem('input')
-          inp.type = 'text'
-          let prev = unescapeLabel(el.textContent, el), updating = false
-          inp.value = prev
-          const updateGlobal = _throttled(() => (_updateBroken(document.body), updating = false), .05)
-          const editor = _isEditable(el)
-          inp.oninput = _throttled(() => {
-            if (inp.value && +inp.value === +inp.value) return
-            let arr = elemValue(undefined, el.to)
-            if (!arr && editor) // Restore ourselves when we've lost it because it's cyclic.
-              arr = [...editor.querySelectorAll('.label')].filter(x => unescapeLabel(x.textContent, x) === prev)
-            if (_isArray(arr))
-              for (let i = 0; i < arr.length; ++i)
-                if (arr[i].classList.contains('label') && unescapeLabel(arr[i].textContent, arr[i]) === prev)
-                  arr[i].textContent = escapeLabel(inp.value, arr[i])
-            prev = inp.value
-            if (!updating) setTimeout(updateGlobal, 0), updating = true
-          }, .2)
-          return inp
-        }
-      },
-    },
-
-    {
-      txt:`For globals, display the owner namespace (if any) (even if the property name does not match) and the global binding.
-For numbers, display a slider from 0 to 2*number for easy adjusting.
-For strings, display them in a <textarea> for easy editing and copying.
-For anything else, display the globals the expression binds to, and an expandable basic definition.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        // For globals, a short definition of what we were called on.
-        if (_invertBindingContext(parse.ctx).has(v)) {
-          // For globals, display the owner namespace (if any) (even if the property name does not match) and the global.
-          const global = serialize(v, fancy, undefined, serialize.displayed), p = lookup.parents.get(v) || Self
-          return p ? elem('div', [elem('unimportant', [serialize(p, fancy, undefined, serialize.displayed), '.']), global]) : global
-        } else if (typeof v == 'number' && isFinite(v) && el && v === +el.textContent && _isEditable(el)) {
-          // Display a slider from 0 to 2*number for easy adjusting.
-          const range = elem('input', ''+v)
-          range.type = 'range'
-          range.min = v > 0 ? 0 : 2*v
-          range.max = v > 0 ? 2*v : 0
-          range.step = .01
-          range.value = v
-          let i = elemValue(undefined, el.to).indexOf(el)
-          range.oninput = () => {
-            if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
-            if (!el) return
-            el.replaceWith(el = elemValue(elem('number', ''+range.value), el.to = +range.value))
-            i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
-          }
-          return range
-        } else if (typeof v == 'string') {
-          // Display strings in a <textarea> for easy editing and copying.
-          const area = elem('textarea', v)
-          if (!_isEditable(el))
-            area.readOnly = true
-          else if (el) {
-            let i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
-            area.oninput = _throttled(() => {
-              if (el && !el.isConnected) el = elemValue(undefined, el.to).filter(_isEditable)[i]
-              if (!el) return
-              el.replaceWith(el = serialize(area.value, fancy, undefined, serialize.displayed))
-              elemValue(area, el.to = area.value)
-              i = elemValue(undefined, el.to).filter(_isEditable).indexOf(el)
-            }, .1)
-          }
-          return elemValue(area, v)
-        } else
-          // Display the globals the expression binds to, and an expandable basic definition.
-          return elem('div', [
-            permissionsElem(v),
-            elem('div', [
-              elemValue(elem('unimportant', 'Basically: '), basic),
-              elemValue(elemCollapse(() => _collapsedSerialization(v)), v),
-            ]),
-          ])
-      },
-    },
-    {
-      txt:`Docstring.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        if (!_isArray(v) && typeof defines(v, txt) == 'string')
-          return elem('div', stringToDoc(defines(v, txt)))
-      },
-    },
-    {
-      txt:`Examples.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        if (!_isArray(v) && _isArray(defines(v, examples)))
-          return elem('div', [
-            elemValue(elem('unimportant', 'Examples: '), examples),
-            elemCollapse(() => serialize(examples(v), fancy, undefined, serialize.displayed))
-          ])
-      },
-    },
-
-    {
-      txt:`A \`_read\` mark if present.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        if (_read.marks && _read.marks.has(v))
-          return elem('div', [
-            elemValue(elem('unimportant', 'Marked: '), _read),
-            elemCollapse(() => serialize(_read.marks.get(v), fancy, undefined, serialize.displayed))
-          ])
-      },
-    },
-
-    {
-      txt:`A table for \`lookup\`s.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        const backctx = _invertBindingContext(parse.ctx)
-        if (!_isArray(v) && defines(v, lookup)) {
-          const row = ([k,v]) => {
-            let ve
-            if (!backctx.has(v))
-              ve = elemValue(elemCollapse(() => serialize(v, fancy, undefined, serialize.displayed)), v)
-            else
-              ve = serialize(v, fancy, undefined, serialize.displayed)
-            return elem('tr', [elem('td', elem('span', k)), elem('td', ve)])
-          }
-          // For `Self`, only display public functionality without lookup.parents (displaying all bindings is too much).
-          let a
-          if (v !== Self) a = lookup(v).map(k => [k, lookup(v, k)])
-          else a = [...backctx].filter(([v,k]) => v && v !== true && k[0] !== '_' && !lookup.parents.has(v)).map(([v,k])=>[k,v])
-
-          return elem('div', [
-            elemValue(elem('unimportant', 'Namespace for:'), lookup),
-            elem('table', a.length <= 16 ? a.map(row) : [a.slice(0,16).map(row), elemCollapse(() => a.slice(16).map(row))]),
-          ])
-        }
-      },
-    },
-    {
-      txt:`For globals, the list of back-refs.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        const backctx = _invertBindingContext(parse.ctx)
-        if (backctx.has(v)) {
-          const Refd = refd(v)
-          if (Refd && Refd.length)
-            return elem('div', [
-              elemValue(elem('unimportant', [
-                'Used in ',
-                elemValue(elem('number', ''+Refd.length), Refd.length),
-                Refd.length != 1 ? ' other globals: ' : ' other global: ',
-              ]), refd),
-              elemCollapse(() => serialize(Refd, fancy, undefined, serialize.displayed))
-            ])
-        }
-      },
-    },
-    {
-      txt:`The full deconstruction if a non-array.`,
-      input:__is(75891),
-      call([_typed, [el, v]]) {
-        const backctx = _invertBindingContext(parse.ctx)
-        if (backctx.has(v) || !_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
-          return elem('div', [
-            elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
-            elemCollapse(() => serialize(deconstruct(v), fancy, undefined, {...serialize.displayed, deconstructPaths:true}))
-          ])
-      },
-    },
-    __is([
-      __is(`function`),
-      [
-        __is(`typed`),
-        [
-          __is(`ToReadableJS`),
-        ],
-        __is(`Self`),
-      ],
-    ]),
-    __is([
-      __is(`function`),
-      [
-        __is(`typed`),
-        [
-          __is(`ToScopedJS`),
-        ],
-        __is(`Self`),
-      ],
-    ]),
   ],
-
-  12341:[[__is(`typed`), [__is(`label`)], __is(`contextMenu`)]],
-  78963:[[__is(`typed`), [__is(`label`)], __is(`evaluator`)]],
-  75891:[[__is(`typed`), [__is(`label`)], __is(`describe`)]],
 
   _disabled:{
     txt:`\`_disabled …?\`: a disabled-with-\`inspectUsageElem\` subcontext of a context.`,
@@ -9113,15 +9275,8 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
             if (inp && j < values.length)
               try { _assign(f[k], values[j], true); ++k; break } catch (err) {}
             // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
-            const stack = result !== false ? _addUsesToContext.stack : _addUsesToContext.checkStack
-            if (stack.has(v)) return result
-            const prev = stack.has(ctx)
-            if (prev) stack.delete(ctx) // Those cyclicity checks add hilarious amounts of complexity to the simplest things.
-            stack.add(v)
-            try {
-              if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
-                { log('Does not exist:', f[k]), k = endK+1; break } // Does not exist.
-            } finally { stack.delete(v);  if (prev) stack.add(ctx) }
+            if (!_addUsesToContext(false, ctx, ctx, ctx, f[k], false))
+              { k = endK+1; break } // Does not exist.
           }
         if (!inp && k < endK) {
           if (!d && _isArray(d ? f : f[f.length-1]) && (d ? f : f[f.length-1])[0] === _if) {
@@ -9155,52 +9310,16 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     // If `either …?`, or defines `Usage` to be `either …?`:
     } else if (_isArray(v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either) {
 
-      // Check out this sub-context.
-      if (!_isArray(v) && _isArray(d) && d[0] === either) v = d
-      if (!_addUsesToContext.stack)
-        _addUsesToContext.stack = new Set, _addUsesToContext.checkStack = new Set
-      const stack = result !== false ? _addUsesToContext.stack : _addUsesToContext.checkStack
-      if (stack.has(v)) return result
-      if (_isVar(values)) return result === false ? v.length > 1 : v ? v.slice() : v
-      let [direct, dep, subctx, r = result, i = 0, j = 0, k = 0] = interrupt(_addUsesToContext)
-      stack.add(v)
+      let [a = _lookupValueInHashes(v, values, inp), r = result, i = 0] = interrupt(_addUsesToContext)
       try {
-        _checkInterrupt(v)
-        // Lookup in _structHash(values[0]) and _structHash.dependent and _structHash.context.
-        if (subctx === undefined) {
-          const a = _hashes(v, false, inp)
-          let hash
-          if (inp)
-            for (let j = 0; j < values.length; ++j) {
-              // Pick the smallest-subcontext of values' hashes, for speed.
-              const h = _structHash(values[j]), d = a.get(h)
-              if (!d || !direct || d.length < direct.length) hash = h, direct = d
-              if (!d) break
-            }
-          else hash = _structHash(values), direct = a.get(hash)
-          if (hash === _structHash.dependent) direct = v
-          dep = hash !== _structHash.dependent && a.get(_structHash.dependent)
-          subctx = hash !== _structHash.context && a.get(_structHash.context) || null
-        }
-
-        if (direct)
-          for (; i < direct.length; ++i) {
-            r = _addUsesToContext(r, direct[i], direct[i], ctx, values, inp)
+        if (a.length)
+          for (; i < a.length; ++i) {
+            r = _addUsesToContext(r, a[i], a[i], ctx, values, inp)
             if (r === true) return true
           }
-        if (dep)
-          for (; j < dep.length; ++j) {
-            r = _addUsesToContext(r, dep[j], dep[j], ctx, values, inp)
-            if (r === true) return true
-          }
-        if (subctx)
-          for (; k < subctx.length; ++k) {
-            r = _addUsesToContext(r, subctx[k], subctx[k], ctx, values, inp)
-            if (r === true) return true
-          }
-        return r ? merge(r) : null
-      } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 7)(direct, dep, subctx, r)(i, j, k);  throw err }
-      finally { stack.delete(v) }
+        _allocArray(a)
+        return r
+      } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 3)(a, r, i);  throw err }
 
     } else if (!inp) {
       // If a plain value fits the output shape, add it.
@@ -9213,6 +9332,53 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
 
     }
     return result
+
+    // .stack
+  },
+
+  _lookupValueInHashes(ctx, v, inp = false, result = _allocArray()) {
+    // Returns an array of all values that could fit `v` in output or shape (that could be `_allocArray(a)`d).
+    let d
+    if (!_isArray(ctx) && _isArray(d = defines(ctx, Usage)) && d[0] === either) ctx = d
+    if (!_isArray(ctx) || ctx[0] !== either) return result.push(ctx), result
+
+    // Check out this sub-context.
+    if (!_lookupValueInHashes.stack)
+    _lookupValueInHashes.stack = new Set
+    const stack = _lookupValueInHashes.stack
+    if (stack.has(ctx)) return result
+    stack.add(ctx)
+    try {
+      // Lookup in _structHash(v) and _structHash.dependent and _structHash.context.
+      let direct, dep, subctx
+      if (subctx === undefined) {
+        const a = _hashes(ctx, false, inp)
+        let hash
+        if (inp) // If inp, then v is an array of values.
+          for (let j = 0; j < v.length; ++j) {
+            // Pick the smallest-subcontext of values' hashes, for speed.
+            const h = _structHash(v[j]), d = a.get(h)
+            if (!d || !direct || d.length < direct.length) hash = h, direct = d
+            if (!d) break
+          }
+        else hash = _structHash(v), direct = a.get(hash)
+        if (hash === _structHash.dependent) direct = ctx
+        dep = hash !== _structHash.dependent && a.get(_structHash.dependent) || null
+        subctx = hash !== _structHash.context && a.get(_structHash.context) || null
+        if (_isVar(v)) direct = ctx.slice(1), dep = subctx = null
+      }
+
+      if (direct)
+        for (let i = 0; i < direct.length; ++i)
+          _lookupValueInHashes(direct[i], v, inp, result)
+      if (dep)
+        for (let j = 0; j < dep.length; ++j)
+          _lookupValueInHashes(dep[j], v, inp, result)
+      if (subctx)
+        for (let k = 0; k < subctx.length; ++k)
+          _lookupValueInHashes(subctx[k], v, inp, result)
+      return result
+    } finally { stack.delete(ctx) }
 
     // .stack
   },
@@ -9285,16 +9451,17 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     txt:`\`use Function Inputs Context\`: returns a non-error result of applying \`Function\` to the \`Context\` once.
 Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where missing.`,
     examples:[
+      // ### Unhand these:
       // `Select the proper semantic type in a bank of knowledge:`,
       // [
       //   `use undefined (either x:'AnalysisResult'->x-14:'Action' x:'onclick'->(elem 'div' (string 'This is ' x))) (15:'AnalysisResult')`,
       //   `1:'Action'`,
       // ],
-      `Can find args in \`Context\`:`,
-      [
-        `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
-        `3:5`,
-      ],
+      // `Can find args in \`Context\`:`,
+      // [
+      //   `use (function a:2 b:3 a+b:5) (either 1:2 2:3)`,
+      //   `3:5`,
+      // ],
       // `Take some, find some:`,
       // [
       //   `use (function 0 x:Int 1 x:Int) (either 5:Int) (0 1) Int='Int'`,
@@ -9336,26 +9503,34 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       const PE = finish.env[L];  finish.env[L] = LE
       const prevInferred = _assign.inferred;  _assign.inferred = null
       try {
-        assign(dec[dec.length-1], body)
+        _assign(dec[dec.length-1], body)
         if (_assign.inferred) throw 'Wait, that\'s illegal'
-        return defines(_function, finish).call(_function, ...bound(labelEnv, dec.slice(1,-1)), body)
+        return defines(_function, finish).call(_function, ...bound(LE, dec.slice(1,-1)), body)
           // This re-partially-evaluates `body` though.
       } catch (err) { if (err === interrupt) interrupt(impl, 1)(LE), LE = null;  throw err }
       finally { LE !== null && _allocMap(LE), finish.env[L] = PE, _assign.inferred = prevInferred }
     }
     const d = impl[defines.key] = Object.create(null)
-    d[_id(input)] = [d[d.length-1]]
+    d[_id(input)] = [dec[dec.length-1]]
     d[_id(argCount)] = 1
     _id(impl), Object.freeze(impl)
     return impl
   },
 
-  _outputIsStructured(v) {
-    if (typeof v == 'function' && !_isArray(v) && _isArray(defines(v, output)))
-      return true
-    else if (_isUsing(v) || _isFunction(v)) {
+  _isStructured(v, out) {
+    if (_isArray(v) && v[0] === _if) return _isStructured(v[2], out) || _isStructured(v[3], out)
+    if (!_isArray(v) || !_isVar(v) && (!_isArray(v[0]) && defines(v[0], finish) === undefined && defines(v[0], call) === undefined || _isArray(v[0]) && !_hasCallableParts(v[0])))
+      try { _assign(out, v, true); return true }
+      catch (err) { return false }
+  },
+
+  _outputIsStructured(v, out = use.var) {
+    if (typeof v == 'function' && !_isArray(v) && _isArray(defines(v, output))) {
+      try { _assign(out, defines(v, output), true); return true }
+      catch (err) { return false }
+    } else if (_isUsing(v) || _isFunction(v)) {
       v = deconstruct(v), v = v[v.length-1]
-      return !_isArray(v) || !_isVar(v) && (!_isArray(v[0]) && defines(v[0], finish) === undefined && defines(v[0], call) === undefined || _isArray(v[0]) && !_hasCallableParts(v[0]))
+      return _isStructured(v, out)
     } else
       return false
   },
@@ -9369,13 +9544,13 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       // If `wantedOutput` is a function, look for its output assuming its inputs and ctx then bind the function with the result.
       if (_isFunction(wantedOutput)) {
         const d = deconstruct(wantedOutput)
-        const subCtx = array(either, ...d.slice(1,-1), ctx)
+        const subCtx = array(either, ...bound(x => !_isVar(x) ? undefined : _unknown(x), d.slice(1,-1), false), ctx)
         log('higher-order', subCtx, wantedOutput)
         _visitNode(subCtx, _functionComposer(wantedOutput), null, use.var, null, then)
         return
       }
 
-      let d, isMacro = false, args
+      let d, isMacro = false
       if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function')
         // If a macro, (remember to) unwrap unknowns inside `actualArgs` and treat it as a call.
         v = d, isMacro = true
@@ -9392,12 +9567,15 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
 
         // _visitNode with each item.
         for (i = 1; i < d.length; ++i)
-          log('visiting', d[i]),
           _visitNode(ctx, d[i], wantedInputs, wantedOutput, actualArgs, then)
         return
       }
 
-      if (typeof v == 'function' && (!wantedInputs || _isArray(d = defines(v, input)) && (args = d.length) >= wantedInputs.length || (args = defines(v, argCount)) >= wantedInputs.length)) {
+      const args = typeof v != 'function' ? 0 : _isArray(d = defines(v, input)) ? d.length : defines(v, argCount)
+      if (typeof v == 'function' && (!wantedInputs || args >= wantedInputs.length)) {
+        if (!actualArgs)
+          // The function's output structure must fit.
+          if (wantedOutput !== use.var && !_outputIsStructured(v, wantedOutput)) return
         if (!actualArgs || actualArgs.length < args) {
           let nextArg
           // `input`-defining functions get treated as if their inputs are as defined.
@@ -9423,14 +9601,14 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
             return
           } catch (err) {
             // If the arg is not in `wantedInputs`, generate it from context.
-            let outs
-            outs = output(nextArg, ctx)
-            // log('Searching in context', outs, 'for', nextArg, 'to fill', v, _outputIsStructured(outs[1]))
-            if (outs)
-              for (let i = 1; i < outs.length; ++i)
-                // To prevent infinite ballooning of search, don't visit functions if we want unstructured nextArg, and don't visit functions with non-structured output.
-                if (typeof outs[i] != 'function' || !_isVar(nextArg) && _outputIsStructured(outs[i]))
-                  _visitNode(ctx, outs[i], null, nextArg, null, node)
+            const a = _lookupValueInHashes(ctx, nextArg)
+            // log('Searching in', a, 'for', nextArg, 'to fill', v)
+            if (a.length)
+              for (let i = 0; i < a.length; ++i)
+                // To prevent infinite ballooning of search, don't visit functions if we want unstructured nextArg, and don't visit functions with non-properly-structured output.
+                if (typeof a[i] != 'function' || !_isVar(nextArg))
+                  _visitNode(ctx, a[i], null, nextArg, null, node)
+            _allocArray(a)
             return
           }
         } else { // Our args are complete. Apply the function.
@@ -9452,35 +9630,30 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         if (wantedOutput !== use.var && !_isVar(wantedOutput)) _assign(wantedOutput, v, true)
         // If `then`, add to args, else return from this graph search.
         if (then) return void _visitNode(then[0], then[1], then[2], then[3], then[4] ? [...then[4], v] : [v], then[5])
-        else return log('FOUND', v, node, console.log(...ctx)), v !== undefined ? v : _onlyUndefined
+        else return log('FOUND', v, node), v !== undefined ? v : _onlyUndefined
       } catch (err) {}
     },
   },
 
-  _logUses:{
-    txt:`Logs all \`use\`s of a value.`,
-    call(value, ctx = CurrentUsage) {
-      let [ins, i = 1] = interrupt(_logUses)
-      const valueArray = _allocArray();  valueArray.push(value)
+  _logAll:{
+    txt:`Logs all defined sub-functions of a value.`,
+    call(f, value) {
+      let [ins = defines(f, _logAll), i = 0] = interrupt(_logAll)
       try {
-        if (ins === undefined) ins = input([value], ctx), log(ins, ctx), console.log(...ins)
         if (!ins) return
         for (; i < ins.length; ++i) {
-          const r = use(ins[i], ctx, valueArray)
-          r && console.log(ins[i], r)
-          try{
+          let r
+          try { r = ins[i](value) }
+          catch (err) { log(jsRejected(err)) }
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
-          }catch(err){console.log(err)}
         }
-        _allocArray(ins)
-      } catch (err) { if (err === interrupt) interrupt(_logUses, 2)(ins, i);  throw err }
-      finally { _allocArray(valueArray) }
+      } catch (err) { if (err === interrupt) interrupt(_logAll, 2)(ins, i);  throw err }
     },
   },
 
   _search:{
     txt:`Searches the graph of structured objects connected by functions. Returns \`(Result Continuation)\` (pass \`Continuation\` to this again to continue the search, to find multiple results; do not re-use the same one) or throws.`,
-    philosophy:`A higher-order potentially-optimizable search.
+    philosophy:`A potentially-optimizable search.
 Nothing unthinkable. Long searches are quite expensive (especially memory-wise); re-initiating the search could alleviate that.`,
     call(cont = undefined, ctx, v = ctx, inputs = undefined, out = undefined) {
       // ### We need to comment out all tests except one, and log everything we can.
@@ -9533,18 +9706,21 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 
   _get:{
     txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful (so that the _search can be continued).`,
-    call(out, ctx = CurrentUsage) {
-      let [sub] = interrupt(_get)
+    call(out, ctx) {
+      const prev = get.ctx
+      let [sub, c = get.ctx && ctx ? array(either, get.ctx, ctx) : get.ctx ? get.ctx : ctx] = interrupt(_get)
+      get.ctx = c
       try {
         if (!sub) sub = typeof out != 'function' ? output(out, ctx) : ctx
         if (!sub) error(out, 'is definitely not in', ctx)
         return _search(undefined, ctx, sub, undefined, out)
       } catch (err) { if (err === interrupt) interrupt(_get, 1)(sub);  throw err }
+      finally { get.ctx = prev }
     },
   },
 
   get:{
-    txt:`\`get OutputShape\` or \`get OutputShape Context\`: creates a structured value from \`Context\` (\`CurrentUsage\` by default).
+    txt:`\`get OutputShape Context\` or \`get OutputShape\`: searches for a structured value from \`Context\` and all contexts used in dynamically-scoped parent searches.
 \`pick\`s values/functions of \`output\` one or more times, until the first non-error application or until all options are exhausted.`,
     examples:[
       // ###
@@ -9588,13 +9764,13 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 //         `X*^0->X  X=#
 // mult='Times' quote='Next'`,
 //       ],
-//       `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
-//       [
-//         `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
-// mult='Times' sum='Sum' quote='Next'`,
-//         `0*^^0->0
-// mult='Times' quote='Next'`,
-//       ],
+      `Prove that there exists an \`X\`, such that \`X*2\` is \`X\`, given \`A*0 -> 0\` and \`A+0 -> A\` and \`A*[B+1] -> A+A*B\`:`,
+      [
+        `get  X*^^0->X  (either A*0->0  A+0->A  A*^B->A+A*B) X=?
+mult='Times' sum='Sum' quote='Next'`,
+        `0*^^0->0
+mult='Times' quote='Next'`,
+      ],
 //       `Can create a function from context as an arg:`,
 //       [
 //         `get
@@ -9611,7 +9787,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
     philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
 Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those).
 But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Search for optimization, for self, for search.`,
-    call(out, ctx = CurrentUsage) {
+    call(out, ctx) {
       const r = _get(out, ctx)
       const result = r[0]
       _allocArray(r[1][0]), _allocArray(r[1][2]), _allocArray(r[1]), _allocArray(r)
@@ -9773,8 +9949,8 @@ A small set of measures stuck to thoughts, like hormones' effects. Searching thr
                 if (_isArray(x) && x[0] === quote) return x
               }, x[1], false)
             } catch (err) { if (err !== null) throw err }
-            if (b && !_isUnknown(er)) return x[1] = array(picker, er, x[1]), x
-            if (b) return x[1] = array(picker, er[1], x[1]), x.push(...er.slice(2)), x
+            if (b && !_isUnknown(er)) return _stage(array(picker, er, x[1]), x)
+            if (b) return [_unknown, array(picker, er[1], x[1]), ...er.slice(2), ...x.slice(2)]
           }
           return x
         } finally { pick.ers.pop(), pick.inlineCache.pop() }
