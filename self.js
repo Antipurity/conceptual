@@ -1191,6 +1191,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // If our URL has `#…` at the end, parse and evaluate that command.
       function evalHash(hash) {
+        finish.env = _newExecutionEnv()
         if (hash) elemInsert(into, elem(evaluator, parse(decodeURI(location.hash.slice(1)))), into.firstChild)
       }
       evalHash(location.hash)
@@ -1958,6 +1959,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
           const backctx = _invertBindingContext(parse.ctx)
           if (!_isArray(v) && defines(v, lookup)) {
             const row = ([k,v]) => {
+              if (typeof k != 'string') return
               let ve
               if (!backctx.has(v))
                 ve = elemValue(elemCollapse(() => serialize(v, fancy, undefined, serialize.displayed)), v)
@@ -5440,12 +5442,13 @@ Putting all variables in a single global namespace allows for easy development. 
       if (typeof cyclic != 'boolean') throw "`cyclic` must be a boolean"
       if (!(ctx instanceof Map) && typeof ctx != 'function') throw "`ctx` must be a Map or a function"
       if (rewrite !== undefined && typeof rewrite != 'function') throw "`rewrite` must be undefined or a function"
+      const prevCtx = bound.ctx, prevCyclic = bound.cyclic, prevEnv = bound.env, prevRewrite = bound.rewrite
       bound.ctx = ctx, bound.cyclic = cyclic, bound.env = env, bound.rewrite = rewrite
 
       if (!bound.cache) bound.cache = new Map, bound.inside = false, bound.innerCtxs = []
-      if (!bound.env) bound.env = bound.cache
+      if (!bound.env) bound.env = !bound.cache.size ? bound.cache : new Map
       try { return _doBinding(v) }
-      finally { bound.cache.clear() }
+      finally { bound.cache.clear(); bound.ctx = prevCtx, bound.cyclic = prevCyclic, bound.env = prevEnv, bound.rewrite = prevRewrite }
       // .cache, .innerCtxs; .ctx, .cyclic, .env, .rewrite to pass args on.
     },
   },
