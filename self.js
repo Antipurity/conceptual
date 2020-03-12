@@ -518,13 +518,14 @@ Label-binding environment is not preserved.`,
       if (iterations !== undefined && typeof iterations != 'number' && typeof iterations != 'function')
         error("iterations must be undefined or a number or a function, got", iterations)
       const prevLog = finish.env[_id(log)], prevLabel = finish.env[_id(label)], us = finish.v
-      let [i = 0, newLabel = new Map, into = log(elem('node', elem('code')))] = interrupt(repeat)
+      let [i = 0, newLabel = new Map, into = log(elemValue(elem('code', elem('code')), us))] = interrupt(repeat)
+      into.classList.add('code')
       prevLog && (finish.env[_id(log)] = into.lastChild), finish.env[_id(label)] = newLabel
       let v, done = false
       try {
         while (true) {
           v = finish(expr)
-          if (_isUnknown(v)) return _stage(_cameFrom(array(repeat, v[1], iterations), us), v)
+          if (_isUnknown(v)) return console.log(v), _stage(_cameFrom(array(repeat, v[1], iterations), us), v)
           _checkInterrupt(us)
           newLabel.clear()
           done = true
@@ -532,6 +533,8 @@ Label-binding environment is not preserved.`,
           if (iterations && (typeof iterations === 'number' ? i >= iterations : iterations(v,i))) return into.remove(), v
         }
       } catch (err) {
+        // Log our last computed value.
+        const prevPure = finish.pure;  finish.pure = false
         if (err === interrupt) {
           if (done)
             if (prevLog) {
@@ -543,7 +546,13 @@ Label-binding environment is not preserved.`,
               _smoothHeightPost(into, pre)
             } else log(v)
           interrupt(repeat, 3)(i, newLabel, into)
+        } else {
+          const pre = _smoothHeightPre(into)
+          for (let ch = into.firstChild; ch && ch.nextSibling; ch = ch.nextSibling)
+            elemRemove(ch, true, false)
+          _smoothHeightPost(into, pre)
         }
+        finish.pure = prevPure
         throw err
       }
       finally { finish.env[_id(log)] = prevLog, finish.env[_id(label)] = prevLabel }
@@ -2645,6 +2654,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         let promise
         if (!clear) promise = new Promise(then => {
           const e = _newExecutionEnv(env)
+          ID = _newJobId()
           e[_id(log)] = waiting = _evaluationElem(ID), finish.env = e
           const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
           if (bindAs) expr = expr[2]
@@ -2668,10 +2678,10 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                 elemInsert(pureOutput, el)
               }
             } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
-          })
+          }, ID)
           _langAt.lang = null, _bindingsAt.binds = null
           _smoothHeightPost(pureOutput, pre)
-        }, ID = _newJobId())
+        })
         return promise
       }, .1, expr => lastExpr = expr)
 
@@ -3452,6 +3462,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _doJob(expr, env, then, ID) {
     // One iteration of the interpreter loop.
+    if (ID === undefined) console.log('BAD', new Error().stack)
     const microstart = env[_id(realTime)] = _timeSince()
     if (_isDeferred(expr))
       expr = _deferredPrepare(expr, env, then, ID)
@@ -4649,16 +4660,16 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
       if (!_isArray(v)) return v
       if (_isUnknown(v)) return v
       if (!finish.code) finish.code = new Set
-      let result = _notFound
 
       // Cache, so that a common object is a variable, evaluated only once.
       const m = finish.env[_id(label)]
-      if (m.has(v)) return result = m.get(v), result !== cycle && finish.code.has(v) && finish.code.delete(v), result
+      if (m.has(v)) return m.get(v)
       if (finish.inFunction === 1 && _isVar(v))
         return m.set(v, _unknown(v)), m.get(v)
       m.set(v, cycle)
 
       try {
+        let result = _notFound
         let [finished, i = 1, record] = interrupt(finish)
         ++finish.depth
         try {
@@ -10173,6 +10184,10 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
   `,
   Input:{txt:`The input to evaluate in EvaluationContext: an arbitrary bound value-flow graph represented via JS arrays.`},
   Output:{txt:`The output of expression evaluation in EvaluationContext: any JS value.`},
+
+
+
+  // Another good thing would be re-searchers: probGet(out, ctx, prob), best(out, ctx)… There are hints of having been found by random search in these, and I cannot imagine a concrete impl; how to make a family of such re-searchers, a shadow of `get`?
 
 
 
