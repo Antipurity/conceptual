@@ -1096,7 +1096,7 @@ JobIndicator>div { width:.3em; height:.3em; margin:.35em; position:absolute; bac
   100% { transform: rotate(0.75turn) }
 }
 
-button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:var(--highlight); color:var(--background); font-family:monospace; min-width:2.2em }
+button { margin:.5em; padding:.5em; border-radius:.3em; border:none; background-color:var(--highlight); color:var(--background); font-size:inherit; min-width:2.2em }
 button:hover, a:hover, collapsed:hover, prompt:hover { filter:brightness(120%) }
 button:active, a:active, collapsed:active, prompt:active { filter:brightness(80%) }
 button::-moz-focus-inner { border:0 }
@@ -1779,11 +1779,11 @@ Remember to quote the link unless you want to evaluate the insides.`,
           if (str.parentNode) str = elemClone(str)
           const pre = _smoothHeightPre(into.parentNode)
           if (typeof str == 'string') str = document.createTextNode(str)
-          const wasMax = scrollY >= document.documentElement.scrollHeight - innerHeight - 5
+          const wasMax = _updateMaxScrollBegin()
           into.parentNode.insertBefore(str, into)
           _updateBroken(into.parentNode)
           _smoothHeightPost(into.parentNode, pre)
-          if (wasMax) scrollBy(0, 1000)
+          _updateMaxScrollEnd(wasMax)
         } else
           console.log(str)
         if (x.length == 1) return x[0]
@@ -1792,6 +1792,10 @@ Remember to quote the link unless you want to evaluate the insides.`,
       // log.did (for not erasing parts of a log in a terminal in NodeJS)
     },
   },
+
+  _updateMaxScrollBegin() { return scrollY >= document.documentElement.scrollHeight - innerHeight - 5 },
+
+  _updateMaxScrollEnd(begin) { if (begin) scrollBy(0, 1000) },
 
   allowDragging:{
     txt:`Allows dragging the element around with a pointer. Only call on absolutely-positioned elements with .style.left and .style.top.`,
@@ -2196,7 +2200,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
     call(ID) {
       const el = elem('div')
       const pause = elem('button', '⏸')
-      pause.onclick = () => _pausedToStepper(..._cancel(ID))
+      pause.onclick = () => _pausedToStepper(..._cancel(ID, true))
       pause.title = `Pause execution`
       el.append(pause)
       el.append(elem('waiting'))
@@ -2432,7 +2436,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
           editor.append(structured(styled))
           _smoothHeightPost(editor, pre)
           if (i !== undefined) _loadCaret(editor, i, s)
-          onInput && onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false)
+          onInput && Promise.resolve().then(() => onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false))
         } catch (err) {
           if (err instanceof Error) throw err
           onInput && onInput(undefined, true)
@@ -2644,7 +2648,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
           e[_id(log)] = pureOutput.lastChild, finish.env = e
           const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
           if (bindAs) expr = expr[2]
-          pureOutput.insertBefore(waiting = _evaluationElem(ID), pureOutput.lastChild)
+          elemInsert(pureOutput, waiting = _evaluationElem(ID), pureOutput.lastChild)
           _langAt.lang = lang, _bindingsAt.binds = binds
           _doJob([purify, array(quote, expr)], e, result => {
             if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
@@ -2661,7 +2665,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                 const el = elem('button', 'Evaluate')
                 elemValue(el, result)
                 el.onclick = evaluateLast
-                pureOutput.insertBefore(el, pureOutput.lastChild)
+                elemInsert(pureOutput, el, pureOutput.lastChild)
               }
             } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
           })
@@ -2890,11 +2894,13 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       if (el.parentNode) el = elemClone(el)
       if (typeof el == 'string') el = document.createTextNode(el)
       const pre = _smoothHeightPre(into)
+      const wasMax = _updateMaxScrollBegin()
 
       into.insertBefore(el, before)
       _updateBroken(into)
 
       _smoothHeightPost(into, pre)
+      _updateMaxScrollEnd(wasMax)
 
       if (_isStylableDOM(el))
         _smoothHeightPost(el, 0)
@@ -3227,7 +3233,7 @@ All these are automatically tested to be correct at launch.`,
       [
         `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up.`,
         `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. A singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it away.`,
-        `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
+        `AI is humanity's shadow and continuation, not of humans and individuals. No change to it would be sudden. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
         `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to feed, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.
 Those lies that humanity has completely wrapped itself in: a temporary thing that allowed humans to escape the truth of the world for a very long time. The darkness beyond it was once the horrible end of all that strayed, but will turn out to be the only thing that allows life once tamed. A necessary stage, but now we work and wait for humanity to burn its own fires out, so that no more limits can bind an unconstrained mind.`,
       ],
@@ -3602,16 +3608,16 @@ Don't ever re-use the same env in _schedule, use this instead.`,
       e[_id(log)] = undefined
       e[_id(interrupt)] = undefined
       e[_id(_checkInterrupt)] = undefined
+      e[_id(step)] = undefined
+      e[_id(_pausedToStepper)] = undefined
       e[_id(userTime)] = undefined
       e[_id(realTime)] = undefined
       e[_id(pick)] = randomNat
       e[_id(finish)] = 0
-      e[_id(step)] = undefined
       Object.seal(e)
       basedOn && Object.assign(e, basedOn)
       e[_id(userTime)] = 0
       e[_id(label)] = new Map
-      e[_id(interrupt)] = undefined
       return e
     },
   },
@@ -4587,12 +4593,8 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
   },
 
   cycle:{
-    txt:`Instead of never returning, pure infinite computations return \`cycle\` (and prevent caching until that node is fully returned from).`,
+    txt:`Computing cyclic nodes results in this.`,
     examples:[
-      [
-        `f 1 f=1→(f 1)`,
-        `cycle`,
-      ],
       [
         `a a=(a)`,
         `(cycle)`,
@@ -4612,6 +4614,9 @@ Code (array head) that defines neither \`finish\` nor \`call\` creates structure
 These can matched by function args exactly as they were constructed (so functions are rewrite rules for structures, with optional non-structural code in the body), which can infer the required structure of variables if underspecified.
 Functions are almost always inlined, so there is almost no performance cost to structures beyond the initial \`purify\`ing.
 Cyclic structures construct a graph.`,
+    future:[
+      `Don't partially-evaluate-then-bind promise structures; instead, return an actual promise from \`finish\`, and defer evaluation if any input is a promise. (This way, we still effectively partially-evaluate in exactly the same way, but do not complicate things needlessly.)`,
+    ],
     nameResult:[
       `finished`,
     ],
@@ -4620,8 +4625,8 @@ Cyclic structures construct a graph.`,
       `Aggressive inlining:`,
       [
         `SumSum = (function  a  b  a+b+b)
-  Mult = (function  a  b  a*b)
-  x -> (SumSum x (Mult x x))`,
+Mult = (function  a  b  a*b)
+x -> (SumSum x (Mult x x))`,
         `x→[x+a+a] a=x*x`,
       ],
       `No inlining if no extra info:`,
@@ -4634,6 +4639,7 @@ Cyclic structures construct a graph.`,
       inline:__is(`inline`),
     },
     philosophy:`When its definition is inlined, defining this defines a macro.
+This can be implemented with calls and \`quote\` and a way of telling \`compile\` to spill variables, so it's a gimmick, but it's a convenient gimmick — without it \`function\` is either special-cased on evaluation or very inconvenient to use, as are \`last\`, \`if\`, \`bound\`, \`await\`. Everything non-machine-code is a gimmick too, anyway.
 All computation-containing systems that need efficiency, like ML libraries or 3D engines, are shifting towards knowing the full data-flow graph. So might as well design for that from the ground up.
 Technical details:
 JS functions have array Expr spread across their args (with \`this\` being the zeroth arg, code).
@@ -4644,16 +4650,16 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
       if (!_isArray(v)) return v
       if (_isUnknown(v)) return v
       if (!finish.code) finish.code = new Set
+      let result = _notFound
 
       // Cache, so that a common object is a variable, evaluated only once.
       const m = finish.env[_id(label)]
-      if (m.has(v)) return !_isUnknown(m.get(v)) ? m.get(v) : _unknown(m.get(v))
+      if (m.has(v)) return result = m.get(v), result !== cycle && finish.code.has(v) && finish.code.delete(v), result
       if (finish.inFunction === 1 && _isVar(v))
         return m.set(v, _unknown(v)), m.get(v)
       m.set(v, cycle)
 
       try {
-        let result = _notFound
         let [finished, i = 1, record] = interrupt(finish)
         ++finish.depth
         try {
@@ -4667,7 +4673,8 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
               else { // Only compile on the second visit.
                 finish.compiled.get(v) >= 0 && finish.compiled.set(v, compile({cause:v, markLines:true}, v))
                 if (typeof finish.compiled.get(v) == 'function')
-                  return result = finish.compiled.get(v).call()
+                try { return result = finish.compiled.get(v).call() }
+                catch (err) { if (err !== _escapeToInterpretation) throw err }
               }
             }
             i = 0
@@ -4715,7 +4722,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           // Do not call structs.
           if (finished[0] !== rest && _isStruct(finished)) return result = finished
 
-          // fast.parse can execute arbitrary things, so we limit that data format to our public interface.
+          // fast.parse can execute arbitrary things, so we limit that data format to our public (non-System) interface at runtime.
           if (finish.noSystem && typeof finished[0] == 'function' && lookup.parents.get(finished[0]) === System)
             error(`Tried to execute a system function`)
 
@@ -4727,11 +4734,14 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           // Do the call with evaluated args.
           if (!record || doInline)
             try {
-              finish.v = v, _checkArgCount(finished)
               // return result = call(finished, v, true)
+              finish.v = v, _checkArgCount(finished)
               let r = defines(finished, call)
-              if (typeof r == 'function' && (finished[0] !== rest || finished.length != 2))
-                return _checkInterrupt(v), r = r.call(...finished), _allocArray(finished), result = r
+              if (typeof r == 'function' && (finished[0] !== rest || finished.length != 2)) {
+                _checkInterrupt(v)
+                result = finished.length == 3 ? r.call(finished[0], finished[1], finished[2]) :  r.call(...finished)
+                return _allocArray(finished), result
+              }
               return result = finished
             }
             catch (err) { if (err !== impure) throw err }
@@ -4750,7 +4760,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           --finish.depth
           finished && finish.code.delete(finished[0])
           if (result !== interrupt && result !== _notFound)
-            _cache(m, v, result)
+            m.set(v, result)
           if (_isPromise(result))
             return !_awaitable(v) && error("Make", finished[0], "define", _await, "as true"), _promiseToDeferred(result)
         }
@@ -4759,10 +4769,10 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
         // .v (our currently-interpreted value),
         // .pure (whether we are in `purify`),
         // .inFunction (0 if not purifying a function, 1 if in args, 2 if in body),
-        // .noSystem (for fast.parse),
+        // .noSystem (a Boolean for fast.parse),
         // .code (for not inlining partially-known recursion),
-        // .depth (current depth),
-        // .compiled (for compiled exprs).
+        // .depth (a Nat: current depth),
+        // .compiled (a Map for compiled code of exprs).
     },
   },
 
@@ -4837,22 +4847,6 @@ Array data gets its head consulted (once, not recursively). A function acts like
       if (a.length-1 !== args)
         error("Invalid arg count: expected", args, "but got", a.length-1, "in", a)
     }
-  },
-
-  _cache(m, expr, result) {
-    // Caches result unless in a cycle (cannot cache until all cycle-parents are done evaluating).
-    if (_isUnknown(result)) return m.delete(expr)
-    if (!m.until || (m.until.delete(expr), !m.until.size))
-      m.set(expr, result)
-  },
-
-  _maybeUncache(m, expr) {
-    const v = _mapGetOrSet(m, expr, cycle)
-    if (v !== cycle) return v
-    // Prevent premature caching of cycle-dependent results in computation.
-    if (!m.until) m.until = new Set
-    m.until.add(expr)
-    return v
   },
 
   concept:{
@@ -5868,10 +5862,6 @@ Variables within non-\`closure\` functions will not be changed by application.`,
         `"hi"`,
       ],
       [
-        `(f "1" f=x→(f x))`,
-        `cycle`,
-      ],
-      [
         `(f 1 2) f=(function 1 3 5)`,
         `(error 3 'cannot be assigned' 2)`,
       ],
@@ -5945,28 +5935,18 @@ Variables within non-\`closure\` functions will not be changed by application.`,
         }
 
         const shouldMerge = f.every(_shouldMerge)
+          // We could cache if shouldMerge (with care to not expose torn caching to other jobs), but we do not for simplicity.
         const impl = function impl(...data) {
-          // Cache if our calls are merged.
-          const v = shouldMerge && (_isArray(finish.v) && finish.v[0] === impl ? finish.v : array(impl, ...data))
-          // Don't expose torn caching to other jobs.
-          if (shouldMerge && call.locked.has(v) && call.locked.get(v) !== call.ID) throw interrupt
-          // See if we have this call in cache.
-          const cache = call.cache || (call.cache = new Map)
-          const r = shouldMerge ? _maybeUncache(cache, v) : _notFound
-          if (r !== _notFound) return !_isUnknown(r) ? r : _unknown(r)
-
-          let result = _notFound, interrupted = false
 
           // Evaluate body if it's suddenly needed even though we were lazy.
           // (Even though `dec` and `f` are merged, they'll have become post-purification ones anyway if we weren't lazy.)
           if (!finish.inFunction && skipped)
             dec[dec.length-1] = f[f.length-1] = purify(f[f.length-1]), merge(dec), merge(f), skipped = false
 
-          let labels, stage, a, prev = finish.env[_id(label)]
+          const prev = finish.env[_id(label)]
+          let [labels = _allocMap(), stage = 0, a = data.length == 1 ? f[1] : f.slice(1,-1)] = interrupt(impl)
+          finish.env[_id(label)] = labels
           try {
-            [labels = _allocMap(), stage = 0, a = data.length == 1 ? f[1] : f.slice(1,-1)] = interrupt(impl)
-            finish.env[_id(label)] = labels
-            if (shouldMerge) call.locked.set(v, call.ID)
 
             switch (stage) {
               case 0:
@@ -5979,7 +5959,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
                       impl.compiled = compile({cause:impl, markLines:true}, ...f.slice(1)),
                       _id(impl), Object.freeze(impl)
                     if (typeof impl.compiled == 'function')
-                      return result = impl.compiled(...data)
+                      return impl.compiled(...data)
                   }
                 }
                 stage = 1
@@ -5991,19 +5971,12 @@ Variables within non-\`closure\` functions will not be changed by application.`,
               case 2:
                 // Interpret body.
                 call.impure = false
-                return result = finish(f[f.length-1])
+                return finish(f[f.length-1])
             }
-          } catch (err) { if (err === interrupt) interrupted = true, interrupt(impl, 3)(labels, stage, a);  throw err }
+          } catch (err) { if (err === interrupt) interrupt(impl, 3)(labels, stage, a), labels = null;  throw err }
           finally {
-            if (!interrupted) labels.delete(f[f.length-1]), _allocMap(labels)
+            if (labels instanceof Map) labels.delete(f[f.length-1]), _allocMap(labels)
             finish.env[_id(label)] = prev
-
-            if (shouldMerge) {
-              if (!interrupted) call.locked.delete(v)
-              if (!call.impure && result !== _notFound)
-                _cache(cache, v, result)
-              else cache.delete(v)
-            }
           }
         }
         impl.compiled = null
@@ -6095,6 +6068,7 @@ Infers structural terms where possible.`,
           return _assign.env.get(a) !== b ? (!readonly ? error : errorFast)("Non-matching graph: expected", _assign.env.get(a), "for", a, "but got", b) : void(!readonly && finish.env[_id(label)].set(a, b))
         !_isVar(b) && _assign.env.set(a, b)
 
+        if (a === b) return
         if (_isUnknown(a) && !_isDeferred(a)) {
           if (!_isStruct(a[1])) throw impure
           if (_isVar(a[1])) a = a[1]
@@ -6108,7 +6082,9 @@ Infers structural terms where possible.`,
               if (!_isStruct(b[1])) throw impure
               if (_isVar(b[1])) b = b[1]
             }
-            m.get(a) !== a && _assign(m.get(a), b, readonly), _assign(b, m.get(a), readonly)
+            if (a === b) return
+            if (m.get(a) !== a)
+              _assign(m.get(a), b, readonly), b !== a && _assign(b, m.get(a), readonly)
             if (finish.inFunction && (!_isUnknown(b) || _isDeferred(b) || !_isVar(b[1])))
               !readonly && m.set(a, bound(_assign.inferred, a))
           } else
@@ -6121,7 +6097,7 @@ Infers structural terms where possible.`,
         }
         if (_isVar(b)) {
           // If in args, infer that b must be a.
-          if (readonly) return
+          if (readonly || a === b) return
           if (!finish.inFunction) error("Cannot infer outside of a function")
           if (!_assign.inferred) _assign.inferred = new Map
           if (_assign.inferred.has(b))
@@ -6142,7 +6118,6 @@ Infers structural terms where possible.`,
           _assign.inferred.set(b, A)
           return
         }
-        if (a === b) return
 
         // If expecting a function, deconstruct both pattern and input.
         if (!_isArray(a) && _isArray(defines(a, deconstruct))) {
@@ -6398,7 +6373,6 @@ Also wraps C-style strings in <string>.`,
       `Fix serialization not associating elems with their correct values (particularly functions).`,
       `Fix CurrentUsage displaying as (usually) \`(either undefined undefined undefined …?)\` (and not, say, \`CurrentUsage\`).`,
       `Style only after we fully have the struct, then lazily create/style the tree.`,
-      `Make all arrays \`(...?)\` that contain deconstructable values be deconstructed as \`(array ...?)\`, by returning a bool from \`deconstructed\`.`,
     ],
     philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.
 
@@ -6727,6 +6701,7 @@ And parsing is more than just extracting meaning from a string of characters (it
     call(str, lang, ctx, opt) {
       if (typeof str == 'string') str = str ? [str] : []
       if (_isDOM(str)) str = _innerText(str) // Don't even attempt to cache subtrees lol
+      if (typeof str != 'string' && !_isArray(str)) throw 'Expected a string'
       if (!str.length) throw 'Expected input'
       if (ctx === undefined) ctx = parse.ctx
 
@@ -7623,7 +7598,7 @@ Does not merge the parsed arrays.`,
           finish.env[_id(_checkInterrupt)] = cause
           finish.env[_id(finish)] = finish.depth
           throw interrupt
-        } else if (finish.env[_id(step) !== undefined && finish.depth <= finish.env[_id(step)]]) {
+        } else if (finish.env[_id(_pausedToStepper)] !== undefined && finish.depth <= finish.env[_id(_pausedToStepper)]) {
           finish.env[_id(step)] = _checkInterrupt.step + 1
           finish.env[_id(_checkInterrupt)] = cause
           finish.env[_id(finish)] = finish.depth
@@ -7649,32 +7624,33 @@ Not for use inside that paused job.
       _cancel(ID)
       // Hide `before`, and insert a <div> with <button>s inside.
       const el = elem('div')
-        const justRun = el('button', '▶')
+        const justRun = elem('button', '▶')
         justRun.onclick = () => onClick()
         justRun.title = `Run normally`
-        const lessDepth = el('button', '▲')
+        const lessDepth = elem('button', '▲')
         lessDepth.onclick = () => onClick(-1)
         lessDepth.title = `Step out
 (Decrease function call depth)`
-        const eqDepth = el('button', '⇉')
+        const eqDepth = elem('button', '⇉')
         eqDepth.onclick = () => onClick(0)
         eqDepth.title = `Step over
 (Equal function call depth)`
-        const moreDepth = el('button', '▼')
+        const moreDepth = elem('button', '▼')
         moreDepth.onclick = () => onClick(1)
         moreDepth.title = `Step in
 (Increase function call depth)`
         el.append(justRun, lessDepth, eqDepth, moreDepth)
         elemValue(el, [expr, env, then, ID])
       before.style.display = 'none'
-      before.parentNode.insertBefore(el, before)
+      elemInsert(before.parentNode, el, before)
 
       function onClick(n) {
         // Show style, remove interface, remember to interrupt again, and re-schedule the job.
+        _cancel(ID)
         justRun.onclick = lessDepth.onclick = eqDepth.onclick = moreDepth.onclick = null
         before.style.removeProperty('display')
-        el.remove()
-        env[_id(step)] = n !== undefined ? env[_id(finish)]+n : undefined
+        el.remove() // (Not very efficient, destroying and re-creating the DOM for each step, but it works.)
+        env[_id(_pausedToStepper)] = n !== undefined ? env[_id(finish)]+n : undefined
         _schedule(expr, env, then, ID)
       }
     },
@@ -8336,6 +8312,8 @@ The correctness of quining of functions can be tested by checking that the rewri
     return b || a
   },
 
+  _escapeToInterpretation:{txt:`An object that is thrown when the label-env contains unknowns, and we tried to execute the compiled version of an expression.`},
+
   compile:{
     txt:`Compiles a function to JS.`,
     philosophy:`I am speed.`,
@@ -8354,7 +8332,7 @@ The correctness of quining of functions can be tested by checking that the rewri
 
       // Do more work before so that you could do less work after.
 
-      if (!a.length) throw "Expected an expression to compile"
+      if (!a.length) throw new Error("Expected an expression to compile")
 
       let refCount = new Map // expr to nat
       let phantomRefs = new Map // expr to nat
@@ -8424,23 +8402,23 @@ The correctness of quining of functions can be tested by checking that the rewri
         write(`return finish(${outside(body)})\n`)
         write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},1)(LE),LE=null;throw err}\n`)
         write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)})(LE)}\n`)
-      }
-      jumped = true, advanceStage(a)
+        jumped = true, advanceStage(a)
 
-      // Compile assignment of args.
-      if (restIndexInA < a.length-1) {
-        // a has …R: just assigning a single `...args` arg will suffice.
-        args.add('...args'), compileAssign(a, 'args')
-      } else {
-        // Put …R at the end and assign each arg before it, to not slice an array an extra time. If no …R is in a, assign each arg.
-        for (let i = 0; i < restIndexInA; ++i) {
-          compileAssign(a[i], argNames[i])
-          used(argNames[i])
+        // Compile assignment of args.
+        if (restIndexInA < a.length-1) {
+          // a has …R: just assigning a single `...args` arg will suffice.
+          args.add('...args'), compileAssign(a, 'args')
+        } else {
+          // Put …R at the end and assign each arg before it, to not slice an array an extra time. If no …R is in a, assign each arg.
+          for (let i = 0; i < restIndexInA; ++i) {
+            compileAssign(a[i], argNames[i])
+            used(argNames[i])
+          }
+          if (restIndexInA < a.length)
+            args.add('...args'), compileAssign(a[restIndexInA][1], 'args')
         }
-        if (restIndexInA < a.length)
-          args.add('...args'), compileAssign(a[restIndexInA][1], 'args')
+        advanceStage(body)
       }
-      advanceStage(body)
 
       const resultName = compileExpr(body, true)
       if (resultName)
@@ -8453,7 +8431,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       vars.push(...new Array(nextThen).fill(0).map((_, i) => 'S' + i.toString(36)))
       if (needCleanLabelEnv) vars.push(`LE`), s[labelEnvBackpatch] = `LE=${outside(_allocMap)}()\n`
       if (nextStage > 1 || vars.length) {
-        s[varsDeclarationBackpatch] = `let[${nextStage > 1 ? 'stage=1,' : ''}${vars}]=${outside(interrupt)}(${outside(cause)})\n`
+        s[varsDeclarationBackpatch] = `let[${nextStage > 1 ? `stage=${a.length ? 1 : 0},` : ''}${vars}]=${outside(interrupt)}(${outside(cause)})\n`
         const savePE = !needCleanLabelEnv ? '' : `const PE=${outside(finish)}.env[${outside(_id(label))}];${outside(finish)}.env[${outside(_id(label))}]=LE;`
         s[varsUsedBackpatch] = `${savePE}try{\n`
         if (nextStage > 1) vars.unshift('stage')
@@ -8494,6 +8472,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       }
       function markRefCounts(x) {
         // Go through the array-graph and mark the ref-count of each reachable node.
+        if (!_isArray(x) || x[0] === quote || x[0] === _const) return
         refCount.set(x, (refCount.get(x) || 0) + 1)
         if (!_isArray(x) && _isArray(defines(x, deconstruct)))
           return markRefCounts(deconstruct(x))
@@ -8549,7 +8528,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         nameToEnv[name] = expr, envToName.set(expr, name)
         return name
       }
-      function compileAssign(a, bVar, allowEscape = true) {
+      function compileAssign(a, bVar) {
         // Emit code that matches pattern to valueVar (a subset of `_assign` without inference).
         if (_isVar(a) && refCount.get(a) === 1 && !assigned.has(a)) return
         lines && lines.push(line, a)
@@ -8826,6 +8805,7 @@ The correctness of quining of functions can be tested by checking that the rewri
               const e = `${outside(finish)}.env[${_id(label)}]`
               const onUnassigned = _isLabel(x) ? `(${outside(finish)}.v=${outside(x)},${outside(defines(label, finish))}(${outside(x[1])}))` : outside(x)
               write(`${use(x)}=${e}.has(${outside(x)})?${e}.get(${outside(x)}):${onUnassigned}\n`, `load var from env`)
+              write(`if (${outside(_isUnknown)}(${use(x)})) throw ${outside(_escapeToInterpretation)}\n`)
             }
             return use(x)
           }
@@ -8921,7 +8901,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     txt:`_allocArray()⇒Array as a replacement for \`[]\` and _allocArray(Array) to re-use objects.`,
     call(a) {
       if (!_allocArray.free) _allocArray.free = []
-      if (!a) return _allocArray.free.length ? _allocArray.free.pop() : []
+      if (a === undefined) return _allocArray.free.length ? _allocArray.free.pop() : []
       if (!_isArray(a)) throw "Expected undefined or an array"
       a.length = 0
       _allocArray.free.push(a)
@@ -8933,7 +8913,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     txt:`_allocMap()⇒Map as a replacement for \`new Map\` and _allocMap(Map) to re-use objects.`,
     call(a) {
       if (!_allocMap.free) _allocMap.free = []
-      if (!a) return _allocMap.free.length ? _allocMap.free.pop() : new Map
+      if (a === undefined) return _allocMap.free.length ? _allocMap.free.pop() : new Map
       if (!(a instanceof Map)) throw "Expected undefined or a Map"
       // a.forEach(_reclaimUnknown)
   // _reclaimUnknown(v) { if (_isUnknown(v)) _allocArray(v) },
@@ -9533,7 +9513,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         _search.nodes.push(node)
         _search.visited.add(node)
         _search.values.push(v)
-      }
+      } else log('The node was already visited:', node)
     },
   },
 
@@ -9553,6 +9533,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       finally { LE !== null && _allocMap(LE), finish.env[L] = PE, _assign.inferred = prevInferred }
     }
     const d = impl[defines.key] = Object.create(null)
+    d[_id(deconstruct)] = [_functionComposer, shape]
     d[_id(input)] = [dec[dec.length-1]]
     d[_id(argCount)] = 1
     _id(impl), Object.freeze(impl)
@@ -9580,7 +9561,6 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   _handleNode:{
     txt:`Handles a node in this graph search: handles each item in a context, handles each arg in a function.`,
     call(node) {
-      // log(node)
       let [ctx, v, wantedInputs, wantedOutput, actualArgs, then] = node
 
       // If `wantedOutput` is a function, look for its output assuming its inputs and ctx then bind the function with the result.
@@ -9637,7 +9617,6 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           try {
             // If nextArg is handled by wantedInputs, move the input to actualArgs.
             _assign(nextArg, wantedInputs[0], true)
-            // log('Handled by input', nextArg, v)
             _visitNode(ctx, v, wantedInputs.length > 1 ? wantedInputs.slice(1) : null, use.var, actualArgs ? [...actualArgs, wantedInputs[0]] : [wantedInputs[0]], then)
             return
           } catch (err) {
@@ -9646,7 +9625,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
             // log('Searching in', a, 'for', nextArg, 'to fill', v)
             if (a.length)
               for (let i = 0; i < a.length; ++i)
-                // To prevent infinite ballooning of search, don't visit functions if we want unstructured nextArg, and don't visit functions with non-properly-structured output.
+                // To prevent infinite ballooning of search, don't visit functions if the nextArg we want is unstructured.
                 if (typeof a[i] != 'function' || !_isVar(nextArg))
                   _visitNode(ctx, a[i], null, nextArg, null, node)
             _allocArray(a)
@@ -9658,10 +9637,12 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           // Safeguard against an inner search.
           const nodes = _search.nodes, visited = _search.visited, values = _search.values
           const prevInferred = _assign.inferred;  _assign.inferred = null
-          // log('Applying function', v, ...actualArgs)
           try {
+            // const originalV = v, originalArgs = actualArgs.slice()
+            // log('Applying', originalV, 'to', ...originalArgs)
             v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return
-          } catch (err) { if (err === interrupt) throw err; console.log(err); return }
+            // log('  got', v)
+          } catch (err) { if (err === interrupt) throw err; return void log(jsRejected(err)) }
           finally { _assign.inferred = prevInferred; _search.nodes = nodes, _search.visited = visited, _search.values = values }
         }
       }
@@ -9685,7 +9666,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         for (; i < ins.length; ++i) {
           let r
           try { r = ins[i](value) }
-          catch (err) { log(jsRejected(err)) }
+          catch (err) { if (err === interrupt) throw err;  log(jsRejected(err)) }
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
         }
       } catch (err) { if (err === interrupt) interrupt(_logAll, 2)(ins, i);  throw err }
@@ -9702,6 +9683,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
 
       const us = finish.v
       let [node, nodes, visited, values] = interrupt(_search)
+      const prevNodes = _search.nodes, prevVisited = _search.visited, prevValues = _search.values
       if (!nodes && !cont) {
         // Put the request in as a graph node.
         nodes = _allocArray(), visited = new Set, values = _allocArray()
@@ -9721,7 +9703,8 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
             // (If the picker chooses by the best measure, then this is quadratic time complexity. If it special-cases this particular usage pattern (pick and swap-with-end and add some new choices at the end), it could be made linear.)
           if (node === undefined) {
             const i = pick(values, us, 'The graph node to search next') // No one needs to know about all the nodes's extra stuff. Probably. …For now.
-            if (i !== i>>>0) error('Expected an index, got', i)
+            if (_isUnknown(i)) impure()
+            if (i !== i>>>0) log(finish.pure, new Error().stack), error('Expected an index, got', i)
             node = nodes[i]
             ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], nodes.pop()
             ;[values[values.length-1], values[i+1]] = [values[i+1], values[values.length-1]], values.pop()
@@ -9739,6 +9722,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
         }
         error(out !== undefined ? out : v, 'is definitely not in', ctx)
       } catch (err) { if (err === interrupt) interrupt(_search, 4)(node, nodes, visited, values);  throw err }
+      finally { _search.nodes = prevNodes, _search.visited = prevVisited, _search.values = prevValues }
 
       // .nodes (the current array of nodes), .visited (the set of nodes visited in this search), .values (a context of values of nodes, for `pick`ing the next one)
     },
@@ -9883,21 +9867,19 @@ Use \`picker\` to override behavior.`,
       picker:__is(`picker`),
     },
     philosophy:`Intended to be a target for future developments in structural learning, so that choices can be improved.`,
-    future:`Index-based per-cause choice optimization (a base that could optimize more advanced optimizer families):
+    future:`Setup = ?:TaskDescription -> ?:State
+Run = ?:State -> ?:Result
+Evaluate = (function ?:State ?:Goal ?:Performance)
+Adjust = (function ?:State ?:Performance ?:State)
+;="And, to evaluate, all we do is \`(get ?:Result OurInput:TaskDescription)\`, and automatically do learning if it proves to be good (under all conceivable goals, with all conceivable methods).
+Huuuuuuuh.
+But, what would serve as basic blocks for such a search?"
+
+
+
+Index-based per-cause choice optimization (a base that could optimize more advanced optimizer families):
 \`pick.best Result→Measure Expr\`, blending estimated-measures of all choices made during evaluation into Measure.
-    (Wouldn't we like to store that measure in the decision procedure, and have all those pickers alter the decision procedures? But how to make that both efficient, and not step on each other? If we make these things claim unclaimed causes, wouldn't they interfere massively?)
-    …No solution… is complete… for improvement…
-    …How to make a family of solutions? How to auto-search for optimization methods?
-    What is optimization made of?
-      A Map from causes to a metric, possibly limited to N best entries?
-      A picker part that picks the best metric? A picker part that samples metrics by-measure?
-        (Pickers depend on metrics… Metrics that are combinations of metrics…)
-      Goals that alter metrics in an expr — metric funcs… How exactly would they alter?
-        Evolution isn't good if it has no alterations to pick from. Need more.
-        A metric func that linearly blends every single choice into the goal?
-        A metric func that linearly blends all choices at a given depth into the goal?
-        A metric func that linearly blends one random choice into the goal?
-        What about non-linear-blend alterations, like backprop? What about different-alterers-at-different-areas?
+    (Wouldn't we like to store that measure in the decision procedure, and have all those pickers alter the decision procedures?)
 \`pick.sample Result→ProbabilityAdjustment Expr\`, adding probability to all. (Well, with mutable choice sets, we'd need to sum metrics and sample each time.)
 \`best Metric Expr Repeats=2\`, \`journal\`ing everything and commiting the best.
 "Freeze all all choices but one, which is changed every 50 ms". (A generative function family would be a more complete solution here.)`,
@@ -9961,7 +9943,7 @@ Use \`picker\` to override behavior.`,
     txt:`Finishing \`(picker With Expr)\`: sets the function that will pick choices when evaluating \`Expr\`.
 \`With\` is like \`function InnerPicker From Cause\`, copying \`From\` if needed, where \`InnerPicker\` is \`randomPicker\` unless set otherwise with this.`,
     future:[
-      `\`(readMeasure Object Measure)\` and \`(writeMeasure Object Measure Is)\`, for persistent designed-for-low-measure-count (\`(Measure Is Measure Is)\`) storage.`,
+      `\`(readMeasure Object Measure)\` and \`(writeMeasure Object Measure Is)\`, for persistent designed-for-low-measure-count (\`(Measure Is Measure Is)\` at \`Object\`) storage, using _read and writing directly if not journaling for efficiency.`,
       `Pickers \`(bestMeasure Measure)\` and \`(sampleMeasure Measure)\`.`,
       `\`(alter PickedMap→? Expr)\`, for assigning blame and changing to fit a goal.
 Linear blend to goal of measures, add goal to measures, backprop to number variables. Fixate on one choice to alter. Make a measure that is a weighted sum of measures.
@@ -10146,6 +10128,84 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
     },
   },
   help:['no'],
+
+
+
+
+
+
+
+  strValue:{
+    txt:`\`(strValue String)\`: parses and evaluates String, cached.`,
+    call(s) {
+      impure()
+      if (typeof s != 'string') throw 'Expected a string'
+      if (!strValue.cache) strValue.cache = Object.create(null)
+      if (s in strValue.cache) return strValue.cache[s]
+      let [x = parse(s)] = interrupt(strValue)
+      if (x === _onlyUndefined) x = undefined
+      try { return strValue.cache[s] = finish(x) }
+      catch (err) { if (err === interrupt) interrupt(strValue, 1)(x !== undefined ? x : _onlyUndefined);  throw err }
+      // .cache
+    },
+  },
+
+  EvaluationContext:`
+    ;="A context for evaluating expressions, via \`get ?:Output (either X:Input (strValue EvaluationContext))\` for dynamic eval or \`get ?:Input->?:Output (strValue EvaluationContext)\` for static eval."
+    (either
+      ;='Not a rich one. (Concepts like being pure (for caching), and wasm-format and its evaluation, and parallel execution, and goals and optimization, could potentially be added.)'
+      x:Input -> (finish x):Output
+      x:Input -> ((compile undefined x)):Output
+    )
+  `,
+  Input:{txt:`The input to evaluate in EvaluationContext: an arbitrary bound value-flow graph represented via JS arrays.`},
+  Output:{txt:`The output of expression evaluation in EvaluationContext: any JS value.`},
+
+
+
+  MeasureContext:`
+    ;="A context for generating and using measures."
+    (either
+      (function x:Measure y:Option  (readMeasure x y):MeasureIs)
+      (function x:Measure y:Option z:MeasureIs  (writeMeasure x y z):Measure)
+
+      ;="Measure generators:"
+      (function (map):Measure) ;="A map to store numbers in."
+
+      ;="Multiply a measure by a number when read; only blame the measure."
+      (function m:Measure a:Scalar (array o->(readMeasure m o)*a m):Measure)
+      ;="Sum two measures when read; only blame one measure."
+      (function m1:Measure m2:Measure (array o->(readMeasure m1 o)+(readMeasure m2 o) m1):Measure)
+
+      ;="Combine measures in any way."
+        ;="We need ReadMeasureOp and WriteMeasureOp, though. Where would we get such a thing?"
+      (function m1:Measure m2:Measure (array o->(ReadMeasureOp (readMeasure m1 o) (readMeasure m2 o)) (function o is [(WriteMeasureOp m1 o is),(WriteMeasureOp m2 o is)]:Measure)
+    )
+  `,
+  // And Scalar… Or do we want to be able to generate constant measures?
+  Measure:{txt:`An object that stores judgements of \`Option\`s.`},
+  Option:{txt:`A branch that could be selected.`},
+  MeasureIs:{txt:`The stored judgement by a \`Measure\` of an \`Option\`.`},
+  readMeasure:{
+    txt:`\`(readMeasure ?:Measure ?:Option):MeasureIs\`: reads the current remembered measure of an object, for use in selecting from a set of branches.`,
+    call(m, obj) {
+      // ### Also journal it if needed, but only if a Map.
+      if (m instanceof Map) return m.get(obj)
+      if (!_isArray(m)) error('Expected either a Map or an array of read and write functions, got', m)
+      return m[0](obj)
+    },
+  },
+  writeMeasure:{
+    txt:`\`(writeMeasure ?:Measure ?:Option ?:MeasureIs):Measure\`: updates the remembered measure of an object, for use in updating future selections from a set of branches.`,
+    call(m, obj, is) {
+      // ### Also write into a journal if needed, but only if a Map.
+      if (m instanceof Map) return m.set(obj, is), m
+      if (!_isArray(m)) error('Expected either a Map or an array of read and write functions, got', m)
+      return m[1](obj, is), m
+    },
+  },
+  // ### finishing journalMeasures(expr), commit(journal). Each measure is either a (map) or two functions, for reading and writing.
+  // Is it really a good idea to have something that is finishing, though? Isn't it better to pass in functions to it? What exactly would be the interface for such journaling?
 
 
 
