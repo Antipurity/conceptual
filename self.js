@@ -2629,7 +2629,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       elemValue(repl, array(elem, REPL, lang, binds))
 
       // Display purified output.
-      const pureOutput = elem('div', elem('div'))
+      const pureOutput = elem('div')
       pureOutput.classList.add('code')
       pureOutput.style.display = 'inline-block'
       let ID, waiting, lastExpr
@@ -2637,7 +2637,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         if (msg === false && _isArray(expr) && expr[0] === jsEval && typeof expr[1] == 'string' && expr[2]) expr = [randomNat, 2]
         const pre = _smoothHeightPre(pureOutput)
         if (pureOutput.firstChild) {
-          for (let ch = pureOutput.firstChild; ch && ch.nextSibling; ch = ch.nextSibling)
+          for (let ch = pureOutput.firstChild; ch; ch = ch.nextSibling)
             if (!ch.removed)
               elemRemove(ch, true, true, false)
         }
@@ -2645,10 +2645,10 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         let promise
         if (!clear) promise = new Promise(then => {
           const e = _newExecutionEnv(env)
-          e[_id(log)] = pureOutput.lastChild, finish.env = e
+          e[_id(log)] = waiting = _evaluationElem(ID), finish.env = e
           const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
           if (bindAs) expr = expr[2]
-          elemInsert(pureOutput, waiting = _evaluationElem(ID), pureOutput.lastChild)
+          elemInsert(pureOutput, waiting)
           _langAt.lang = lang, _bindingsAt.binds = binds
           _doJob([purify, array(quote, expr)], e, result => {
             if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
@@ -2660,12 +2660,12 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
               ID = undefined, waiting && waiting.remove(), waiting = undefined
               if (!_isUnknown(result)) {
                 // Display `_logAll evaluator (Result)`.
-                elemInsert(pureOutput, daintyEvaluator([_logAll, evaluator, [quote, [result]]]), pureOutput.lastChild)
+                elemInsert(pureOutput, daintyEvaluator([_logAll, evaluator, [quote, [result]]]))
               } else {
                 const el = elem('button', 'Evaluate')
                 elemValue(el, result)
                 el.onclick = evaluateLast
-                elemInsert(pureOutput, el, pureOutput.lastChild)
+                elemInsert(pureOutput, el)
               }
             } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
           })
@@ -3283,11 +3283,10 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
               promise.forEach(p => p.then(result => p.result = result).catch(reason => p.result = jsRejected(reason))),
               promise = Promise.all(promise)
             doing = r[1]
-            _jobs.reEnter = (expr, env, then, ID) => {
+            _causeInterrupt(cause, (expr, env, then, ID) => {
               const cont = () => _schedule(expr, env, then, ID)
               promise.then(cont, cont)
-            }
-            throw interrupt
+            })
           }
           return _stage(array(_await, r[1]), r)
         }
@@ -3308,15 +3307,15 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
           p.push(awaitables[i])
         }
       if (!p) return
-      _jobsReEnter.promise = p.length === 1 ? p[0] : p, _jobs.reEnter = _jobsReEnter
+      _promiseReEnter.promise = p.length === 1 ? p[0] : p
       _allocArray(p)
-      throw interrupt
+      _causeInterrupt(finish.v, _promiseReEnter)
     },
   },
 
-  _jobsReEnter(expr, env, then, ID) {
+  _promiseReEnter(expr, env, then, ID) {
     // Re-schedule interpretation when the promise returns.
-    const p = _jobsReEnter.promise
+    const p = _promiseReEnter.promise
     if (_isPromise(p)) {
       p.then(
         r => (p.result = r, _schedule(expr, env, then, ID)),
@@ -3603,19 +3602,19 @@ If any promises the job depends on have a method .cancel, calls those.`,
 Don't ever re-use the same env in _schedule, use this instead.`,
     call(basedOn) {
       const e = Object.create(null)
-      e[_id(journal)] = undefined
-      e[_id(label)] = undefined
       e[_id(log)] = undefined
+      basedOn && Object.assign(e, basedOn)
+      e[_id(label)] = undefined
+      e[_id(finish)] = 0
       e[_id(interrupt)] = undefined
       e[_id(_checkInterrupt)] = undefined
-      e[_id(step)] = undefined
+      e[_id(step)] = 0
       e[_id(_pausedToStepper)] = undefined
       e[_id(userTime)] = undefined
       e[_id(realTime)] = undefined
       e[_id(pick)] = randomNat
-      e[_id(finish)] = 0
+      e[_id(journal)] = undefined
       Object.seal(e)
-      basedOn && Object.assign(e, basedOn)
       e[_id(userTime)] = 0
       e[_id(label)] = new Map
       return e
@@ -5335,6 +5334,7 @@ Somewhat usable in a REPL.`,
       if (!_isArray(struct)) return struct
       return elem('span', struct.map(s => typeof s != 'string' ? s : elem('span', _highlightGlobalsInString(s))))
     },
+    philosophy:`JS (and the web ecosystem) is a seemingly-unimpressive language that aims to take over all aspects of computing, in a manner similar to the ones before but completely safe and universal and ultimately as little loss in performance as is possible. Like attracts like, and Conceptual is written in JS.`,
   },
 
   _test(env) {
@@ -7586,33 +7586,47 @@ Does not merge the parsed arrays.`,
     },
   },
 
+  _causeInterrupt(cause, toReEnter = undefined) {
+    finish.env[_id(step)] = _checkInterrupt.step
+    finish.env[_id(_checkInterrupt)] = cause
+    finish.env[_id(finish)] = finish.depth
+    if (toReEnter) _jobs.reEnter = toReEnter
+    throw interrupt
+  },
+
   _checkInterrupt:{
     txt:`Checks whether an interrupt is appropriate right now.`,
     call(cause) {
       if (interrupt.noInterrupt) return
       if (!finish.env[_id(interrupt)] || !finish.env[_id(interrupt)].length) {
         // If we stepped enough (ensuring progress), and either we have worked for 10 ms or the nesting depth is as wanted by _pausedToStepper, interrupt.
-        if (finish.env[_id(step)]) --finish.env[_id(step)], ++_checkInterrupt.step
-        else if (_timeSince(interrupt.started, true) > 10) {
-          finish.env[_id(step)] = _checkInterrupt.step + 1 // Ensure progress.
-          finish.env[_id(_checkInterrupt)] = cause
-          finish.env[_id(finish)] = finish.depth
-          throw interrupt
-        } else if (finish.env[_id(_pausedToStepper)] !== undefined && finish.depth <= finish.env[_id(_pausedToStepper)]) {
-          finish.env[_id(step)] = _checkInterrupt.step + 1
-          finish.env[_id(_checkInterrupt)] = cause
-          finish.env[_id(finish)] = finish.depth
-          _jobs.reEnter = _pausedToStepper
-          throw interrupt
-        } else _checkInterrupt.step = 0
+        if (finish.env[_id(step)])
+          --finish.env[_id(step)], ++_checkInterrupt.step
+        else if (finish.env[_id(_pausedToStepper)] !== undefined && finish.depth <= finish.env[_id(_pausedToStepper)])
+          _causeInterrupt(cause, _pausedToStepper)
+        else if (_timeSince(interrupt.started, true) > 10)
+          ++_checkInterrupt.step, _causeInterrupt(cause) // Ensure progress.
+        else _checkInterrupt.step = 0
       }
       // .step (the counter of interrupt checks, for fully consistent restoration)
     },
   },
 
   step:{
-    txt:`\`(step)\`: pauses execution and displays stepping interface to the user.`,
-    finish() { _jobs.reEnter = _pausedToStepper;  throw interrupt },
+    txt:`\`(step Expr)\`: pauses execution and displays stepping interface to the user, then evaluates Expr.`,
+    examples:[
+      [
+        `step 1*2+3*4+5*6+7*8+9*10+11*12+13*14`,
+      ],
+    ],
+    finish(expr) {
+      let [int = true] = interrupt(step)
+      try {
+        if (int) int = false, _causeInterrupt(expr, _pausedToStepper)
+        if (int === false) ++_checkInterrupt.step, int = 0
+        return finish(expr)
+      } catch (err) { if (err === interrupt) interrupt(step, 1)(int);  throw err }
+    },
     merge:true,
   },
 
@@ -7636,7 +7650,7 @@ Not for use inside that paused job.
         eqDepth.title = `Step over
 (Equal function call depth)`
         const moreDepth = elem('button', '▼')
-        moreDepth.onclick = () => onClick(1)
+        moreDepth.onclick = () => onClick(Infinity)
         moreDepth.title = `Step in
 (Increase function call depth)`
         el.append(justRun, lessDepth, eqDepth, moreDepth)
@@ -7668,7 +7682,7 @@ Not for use inside that paused job.
 Interruption (and sandboxing) is absolutely essential for being able to actually use a program comfortably, and for stepping through the program, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes, and/or heuristic-based totality guarantees.
 
 Technical details:
-\`throw interrupt\` to interrupt execution.
+\`_causeInterrupt(cause)\` to interrupt execution.
 Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(f)\`, in particular for loops. Make sure to put interruptible computations not here but inside the try/catch below, to not corrupt interrupt state.
 Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2)(i,j);  throw err }\`: store 4 values in tmp at a time, up to the requested length (\`...args\` in JS allocates, so this way tries to avoid that).`,
     call(cause, len = undefined) {
@@ -9528,7 +9542,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         _assign(dec[dec.length-1], body)
         if (_assign.inferred) throw 'Wait, that\'s illegal'
         return defines(_function, finish).call(_function, ...bound(LE, dec.slice(1,-1)), body)
-          // This re-partially-evaluates `body` though.
+          // This re-partially-evaluates `body`, which is as intended (so `get`s inside can remember the context they were generated in).
       } catch (err) { if (err === interrupt) interrupt(impl, 1)(LE), LE = null;  throw err }
       finally { LE !== null && _allocMap(LE), finish.env[L] = PE, _assign.inferred = prevInferred }
     }
@@ -9738,7 +9752,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
         if (!sub) sub = typeof out != 'function' ? output(out, ctx) : ctx
         if (!sub) error(out, 'is definitely not in', ctx)
         return _search(undefined, ctx, sub, undefined, out)
-      } catch (err) { if (err === interrupt) interrupt(_get, 1)(sub);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_get, 1)(sub);  if (err === impure) return _unknown([_get, out, prev]);  throw err }
       finally { get.ctx = prev }
     },
   },
@@ -9813,6 +9827,7 @@ Theorems are compositions of axioms, both \`function\`s. Formal proofs are about
 But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Search for optimization, for self, for search.`,
     call(out, ctx) {
       const r = _get(out, ctx)
+      if (_isUnknown(r)) return r[1][0] = get, r
       const result = r[0]
       _allocArray(r[1][0]), _allocArray(r[1][2]), _allocArray(r[1]), _allocArray(r)
       return result
@@ -10045,8 +10060,7 @@ This is the default when no picker is specified.`,
           else
             askUser.got.set(a, i), _schedule(...job)
         }
-        _jobs.reEnter = (expr, env, then, ID) => job = [expr, env, then, ID]
-        throw interrupt
+        _causeInterrupt(cause, (expr, env, then, ID) => job = [expr, env, then, ID])
       }
       // Browser.
       const el = elem('div')
@@ -10096,8 +10110,7 @@ This is the default when no picker is specified.`,
       }
       log(el)
 
-      _jobs.reEnter = (expr, env, then, ID) => job = [expr, env, then, ID]
-      throw interrupt
+      _causeInterrupt(cause, (expr, env, then, ID) => job = [expr, env, then, ID])
     },
   },
 
