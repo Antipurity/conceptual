@@ -535,6 +535,7 @@ Label-binding environment is not preserved.`,
       } catch (err) {
         // Log our last computed value.
         const prevPure = finish.pure;  finish.pure = false
+        try {
         if (err === interrupt) {
           if (done)
             if (prevLog) {
@@ -552,7 +553,7 @@ Label-binding environment is not preserved.`,
             elemRemove(ch, true, false)
           _smoothHeightPost(into, pre)
         }
-        finish.pure = prevPure
+        } finally { finish.pure = prevPure }
         throw err
       }
       finally { finish.env[_id(log)] = prevLog, finish.env[_id(label)] = prevLabel }
@@ -4649,7 +4650,7 @@ x -> (SumSum x (Mult x x))`,
       inline:__is(`inline`),
     },
     philosophy:`When its definition is inlined, defining this defines a macro.
-This can be implemented with calls and \`quote\` and a way of telling \`compile\` to spill variables, so it's a gimmick, but it's a convenient gimmick — without it \`function\` is either special-cased on evaluation or very inconvenient to use, as are \`last\`, \`if\`, \`bound\`, \`await\`. Everything non-machine-code is a gimmick too, anyway.
+This can be implemented with calls and \`quote\` and a way for native functions to tell \`compile\` to spill variables inside arg/s, so it's a gimmick, but it's a convenient gimmick — without it \`function\` is either special-cased on evaluation or very inconvenient to use, as are \`last\`, \`if\`, \`bound\`, \`await\`. Everything non-machine-code is a gimmick too, anyway.
 All computation-containing systems that need efficiency, like ML libraries or 3D engines, are shifting towards knowing the full data-flow graph. So might as well design for that from the ground up.
 Technical details:
 JS functions have array Expr spread across their args (with \`this\` being the zeroth arg, code).
@@ -10135,11 +10136,17 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
     call(ctx, ...a) {
       // Return a function that does `pick(2, func) ? impl.impl(...args) : (impl.impl = get(f, ctx))(...args)`.
         // This is a really limited implementation, though it does encompass everything. A real implementation would search for the best of itself.
-      const f = [_function, ...a]
+      const f = finish(array(_function, ...a))
       function impl(...args) {
-        if (impl.impl === _notFound || pick(2, func, "1 to get a new implementation"))
-          impl.impl = _notFound, impl.impl = get(f, ctx)
-        return impl.impl(...args)
+        let [r = impl.impl] = interrupt(impl)
+        try {
+          if (r === _notFound || pick(2, func, "1 to get a new implementation")) {
+            r = _notFound, r = get(f, ctx)
+            if (_isUnknown(r)) return _unknown(array(using, r[1][2], ...a))
+            impl.impl = r
+          }
+          return r.apply(impl, args)
+        } catch (err) { if (err === interrupt) interrupt(impl, 1)(r);  throw err }
       }
       impl.impl = _notFound
       const d = impl[defines.key] = Object.create(null)
