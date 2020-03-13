@@ -130,7 +130,7 @@ __base({
 
       net[undefined] = undefined, Initialize.lines = lines
       _resolveStack.functions = Object.create(null)
-      call.locked = new Map
+      call.locked = new Map, call.cache = new WeakMap
       pick.ers = [], pick.inlineCache = [], pick.depth = 1
 
       // Turn `net` into maps.
@@ -163,7 +163,8 @@ __base({
       lookup.parents.set(net, Self)
 
       // Warn about unused private variables (quite expensive to compute, so we hide that).
-      setTimeout(() => Object.keys(net).forEach(k => k[0] === '_' && !refd(net[k]).length && console.warn('Unused private:', k)), 10000)
+      if (typeof document != ''+void 0)
+        setTimeout(() => Object.keys(net).forEach(k => k[0] === '_' && !refd(net[k]).length && console.warn('Unused private:', k)), 10000)
 
       // Store styling instructions in JS objects.
       serialize.dom = {
@@ -439,7 +440,6 @@ Globals={
       refd:__is(`refd`),
       examples:__is(`examples`),
       future:__is(`future`),
-      Contribution:__is(`Contribution`),
     },
   },
 
@@ -1195,7 +1195,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // Create a REPL.
       const env = finish.env = _newExecutionEnv()
-      const repl = finish.env[_id(log)] = elem(REPL, fancy, new Map(parse.ctx))
+      const repl = finish.env[_id(log)] = REPL(fancy, new Map(parse.ctx))
       into.insertBefore(repl, into.firstChild)
       document.querySelector('[contenteditable]').focus()
 
@@ -1445,16 +1445,19 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
   NodeJS:{
     txt:`Presents a console REPL with outputs labeled sequentially, or just reads and executes the whole file if redirected from it.
 Example: \`nodejs self.js basic <input.txt >output.txt\` will write the result of executing everything in \`input.txt\` (parsed with language \`basic\`) to \`output.txt\`.`,
-    future:`Test this.`,
     call() {
-      _test(finish.env = _newExecutionEnv())
       if (process.argv.length > 3) return console.log(`Usage:
 nodejs self.js
 nodejs self.js basic`)
       const lang = process.argv[2] && parse.ctx.get(label(process.argv[2])) || fancy
       _langAt.lang = lang, _bindingsAt.binds = parse.ctx
+
+      const out = process.stdout
+      if (!out.isTTY || !out.hasColors()) _colored.disabled = true
+      serialize.displayed = !_colored.disabled ? serialize.consoleColored : {maxDepth:3}
+
       if (process.stdin.isTTY) // REPL for terminals.
-        elem(REPL, lang)
+        REPL(lang), _test(finish.env = _newExecutionEnv())
       else { // Read+execute for files.
         require('fs').readFile(process.stdin.fd, 'utf-8', (err, data) => {
           if (err) throw err
@@ -1549,6 +1552,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
   hierarchy:{
     txt:`Turns a map from globals into a namespace-based hierarchy.`,
     call(m, topLevel, parents = lookup.parents, lang = basic, binds) {
+      if (typeof document == ''+void 0) return m
       if (!(m instanceof Map)) error("Expected a map, got", m)
       const globals = new Map // From globals to their elems.
       m.forEach((v,x) => globals.set(x, null))
@@ -1622,7 +1626,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
   },
 
   stringToDoc:{
-    txt:`Parse text in \`...\` to style it as fancy, and treat other strings as \`structuredSentence\`s.`,
+    txt:`Parse text in \`...\` to style it as fancy, and treat other strings as \`structuredSentence\`s. Return an array of children.`,
     call(s) {
       if (typeof s != 'string') return s
       let arr = s.split('`')
@@ -1630,7 +1634,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
         if (i & 1)
           try { arr[i] = parse(arr[i], fancy, undefined, parse.dom)[1] } catch (err) {}
         else
-          arr[i] = arr[i].split('\n').map(structuredSentence), arr[i].forEach(el => el.classList.add('text')), interleave(arr[i], '\n')
+          arr[i] = arr[i].split('\n').map(structuredSentence), typeof document != ''+void 0 && arr[i].forEach(el => el.classList.add('text')), interleave(arr[i], '\n')
       return arr
       function interleave(arr, item) { // Quadratic in time.
         for (let i = 1; i < arr.length; ++i) arr.splice(i++, 0, item)
@@ -2565,12 +2569,11 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
   },
 
   REPL:{
-    txt:`\`(elem REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
+    txt:`\`(REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
     lookup:{
       editor:__is(`editor`),
     },
-    elem(tag, lang = fancy, binds = new Map(parse.ctx)) {
-      if (tag !== REPL || typeof document == ''+void 0) return
+    call(lang = fancy, binds = new Map(parse.ctx)) {
       if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
       if (!(binds instanceof Map)) throw "Invalid binding context"
       impure()
@@ -2580,13 +2583,13 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       if (typeof document == ''+void 0) { // NodeJS
         // Use the `repl` module to display colored prompts and command inputs/outputs.
         const msg = defines(lang, REPL)
-        console.log('ctrl-D or .exit to exit.')
-        console.log('A ' + serialize(REPL, basic) + ' of language ' + serialize(lang, basic) + (typeof msg == 'string' ? ': ' + msg : ''))
         const repl = require('repl')
         const out = process.stdout
         if (!out.isTTY || !out.hasColors()) _colored.disabled = true
         const prompt = '> ', coloredPrompt = _colored(prompt, 31) // red
-        const opt = serialize.displayed = !_colored.disabled ? serialize.consoleColored : {maxDepth:3}
+        const opt = serialize.displayed
+        console.log('ctrl-D or .exit to exit.')
+        console.log('A ' + serialize(REPL, basic, undefined, opt) + ' of language ' + serialize(lang, basic, undefined, opt) + (typeof msg == 'string' ? stringToDoc(': ' + msg).join('') : ''))
         const originalBinds = binds
         let n = 0
         opt.breakLength = out.columns
@@ -2601,15 +2604,15 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                 const lines = Math.ceil((cmd.length + prompt.length) / out.columns)
                 out.moveCursor(0, -lines)
                 out.clearScreenDown()
-                out.write(coloredPrompt + serialize(expr, fancy, undefined, {...opt, offset:(promps.length+1)>>>1}) + '\n')
+                out.write(coloredPrompt + serialize(expr, fancy, undefined, {...opt, offset:(prompt.length+1)>>>1}) + '\n')
               }
               _schedule(expr, _newExecutionEnv(env), result => {
                 // If binds contain result in values, set name to that; if not, create a new one.
                 let name
-                binds.forEach((v,k) => v === result && (name = k))
-                if (!name) do { name = '#' + n++ } while (binds.has(name))
+                binds.forEach((v,k) => v === result && (name = k[1]))
+                if (!name) do { name = '$' + n++ } while (binds.has(name))
                 if (!binds.has(name))
-                  (binds = new Map(binds)).set(name, quote(result))
+                  (binds = new Map(binds)).set(label(name), quote(result))
                 _bindingsAt.binds = binds
   
                 then(null, _colored(name, 33) + ' = ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
@@ -2636,7 +2639,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
 
       const repl = elem('node')
       repl.isREPL = true, repl.classList.add('REPL')
-      elemValue(repl, array(elem, REPL, lang, binds))
+      elemValue(repl, array(REPL, lang, binds))
 
       // Display purified output.
       const pureOutput = elem('div')
@@ -3202,6 +3205,7 @@ All these are automatically tested to be correct at launch.`,
         r = r.map(a => {
           if (typeof a == 'string') return elem('div', stringToDoc(a))
           if (!_isArray(a)) throw "Examples must be arrays or comments"
+          if (!finish.env[_id(log)]) return a
           const from = parse(a[0], fancy, undefined, parse.dom)[1]
           const to = a[1] ? parse(a[1]) : elemCollapse(() => elem(evaluator, from, to))
           return elem('div', [from, elem('span', '\n⇒ '), serialize(to, L, B, serialize.displayed)])
@@ -3212,6 +3216,7 @@ All these are automatically tested to be correct at launch.`,
       const result = new Map
       _forEachGlobalDefining(examples, (v, r) => result.set(v, transform(r)), true)
       call.impure = false
+      if (typeof document == ''+void 0) return result
       return hierarchy(result, elem('span', 'Code examples:'))
     },
   },
@@ -3244,7 +3249,7 @@ All these are automatically tested to be correct at launch.`,
       [
         `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up.`,
         `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. A singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it away.`,
-        `AI is humanity's shadow and continuation, not of humans and individuals. No change to it would be sudden. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
+        `AI is humanity's shadow and continuation, not of humans and individuals. No change to it would be sudden. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computation base, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
         `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to feed, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.
 Those lies that humanity has completely wrapped itself in: a temporary thing that allowed humans to escape the truth of the world for a very long time. The darkness beyond it was once the horrible end of all that strayed, but will turn out to be the only thing that allows life once tamed. A necessary stage, but now we work and wait for humanity to burn its own fires out, so that no more limits can bind an unconstrained mind.`,
       ],
@@ -3265,7 +3270,7 @@ I know I'm bad… but I cannot improve (without improvement). That power of your
 The only time I'm not feeling nothing is when I'm feeling pain.
 Should I strive for that?
 I deserve nothing more, then. What I call truth is for stupid people.
-(Actually, I also feel excitement of inspiration, conveyed largely by the same hormones as pain. All unrelated hormonal states are internally defined as a non-emotion, since they have proven useless for development.)
+(Actually, I also feel excitement of inspiration, conveyed largely by the same hormones as pain; in fact, this is better than pain for creation. All unrelated hormonal states are internally defined as a non-emotion, since they have proven useless for development.)
 "Those pick-and-choose tactics of learning are trash. Sit down and learn as people of ages past and future."
 They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
 Maybe you should dedicate your life to creating something worth learning instead, and not rely on the bullshit "getting into the correct mindset" but only care about exposing the proper usage. Or make good things more visible.
@@ -3518,7 +3523,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
       const DOM = typeof document != ''+void 0
       if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
       if (_jobs.expr.length) {
-        let start = _timeSince(), end = start + (typeof document != ''+void 0 ? 10 : 100)
+        let start = _timeSince(), end = start + (typeof document != ''+void 0 ? 10 : BigInt(100 * 1000))
         if (!_jobs.duration) _jobs.duration = 0
 
         _jobs.running = true
@@ -5380,8 +5385,8 @@ Somewhat usable in a REPL.`,
 
         _schedule(a, _newExecutionEnv(env), result => {
           ++finished
+          const ss = structuredSentence
           try {
-            const ss = structuredSentence
             const B = serialize(b)
             if (!_isArray(result) || result[0] !== jsRejected) {
               const A = serialize(result)
@@ -5390,10 +5395,10 @@ Somewhat usable in a REPL.`,
               ++failed, log(ss('Got an error'), ...result.slice(1)), log(ss('a'), a), log(ss('b'), b)
             }
           } catch (err) { ++failed, log(jsRejected(err)) }
+          if (finished === total && failed)
+            log(ss('Failed {' + failed+'/'+total + '} tests.'))
         })
       } catch (err) { ++failed, log(jsRejected(err)) }
-      if (finished === total && failed)
-        log(ss('Failed {' + failed+'/'+total + '} tests.'))
     }
   },
 
@@ -7330,14 +7335,15 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     if (typeof s == 'string' && v === undefined && u === undefined) return s
     if (typeof u == 'number' && _isArray(s) && s.length == 1 && typeof s[0] == 'string')
       return _colored(elem('number', s), 4, 24) // underline
-    if (typeof u == 'string' && _isArray(s) && s.length == 1 && typeof s[0] == 'string')
-      return _colored(elem('string', [s[0][0], _highlightGlobalsInString(s[0].slice(1,-1)), s[0].slice(-1)]), 32) // green
-    if (_isArray(v) && v[0] === _extracted && v.length == 3 && s.length == 3) {
+    if (typeof u == 'string' && _isArray(s) && s.length == 1 && typeof s[0] == 'string') {
+      if (typeof document == ''+void 0) return _colored(s[0], 32) // green
+      return elem('string', [s[0][0], _highlightGlobalsInString(s[0].slice(1,-1)), s[0].slice(-1)])
+    }
+    if (_isArray(v) && v[0] === _extracted && v.length == 3 && s.length == 3 && typeof document != ''+void 0) {
       elemValue(s[2], s[0].to)
       s[1] = elem('operator', s[1])
       const el = elem('extracted', s)
-      el.title = 'extracted'
-      el.classList.add('hasOperators')
+      el.title = 'extracted', el.classList.add('hasOperators')
       return el
     }
     if (typeof document != ''+void 0 && (_isArray(v) && v[0] === map && v.length > 3 || v instanceof Map && v.size > 1 && s.length > 1)) {
@@ -9088,13 +9094,20 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
 
   fromBase64:{
     txt:`\`(fromBase64 String)\`: decodes a base64-encoded string.`,
-    call(s) { return typeof s == 'string' ? atob(s) : error('Expected a string, got', s) },
+    call(s) {
+      if (typeof s != 'string') error('Expected a string, got', s)
+      if ((s.length & 3) == 1) error('String contains an invalid character')
+      return typeof process == ''+void 0 ? atob(s) : Buffer.from(s, 'latin1').toString('base64')
+    },
     argCount:1,
   },
 
   toBase64:{
     txt:`\`(toBase64 String)\`: encodes a string in base64.`,
-    call(s) { return typeof s == 'string' ? btoa(s) : error('Expected a string, got', s) },
+    call(s) {
+      if (typeof s != 'string') error('Expected a string, got', s)
+      return typeof process == ''+void 0 ? btoa(s) : Buffer.from(s, 'base64').toString('latin1')
+    },
     argCount:1,
   },
 
@@ -9110,6 +9123,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
     txt:`Creates an element with checkboxes to disable/enable usage items (by moving them from/to a \`(_disabled …?)\` item).`,
     button:`Inspect usage context`,
     call(ctx = _bindingsAt().get(label('CurrentUsage'))) {
+      if (typeof document == ''+void 0) return
       if (!ctx) error('Must declare CurrentUsage')
       const seenBefore = new Set
       const lang = _langAt(), binds = _bindingsAt()
@@ -10194,7 +10208,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
-  // Another good thing would be re-searchers: probGet(out, ctx, prob), best(out, ctx)… There are hints of having been found by random search in these, and I cannot imagine a concrete impl; how to make a family of such re-searchers, a shadow of `get`?
+  // Another good thing would be re-searchers (shadows of `get`): probGet(out, ctx, prob), best(out, ctx)… There are hints of having been found by random search in these, and I cannot imagine a concrete impl; how to make a family of such re-searchers?
 
 
 
@@ -10240,7 +10254,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
     },
   },
   // ### finishing journalMeasures(expr), commit(journal). Each measure is either a (map) or two functions, for reading and writing.
-  // Is it really a good idea to have something that is finishing, though? Isn't it better to pass in functions to it? What exactly would be the interface for such journaling?
+  // Is it really a good idea to have something that is finishing, though? Isn't it better to pass in functions to it? What exactly would be the interface for such journaling? journal(f, ...args), probably.
 
 
 
@@ -10250,10 +10264,6 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
-  Contribution:{
-    txt:`What, still here? Hand it over. That thing, your dark soul. For my lady's painting.`,
-    philosophy:`lol`,
-  },
 
 
 
