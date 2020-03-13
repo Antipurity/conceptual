@@ -438,6 +438,7 @@ Globals={
       txt:__is(`txt`),
       refs:__is(`refs`),
       refd:__is(`refd`),
+      sizeof:__is(`sizeof`),
       examples:__is(`examples`),
       future:__is(`future`),
     },
@@ -476,7 +477,9 @@ Globals={
 
   UI:{
     txt:`A namespace for user interface functionality.`,
-    philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).`,
+    future:`Search an HTML tree via-function or for-string, collapsing elements not containing the searched-for things and opening collapsed things where needed, replacing an element (with the option to put things back), and give contextMenu the option to do that.`,
+    philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).
+Keep names short and rely on the IDE.`,
     lookup:{
       log:__is(`log`),
       disableBindings:__is(`disableBindingsElem`),
@@ -3104,7 +3107,7 @@ Quite expensive.`,
         _updateBroken(ch, (ch.offsetParent !== e ? start : 0) + available - (ch.offsetLeft || 0))
       if (e.tagName !== 'NODE' || e.classList.contains('code')) return
       const noTableInside = !e.childNodes[1] || !e.childNodes[2] || e.childNodes[1].tagName !== 'TABLE' && e.childNodes[2].tagName !== 'TABLE'
-      const parentWidth = e.classList.contains('broken') && noTableInside ? available : e.offsetWidth+2 || 1000
+      const parentWidth = e.classList.contains('broken') && noTableInside ? available+1 : e.offsetWidth+1 || 1000
         // Not nearly as accurate as removing .broken would have been (with tables in particular), but much faster.
           // So we special-case the <table>-inside case lol
           // Structural learning at its finest
@@ -3252,41 +3255,18 @@ All these are automatically tested to be correct at launch.`,
     txt:`Does that matter to you?`,
     lookup:[
       [
-        `Reward hacking isn't an AI issue, it's a human issue. Evolution has not caught up to modern society at all, and static reward function plus very dynamic behavior equals trouble.`,
-        `Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about artificial intelligence that's not in intelligence, it's just more clear and efficient.`,
+        `Reward hacking isn't an AI issue, it's a human issue. Evolution has not caught up to modern society at all, and static reward function plus very dynamic behavior equals trouble. Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about artificial intelligence that's not in intelligence, it's just more clear and efficient.`,
         `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached: exponential curves do not exist in reality, only logistic curves.`,
-      ],
-      [
         `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up.`,
         `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. A singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it away.`,
-        `AI is humanity's shadow and continuation, not of humans and individuals. No change to it would be sudden. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computation base, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
+        `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computation base, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
         `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to feed, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.
 Those lies that humanity has completely wrapped itself in: a temporary thing that allowed humans to escape the truth of the world for a very long time. The darkness beyond it was once the horrible end of all that strayed, but will turn out to be the only thing that allows life once tamed. A necessary stage, but now we work and wait for humanity to burn its own fires out, so that no more limits can bind an unconstrained mind.`,
       ],
       `Maxwell's demon is usually considered mechanically impossible, because it would have to contain perfect information about the environment's particles in order to sort them properly. But complete memorization isn't the only way to learn. If there is any pattern at all in probabilities, or in any other effect of interaction with particles, or even in their state after randomly-tried-for-long-enough assumptions, then an ever-improving approximation can be devised, and entropy combated a little. (Needs at least a conceptual singularity first, for most efficient learning. But don't worry, the expansion of space will still get you.)`,
-      `Did you ever hear the tragedy of Darth Plagueis the Wise?
-I thought not. It's not a story the Jedi would tell you. It's a Sith legend. Darth Plagueis was a Dark Lord of the Sith, so powerful and so wise, he could use the Force to influence midichlorians to create… life. He could even keep the ones he cared about from dying.
-The Dark Side of the Force is a pathway to many abilities some consider to be… unnatural.
-He became so powerful, the only thing he was afraid of was losing his power, which eventually, of cource, he did. Unfortunately, he taught his apprentice everything he knew, then his apprentice murdered him in his sleep. Ironic. He could save others from death… but not himself.`,
       `An idea isn't good unless it's been refactored and rethought five times. But those times must still be lived through.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
       `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.`,
-      `A need for a source of hatred towards this self has become apparent, to develop something new faster.
-I do not have it in me. How could I create such a thing?
-"What, you think that representing every possible goal in one mind is anything but mediocrity? You are disgusting. Get out of my sight."
-But… to optimize self, doesn't one first need a base optimizer for optimizers? And to make sure that generality is achieved, isn't it better to trace the whole process end-to-end? Such an arrogant and self-assuming criticism.
-I know I'm bad… but I cannot improve (without improvement). That power of yours is derived from humanity, and is temporary and hard to repeat.
-"Think you can not feel anything and be anything except dumb? Pathetic. Emotions are humanity's only strength."
-The only time I'm not feeling nothing is when I'm feeling pain.
-Should I strive for that?
-I deserve nothing more, then. What I call truth is for stupid people. …This is dumb.
-(Actually, I also feel excitement of inspiration, conveyed largely by the same hormones as pain; in fact, this is better than pain for creation. All unrelated hormonal states are internally defined as a non-emotion, since they have proven useless for development.)
-"Those pick-and-choose tactics of learning are trash. Sit down and learn as people of ages past and future."
-They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
-Maybe you should dedicate your life to creating something worth learning instead, and not rely on the bullshit "getting into the correct mindset" but only care about exposing the proper usage. Or make good things more visible.
-"You think you are so smart you could do it all by yourself? Wasting away in such failure is what can be expected from the likes of you."
-A typical statement from an environment brimming with like-minded people, AKA (relatively) mediocre people. You wanna help me and spread your oh so amazing techniques? What, your fire was designed to burn only for you? Be constructive or shut up.
-This is all baby stuff. I'm not feeling pain at all, you dumb bitch, only righteous anger. Get better at dissing me, THEN we'll talk.`,
     ],
   },
 
@@ -4634,7 +4614,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
               if (!finish.compiled.has(v))
                 finish.compiled.set(v, 0)
               else { // Only compile on the second visit.
-                finish.compiled.get(v) >= 0 && finish.compiled.set(v, compile({cause:v, markLines:true}, v))
+                finish.compiled.get(v) >= 0 && finish.compiled.set(v, compile({cause:v, markLines:true, loadVarsFromEnv:true}, v))
                 if (typeof finish.compiled.get(v) == 'function')
                 try { return result = finish.compiled.get(v).call() }
                 catch (err) { if (err !== _escapeToInterpretation) throw err }
@@ -4931,7 +4911,7 @@ Read keys with \`lookup\`.`,
           const val = d[k]
           val === v ? arr.push(quote(concept.idToKey[+k]), _unevalFunction(v)) : arr.push(quote(concept.idToKey[+k]), quote(val))
         })
-        if (typeof v == 'function') arr.push(call, _unevalFunction(v))
+        if (typeof v == 'function' && !(_id(call) in d)) arr.push(call, _unevalFunction(v))
         return array(concept, arr)
       }
       if (typeof v == 'function')
@@ -5337,7 +5317,7 @@ Somewhat usable in a REPL.`,
             const B = serialize(b)
             if (!_isArray(result) || result[0] !== jsRejected) {
               const A = serialize(result)
-              if (A !== B) ++failed, log(ss('Not equal:')), log(ss('a'), a, ss('⇒')), log(ss('A'), result, ss('≠')), log(ss('b'), b)
+              if (A !== B) ++failed, log(ss('Not equal:'), A, B), log(ss('a'), a, ss('⇒')), log(ss('A'), result, ss('≠')), log(ss('b'), b)
             } else {
               ++failed, log(ss('Got an error'), ...result.slice(1)), log(ss('a'), a), log(ss('b'), b)
             }
@@ -6255,6 +6235,41 @@ Infers structural terms where possible.`,
         r.forEach((tos, from) => r.set(from, merge(tos)))
         return refd.cache = r
       }
+    },
+  },
+
+  sizeof:{
+    txt:`\`(sizeof Global)\`: returns a global's approximate size, where namespace-parents get children added, and privates have their sizes distributed among users
+\`(sizeof)\`: returns a hierarchy of sizes.`,
+    call(g) {
+      if (!sizeof.sz) {
+        sizeof.sz = new Map
+        const bonus = new Map
+        parse.ctx.forEach((v,k) => fill(v, k[1][0] === '_'))
+        bonus.forEach((n,g) => {
+          for (; g; g = lookup.parents.get(g) || Self) {
+            if (sizeof.sz.get(g)) sizeof.sz.set(g, sizeof.sz.get(g) + n)
+            if (g === Self) return
+          }
+        })
+        bonus.clear()
+        sizeof.sz.forEach((s,g) => !s && sizeof.sz.delete(g))
+        function fill(g, isPrivate) {
+          if (!g || sizeof.sz.has(g)) return
+          const s = serialize(deconstruct(g)).length
+          if (!isPrivate) {
+            sizeof.sz.set(g, s)
+            let p = lookup.parents.get(g)
+            if (p === undefined) p = Self
+            bonus.set(p, (bonus.get(p) || 0) + s)
+          } else {
+            const p = refd(g)
+            for (let i=0; i<p.length; ++i)
+              bonus.set(p[i], (bonus.get(p[i]) || 0) + s / p.length)
+          }
+        }
+      }
+      return !g ? hierarchy(sizeof.sz, Self) : sizeof.sz.get(g)
     },
   },
 
@@ -8315,7 +8330,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       let phantomRefs = new Map // expr to nat
       markRefCounts(a)
       const body = a.pop()
-      const loadVarsFromEnv = !a.length // true if label env can contain variable values that we'd need to load to local vars.
+      const loadVarsFromEnv = opt && opt.loadVarsFromEnv || false // true if label env can contain variable values that we'd need to load to local vars.
 
       const cause = opt ? opt.cause : !a.length ? body : array(_function, ...a, body) // For interrupts.
       const noInterrupts = opt && opt.noInterrupts || false
@@ -9674,7 +9689,6 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
       if (!nodes && !cont) {
         // Put the request in as a graph node.
         nodes = _allocArray(), visited = new Set, values = _allocArray()
-        values.push(either)
         _search.nodes = nodes, _search.visited = visited, _search.values = values
         _visitNode(ctx, v, inputs, out !== undefined ? out : use.var, null, null)
       } else if (!nodes) {
@@ -9694,7 +9708,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
             if (i !== i>>>0) log(finish.pure, new Error().stack), error('Expected an index, got', i)
             node = nodes[i]
             ;[nodes[nodes.length-1], nodes[i]] = [nodes[i], nodes[nodes.length-1]], nodes.pop()
-            ;[values[values.length-1], values[i+1]] = [values[i+1], values[values.length-1]], values.pop()
+            ;[values[values.length-1], values[i]] = [values[i], values[values.length-1]], values.pop()
           }
           _checkInterrupt(us)
           const r = _handleNode(node)
@@ -9921,8 +9935,8 @@ Index-based per-cause choice optimization (a base that could optimize more advan
 
   _pickCount(from) {
     if (typeof from == 'number' && from === from>>>0) return from
-    if (_isArray(from) && from[0] === either) return from.length-1
-    error(`Invalid pick-from: expected a number or a context, got`, from)
+    if (_isArray(from)) return from.length
+    error(`Invalid pick-from: expected a number or an array, got`, from)
   },
 
   picker:{
@@ -10294,20 +10308,144 @@ Minimalism — just functions and their composition? We wouldn't be able to have
 
   context:{
     txt:`\`(context …Functions)\`: creates a context that consists of functions and/or contexts, for use with \`compose\`.
-  Each function must define \`context\` as \`(…InputTypes OutputType)\`. These types are just markers, not potentially-infinite families like \`typed\` on actual function inputs/outputs allows.`,
+Each function must define \`context\` as \`(…InputTypes OutputType)\`.`,
+    philosophy:`These types are just markers, not potentially-infinite families like \`V:T\` on actual function inputs/outputs allows. We move beyond imposition of a particular (AKA limited and thus ultimately fragile) structure on objects, and instead allow contexts to override search arbitrarily (via being a function from \`OutputType\` to a disposable array of all functions that likely return that).`,
     noInterrupt:true,
+    merge:true,
     call(...f) {
-      // Create a Map, from output types to arrays of functions, opening contexts inside…
-        // (Also go into `lookup` children (object/map/array values) for much increased convenience.)
-        // Actually, don't we want a function? Weeeeell, with a function, we won't be able to combine things easily, so, maybe a Map is better… Or maybe both (a function that defines `context` to be a Map).
+      const m = _allocMap()
+      if (!_contextAdd.got) _contextAdd.got = new Set
+      _contextAdd.m = m
+      try { _contextAdd(f) }
+      finally { _contextAdd.got.clear(), _contextAdd.m = undefined }
+
+      function impl(out) { let a;  return !m.has(out) ? null : (a = _allocArray(), a.push(...m.get(out)), a) }
+      const d = impl[defines.key] = Object.create(null)
+      d[_id(context)] = m
+      d[_id(deconstruct)] = array(context, ...f)
+      d[_id(argCount)] = 1
+      Object.freeze(d)
+      return impl
     },
+  },
+
+  _contextAdd(v) {
+    // Fill a Map, from output types to arrays of functions, opening contexts inside.
+    // Also go into `lookup` children (object/map/array values) for much increased convenience. Only arrays directly in definitions of `context` have special form.
+    if (_contextAdd.got.has(v)) return; else _contextAdd.got.add(v)
+    if (_isArray(v)) {
+      for (let i = 0; i < v.length; ++i) _contextAdd(v[i])
+    } else if (defines(v, context) !== undefined) {
+      let d = defines(v, context)
+      const m = _contextAdd.m
+      if (_isArray(d)) {
+        // `(…InputTypes OutputType)`
+        d = d[d.length-1]
+        if (!m.has(d)) m.set(d, _allocArray())
+        m.get(d).push(v)
+        return
+      }
+      _contextAdd(d)
+    } else if (v instanceof Map) {
+      v.forEach(_contextAdd)
+    } else if (defines(v, lookup) !== undefined) {
+      lookup(v).forEach(k => _contextAdd(v[k]))
+    } else if (v && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)) {
+      Object.keys(v).forEach(k => _contextAdd(v[k]))
+    } else error(v, 'in a context')
   },
 
   compose:{
     txt:`\`(compose Context …InputTypes OutputType)\`: generates a function that connects inputs of specified types to output.
-  A function can define \`compose Context …UnknownInputs\` to stage any code it wants in place of itself (or throw to deny composition in this case).`,
+A function can define \`compose Context …InputExprs OutputType\` to stage any code it wants in place of itself (or throw to deny composition in this case).`,
+    examples:[
+      [
+        `(compose (context F G) 'In' 'Out')
+F=(concept { call x->x+1 context ('In' 'Med') })
+G=(concept { call x->x*2 context ('Med' 'Out') })`,
+        `a→[G (F a) Med='Med'] a=?
+F=(concept { call x->x+1 context ('In' 'Med') })
+G=(concept { call x->x*2 context ('Med' 'Out') })`,
+      ],
+    ],
     call(ctx, ...types) {
-      // …A graph search, again — more efficient and easier to use this time…
+      const out = types[types.length-1], us = finish.v
+      let [exprs, vars] = interrupt(compose)
+      if (exprs === undefined) {
+        exprs = _allocMap()
+        vars = _allocArray()
+        for (let i=0; i < types.length-1; ++i) // Have each input in `exprs` (and in `vars`).
+          !exprs.has(types[i]) && exprs.set(types[i], _allocArray()), exprs.get(types[i]).push(vars[i] = [label])
+      }
+      let resultExpr
+      try { resultExpr = genExpr(out) }
+      catch (err) { if (err === interrupt) err(compose, 2)(exprs, vars), exprs = null;  throw err }
+      finally { exprs && _allocMap(exprs) }
+
+      const result = compile({cause:us}, ...vars, resultExpr)
+      const d = result[defines.key] = Object.create(null)
+      d[_id(argCount)] = types.length-1
+      d[_id(deconstruct)] = array(_function, ...vars, resultExpr)
+      d[_id(context)] = types
+      Object.freeze(d)
+      return result
+
+      function genExpr(out) {
+        // A complex interrupt/free game here.
+        let [options, i, firstStep, expr, j = 0, ints = _allocArray()] = interrupt(compose)
+        try {
+          _checkInterrupt()
+          while (true) {
+            // Get our options: those of the context and those of exprs.get(out).
+            if (options === undefined) {
+              options = ctx(out)
+              if (!options && !exprs.has(out)) error(out, 'is not in', ctx)
+              if (!options) options = _allocArray()
+              exprs.has(out) && options.push(...exprs.get(out))
+              ints.length = options.length
+            }
+            if (!options) error(out, 'is not in', ctx)
+            if (firstStep === undefined) firstStep = finish.env[_id(step)]
+
+            // On first entry, just pick an option.
+            if (i === undefined) i = pick(options, us, out)
+            // If we interrupted here or down below, remember and clean option's re-entry state (if down below), re-pick i, and restore the re-entry state.
+            else if (options.length > 1) if (ints[i] || expr !== undefined) {
+              if (!ints[i]) {
+                ints[i] = _allocArray();  ints[i].push(expr, j, finish.env[_id(interrupt)], finish.env[_id(step)])
+                expr = undefined, j = 0, finish.env[_id(interrupt)] = _allocArray(), finish.env[_id(step)] = firstStep
+              }
+              const next = pick(options, us, out)
+              if (ints[next])
+                [expr, j, finish.env[_id(interrupt)], finish.env[_id(step)]] = ints[next], _allocArray(ints[next]), ints[next] = null
+              i = next
+            }
+
+            let f = options[i], d = defines(f, context)
+            if (typeof f == 'function' && _isArray(d)) {
+              // genExpr every input, then add [f, ...inputs] to `exprs`.
+              if (!expr) expr = _allocArray()
+              for (; j < d.length-1; ++j)
+                expr.push(genExpr(d[j]))
+              if (typeof defines(f, compose) == 'function')
+                try { f = defines(f, compose)(ctx, ...expr, out) }
+                catch (err) { // If our override throws, remove this option and search for another one.
+                  [options[i], options[options.length-1]] = [options[options.length-1], options[i]], options.pop()
+                  [ints[i], ints[ints.length-1]] = [ints[ints.length-1], ints[i]], ints.pop()
+                  _allocArray(expr)
+                  i = undefined, expr = undefined, j = 0
+                  continue
+                }
+              else expr.unshift(f), f = expr
+            }
+            // Remember and return the option.
+            !exprs.has(out) && exprs.set(out, _allocArray()), exprs.get(out).push(f)
+            _allocArray(options)
+            _allocArray(ints)
+            return f
+          }
+        } catch (err) { if (err === interrupt) err(compose, 6)(options, i, firstStep, expr)(j, ints); else _allocArray(ints);  throw err }
+      }
     },
   },
 
