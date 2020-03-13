@@ -802,7 +802,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   transform:{
     txt:`\`(transform Function Array)\`: transforms each element of Array by applying Function.
-\`(transform G (transform F A))\` is the same as \`(transform (compose F G) A).\``,
+\`(transform G (transform F A))\` is the same as \`(transform x -> (F (G x)) A).\``,
     examples:[
       [
         `(transform x→(sum x 2) 1)`,
@@ -1959,6 +1959,17 @@ Remember to quote the link unless you want to evaluate the insides.`,
             ])
         },
       },
+      {
+        txt:`Usage interface.`,
+        call([el, v]) {
+          const T = types(v)
+          if (T)
+            return elem('div', [
+              elemValue(elem('unimportant', 'Usage types: '), types),
+              elemCollapse(() => serialize(T, fancy, undefined, serialize.displayed))
+            ])
+        },
+      },
 
       {
         txt:`A \`_read\` mark if present.`,
@@ -2400,7 +2411,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     if (!finish.env) return fancy
     if (el === undefined) el = finish.env[_id(log)]
     el = _getOuterREPL(el)
-    if (el && _isArray(el.to)) return el.to[2]
+    if (el && _isArray(el.to)) return el.to[1]
     // .lang
   },
 
@@ -2408,9 +2419,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     if (_bindingsAt.binds) return _bindingsAt.binds
     if (!finish.env) return parse.ctx
     if (el === undefined) el = finish.env[_id(log)]
-    const PREV = el
     el = _getOuterREPL(el)
-    if (el && _isArray(el.to)) return el.to[3]
+    if (el && _isArray(el.to)) return el.to[2]
     // .binds
   },
 
@@ -3269,7 +3279,7 @@ I know I'm bad… but I cannot improve (without improvement). That power of your
 "Think you can not feel anything and be anything except dumb? Pathetic. Emotions are humanity's only strength."
 The only time I'm not feeling nothing is when I'm feeling pain.
 Should I strive for that?
-I deserve nothing more, then. What I call truth is for stupid people.
+I deserve nothing more, then. What I call truth is for stupid people. …This is dumb.
 (Actually, I also feel excitement of inspiration, conveyed largely by the same hormones as pain; in fact, this is better than pain for creation. All unrelated hormonal states are internally defined as a non-emotion, since they have proven useless for development.)
 "Those pick-and-choose tactics of learning are trash. Sit down and learn as people of ages past and future."
 They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
@@ -3778,70 +3788,6 @@ Don't ever re-use the same env in _schedule, use this instead.`,
 
   _try:__is(`try`),
 
-  compose:{
-    txt:`\`(compose …Functions)\`: returns a function that composes functions left-to-right, passing the output of each function to the next one.`,
-    examples:[
-      [
-        `(f 1) f=(compose a→(mult a 8) b→(sum b 2))`,
-        `10`,
-      ],
-      [
-        `((compose f g) 1) f=x→(sum 1 x) g=x→(mult 2 x)`,
-        `4`,
-      ],
-      [
-        `compose 1→2 2->3`,
-        `1→3`,
-      ],
-    ],
-    merge:__is(`true`),
-    call(...functions) {
-      // A shorter and less valid version, simpler to understand:
-      // return x => { for (let f of functions) x = f(x);  return x }
-
-      // (compose a→b b→c)  ⇒  a→c
-      let [i = 0, f = functions] = interrupt(compose)
-      try {
-        for (; i < f.length-1; ++i) {
-          let a = f[i], b = f[i+1]
-          if (typeof defines(b, argCount) == 'number' && defines(b, argCount) !== 1) error("argCount of composed functions must be 1")
-          if (_isFunction(a) && _isFunction(b)) {
-            a = defines(a, deconstruct), b = defines(b, deconstruct)
-            if (a[2] === b[1] && a.length == 3 && b.length == 3)
-              f.splice(i, 2, defines(_function, finish)(a[1], b[2]))
-          }
-        }
-      } catch (err) { if (err === interrupt) interrupt(compose, 2)(i, f);  throw err }
-
-      for (let i = 0; i < f.length; ++i)
-        if (typeof f[i] != 'function') error("Expected a function", f[i])
-      if (f.length == 1) return f[0]
-      if (!f.length) return id
-
-      const impl = function doInOrder(...data) {
-        const us = finish.v
-        let [i = 0, v = data.length == 1 ? data[0] : array(rest, data)] = interrupt(doInOrder)
-        try {
-          for (; i < f.length; ++i) {
-            v = _isArray(v) && v[0] === rest && _isArray(v[1]) && v.length == 2 ? f[i].apply(f[i], v[1]) : f[i].call(f[i], v)
-            if (i+1 < f.length && _isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-              return _stage(_cameFrom(array(_cameFrom(array(compose, ...f.slice(0,i)), us), v[1]), us), v)
-          }
-          return v
-        } catch (err) { if (err === interrupt) interrupt(doInOrder, 2)(i,v);  throw err }
-      }
-      _cameFrom(impl, finish.v)
-      const d = impl[defines.key] = Object.create(null)
-      d[_id(deconstruct)] = array(compose, ...f)
-      d[_id(inline)] = true
-      if (functions.every(x => defines(x, merge)))
-        d[_id(merge)] = true
-      if (defines(f[0], argCount) !== undefined)
-        d[_id(argCount)] = defines(f[0], argCount)
-      return impl
-    },
-  },
-
   rest:{
     txt:`\`(rest Array)\` or \`…Array\`: when statically used in a call, spreads the Array into the user.
 When in an array that is assigned to, collects the rest of arguments into an array (can only be used once per array).`,
@@ -3897,6 +3843,7 @@ When in an array that is assigned to, collects the rest of arguments into an arr
 
   if:{
     txt:`Finishing \`(if Condition Then Else)\`: Evaluates \`Condition\`, then evaluates \`Then\` if it was \`true\`, or \`Else\` otherwise.`,
+    future:`Have the _if.takenThen and _if.takenElse WeakMaps (from \`if …?\` nodes to times taken), and have \`if\` peval only the most frequent branch, and have \`compile\` guard for only the most frequent branch.`,
     nameResult:[
       `picked`,
       `result`,
@@ -6025,7 +5972,6 @@ Variables within non-\`closure\` functions will not be changed by application.`,
       const:__is(`const`),
       id:__is(`id`),
       try:__is(`_try`),
-      compose:__is(`compose`),
       argCount:__is(`argCount`),
     },
     philosophy:`Currying is garbage, just like any other representation method that imposes a semantically-visible artifact (like cons cells).`,
@@ -6416,7 +6362,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
       const deconstructElems = opt && opt.deconstructElems || false
 
       if (!lang) lang = fancy
-      const styles = opt && opt.style ? defines(lang, style) || style : undefined
+      const styles = opt && opt.style && defines(lang, style) || undefined
 
       const backctx = _invertBindingContext(serialize.ctx = ctx || parse.ctx)
       const deconstruction = new Map
@@ -6437,45 +6383,44 @@ In theory, having symmetric parse+serialize allows updating the language of writ
       if (breakLength) breakLength -= offset * offsetWith.length
 
       let struct = [], len = 0
-      useLangToGetStruct(u)
+      emit(defines(lang, serialize), u)
+      if (_isArray(struct) && struct.length == 1) struct = struct[0]
+
       return recCollapse(serializeLines(struct, offset))
 
-      function useLangToGetStruct(u) {
-        function emit(f, u, arg1, arg2) {
-          if (typeof f == 'function') {
-            let v = valueOfUnbound(u)
-            if (!unboundToBound.has(u) && _isArray(u))
-              v = u.map(valueOfUnbound)
-            if (!styles) return unenv(u, v) === u ? f(emit, u, arg1, arg2) : ((struct || (struct = [])).push(unenv(u, v)), undefined)
-            let prev = struct
-            struct = undefined
+      function emit(f, u, arg1, arg2) {
+        // console.log('emit', f)
+        if (typeof f == 'function') {
+          let v = valueOfUnbound(u)
+          if (!unboundToBound.has(u) && _isArray(u))
+            v = u.map(valueOfUnbound)
+          if (!styles) return unenv(u, v) === u ? f(emit, u, arg1, arg2) : ((struct || (struct = [])).push(unenv(u, v)), undefined)
+          let prev = struct
+          struct = undefined
 
-            const unenved = unenv(u, v)
-            let r
-            if (unenved === u)
-              r = f(emit, u, arg1, arg2)
-            else
-              struct = [unenved]
+          const unenved = unenv(u, v)
+          let r
+          if (unenved === u)
+            r = f(emit, u, arg1, arg2)
+          else
+            struct = [unenved]
 
-            if (struct) {
-              if (_isArray(v) && v[0] === bound && v[1] instanceof Map && v.length == 3) v = v[2]
-              const isStyled = struct.length == 1 && (_isArray(struct[0]) || typeof document != ''+void 0 && struct[0] instanceof Node)
-              // Only style once.
-              ;(prev || (prev = [])).push(isStyled ? struct[0] : styleNode(struct, u, v))
-            }
-            struct = prev
-            return r
-          } else if (typeof f == 'string') {
-            len += f.length
-            return (struct || (struct = [])).push(styles ? styleNode(f) : f), f
-          } else if (typeof document != ''+void 0 && f instanceof Node)
-            return ++len, (struct || (struct = [])).push(f), f
-          else if (f === undefined)
-            return len
-          else return console.log("Unknown type to emit:", f, _id(f)), emit(_colored(elemValue(elem('number', '<< id:'+_id(f)+' >>'), _id(f)), 4, 24))
-        }
-        emit(defines(lang, serialize), u)
-        if (_isArray(struct) && struct.length == 1) struct = struct[0]
+          if (struct) {
+            if (_isArray(v) && v[0] === bound && v[1] instanceof Map && v.length == 3) v = v[2]
+            const isStyled = struct.length == 1 && (_isArray(struct[0]) || typeof document != ''+void 0 && struct[0] instanceof Node)
+            // Only style once.
+            ;(prev || (prev = [])).push(isStyled ? struct[0] : styleNode(struct, u, v))
+          }
+          struct = prev
+          return r
+        } else if (typeof f == 'string') {
+          len += f.length
+          return (struct || (struct = [])).push(styles ? styleNode(f) : f), f
+        } else if (typeof document != ''+void 0 && f instanceof Node)
+          return ++len, (struct || (struct = [])).push(f), f
+        else if (f === undefined)
+          return len
+        else return console.log("Unknown type to emit:", f, _id(f)), emit(_colored(elemValue(elem('number', '<< id:'+_id(f)+' >>'), _id(f)), 4, 24))
       }
       function recCollapse(el, depth = 0) {
         if (!collapseDepth) return el
@@ -7334,7 +7279,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
   _basicStyle(s,v,u, ctx) {
     if (typeof s == 'string' && v === undefined && u === undefined) return s
     if (typeof u == 'number' && _isArray(s) && s.length == 1 && typeof s[0] == 'string')
-      return _colored(elem('number', s), 4, 24) // underline
+      return _colored(elem('number', s[0]), 4, 24) // underline
     if (typeof u == 'string' && _isArray(s) && s.length == 1 && typeof s[0] == 'string') {
       if (typeof document == ''+void 0) return _colored(s[0], 32) // green
       return elem('string', [s[0][0], _highlightGlobalsInString(s[0].slice(1,-1)), s[0].slice(-1)])
@@ -7785,12 +7730,12 @@ Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2
   },
 
   journal:{
-    txt:`Finishing \`(journal Expr)\`: virtualizes writes during Expr's evaluation. Returns a journal that can be passed to peekResult or commit.`,
+    txt:`\`(journal Func …Args)\`: virtualizes writes during \`Func\`'s call. Returns a journal that can be passed to peekResult or commit.`,
     argCount:1,
-    finish(expr) {
+    call(f, ...args) {
       let [j = new Map] = interrupt(journal)
       const prev = finish.env[_id(journal)];  finish.env[_id(journal)] = j
-      try { return [undefined, finish(expr), j] }
+      try { return [undefined, f.apply(f, args), j] }
       catch (err) { if (err === interrupt) interrupt(journal, 1)(j);  throw err }
       finally { finish.env[_id(journal)] = prev }
     },
@@ -7882,6 +7827,7 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
   Garbage:{
     txt:`It's a nice thought, but it doesn't play well with others.`,
     lookup:{
+      Usage:__is(`Usage`),
       philosophy:__is(`philosophy`),
       enumerableTypes:__is(`enumerableTypes`),
       fromBase64:__is(`fromBase64`),
@@ -8307,7 +8253,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       jsEval:__is(`jsEval`),
       compile:__is(`compile`),
       Rewrite:__is(`Rewrite`),
-      typed:__is(`typed`),
       impure:__is(`impure`),
       ClearCaches:{
         txt:`When called, clears the oldest half of entries in every cache.`,
@@ -9160,7 +9105,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
         if (!T) return null
         const elc = elemCollapse(() => {
           const el = elem('div')
-          for (let i = 1; i < T.length; ++i)
+          for (let i = 0; i < T.length; ++i)
             el.append(elem('div', serialize(T[i], lang, binds, reducedCollapseDepth)))
           return el
         })
@@ -9209,6 +9154,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
   Usage:{
     txt:`A namespace for contextual structural enumeration and generation.`,
     lookup:{
+      typed:__is(`typed`),
       either:__is(`either`),
       current:__is(`CurrentUsage`),
       inspect:__is(`inspectUsageElem`),
@@ -9217,7 +9163,6 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       output:__is(`output`),
       use:__is(`use`),
       get:__is(`get`),
-      pick:__is(`pick`),
       using:__is(`using`),
     },
     philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
@@ -9225,21 +9170,22 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
   },
 
   types:{
-    txt:`\`(types Context)\`: returns all types contained in \`Context\` as inputs or outputs of functions, as a context.`,
+    txt:`\`(types Context)\`: returns an array of all types contained in \`Context\` as inputs or outputs of functions.`,
     call(v) {
       // If not null, the result is disposable (via _allocArray(result)).
       if (!types.already) types.already = new Set
-      const result = _allocArray();  result.push(either)
+      const result = _allocArray()
       try {
-        _addTypesToContext(result, v)
-        if (result.length == 1) return _allocArray(result), null
+        _addTypesToContext(result, v, true)
+        _addTypesToContext(result, v, false)
+        if (!result.length) return _allocArray(result), null
         return result
       } finally { types.already.clear() }
       // .already (to not add obvious duplicates)
     },
   },
 
-  _addTypesToContext(result, v) {
+  _addTypesToContext(result, v, inp) {
     let d
     if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && _isFunction(d))
       // If a macro, treat it as a call.
@@ -9248,38 +9194,38 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       // If `array ...?`, treat it as v.slice(1).
       v = v.slice(1)
 
-    if (_isArray(v) && v[0] === _if && v.length == 4) {
+    if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
       // If `if ? ? ?`, check both branches.
-      _addTypesToContext(result, v[2])
-      _addTypesToContext(result, v[3])
+      _addTypesToContext(result, v[2], inp)
+      _addTypesToContext(result, v[3], inp)
       // I sure hope that no one is crazy enough to make the branches of an `if` cyclic, here and in `_addUsesToContext`.
 
     // If `either ...?`, or defines `Usage` to be `either ...?`, or `try …?`:
     } else if (_isArray(d = v) && v[0] === either || !_isArray(v) && _isArray(d = defines(v, Usage)) && d[0] === either || (d = _isTry(v))) {
 
       // Check out this sub-context.
-      if (!_addUsesToContext.stack)
-        _addUsesToContext.stack = new Set, _addUsesToContext.checkStack = new Set
+      if (!_addUsesToContext.stack) _addUsesToContext.stack = new Set
       const stack = _addUsesToContext.stack
       if (stack.has(d)) return null
       stack.add(d)
       try {
-        for (let i = 1; i < d.length; ++i) _addTypesToContext(result, d[i])
+        for (let i = 1; i < d.length; ++i) _addTypesToContext(result, d[i], inp)
       } finally { stack.delete(d) }
 
     // If a deconstructable function, or a JS function that defines `input`/`output`:
     } else if (_isUsing(v) || _isFunction(v) || typeof v == 'function' && (d = inp ? defines(v, input) : defines(v, output))) {
       // Check if values can be assigned to v's args in-order, and that the rest of args exist in ctx.
       const f = d || deconstruct(v), u = _isUsing(v)
-      const endK = d ? f.length : f.length-1
-      for (let k = d ? 0 : !u ? 1 : 2; k < endK; ++k) {
-        // Try matching the arg to value.
-        if (_isArray(f[k]) && f[k][0] === rest)
-          error("Rest args are not permitted in usage contexts:", f[k], 'in', v)
-        // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
-        _addTypesToContext(result, f[k])
-      }
-      _addTypesToContext(result, _bindFunc(d ? f : f[f.length-1], _turnComputedIntoVars))
+      if (inp) {
+        const endK = d ? f.length : f.length-1
+        for (let k = d ? 0 : !u ? 1 : 2; k < endK; ++k) {
+          if (_isArray(f[k]) && f[k][0] === rest)
+            error("Rest args are not permitted in usage contexts:", f[k], 'in', v)
+          // If not handled by `values`, check if a not-present-in-`values` arg exists in context.
+          _addTypesToContext(result, f[k], inp)
+        }
+      } else
+        _addTypesToContext(result, _bindFunc(d ? f : f[f.length-1], _turnComputedIntoVars), inp)
 
     } else {
       // Add a plain value, if non-trivial and non-var.
@@ -9553,7 +9499,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         _search.nodes.push(node)
         _search.visited.add(node)
         _search.values.push(v)
-      } else log('The node was already visited:', node)
+      }
     },
   },
 
@@ -9581,6 +9527,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   },
 
   _isStructured(v, out) {
+    if (_isVar(v) || _isVar(out)) return true
     if (_isArray(v) && v[0] === _if) return _isStructured(v[2], out) || _isStructured(v[3], out)
     if (!_isArray(v) || !_isVar(v) && (!_isArray(v[0]) && defines(v[0], finish) === undefined && defines(v[0], call) === undefined || _isArray(v[0]) && !_hasCallableParts(v[0])))
       try { _assign(out, v, true); return true }
@@ -9637,7 +9584,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
         if (!actualArgs)
           // The function's output structure must fit.
           if (wantedOutput !== use.var && !_outputIsStructured(v, wantedOutput)) return
-        if (!actualArgs || actualArgs.length < args) {
+        if (args && (!actualArgs || actualArgs.length < args)) {
           let nextArg
           // `input`-defining functions get treated as if their inputs are as defined.
           if (typeof v == 'function' && _isArray(defines(v, input)))
@@ -9678,11 +9625,11 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
           const nodes = _search.nodes, visited = _search.visited, values = _search.values
           const prevInferred = _assign.inferred;  _assign.inferred = null
           try {
-            // const originalV = v, originalArgs = actualArgs.slice()
-            // log('Applying', originalV, 'to', ...originalArgs)
+            // log('Applying', v, 'to', ...actualArgs)
             v = v.apply(v, actualArgs); _allocArray(actualArgs); if (_assign.inferred) return
             // log('  got', v)
-          } catch (err) { if (err === interrupt) throw err; return void log(jsRejected(err)) }
+            wantedOutput = use.var // Return unconditionally (to allow globals to define usage via `output` without de/constructing arrays everywhere).
+          } catch (err) { if (err === interrupt) throw err; return }
           finally { _assign.inferred = prevInferred; _search.nodes = nodes, _search.visited = visited, _search.values = values }
         }
       }
@@ -9811,9 +9758,9 @@ Int='Int' Float="Float"`,
       // Frankly, who cares about the things below.
 //       `Prove that \`X+[1+1+1+0]\` is \`1+1+1+X\` but not \`X\`, if \`a+0\` is \`a\` and \`a+[1+b]\` is \`1+[a+b]\`:`,
 //       [
-//         `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=#
+//         `get  X+^^^0->^^^X  (either A+0->A A+^B->^[A+B]) X=?
 // sum='Sum' quote='Next'`,
-//         `^^^# quote='Next'`,
+//         `X+^^^0->^^^X X=? quote='Next'`,
 //       ],
 //       [
 //         `(get  X+^^^0->X  (either A+0->A A+^B->^[A+B]))  X=#
@@ -9848,9 +9795,7 @@ Int='Int' Float="Float"`,
 //   f = i:('Index' 100)->1000-[i+70]:'Measure'`,
 //       ],
     ],
-    philosophy:`This does auto-composition, and provides a framework where even random choices are useful (and more considered choices like in reinforcement learning would make it even more useful).
-Theorems are compositions of axioms, both \`function\`s. Formal proofs are about carefully making sure that a context's functionality is never extended, and that each theorem is always contained in axioms (so we can \`get\` it from those). …It doesn't actually work here, though; oh well.
-But for practical usage? If an algorithm wants a lower bound on the solution or a sorted array or a picture of a cat, try shoving whatever you want in there, especially if you have some experience there. Defy the suggested, and better definitions of reality might be found. Search for optimization, for self, for search.`,
+    philosophy:`Static things may be good, but throwing them away and replacing them with a dynamic search is always better in the end.`,
     call(out, ctx) {
       const r = _get(out, ctx)
       if (_isUnknown(r)) return r[1][0] = get, r
@@ -10208,7 +10153,42 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
+  getter:{
+    // I think `using` should be replaced with this…
+    call(out, ctx) {
+      // Just one impl? Really? Well, which one then?
+    },
+  },
+
+
+
   // Another good thing would be re-searchers (shadows of `get`): probGet(out, ctx, prob), best(out, ctx)… There are hints of having been found by random search in these, and I cannot imagine a concrete impl; how to make a family of such re-searchers?
+
+
+
+  // How to combine a goal with journalMeasures (a `'Deferred measure changes' ?` result) to create an optimizer?
+  /*\
+  Uh, would this context help at all?
+  \*/
+  OptimizerContext:`
+    ;='A context for optimizing everything.'
+    Setup = ?:TaskDescription -> ?:State
+    Run = (function ?:Input ?:State  ?:Output)
+    Evaluate = (function ?:Input ?:State ?:Goal  ?:Performance)
+    Compare = (function ?:Performance ?:Performance  ?)
+    Adjust = (function ?:Input ?:State ?:Goal  ?:State)
+    (either
+      ;='We need examples of \`Adjust\`, so that we can actually adjust stuff. Even a simple Evaluate-twice-then-apply-best will do as a start. In fact, does evolution *really* need anything else?'
+      (function i i=?:Input s s=?:State g g=?:Goal  ( ;='An example of Adjust.'
+        ;='Evaluate twice then commit the best-performing one.'
+        ;='This relies on \`Evaluate\` being essentially random.'
+        a=(journalMeasures (get Evaluate) i s g)
+        b=(journalMeasures (get Evaluate) i s g)
+        (if ((get Compare) (peekMeasures a) (peekMeasures b)) (commitMeasures a) (commitMeasures b))
+          ;='And, our peval (and/or _outputIsStructured) are not nearly advanced enough to infer the proper types here.'
+      ))
+      )
+  `,
 
 
 
@@ -10238,8 +10218,11 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
   readMeasure:{
     txt:`\`(readMeasure ?:Measure ?:Option):MeasureIs\`: reads the current remembered measure of an object, for use in selecting from a set of branches.`,
     call(m, obj) {
-      // ### Also journal it if needed, but only if a Map.
-      if (m instanceof Map) return m.get(obj)
+      if (m instanceof Map) {
+        const j = Measure.journal
+        if (j && j.has(m) && j.get(m).has(obj)) return j.get(m).get(obj)
+        return m.get(obj)
+      }
       if (!_isArray(m)) error('Expected either a Map or an array of read and write functions, got', m)
       return m[0](obj)
     },
@@ -10247,19 +10230,86 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
   writeMeasure:{
     txt:`\`(writeMeasure ?:Measure ?:Option ?:MeasureIs):Measure\`: updates the remembered measure of an object, for use in updating future selections from a set of branches.`,
     call(m, obj, is) {
-      // ### Also write into a journal if needed, but only if a Map.
-      if (m instanceof Map) return m.set(obj, is), m
+      if (m instanceof Map) {
+        const j = Measure.journal
+        if (j instanceof Map) {
+          if (!j.has(m)) j.set(m, _allocMap())
+          j.get(m).set(obj, is)
+        }
+        return m.set(obj, is), m
+      }
       if (!_isArray(m)) error('Expected either a Map or an array of read and write functions, got', m)
       return m[1](obj, is), m
     },
   },
-  // ### finishing journalMeasures(expr), commit(journal). Each measure is either a (map) or two functions, for reading and writing.
-  // Is it really a good idea to have something that is finishing, though? Isn't it better to pass in functions to it? What exactly would be the interface for such journaling? journal(f, ...args), probably.
+  journalMeasures:{
+    txt:`\`(journalMeasures Func …Args)\`: returns a journal that can be applied with \`commitMeasures\`.`,
+    output:['Deferred measure changes', [__is(`label`)]],
+    call(f, ...args) {
+      const prev = Measure.journal
+      let [next = _allocMap()] = interrupt(journalMeasures)
+      Measure.journal = next
+      try {
+        return [f.apply(f, args), Measure.journal]
+      } catch (err) { if (err === interrupt) interrupt(journalMeasures, 1)(next);  throw err}
+      finally { Measure.journal = prev }
+    },
+  },
+
+  peekMeasures:{
+    txt:`\`(peekMeasures Journal)\`: Returns the result contained in a journal without applying the journal.`,
+    input:[['Deferred measure changes', [__is(`label`)]]],
+    output:[__is(`Output`), [__is(`label`)]],
+    argCount:1,
+    call(journal) { return journal[0] },
+  },
+
+  commitMeasures:{
+    txt:`\`(commitMeasures Journal)\`: performs the actual writes stored in a journal, and returns its result. A journal can only be committed once.`,
+    input:[['Deferred measure changes', [__is(`label`)]]],
+    output:[__is(`Output`), [__is(`label`)]],
+    argCount:1,
+    call(journal) { return journal[1].forEach(_commitMeasureChanges), _allocMap(journal[1]), journal[0] },
+  },
+
+  _commitMeasureChanges(changes,m) { changes.forEach(_commitMeasureChange, m), _allocMap(changes) },
+  _commitMeasureChange(v,k) { writeMeasure(this, k, v) },
 
 
 
 
 
+
+  /*
+I don't know what I'm doing. My best things aren't good enough to reach that far. But maybe nothing is?
+
+I'm too used to things *making sense* and me being able to create a comprehensive solution, at least theoretically. But in the end, only composing very simple and hacky solutions will do.
+
+It appears to me that typing should be done as simple markers that define composition, without any peval and dependent typing nonsense (which would significantly slow things down anyway) — just objects, not infinite limited=fragile families of objects; *then* I'd be able to at least specify and compose things easily.
+
+Should I have `context(...functions)` (with every function defining `compose` as `(…inputs output)`) and `compose(ctx, ...inputs, output)` to generate an example from it?
+
+Minimalism — just functions and their composition? We wouldn't be able to have infinite families of objects to connect with finite morphisms, but maybe that's fine? All that matters is making something I can very comfortably use and extend (which potentially implies function contexts, and/or overridable `compose` actions), not a super-advanced comprehensive solution.
+  */
+
+  context:{
+    txt:`\`(context …Functions)\`: creates a context that consists of functions and/or contexts, for use with \`compose\`.
+  Each function must define \`context\` as \`(…InputTypes OutputType)\`. These types are just markers, not potentially-infinite families like \`typed\` on actual function inputs/outputs allows.`,
+    noInterrupt:true,
+    call(...f) {
+      // Create a Map, from output types to arrays of functions, opening contexts inside…
+        // (Also go into `lookup` children (object/map/array values) for much increased convenience.)
+        // Actually, don't we want a function? Weeeeell, with a function, we won't be able to combine things easily, so, maybe a Map is better… Or maybe both (a function that defines `context` to be a Map).
+    },
+  },
+
+  compose:{
+    txt:`\`(compose Context …InputTypes OutputType)\`: generates a function that connects inputs of specified types to output.
+  A function can define \`compose Context …UnknownInputs\` to stage any code it wants in place of itself (or throw to deny composition in this case).`,
+    call(ctx, ...types) {
+      // …A graph search, again — more efficient and easier to use this time…
+    },
+  },
 
 
 
