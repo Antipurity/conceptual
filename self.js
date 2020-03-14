@@ -1810,7 +1810,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
     },
   },
 
-  _updateMaxScrollBegin() { return scrollY >= document.documentElement.scrollHeight - innerHeight - 5 },
+  _updateMaxScrollBegin() { return _smoothHeight.disabled && scrollY >= document.documentElement.scrollHeight - innerHeight - 5 },
 
   _updateMaxScrollEnd(begin) { if (begin) scrollBy(0, 1000) },
 
@@ -3530,11 +3530,11 @@ If any promises the job depends on have a method .cancel, calls those.`,
       }
       finish.env = undefined
       if (DOM) {
-        if (_jobs.expr.length) _jobsResume(_jobs.CPU ? Math.min(_jobs.duration / +_jobs.CPU.value - _jobs.duration, 1000) : 0)
+        if (_jobs.expr.length) _jobsResume(_jobs.cpu ? Math.min(_jobs.duration / +_jobs.cpu.value - _jobs.duration, 1000) : 0)
         _jobs.display(_jobs.indicator)
       } else if (_jobs.expr.length)
         _jobsResume()
-      // _jobs.expr (Array), _jobs.duration (Number), _jobs.reEnter (true or a _schedule-replacing function), _jobs.indicator, _jobs.CPU
+      // _jobs.expr (Array), _jobs.duration (Number), _jobs.reEnter (true or a _schedule-replacing function), _jobs.indicator, _jobs.cpu
     },
   },
 
@@ -5317,7 +5317,7 @@ Somewhat usable in a REPL.`,
             const B = serialize(b)
             if (!_isArray(result) || result[0] !== jsRejected) {
               const A = serialize(result)
-              if (A !== B) ++failed, log(ss('Not equal:'), A, B), log(ss('a'), a, ss('⇒')), log(ss('A'), result, ss('≠')), log(ss('b'), b)
+              if (A !== B) ++failed, log(ss('Not equal:')), log(ss('a'), a, ss('⇒')), log(ss('A'), result, ss('≠')), log(ss('b'), b)
             } else {
               ++failed, log(ss('Got an error'), ...result.slice(1)), log(ss('a'), a), log(ss('b'), b)
             }
@@ -10308,51 +10308,73 @@ Minimalism — just functions and their composition? We wouldn't be able to have
 
   context:{
     txt:`\`(context …Functions)\`: creates a context that consists of functions and/or contexts, for use with \`compose\`.
-Each function must define \`context\` as \`(…InputTypes OutputType)\`.`,
+Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a function of \`OutputType\` to be a context, or a map).`,
     philosophy:`These types are just markers, not potentially-infinite families like \`V:T\` on actual function inputs/outputs allows. We move beyond imposition of a particular (AKA limited and thus ultimately fragile) structure on objects, and instead allow contexts to override search arbitrarily (via being a function from \`OutputType\` to a disposable array of all functions that likely return that).`,
     noInterrupt:true,
     merge:true,
     call(...f) {
       const m = _allocMap()
-      if (!_contextAdd.got) _contextAdd.got = new Set
-      _contextAdd.m = m
-      try { _contextAdd(f) }
-      finally { _contextAdd.got.clear(), _contextAdd.m = undefined }
+      if (!context.got) context.got = new Set, context.ctx = Symbol('customContext')
+      context.m = m
+      try { add(f) }
+      finally { context.got.clear(), context.m = undefined }
 
-      function impl(out) { let a;  return !m.has(out) ? null : (a = _allocArray(), a.push(...m.get(out)), a) }
-      const d = impl[defines.key] = Object.create(null)
+      let result
+      if (!m.has(context.ctx))
+        result = function(out) { let a;  return !m.has(out) ? null : (a = _allocArray(), a.push(...m.get(out)), a) }
+      else
+        result = function impl(out) {
+          // Does the same as `return [m.get(out) || [], ...m.get(context.ctx).map(c => c(out) || [])].flat()` if disregarding interrupts.
+          if (!m.has(out)) return null
+          const c = m.get(context.ctx)
+          let [a = _allocArray(), i = c.length] = interrupt(impl)
+          try {
+            if (i === c.length) a.push(...m.get(out)), i = 0
+            for (; i < c.length; ++i)
+              { const r = c[i](out);  _isArray(r) && (a.push(...r), _allocArray(r)) }
+            return a
+          } catch (err) { if (err === interrupt) err(impl, 2)(a, i);  throw err }
+        }
+      const d = result[defines.key] = Object.create(null)
       d[_id(context)] = m
       d[_id(deconstruct)] = array(context, ...f)
       d[_id(argCount)] = 1
       Object.freeze(d)
-      return impl
-    },
-  },
+      return result
 
-  _contextAdd(v) {
-    // Fill a Map, from output types to arrays of functions, opening contexts inside.
-    // Also go into `lookup` children (object/map/array values) for much increased convenience. Only arrays directly in definitions of `context` have special form.
-    if (_contextAdd.got.has(v)) return; else _contextAdd.got.add(v)
-    if (_isArray(v)) {
-      for (let i = 0; i < v.length; ++i) _contextAdd(v[i])
-    } else if (defines(v, context) !== undefined) {
-      let d = defines(v, context)
-      const m = _contextAdd.m
-      if (_isArray(d)) {
-        // `(…InputTypes OutputType)`
-        d = d[d.length-1]
-        if (!m.has(d)) m.set(d, _allocArray())
-        m.get(d).push(v)
-        return
+      function add(v) {
+        // Fill a Map, from output types to arrays of functions, opening contexts inside.
+        // Also go into `lookup` children (object/map/array values) for much increased convenience. Only arrays directly in definitions of `context` have special form.
+        if (context.got.has(v)) return; else context.got.add(v)
+        if (_isArray(v)) {
+          for (let i = 0; i < v.length; ++i) add(v[i])
+        } else if (defines(v, context) !== undefined) {
+          let d = defines(v, context)
+          const m = context.m
+          if (typeof d == 'function') { // Invoke and add the result (if any) to options every time.
+            if (!m.has(context.ctx)) m.set(context.ctx, _allocArray())
+            m.get(context.ctx).push(d)
+            return
+          }
+          if (_isArray(d)) {
+            // `(…InputTypes OutputType)`
+            d = d[d.length-1]
+            if (!m.has(d)) m.set(d, _allocArray())
+            m.get(d).push(v)
+            return
+          }
+          add(d)
+        } else if (v instanceof Map) {
+          v.forEach(add)
+        } else if (defines(v, lookup) !== undefined) {
+          lookup(v).forEach(k => add(v[k]))
+        } else if (v && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)) {
+          Object.keys(v).forEach(k => add(v[k]))
+        } else error(v, 'in a context')
       }
-      _contextAdd(d)
-    } else if (v instanceof Map) {
-      v.forEach(_contextAdd)
-    } else if (defines(v, lookup) !== undefined) {
-      lookup(v).forEach(k => _contextAdd(v[k]))
-    } else if (v && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)) {
-      Object.keys(v).forEach(k => _contextAdd(v[k]))
-    } else error(v, 'in a context')
+
+      // .got, .ctx, .m
+    },
   },
 
   compose:{
@@ -10404,7 +10426,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
               exprs.has(out) && options.push(...exprs.get(out))
               ints.length = options.length
             }
-            if (!options) error(out, 'is not in', ctx)
+            if (!options.length) error(out, 'is not in', ctx)
             if (firstStep === undefined) firstStep = finish.env[_id(step)]
 
             // On first entry, just pick an option.
@@ -10448,6 +10470,8 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       }
     },
   },
+
+  // Now, what I need are, well, example contexts… in particular a function that re-composes itself dynamically (able to handle self-reference)… and goals, and dynamic-recomposition-with-goal that keeps the best things… and copy/mutation by culling the context… And deferring `pick`s till runtime — how is this one done (more importantly, *when*); maybe it is better to have a `dynamic` function-composing (with a choice source) function?
 
 
 
