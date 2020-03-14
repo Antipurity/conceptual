@@ -225,6 +225,7 @@ Globals={
 
   "eval" eval eval=(js "(x, binds) => {
     // (This is \`finish\` in the bigger lang, with \`binds\` stored in \`finish.env[_id(label)]\`.)
+      // ### Should adapt this in the bigger lang, as \`evalCalls Graph\`; also have \`compileCalls Graph\` and \`(_evalIndexes ?:Graph):ArrayOfIndexesThatEvalCallsWillBeCalledOn\`. Simplicity.
     if (Array.isArray(x)) {
       // Evaluate each graph node once, in a given function call. Remember bindings.
       if (binds.has(x)) return binds.get(x)
@@ -528,7 +529,7 @@ Label-binding environment is not preserved.`,
       try {
         while (true) {
           v = finish(expr)
-          if (_isUnknown(v)) return console.log(v), _stage(_cameFrom(array(repeat, v[1], iterations), us), v)
+          if (_isUnknown(v)) return _stage(_cameFrom(array(repeat, v[1], iterations), us), v)
           _checkInterrupt(us)
           newLabel.clear()
           done = true
@@ -1934,8 +1935,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
               }, .1)
             }
             return elemValue(area, v)
-          } else
-            // Display the globals the expression binds to, and an expandable basic definition.
+          } else if (_isArray(v) || !v || typeof v != 'object' && typeof v != 'function')
+            // If not a deconstructable thing, display the globals the expression binds to, and an expandable basic definition.
             return elem('div', [
               permissionsElem(v),
               elem('div', [
@@ -1943,6 +1944,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
                 elemValue(elemCollapse(() => _collapsedSerialization(v)), v),
               ]),
             ])
+          else return permissionsElem(v) // Display the globals the deconstruction binds to.
         },
       },
       {
@@ -2462,7 +2464,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
           while (editor.firstChild) editor.removeChild(editor.firstChild)
           editor.append(structured(styled))
           _smoothHeightPost(editor, pre)
-          if (i !== undefined) _loadCaret(editor, i, s)
+          if (i !== undefined && editor.contains(document.activeElement)) _loadCaret(editor, i, s)
           onInput && Promise.resolve().then(() => onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false))
         } catch (err) {
           if (err instanceof Error) throw err
@@ -2766,6 +2768,8 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       const el = elem('a', href)
       elemValue(el, array(elem, url, href))
       el.href = href
+      el.title = decodeURI(href)
+      if (el.title.slice(0,8) === 'https://') el.title = el.title.slice(8)
       return el
     },
   },
@@ -3254,6 +3258,7 @@ All these are automatically tested to be correct at launch.`,
   philosophy:{
     txt:`Does that matter to you?`,
     lookup:[
+      `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster.`,
       [
         `Reward hacking isn't an AI issue, it's a human issue. Evolution has not caught up to modern society at all, and static reward function plus very dynamic behavior equals trouble. Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about artificial intelligence that's not in intelligence, it's just more clear and efficient.`,
         `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached: exponential curves do not exist in reality, only logistic curves.`,
@@ -4877,6 +4882,7 @@ Read keys with \`lookup\`.`,
     call(v, allowPath = false) {
       if (defines(v, deconstruct)) return defines(v, deconstruct)
       else if (_isArray(v)) return quote(v.slice())
+      else if (typeof v == 'string') return !v ? [string] : v.length == 1 ? [lookup, v+' ', 0] : [string, v[0], v.slice(1)]
 
       if (allowPath && lookup.parents.has(v)) {
         const p = lookup.parents.get(v)
@@ -5479,9 +5485,10 @@ Putting all variables in a single global namespace allows for easy development. 
       const children = new Map
       invertParents(x)
       const names = new Map
-      return noCycles(unbindChildren(x))
+      const result = unbindChildren(x)
+      return noCycles(result)
 
-      function preserve(x) { return _isLabel(x) || _isStylableDOM(x) || typeof x == 'number' }
+      function preserve(x) { return _isLabel(x) || _isStylableDOM(x) || typeof x == 'string' && x.length<=2 || typeof x == 'number' }
       function markParents(x, _i, parent) {
         if (preserve(x)) return
         if (unenv.has(x)) return
@@ -5532,11 +5539,11 @@ Putting all variables in a single global namespace allows for easy development. 
         if (_isArray(x))
           x.forEach(invertParents)
       }
-      function unbindChildren(x, ignoreName = false) {
-        if (!ignoreName && names.has(x)) return names.get(x)
-        if (!ignoreName && unenv.has(x)) return unenv.get(x) === unbindChildren && unenv.set(x, x.slice()), unenv.get(x)
-        if (preserve(x)) return x
-        if (!_isArray(x)) return x
+      function unbindChildren(x, ignoreEnv = false, ignoreName = false) {
+        if (!ignoreName && names.has(x)) return !unenv.has(x) && unenv.set(x, names.get(x)), names.get(x)
+        if (!ignoreEnv && unenv.has(x)) return unenv.get(x) === unbindChildren && unenv.set(x, x.slice()), unenv.get(x)
+        if (preserve(x)) return unenv.set(x,x), x
+        if (!_isArray(x)) return unenv.set(x,x), x
         const ch = children.get(x)
         children.delete(x)
         let copy
@@ -5550,16 +5557,17 @@ Putting all variables in a single global namespace allows for easy development. 
               name = nameAllocator(ch[i], undefined)
             if (typeof name == 'string') name = [label, name]
             currentAncestors.add(name)
+            unenv.set(ch[i], name)
             names.set(ch[i], name)
           }
           for (let i = 0; i < ch.length; ++i)
-            ctx.set(names.get(ch[i]), unbindChildren(ch[i], true))
-          if (!ignoreName && names.has(copy[2]))
-            copy[2] = names.get(copy[2])
+            ctx.set(unenv.get(ch[i]), unbindChildren(ch[i], true, true))
+          if (!ignoreName && names.has(x))
+            copy[2] = names.get(x)
           else
-            copy[2] = unbindChildren(copy[2], true)
+            copy[2] = unbindChildren(x, true, true)
         } else {
-          if (_isVar(x)) return x
+          if (_isVar(x)) return unenv.set(x,x), x
           let changed = false
           unenv.set(x, unbindChildren)
           for (let i = 0; i < x.length; ++i) {
@@ -5584,7 +5592,7 @@ Putting all variables in a single global namespace allows for easy development. 
         // Throw if x has cycles.
         if (!noCycles.s) noCycles.s = new Set
         if (unenv.has(x)) return x
-        if (noCycles.s.has(x)) throw console.trace(x), "Cycles"
+        if (noCycles.s.has(x)) throw console.trace("Cycles", result), "Cycles"
         noCycles.s.add(x)
         if (x instanceof Map) x.forEach(v => v !== x && noCycles(v))
         if (_isArray(x)) x.forEach(noCycles)
@@ -6347,14 +6355,10 @@ Also wraps C-style strings in <string>.`,
 
   serialize:{
     txt:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes Expr into a string or a DOM tree (that can be parsed to retrieve the original structure).`,
-    future:[
-      `Fix serialization not associating elems with their correct values (particularly functions).`,
-      `Fix CurrentUsage displaying as (usually) \`(either undefined undefined undefined …?)\` (and not, say, \`CurrentUsage\`).`,
-      `Style only after we fully have the struct, then lazily create/style the tree.`,
-    ],
+    future:`Style only after we fully have the struct, then lazily create/style the tree.`,
     philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.
 
-In theory, having symmetric parse+serialize allows updating the language of written code via "read in with the old, write out with the new", but we don't curently do that.`,
+In theory, having symmetric parse+serialize allows updating the language of written code via "read in with the old, write out with the new", but we don't curently do that here.`,
     examples:[
       [
         `serialize ^(parse '12')`,
@@ -6394,7 +6398,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
       const nodeNames = styles && typeof document != ''+void 0 && new Map
       backctx.forEach((v,k) => boundToUnbound.set(k,k))
       const u = unbound(arr, nameAllocator, boundToUnbound, maxDepth)
-      boundToUnbound.forEach((v,k) => k !== v && unboundToBound.set(v, k))
+      boundToUnbound.forEach((v,k) => k !== v && !unboundToBound.has(v) && unboundToBound.set(v, k))
       if (breakLength) breakLength -= offset * offsetWith.length
 
       let struct = [], len = 0
@@ -6404,11 +6408,8 @@ In theory, having symmetric parse+serialize allows updating the language of writ
       return recCollapse(serializeLines(struct, offset))
 
       function emit(f, u, arg1, arg2) {
-        // console.log('emit', f)
         if (typeof f == 'function') {
           let v = valueOfUnbound(u)
-          if (!unboundToBound.has(u) && _isArray(u))
-            v = u.map(valueOfUnbound)
           if (!styles) return unenv(u, v) === u ? f(emit, u, arg1, arg2) : ((struct || (struct = [])).push(unenv(u, v)), undefined)
           let prev = struct
           struct = undefined
@@ -6454,12 +6455,18 @@ In theory, having symmetric parse+serialize allows updating the language of writ
         return el
       }
 
-      function valueOfUnbound(u) {
+      function valueOfUnbound(u, depth = 0) {
+        if (depth>2) return
+        if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3) u = u[2]
         if (typeof document != ''+void 0 && u instanceof Element && 'to' in u)
           return u.to
-        if (unboundToBound.has(u) && unboundToBound.get(u) !== u)
-          return valueOfUnbound(unboundToBound.get(u))
-        return u
+        if (backctx.has(u)) return u
+        if (unboundToBound.has(u)) return unboundToBound.get(u)
+        if (_isDOM(u)) return u
+        if (_isArray(u) && u.length == 1 && u[0] !== u) return valueOfUnbound(u[0], depth+1)
+        if (_isArray(u) && u.length == 3 && u[0] === _extracted) return [_extracted, valueOfUnbound(u[1]), valueOfUnbound(u[2])]
+        if (_isArray(u) && u[0] === label) return u
+        return console.log('missing', u), "MISSING"
       }
       function styleNode(str, u, v) {
         if (!styles) return str
@@ -6503,15 +6510,16 @@ In theory, having symmetric parse+serialize allows updating the language of writ
       function deconstructed(x) {
         // Return a copy of x with non-array non-string non-backctx things deconstructed.
         if (!deconstructElems && typeof document != ''+void 0 && x instanceof Element)
-          return x.parentNode && x.isConnected ? (boundToUnbound.set(x, x = elemClone(x)), x) : x
+          return x.parentNode && x.isConnected && boundToUnbound.set(x, x = elemClone(x)), x
         if (deconstruction.has(x)) {
           if (deconstruction.get(x) === undefined) deconstruction.set(x, x.slice())
           x = deconstruction.get(x)
-          if (deconstruction.get(x) === undefined) deconstruction.set(x, x.slice())
-          return deconstruction.has(x) ? deconstruction.get(x) : x
+          if (deconstruction.has(x) && deconstruction.get(x) === undefined) deconstruction.set(x, x.slice())
+          if (deconstruction.has(x)) x = deconstruction.get(x)
+          return x
         }
-        if (_isLabel(x)) return named.add(x[1]), x
-        if (backctx && backctx.has(x)) return named.add(backctx.get(x)), x
+        if (_isLabel(x)) return unboundToBound.set(x,x), named.add(x[1]), x
+        if (backctx && backctx.has(x)) return unboundToBound.set(x,x), named.add(backctx.get(x)), x
         const original = x
         if (deconstructElems || !_isDOM(x))
           if (!_isArray(x) && typeof x != 'string' && typeof x != 'number' && (!backctx || !backctx.has(x)))
@@ -6525,11 +6533,10 @@ In theory, having symmetric parse+serialize allows updating the language of writ
             return styled.get(x)
           }, undefined, boundToUnbound)
         }
-        if (!unboundToBound.has(x))
-          unboundToBound.set(x, original)
+        unboundToBound.set(x, original)
         deconstruction.set(original, x)
         if (_isArray(x)) {
-          if (_isVar(x)) return x
+          if (_isVar(x)) return unboundToBound.set(x, original), x
           let copy, changed = false
           deconstruction.set(x, undefined)
           for (let i = 0; i < x.length; ++i) {
@@ -6545,7 +6552,8 @@ In theory, having symmetric parse+serialize allows updating the language of writ
               copy[i] = v
             }
           }
-          return changed ? (unboundToBound.set(copy, original), copy) : (deconstruction.set(x,x), unboundToBound.set(x,x), x)
+          if (!changed) deconstruction.set(x,x), unboundToBound.set(x, original), copy = x
+          return copy
         }
         return x
       }
@@ -6568,7 +6576,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
         }
         if (breakLength == null || len + offsetWith.length-1 < breakLength) {
           const joined = arr.join('')
-          const styled = styleNode(joined, arr, valueOfUnbound(arr))
+          const styled = styleNode(joined, arr, valueOfUnbound(arr.unbound))
           lengths.set(styled, len)
           return styled
         } else
@@ -6853,9 +6861,9 @@ And parsing is more than just extracting meaning from a string of characters (it
     else match(value, u)
   },
 
-  _basicMany(match, u, value) { // a b c c=x
+  _basicMany(match, u, value, head) { // a b c c=x
     if (u === _specialParsedValue) {
-      const arr = []
+      const arr = !head ? [] : [head]
       let ctx
       while (true) {
         match(/\s+/y)
@@ -6872,14 +6880,10 @@ And parsing is more than just extracting meaning from a string of characters (it
     let ctx
     if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3)
       ctx = u[1], u = u[2]
-    let b = false
-    if (!_isArray(u)) match(u)
-    else {
-      _fancyGrouping.pos.delete(match())
-      for (let j = 0; j < u.length; ++j) {
-        b ? match(' ') : (b = true)
-        match(_basicExtracted, u[j], value)
-      }
+    _fancyGrouping.pos.delete(match())
+    for (let b = false, j = !head ? 0 : 1; j < u.length; ++j) {
+      b ? match(' ') : (b = true)
+      match(_basicExtracted, u[j], value)
     }
     if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], value)))
   },
@@ -6898,11 +6902,11 @@ And parsing is more than just extracting meaning from a string of characters (it
   _fancyMap(match, u, value) { // {a b c c=x}
     if (u === _specialParsedValue) {
       if (!match('{')) return
-      const arr = _basicMany(match, u, value)
+      const arr = _basicMany(match, u, value, label('map'))
       if (!match('}')) match.notEnoughInfo('Expected a closing bracket')
-      return [label('map'), ...arr]
+      return arr
     }
-    match('{'), _basicMany(match, u.slice(1), value), match('}')
+    match('{'), _basicMany(match, u, value, _unctx('map')), match('}')
   },
 
   _basicValue(match, u, call, value) { // String or label or call.
@@ -8308,6 +8312,9 @@ The correctness of quining of functions can be tested by checking that the rewri
 
   compile:{
     txt:`Compiles a function to JS.`,
+    future:`Fix:
+compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x-x x=?
+`,
     philosophy:`I am speed.`,
     buzzwords:`compiled just-ahead-of-time`,
     call(opt, ...a) {
@@ -8784,9 +8791,12 @@ The correctness of quining of functions can be tested by checking that the rewri
           if (!uncertainSeenTwice.has(x))
             into && error("How could the top-level be uncertainly-computed?"),
             write(`if(${name}===${outside(uncomputed)})`)
-          write(`{${uncertainThen.get(x)}=`)
+          const doesNotImmediatelyFollow = uncertainStage.get(x) !== nextStage
+          if (doesNotImmediatelyFollow) write('{')
+          write(`${uncertainThen.get(x)}=`)
           backpatch = write(uncertain || nextStage)
-          write(`;stage=${uncertainStage.get(x)};continue}\n`, `computed return`)
+          if (doesNotImmediatelyFollow) write(`;stage=${uncertainStage.get(x)};continue}\n`, `computed return`)
+          else write(`\n`, `computed return`)
           if (uncertainSeenTwice.has(x)) jumped = true
           advanceStage(x)
         }
@@ -9180,7 +9190,14 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       get:__is(`get`),
       using:__is(`using`),
     },
-    philosophy:`What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
+    philosophy:`Did you ever hear the tragedy of Darth Usage the Wise?
+I thought not. It's not a story the Jedi would tell you. It's a Sith legend.
+Darth Usage was a Dark Lord of the Sith, so powerful and so wise, he can use structures to influence the search to create… functions. He could even keep user intentions he loved from being obscured by having just one implementation.
+The Dark Side of dependent types is a pathway to many abilities some consider to be… unnatural.
+He became so powerful, the only thing he was afraid of was *losing* his power… which eventually, of course, he did. Unfortunately, he taught his apprentice everything he knew, then his apprentice killed him in his sleep. Ironic. He could save others from death… but not himself.
+
+
+What is a thought, compared to a mind? Functions are good, but combining them as precisely as needed is where it's at.
 All functions and all APIs must be written by gradually connecting in-the-mind nouns (types of inputs/outputs), with simple and obviously-correct verbs (functions), from the required inputs to outputs. Programming languages must be described in an understandable and searchable and optimizable and extensible format, not given one measly implementation of. But that is not at all the regular programming style. Very alien to me. Can an old dog be taught new tricks?`,
   },
 
@@ -10180,55 +10197,6 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
-  // How to combine a goal with journalMeasures (a `'Deferred measure changes' ?` result) to create an optimizer?
-  /*\
-  Uh, would this context help at all?
-  \*/
-  OptimizerContext:`
-    ;='A context for optimizing everything.'
-    Setup = ?:TaskDescription -> ?:State
-    Run = (function ?:Input ?:State  ?:Output)
-    Evaluate = (function ?:Input ?:State ?:Goal  ?:Performance)
-    Compare = (function ?:Performance ?:Performance  ?)
-    Adjust = (function ?:Input ?:State ?:Goal  ?:State)
-    (either
-      ;='We need examples of \`Adjust\`, so that we can actually adjust stuff. Even a simple Evaluate-twice-then-apply-best will do as a start. In fact, does evolution *really* need anything else?'
-      (function i i=?:Input s s=?:State g g=?:Goal  ( ;='An example of Adjust.'
-        ;='Evaluate twice then commit the best-performing one.'
-        ;='This relies on \`Evaluate\` being essentially random.'
-        a=(journalMeasures (get Evaluate) i s g)
-        b=(journalMeasures (get Evaluate) i s g)
-        (if ((get Compare) (peekMeasures a) (peekMeasures b)) (commitMeasures a) (commitMeasures b))
-          ;='And, our peval (and/or _outputIsStructured) are not nearly advanced enough to infer the proper types here.'
-      ))
-      )
-  `,
-
-
-
-  MeasureContext:`
-    ;="A context for generating and using measures."
-    (either
-      (function x:Measure y:Option  (readMeasure x y):MeasureIs)
-      (function x:Measure y:Option z:MeasureIs  (writeMeasure x y z):Measure)
-
-      ;="Measure generators:"
-      (function (map):Measure) ;="A map to store numbers in."
-
-      ;="Multiply a measure by a number when read; only blame the measure."
-      (function m:Measure a:Scalar (array o->(readMeasure m o)*a m):Measure)
-      ;="Sum two measures when read; only blame one measure."
-      (function m1:Measure m2:Measure (array o->(readMeasure m1 o)+(readMeasure m2 o) m1):Measure)
-
-      ;="Combine measures in any way."
-        ;="We need ReadMeasureOp and WriteMeasureOp, though. Where would we get such a thing?"
-      (function m1:Measure m2:Measure (array o->(ReadMeasureOp (readMeasure m1 o) (readMeasure m2 o)) (function o is [(WriteMeasureOp m1 o is),(WriteMeasureOp m2 o is)]:Measure)
-    )
-  `,
-  // And Scalar… Or do we want to be able to generate constant measures?
-  Measure:{txt:`An object that stores judgements of \`Option\`s.`},
-  Option:{txt:`A branch that could be selected.`},
-  MeasureIs:{txt:`The stored judgement by a \`Measure\` of an \`Option\`.`},
   readMeasure:{
     txt:`\`(readMeasure ?:Measure ?:Option):MeasureIs\`: reads the current remembered measure of an object, for use in selecting from a set of branches.`,
     call(m, obj) {
@@ -10404,7 +10372,13 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       catch (err) { if (err === interrupt) err(compose, 2)(exprs, vars), exprs = null;  throw err }
       finally { exprs && _allocMap(exprs) }
 
-      const result = compile({cause:us}, ...vars, resultExpr)
+      let result
+      try {
+        result = compile({cause:us,comments:true}, ...vars, resultExpr) // ### Compilation has trouble with phantom-ref allocation when we create `if`s here.
+      } catch (err) { log(jsRejected(err), resultExpr);  throw err }
+          // …Honestly… maybe we should completely switch to the simpler function-only interpreter loop (and/or a compiler for that simple thing). The compiler that we made doesn't generate very great code.
+            // Complexity is bad, anyway.
+            // evalCalls and compileCalls, here we go.
       const d = result[defines.key] = Object.create(null)
       d[_id(argCount)] = types.length-1
       d[_id(deconstruct)] = array(_function, ...vars, resultExpr)
@@ -10414,7 +10388,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
       function genExpr(out) {
         // A complex interrupt/free game here.
-        let [options, i, firstStep, expr, j = 0, ints = _allocArray()] = interrupt(compose)
+        let [options, i, firstStep, expr, j = 0, known = true, ints = _allocArray()] = interrupt(compose)
         try {
           _checkInterrupt()
           while (true) {
@@ -10432,33 +10406,44 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
             // On first entry, just pick an option.
             if (i === undefined) i = pick(options, us, out)
             // If we interrupted here or down below, remember and clean option's re-entry state (if down below), re-pick i, and restore the re-entry state.
-            else if (options.length > 1) if (ints[i] || expr !== undefined) {
+            else if (options.length > 1 && Math.random()<.1) if (ints[i] || expr !== undefined) {
+              // This reduces generated expression complexity (potentially, from infinity).
               if (!ints[i]) {
-                ints[i] = _allocArray();  ints[i].push(expr, j, finish.env[_id(interrupt)], finish.env[_id(step)])
-                expr = undefined, j = 0, finish.env[_id(interrupt)] = _allocArray(), finish.env[_id(step)] = firstStep
+                ints[i] = _allocArray();  ints[i].push(expr, j, known, finish.env[_id(interrupt)], finish.env[_id(step)])
+                expr = undefined, j = 0, known = true, finish.env[_id(interrupt)] = _allocArray(), finish.env[_id(step)] = firstStep+1
               }
               const next = pick(options, us, out)
               if (ints[next])
-                [expr, j, finish.env[_id(interrupt)], finish.env[_id(step)]] = ints[next], _allocArray(ints[next]), ints[next] = null
+                [expr, j, known, finish.env[_id(interrupt)], finish.env[_id(step)]] = ints[next], _allocArray(ints[next]), ints[next] = null
               i = next
             }
 
-            let f = options[i], d = defines(f, context)
-            if (typeof f == 'function' && _isArray(d)) {
+            let f = options[i], d = !_isArray(f) && defines(f, context)
+            if (_isArray(d)) {
               // genExpr every input, then add [f, ...inputs] to `exprs`.
               if (!expr) expr = _allocArray()
-              for (; j < d.length-1; ++j)
-                expr.push(genExpr(d[j]))
-              if (typeof defines(f, compose) == 'function')
-                try { f = defines(f, compose)(ctx, ...expr, out) }
-                catch (err) { // If our override throws, remove this option and search for another one.
-                  [options[i], options[options.length-1]] = [options[options.length-1], options[i]], options.pop()
-                  [ints[i], ints[ints.length-1]] = [ints[ints.length-1], ints[i]], ints.pop()
-                  _allocArray(expr)
-                  i = undefined, expr = undefined, j = 0
-                  continue
-                }
-              else expr.unshift(f), f = expr
+              // log('Getting inputs', ...d.slice(0,-1), 'for', f)
+              for (; j < d.length-1; ++j) {
+                const r = genExpr(d[j])
+                if (_isArray(r) || defines(r, compose) !== undefined || _isVar(r)) known = false
+                expr.push(r)
+              }
+              // log('  got', d[d.length-1], ...expr)
+              try {
+                if (typeof defines(f, compose) == 'function')
+                  f = defines(f, compose)(ctx, ...expr, out)
+                else if (typeof f == 'function' && known)
+                  f = f(...expr)
+                else expr.unshift(f), f = expr
+              } catch (err) { // If our override throws, remove this option and search for another one.
+                if (err === interrupt) throw err
+                // log('Error', jsRejected(err))
+                ;[options[i], options[options.length-1]] = [options[options.length-1], options[i]], options.pop()
+                ;[ints[i], ints[ints.length-1]] = [ints[ints.length-1], ints[i]], ints.pop()
+                _allocArray(expr)
+                i = undefined, expr = undefined, j = 0
+                continue
+              }
             }
             // Remember and return the option.
             !exprs.has(out) && exprs.set(out, _allocArray()), exprs.get(out).push(f)
@@ -10466,13 +10451,103 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
             _allocArray(ints)
             return f
           }
-        } catch (err) { if (err === interrupt) err(compose, 6)(options, i, firstStep, expr)(j, ints); else _allocArray(ints);  throw err }
+        } catch (err) { if (err === interrupt) err(compose, 7)(options, i, firstStep, expr)(j, known, ints); else _allocArray(ints);  throw err }
       }
     },
   },
 
   // Now, what I need are, well, example contexts… in particular a function that re-composes itself dynamically (able to handle self-reference)… and goals, and dynamic-recomposition-with-goal that keeps the best things… and copy/mutation by culling the context… And deferring `pick`s till runtime — how is this one done (more importantly, *when*); maybe it is better to have a `dynamic` function-composing (with a choice source) function?
 
+  atan(x) { return Math.atan(x) },
+  numbersRandomSearch:`
+    compose
+    (context
+      ;='A goal to maximize, fitting to some function.'
+      (concept { call x -> 0-a*a context ('Output' 'Performance') a=[x-(atan [x + x*x/11])] })
+        ;='Maybe we also want to take the initial-info thing here? Or at least the input. …Yeah, we really don''t want to find a root of an equation, we want to approximate a function.'
+
+      ;='Input is a number. Output is a number.'
+      (concept { call id compose (function ctx x x) context ('Input' 'Number') })
+      (concept { call id compose (function ctx x x) context ('Number' 'Output') })
+
+      ;='Allow single-number generation.'
+      (concept { call (function 0) context ('Number') })
+      (concept { call (function 1) context ('Number') })
+
+      ;='Allow basic arithmetic operations.'
+      (concept { call sum compose (jsEval "(ctx,a,b) => !a ? b : !b ? a : typeof a == 'number' && typeof b == 'number' ? a+b : [sum,a,b]" {'sum' sum}) context ('Number' 'Number' 'Number') })
+      (concept { call sub compose (jsEval "(ctx,a,b) => !b ? a : typeof a == 'number' && typeof b == 'number' ? a-b : [sub,a,b]" {'sub' sub}) context ('Number' 'Number' 'Number') })
+      (concept { call mult compose (jsEval "(ctx,a,b) => !a || !b ? 0 : a === 1 ? b : b === 1 ? a : typeof a == 'number' && typeof b == 'number' ? a*b : [mult,a,b]" {'mult' mult}) context ('Number' 'Number' 'Number') })
+      (concept { call div compose (jsEval "(ctx,a,b) => !b ? errorFast() : b === 1 ? a : typeof a == 'number' && typeof b == 'number' ? a/b : [div,a,b]" {'div' div}) context ('Number' 'Number' 'Number') })
+
+      ;='Allow comparisons and branching.'
+      (concept { call (jsEval '(a,b) => a<b') context ('Number' 'Number' 'Boolean') })
+      (concept { call (jsEval '(a,b) => a===b') context ('Number' 'Number' 'Boolean') })
+      (concept { compose (jsEval '(ctx,c,a,b) => c===false ? b : c===true ? a : a===b ? a : [_if, c, a, b]' {'_if' if}) context ('Boolean' 'Number' 'Number' 'Number') })
+
+      ;='Allow setting up and modifying state. …Except, shouldn''t state be local to decision sites, and be completely contained in measures anyway?'
+      (concept { call id compose (function ctx x x) context ('State' 'Number') })
+      (concept { call id compose (function ctx x x) context ('Number' 'State') })
+
+      ;='And allow feedback of performance into state… And an expr-run+eval function, taking Input and State and producing Performance…'
+      ;='The — run, evaluate performance, adjust — cycle… And each function must know how it was produced, and *that* can be copied and adjusted too…'
+      ;='And a picker… And measures…'
+      )
+      'Input'
+      'Performance'
+  `,
+
+
+
+  // How to combine a goal with journalMeasures (a `'Deferred measure changes' ?` result) to create an optimizer?
+  /*\
+  Uh, would this context help at all?
+  \*/
+  OptimizerContext:`
+    ;='A context for optimizing everything.'
+    Setup = ?:TaskDescription -> ?:State
+    Run = (function ?:Input ?:State  ?:Output)
+    Evaluate = (function ?:Input ?:State ?:Goal  ?:Performance)
+    Compare = (function ?:Performance ?:Performance  ?)
+    Adjust = (function ?:Input ?:State ?:Goal  ?:State)
+    (either
+      ;='We need examples of \`Adjust\`, so that we can actually adjust stuff. Even a simple Evaluate-twice-then-apply-best will do as a start. In fact, does evolution *really* need anything else?'
+      (function i i=?:Input s s=?:State g g=?:Goal  ( ;='An example of Adjust.'
+        ;='Evaluate twice then commit the best-performing one.'
+        ;='This relies on \`Evaluate\` being essentially random.'
+        a=(journalMeasures (get Evaluate) i s g)
+        b=(journalMeasures (get Evaluate) i s g)
+        (if ((get Compare) (peekMeasures a) (peekMeasures b)) (commitMeasures a) (commitMeasures b))
+          ;='And, our peval (and/or _outputIsStructured) are not nearly advanced enough to infer the proper types here.'
+      ))
+      )
+  `,
+
+
+
+  MeasureContext:`
+    ;="A context for generating and using measures."
+    (either
+      (function x:Measure y:Option  (readMeasure x y):MeasureIs)
+      (function x:Measure y:Option z:MeasureIs  (writeMeasure x y z):Measure)
+
+      ;="Measure generators:"
+      (function (map):Measure) ;="A map to store numbers in."
+
+      ;="Multiply a measure by a number when read; only blame the measure."
+      (function m:Measure a:Scalar (array o->(readMeasure m o)*a m):Measure)
+      ;="Sum two measures when read; only blame one measure."
+      (function m1:Measure m2:Measure (array o->(readMeasure m1 o)+(readMeasure m2 o) m1):Measure)
+
+      ;="Combine measures in any way."
+        ;="We need ReadMeasureOp and WriteMeasureOp, though. Where would we get such a thing?"
+      (function m1:Measure m2:Measure (array o->(ReadMeasureOp (readMeasure m1 o) (readMeasure m2 o)) (function o is [(WriteMeasureOp m1 o is),(WriteMeasureOp m2 o is)]:Measure)
+    )
+  `,
+  // And Scalar… Or do we want to be able to generate constant measures?
+  Measure:{txt:`An object that stores judgements of \`Option\`s.`},
+  Option:{txt:`A branch that could be selected.`},
+  MeasureIs:{txt:`The stored judgement by a \`Measure\` of an \`Option\`.`},
 
 
 
