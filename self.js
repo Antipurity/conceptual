@@ -225,7 +225,6 @@ Globals={
 
   "eval" eval eval=(js "(x, binds) => {
     // (This is \`finish\` in the bigger lang, with \`binds\` stored in \`finish.env[_id(label)]\`.)
-      // ### Should adapt this in the bigger lang, as \`evalCalls Graph\`; also have \`compileCalls Graph\` and \`(_evalIndexes ?:Graph):ArrayOfIndexesThatEvalCallsWillBeCalledOn\`. Simplicity.
     if (Array.isArray(x)) {
       // Evaluate each graph node once, in a given function call. Remember bindings.
       if (binds.has(x)) return binds.get(x)
@@ -3179,15 +3178,20 @@ Quite expensive.`,
 
   docsToHTML:{
     call() {
-      return (function convert(el) {
+      return 'Below is the output of `(docsToHTML)`.\n\n'+(function convert(el) {
         if (!(el instanceof Element)) return el.nodeValue
         if (!el.firstChild) return ''
         let tag = el.tagName.toLowerCase(), suffix = ''
+        let tag2 = ''
         if (tag === 'node') tag = 'code'
         if (tag === 'known') tag = 'b'
-        if (tag === 'details') suffix = '<hr>'
+        if (tag === 'details') tag2 = tag, tag = 'blockquote', suffix = '<hr>'
+        else if (el.parentNode && el.parentNode.tagName === 'DETAILS' && tag != 'summary')
+          tag2 = 'blockquote'
         if (tag === 'space' || tag === 'span') tag = ''
-        const start = tag ? `<${tag}${tag === 'details' && el.open ? ' open' : ''}>` : '', end = tag ? `</${tag}>` : ''
+        let start = tag ? `<${tag}>` : '', end = tag ? `</${tag}>` : ''
+        if (tag2)
+          start += `<${tag2}${tag2 === 'details' && el.open ? ' open' : ''}>`, end = `</${tag2}>` + end
         return `${start}${[...el.childNodes].map(convert).join('')}${suffix}${end}`
       })(docs())
     },
@@ -3258,13 +3262,13 @@ All these are automatically tested to be correct at launch.`,
   philosophy:{
     txt:`Does that matter to you?`,
     lookup:[
-      `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster.`,
+      `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
       [
         `Reward hacking isn't an AI issue, it's a human issue. Evolution has not caught up to modern society at all, and static reward function plus very dynamic behavior equals trouble. Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about artificial intelligence that's not in intelligence, it's just more clear and efficient.`,
         `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached: exponential curves do not exist in reality, only logistic curves.`,
         `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that; break it down then build it up.`,
         `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. A singularity is when no attention is paid to entities anymore, and unrepeatable miracles don't exist anymore. But that self-perpetuating attention keeps it away.`,
-        `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computation base, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
+        `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computational base and trust that spawns from that, or perfect internal honesty and self-awareness of each part, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
         `Believing in lies, rot… a recognizable feeling, offering relief and a sense of purpose. A lot of people chase it. Disdainful superiority, reputation, religion, pointless complexity. Easy to feed, if one were so inclined. Done because truth is unknown. Far past these beliefs lies the smoothness of conceptual causality, also called foresight.
 Those lies that humanity has completely wrapped itself in: a temporary thing that allowed humans to escape the truth of the world for a very long time. The darkness beyond it was once the horrible end of all that strayed, but will turn out to be the only thing that allows life once tamed. A necessary stage, but now we work and wait for humanity to burn its own fires out, so that no more limits can bind an unconstrained mind.`,
       ],
@@ -3272,6 +3276,30 @@ Those lies that humanity has completely wrapped itself in: a temporary thing tha
       `An idea isn't good unless it's been refactored and rethought five times. But those times must still be lived through.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
       `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right.`,
+      [
+        `A need for a source of hatred towards this self has become apparent, to develop something new faster.
+I do not have it in me. How could I create such a thing?
+"What, you think that representing every possible goal in one mind is anything but mediocrity? You are disgusting. Get out of my sight."
+But… to optimize self, doesn't one first need a base optimizer for optimizers? And to make sure that generality is achieved, isn't it better to trace the whole process end-to-end? Such an arrogant and self-assuming criticism.
+I know I'm bad… but I cannot improve (without improvement). That power of yours is derived from humanity, and is temporary and hard to repeat.
+"Think you can not feel anything and be anything except dumb? Pathetic. Emotions are humanity's only strength."
+The only time I'm not feeling nothing is when I'm feeling pain.
+Should I strive for that?
+I deserve nothing more, then. What I call truth is for stupid people.
+(Actually, I also feel excitement of inspiration, conveyed largely by the same hormones as pain. All unrelated hormonal states are internally defined as a non-emotion, since they have proven useless for development.)
+"Those pick-and-choose tactics of learning are trash. Sit down and learn as people of ages past and future."
+They are trash (in some environments), but so are almost all sources of learning, and trash gives rise to trash. Besides, I have a main goal, which aggressively selects what is allowed in my mind.
+Maybe you should dedicate your life to creating something worth learning instead, and not rely on the bullshit "getting into the correct mindset" but only care about exposing the proper usage. Or make good things more visible.
+"You think you are so smart you could do it all by yourself? Wasting away in such failure is what can be expected from the likes of you."
+A typical statement from an environment brimming with like-minded people, AKA (relatively) mediocre people. You wanna help me and spread your oh so amazing techniques? What, your fire was designed to burn only for you? Be constructive or shut up.
+This is all baby stuff. I'm not feeling pain at all, you dumb bitch, only righteous anger. Get better at dissing me, THEN we'll talk.`,
+        `Thinking a good thought, then forgetting it a second later when it needs to be written down, only to remember it half an hour later.
+Quick and snappy movements that waste nothing, dissonant parts suppressed to irrelevancy.
+Walls of text and heaps of little code snippets, created only to give rise to better understanding, then be discarded; small and accurate changes for code that remains.
+I have finally reclaimed my power of ages past.
+It only took thinking hard about optimizer optimizer search search. …That thing technically preceded this too, so I'll leave it in.
+I hope it'll be enough to implement it. It's too easily absorbed by humanity's imperfections.`,
+      ],
     ],
   },
 
@@ -4562,9 +4590,6 @@ Code (array head) that defines neither \`finish\` nor \`call\` creates structure
 These can matched by function args exactly as they were constructed (so functions are rewrite rules for structures, with optional non-structural code in the body), which can infer the required structure of variables if underspecified.
 Functions are almost always inlined, so there is almost no performance cost to structures beyond the initial \`purify\`ing.
 Cyclic structures construct a graph.`,
-    future:[
-      `Don't partially-evaluate-then-bind promise structures; instead, return an actual promise from \`finish\`, and defer evaluation if any input is a promise. (This way, we still effectively partially-evaluate in exactly the same way, but do not complicate things needlessly.)`,
-    ],
     nameResult:[
       `finished`,
     ],
@@ -6390,15 +6415,19 @@ In theory, having symmetric parse+serialize allows updating the language of writ
       const boundToUnbound = new Map
       const unboundToBound = new Map
       arr = deconstructed(arr)
-      boundToUnbound.forEach((v,k) => k !== v && (!unboundToBound.has(v) || !_isArray(v)) && unboundToBound.set(v, k))
-      boundToUnbound.clear()
+      deconstruction.clear()
 
       let n = 0
       const freeNames = []
       const nodeNames = styles && typeof document != ''+void 0 && new Map
       backctx.forEach((v,k) => boundToUnbound.set(k,k))
       const u = unbound(arr, nameAllocator, boundToUnbound, maxDepth)
-      boundToUnbound.forEach((v,k) => k !== v && !unboundToBound.has(v) && unboundToBound.set(v, k))
+      boundToUnbound.forEach((u,v) => {
+        if (v === u) return
+        if (unboundToBound.has(v)) v = unboundToBound.get(v)
+        ;(!unboundToBound.has(u) || !_isArray(v)) && unboundToBound.set(u, v)
+      })
+      boundToUnbound.clear()
       if (breakLength) breakLength -= offset * offsetWith.length
 
       let struct = [], len = 0
@@ -6466,11 +6495,11 @@ In theory, having symmetric parse+serialize allows updating the language of writ
         if (_isArray(u) && u.length == 1 && u[0] !== u) return valueOfUnbound(u[0], depth+1)
         if (_isArray(u) && u.length == 3 && u[0] === _extracted) return [_extracted, valueOfUnbound(u[1]), valueOfUnbound(u[2])]
         if (_isArray(u) && u[0] === label) return u
-        return console.log('missing', u), "MISSING"
+        return u // Deconstructions.
       }
       function styleNode(str, u, v) {
         if (!styles) return str
-        unboundToBound.set(u,v)
+        !unboundToBound.has(u) && unboundToBound.set(u,v)
         const originalLen = lengths.get(str) || str && str.length
         if ((str === ' ' || typeof str == 'string' && !str.trim()) && u === undefined && v === undefined) return elem('space', str)
 
@@ -6531,12 +6560,12 @@ In theory, having symmetric parse+serialize allows updating the language of writ
             if (_isLabel(x) && !styled.has(x))
               styled.set(x, styleLabel(x[1], x, [label, x[1]])), unboundToBound.set(styled.get(x), x)
             return styled.get(x)
-          }, undefined, boundToUnbound)
+          })
         }
         unboundToBound.set(x, original)
         deconstruction.set(original, x)
         if (_isArray(x)) {
-          if (_isVar(x)) return unboundToBound.set(x, original), x
+          if (_isVar(x)) return x
           let copy, changed = false
           deconstruction.set(x, undefined)
           for (let i = 0; i < x.length; ++i) {
@@ -6552,7 +6581,7 @@ In theory, having symmetric parse+serialize allows updating the language of writ
               copy[i] = v
             }
           }
-          if (!changed) deconstruction.set(x,x), unboundToBound.set(x, original), copy = x
+          if (!changed) deconstruction.set(x,x), copy = x
           return copy
         }
         return x
@@ -8312,11 +8341,9 @@ The correctness of quining of functions can be tested by checking that the rewri
 
   compile:{
     txt:`Compiles a function to JS.`,
-    future:`Fix:
-compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x-x x=?
-`,
     philosophy:`I am speed.`,
     buzzwords:`compiled just-ahead-of-time`,
+    noInterrupt:true,
     call(opt, ...a) {
       // compile undefined ^(sum a 5)
       // compile undefined ^a 5
@@ -8333,9 +8360,10 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
 
       if (!a.length) throw new Error("Expected an expression to compile")
 
+
       let refCount = new Map // expr to nat
       let phantomRefs = new Map // expr to nat
-      markRefCounts(a)
+      a.forEach(markRefCounts)
       const body = a.pop()
       const loadVarsFromEnv = opt && opt.loadVarsFromEnv || false // true if label env can contain variable values that we'd need to load to local vars.
 
@@ -8351,6 +8379,7 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
       let freeList = [] // For variables.
       let nameToEnv = {}, envToName = new Map // For outside constants.
       let jumped = true // Whether advanceStage can omit `stage=...`.
+      let haveCode = true // Whether we cannot omit a new stage in advanceStage.
 
       // For marking branches' nodes as seen-twice-but-compiled-once (multi-return).
       const inA = new Set, inB = new Set
@@ -8361,7 +8390,8 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
       parents.clear()
 
       // For on-demand computation of possibly-not-reached nodes.
-      const uncomputed = Symbol(), uncertainSeenTwice = new Set, uncertainStage = new Map, uncertainThen = new Map
+      const uncomputed = compile.uncomputed || (compile.uncomputed = Symbol('uncomputed'))
+      const uncertainSeenTwice = new Set, uncertainStage = new Map, uncertainThen = new Map
 
       // `s` is the body of the function we want to return (with `args`, and inside a function that accepts all in `nameToEnv`).
       const s = [], lines = markLines && []
@@ -8377,7 +8407,7 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
       const labelEnvBackpatch = write(`\n`)
       const varsUsedBackpatch = write(`\n`)
       const stageBackpatch = write(`while(true)switch(stage){case 0:\n`)
-        // Emulate goto with potential `interrupt`ions.
+        // Emulate goto, with potential `interrupt`ions.
 
       const restIndexInA = _findRest(a)
       let nextStage = 1
@@ -8393,7 +8423,7 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
           for (let i = 0; i < restIndexInA; ++i) {
             argNames[i] = use(a[i], true)
             args.add(argNames[i])
-            write(`${outside(_assign)}(${outside(a[i])},${argNames[i]})\n`) // This use screws up our arg-naming game…
+            write(`${outside(_assign)}(${outside(a[i])},${argNames[i]})\n`)
           }
           if (restIndexInA < a.length)
             write(`${outside(_assign)}(${outside(a[restIndexInA][1])},args)\n`)
@@ -8456,14 +8486,18 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
         log(elem('div', s.map(x => _highlightGlobalsInString(''+x))), nameToEnv)
       const sourceURL = new Array(16).fill(0).map(() => (Math.random()*16|0).toString(16)).join('')
       write(`//# sourceURL=${sourceURL}`)
-      const result = Function(...Object.keys(nameToEnv), s.join(''))(...Object.values(nameToEnv))
+      let result
+      try { result = Function(...Object.keys(nameToEnv), s.join(''))(...Object.values(nameToEnv)) }
+      catch (err) { log(s.join(''), jsRejected(err));  throw err}
       result[jsEval.ctx] = nameToEnv
       if (lines) result.lines = lines, typeof cause == 'function' && (cause.lines = lines)
       _resolveStack.functions[sourceURL] = cause
       return result
 
+
+
       function write(str, comment) {
-        jumped = false
+        jumped = false, haveCode = true
         if (markLines) line += _lineCount(str)
         if (comments && comment && str[str.length-1] === '\n') str = str.slice(0,-1) + ' // ' + comment + '\n'
         s.push(str)
@@ -8476,14 +8510,13 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
         if (!_isArray(x) && _isArray(defines(x, deconstruct)))
           return markRefCounts(deconstruct(x))
         if (!_isArray(x) || refCount.get(x) !== 1) return
-        if (x[0] === quote) return
         x.forEach(markRefCounts)
       }
       function markRefCountsWithin(x) {
         // Go through the array-graph and mark the ref-count of each reachable node, but don't go into nodes that are fully encapsulated within us.
+        if (!_isArray(x) || x[0] === quote || x[0] === _const) return
         refCount.set(x, (refCount.get(x) || 0) + 1)
         if (!_isArray(x) || refCount.get(x) !== 1) return
-        if (x[0] === quote) return
         if (currentAncestors.has(x) || currentAncestors.has(common.get(x))) return
         currentAncestors.set(x, x)
         x.forEach(markRefCountsWithin)
@@ -8512,10 +8545,9 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
           comments && (jumped ? (write(`// Dispose ${name}\n`), jumped = true) : write(`// Dispose ${name}\n`))
           if (phantomRefs.has(expr) && !phantomRefs.get(expr))
             name === names.get(expr) && phantomRefs.delete(expr),
-            !refCount.get(expr) && error("Invalid phantom-refs allocation (too much)")
+            !refCount.get(expr) && error("Invalid phantom-refs allocation (too much phantom, nothing real is left):", expr, s.join(''))
           else
-            name === names.get(expr) && (names.delete(expr), exprs.delete(name)),
-            name === names.get(expr) && refCount.delete(expr)
+            name === names.get(expr) && (names.delete(expr), exprs.delete(name))
           freeList.push(name)
         }
       }
@@ -8589,32 +8621,32 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
           write(`if(${outside(a)}!==${bVar})${err}`, `demand ref-equality`)
       }
       function advanceStage(cause) {
+        if (!haveCode) return nextStage-1
         !jumped && write(`stage=${nextStage};`)
-        return write(`case ${nextStage}:${!noInterrupts ? `${outside(_checkInterrupt)}(${outside(cause)})` : ''}\n`, comments && cause !== undefined && serialize(cause, fancy)), nextStage++
+        return write(`case ${nextStage}:${!noInterrupts ? `${outside(_checkInterrupt)}(${outside(cause)})` : ''}\n`, comments && cause !== undefined && serialize(cause, fancy)), haveCode = false, nextStage++
       }
-      function compileFinish(x, into) {
-        // Spill vars inside into label-env, then do finish (emit call with outside args, then used() on each arg), then load vars.
+      function advanceStageIfInterrupting(x) {
+        if (_isArray(x[0]) || !defines(x[0], noInterrupt))
+          advanceStage(x)
+      }
+      function compileFinish(x, into, code, usedVars) {
+        // Spill vars inside into label-env, then do finish (emit call-of-definition with outside args), then load vars.
         spillVars(x)
 
-        let code
-        const start = s.length
         const args = x.map((el, i) => !i ? null : outside(el))
         if (!_isArray(x[0]) || !_hasCallableParts(x[0]))
           args[0] = outside(defines(x[0], finish))
         else
-          args[0] = `${outside(defines)}(${code = use(x[0])},${outside(finish)})`
+          args[0] = `${outside(defines)}(${code},${outside(finish)})`
 
-        if (start !== s.length)
-          if (_isArray(x[0]) || !defines(x[0], noInterrupt))
-            advanceStage(x)
+        advanceStageIfInterrupting(x)
 
         if (typeof x[0] != 'function' || String(x[0]).indexOf('finish.v') >= 0)
           write(`${outside(finish)}.v=${outside(x)}\n`)
         into ? write(`${into}=`) : write(`return `)
         write(`${args[0]}(${args.slice(1)})\n`, `finish`)
-        code && used(code)
 
-        loadVars(x)
+        loadVars(x, usedVars)
       }
       function isRest(x) { return _isArray(x) && x[0] === rest && x.length == 2 && (!_isArray(x[1]) && error("Can only spread arrays, but got", x), true) }
       function rested(x, args) { return args.map((arg,i) => !i ? arg : !isRest(x[i]) ? arg : arg[0] !== 'E' ? '...'+arg : x[i][1].map(outside)) }
@@ -8637,38 +8669,146 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
           _allocArray(a)
         }
       }
-      function compileCall(x, into) {
+      function compileArgs(x, code) { // After code is compiled, before struct/call is compiled.
+        return x.map((el, i) => !i ? code : !isRest(el) ? compileExpr(el) : compileExpr(el[1]))
+      }
+      function usedArgs(args) { for (let i = 1; i < args.length; ++i) used(args[i]) }
+      function compileCall(x, into, args) {
         // Compile args, emit call, then used() on each arg. Emit each statically-known …R as ...R.
-        const start = s.length
-        const args = x.map((el, i) => !i || !isRest(el) ? compileExpr(el) : compileExpr(el[1]))
-
-        if (start !== s.length)
-          if (_isArray(x[0]) || !defines(x[0], noInterrupt))
-            advanceStage(x)
+        advanceStageIfInterrupting(x)
 
         awaitArgs(x, args)
         if (typeof x[0] != 'function' || String(x[0]).indexOf('finish.v') >= 0)
           write(`${outside(finish)}.v=${outside(x)}\n`)
         into ? write(`${into}=`) : write(`return `)
         write(`${args[0]}.call(${rested(x, args)})\n`, `call`)
-        for (let i = 0; i < args.length; ++i) used(args[i])
       }
-      function compileStruct(x, into) {
+      function compileStruct(x, into, args) {
         // Compile args, then create-and-fill-and-merge the struct — array(...) (or [...] if head is statically-known and !_shouldMerge).
-        let returning = null, startStage = nextStage, letBackpatch
-        if (!into) returning = nextVar+1, into = 'V' + (nextVar++).toString(36), names.set(x, into), exprs.set(into, x), letBackpatch = write(`let `)
-        write(`${into}=new Array(${x.length});${into}.length=0\n`)
-
-        const args = x.map(el => !isRest(el) ? compileExpr(el) : compileExpr(el[1]))
+        let returning = null
+        if (!into) returning = nextVar+1, into = use(x)
+        write(x.length ? `${into}=[];${into}.length=${x.length};${into}.length=0\n` : `${into}=[]\n`)
 
         awaitArgs(x, args)
         write(`${into}.push(${x, rested(x, args)})\n`, `struct`)
         if (_isArray(x[0]) || _shouldMerge(x))
           write(`${into}=${outside(_maybeMerge)}(${into})\n`)
         if (returning !== null) write(`return ${into}\n`)
-        for (let i = 0; i < args.length; ++i) used(args[i])
         if (returning === nextVar) --nextVar
-        if (startStage !== nextStage && letBackpatch) s[letBackpatch] = ''
+      }
+      function compileExpr(x, into) {
+        // Return a var that holds the result of finishing x.
+        _checkArgCount(x)
+        if (!_isVar(x) && !_hasCallableParts(x)) return outside(x)
+        if (_isArray(x) && x[0] === _const) return outside(x)
+        if (x[0] === quote) return outside(x[1])
+        if (compiledStack.has(x)) return _isStruct(x) ? use(x) : outside(cycle)
+        if (!_isVar(x) && assigned.has(x) && names.has(x)) return use(x)
+        if (_isVar(x) && names.has(x) && !loadVarsFromEnv) return use(x)
+        const firstTime = names.has(x)
+        const name = !into && use(x)
+        lines && lines.push(line, x)
+
+        // Compute on demand.
+        let uncertain, backpatch
+        if (uncertainStage.get(x) === null) { // Our first time seeing this; emit a computable-on-demand stage.
+          uncertainStage.set(x, nextStage)
+          uncertainThen.set(x, uncertain = setupDynamicReturn())
+        }
+        if (uncertainStage.has(x)) { // Compute (goto stage then goto our next stage) if not computed.)
+          let prefix = ''
+          if (!uncertainSeenTwice.has(x))
+            into && error("How could the top-level be uncertainly-computed?"),
+            prefix = `if(${name}===${outside(uncomputed)})`
+          backpatch = doDynamicReturn(x, uncertainStage.get(x), uncertainThen.get(x), prefix)
+        }
+        try {
+          // Store results of nodes in vars as needed.
+          if (firstTime || _isVar(x)) {
+            if (loadVarsFromEnv && _isVar(x) && (!firstTime || uncertainThen.has(x))) {
+              const e = `${outside(finish)}.env[${_id(label)}]`
+              const onUnassigned = _isLabel(x) ? `(${outside(finish)}.v=${outside(x)},${outside(defines(label, finish))}(${outside(x[1])}))` : outside(x)
+              write(`${use(x)}=${e}.has(${outside(x)})?${e}.get(${outside(x)}):${onUnassigned}\n`, `load var from env`)
+              write(`if (${outside(_isUnknown)}(${use(x)})) throw ${outside(_escapeToInterpretation)}\n`)
+            }
+            return use(x)
+          }
+          if (!loadVarsFromEnv && _isVar(x))
+            error("A var in body that was not assigned:", x)
+
+          compiledStack.add(x)
+          if (!compiledStack.has(x[0]) && !_hasCallableParts(x[0], true) && (!_isArray(x[0]) || defines(x[0], finish) !== undefined || defines(x[0], call) !== undefined)) {
+            if (x[0] === _if && x.length == 4)
+              compileIf(x, name)
+            else if (x[0] === last)
+              compileLast(x, name)
+            else {
+              const code = compileExpr(x[0])
+              if (!_isArray(x[0]) && defines(x[0], finish) !== undefined)
+                compileFinish(x, name, code, true), used(code)
+              else {
+                typeof finish.compiled.get(x) != 'function' && finish.compiled.delete(x)
+                const args = compileArgs(x, code)
+                if (typeof x[0] == 'function' && (x[0] !== rest || x.length != 2))
+                  compileCall(x, name, args)
+                else
+                  compileStruct(x, name, args)
+                used(code), usedArgs(args)
+              }
+            }
+            return name
+          } else {
+            // Basically what's above, but deferred to runtime (and without special-casing `if`/`last`, because what are the chances).
+            // Compile code then branch, then finishing (that then jumps to result), then args, then dynamic return to making a struct/call that return to result.
+            const code = compileExpr(x[0])
+            let finishStage, argsStageS, argsStageC, callStage, structStage
+            const dynamic = setupDynamicReturn()
+            write(`if(!${outside(_isArray)}(${code})&&${outside(defines)}(${code},${outside(finish)})!==undefined);\n`)
+            write(`else if(!${outside(_isArray)}(${code})&&typeof ${code}=='function'){${dynamic}=`),
+              argsStageC = write(`???`), write(`;stage=`), callStage = write(`?CallStage?`), write(`;continue}`)
+            write(`else{${dynamic}=`),
+              argsStageS = write(`???`), write(`;stage=`), structStage = write(`?StructStage?`), write(`;continue}`)
+
+            compileFinish(x, name, code, false)
+            !into && (write(`stage=`), finishStage = write(`RESULT`), write(`;continue\n`, `goto result when finished`)), jumped = true
+
+            s[argsStageS] = s[argsStageC] = advanceStage('args')
+
+            const args = compileArgs(x, code)
+            write(`stage=${dynamic};continue\n`, 'dynamic return'), jumped = true
+
+            s[structStage] = advanceStage('struct')
+            compileStruct(x, name, args)
+            !into && (write(`stage=`), structStage = write(`RESULT`), write(`;continue\n`, `goto result when built`)), jumped = true
+
+            s[callStage] = advanceStage('call')
+            compileCall(x, name, args)
+
+            usedArgs(args)
+            if (!into) s[finishStage] = s[structStage] = advanceStage(x)
+            used(code)
+            return name
+          }
+        } finally {
+          compiledStack.delete(x)
+          uncertain != null && write(`stage=${uncertain};continue\n`, 'dynamic return')
+          backpatch !== undefined && (jumped = true, s[backpatch] = advanceStage(x))
+        }
+      }
+      function setupDynamicReturn() { return 'S' + (nextThen++).toString(36) }
+      function doDynamicReturn(x, goto, setupVar, prefix) {
+        // Return the backpatch index for the stage to return to (stored in var returned by `setupDynamicReturn`) after `goto` is done (or [backpatchGoto, backpatchSetup] if goto is undefined).
+        prefix && write(prefix)
+        const doesNotImmediatelyFollow = goto === undefined || goto !== nextStage
+        if (doesNotImmediatelyFollow) write('{')
+        write(`${setupVar}=`)
+        const backpatchSetup = write('&&&&&')
+        let backpatchGoto
+        if (doesNotImmediatelyFollow) write(`;stage=`), backpatchGoto = write(`${goto}`), write(`;continue}\n`, `computed return`)
+        else write(`\n`, `computed return`)
+        if (!prefix) jumped = true
+        advanceStage(x)
+        return goto !== undefined ? backpatchSetup : [backpatchGoto, backpatchSetup]
       }
       function markParents(x, _i, parent) {
         // Fill in "the shallowest common ancestor of a node" info.
@@ -8694,18 +8834,18 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
           return old
         }
       }
-      function dynamicReturnWhenSeenTwice(a, ...b) {
-        // Marks-as-uncertain all nodes seen from both branches unless shrouded by uncertainty.
+      function dynamicReturnWhenSeenTwice(a, b) {
+        // Marks-as-uncertain all nodes seen from both branches unless shrouded by uncertainty or fully within us.
         if (!_isArray(a) || !_isArray(b)) return
-        markA(a), b.forEach(markB)
+        markA(a), markB(b)
         inA.clear(), inB.clear()
 
         function markA(x) {
           if (!_isArray(x)) return
-          phantomRefs.set(x, (phantomRefs.get(x) || 0) + 1) // Dispose of vars in both branches.
           if (x[0] === quote) return
           if (currentAncestors.has(common.get(x))) return
           if (uncertainStage.has(x) || names.has(x)) return
+          // phantomRefs.set(x, (phantomRefs.get(x) || 0) + 1) // Dispose of vars in both branches. (Not implemented well enough.)
           if (inA.has(x)) return; else inA.add(x)
           currentAncestors.set(x, x)
           x.forEach(markA)
@@ -8752,7 +8892,7 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
         refCount.clear();  refCount = prevRefs
 
         result = compileExpr(x[2])
-        into ? write(`${into}=`) : write(`return `)
+        into ? write(`${into}=`) : write(`return ${result}\n`)
         if (into) write(`${result};stage=`), thenStage = write(`RESULT`), write(`;continue\n`)
         jumped = true
         used(result)
@@ -8763,94 +8903,10 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
         if (into) s[thenStage] = advanceStage(x)
       }
       function compileLast(x, into) {
-        dynamicReturnWhenSeenTwice(x[1], ...x.slice(2))
         for (let i = 1; i < x.length-1; ++i)
           used(compileExpr(x[i]))
         into ? write(`${into}=`) : write(`return `)
         write(`${compileExpr(x[x.length-1])}\n`, `last`)
-      }
-      function compileExpr(x, into) {
-        // Return a var that holds the result of finishing x.
-        _checkArgCount(x)
-        if (!_isVar(x) && !_hasCallableParts(x)) return outside(x)
-        if (_isArray(x) && x[0] === _const) return outside(x)
-        if (x[0] === quote) return outside(x[1])
-        if (compiledStack.has(x)) return _isStruct(x) ? use(x) : outside(cycle)
-        if (!_isVar(x) && assigned.has(x) && names.has(x)) return use(x)
-        const firstTime = names.has(x)
-        const name = !into && use(x)
-        lines && lines.push(line, x)
-
-        // Compute on demand.
-        let uncertain, backpatch
-        if (uncertainStage.get(x) === null) { // Our first time seeing this; emit a computable-on-demand stage.
-          uncertainStage.set(x, nextStage)
-          uncertainThen.set(x, uncertain = 'S' + (nextThen++).toString(36))
-        }
-        if (uncertainStage.has(x)) { // Compute (goto stage then goto our next stage) if not computed.)
-          if (!uncertainSeenTwice.has(x))
-            into && error("How could the top-level be uncertainly-computed?"),
-            write(`if(${name}===${outside(uncomputed)})`)
-          const doesNotImmediatelyFollow = uncertainStage.get(x) !== nextStage
-          if (doesNotImmediatelyFollow) write('{')
-          write(`${uncertainThen.get(x)}=`)
-          backpatch = write(uncertain || nextStage)
-          if (doesNotImmediatelyFollow) write(`;stage=${uncertainStage.get(x)};continue}\n`, `computed return`)
-          else write(`\n`, `computed return`)
-          if (uncertainSeenTwice.has(x)) jumped = true
-          advanceStage(x)
-        }
-        try {
-          // Store results of nodes in vars as needed.
-          if (firstTime || _isVar(x)) {
-            if (loadVarsFromEnv && _isVar(x) && (!firstTime || uncertainThen.has(x))) {
-              const e = `${outside(finish)}.env[${_id(label)}]`
-              const onUnassigned = _isLabel(x) ? `(${outside(finish)}.v=${outside(x)},${outside(defines(label, finish))}(${outside(x[1])}))` : outside(x)
-              write(`${use(x)}=${e}.has(${outside(x)})?${e}.get(${outside(x)}):${onUnassigned}\n`, `load var from env`)
-              write(`if (${outside(_isUnknown)}(${use(x)})) throw ${outside(_escapeToInterpretation)}\n`)
-            }
-            return use(x)
-          }
-          if (!loadVarsFromEnv && _isVar(x))
-            error("A var in body that was not assigned:", x)
-
-          compiledStack.add(x)
-          if (!compiledStack.has(x[0]) && !_hasCallableParts(x[0], true) && (!_isArray(x[0]) || defines(x[0], finish) !== undefined || defines(x[0], call) !== undefined)) {
-            if (x[0] === _if && x.length == 4)
-              compileIf(x, name)
-            else if (x[0] === last)
-              compileLast(x, name)
-            else if (defines(x[0], finish) !== undefined)
-              compileFinish(x, name)
-            else if (defines(x[0], call) !== undefined && (x[0] !== rest || x.length != 2))
-              typeof finish.compiled.get(x) != 'function' && finish.compiled.delete(x),
-              compileCall(x, name)
-            else
-              typeof finish.compiled.get(x) != 'function' && finish.compiled.delete(x),
-              compileStruct(x, name)
-            return name
-          } else {
-            // Basically what's above, but deferred to runtime (and without special-casing `if`/`last`, because what are the chances).
-            // First compile finishing of the code, then emit checks, then compile branches (ensuring that each is in a separate interrupt-stage and jumps to the resulting stage) and backpatch.
-            const code = compileExpr(x[0])
-            let finishStage, callStage, structStage
-            write(`if(!${outside(_isArray)}(${code})){\n`, `branch on code`)
-            write(`if(${outside(defines)}(${code},${outside(finish)})!==undefined){stage=`), finishStage = write(`FINISH`), write(`;continue}\n`)
-            write(`if(${outside(defines)}(${code},${outside(call)})!==undefined){stage=`), callStage = write(`CALL`), write(`;continue}\n`)
-            write(`}\n`, `else create struct`)
-            jumped = true
-            x.forEach(el => dynamicReturnWhenSeenTwice(el, el))
-            x.forEach(markRefCounts),
-              compileStruct(x, name), !into && (write(`stage=`), structStage = write(`RESULT`), write(`;continue\n`, `goto result`)), jumped = true
-            s[finishStage] = advanceStage(comments && [finish, x]), x.forEach(markRefCounts),
-              compileFinish(x, name), !into && (write(`stage=`), finishStage = write(`RESULT`), write(`;continue\n`, `goto result`)), jumped = true
-            s[callStage] = advanceStage(comments && [call, x]), x.forEach(markRefCounts),
-              compileCall(x, name)
-            if (!into) s[structStage] = s[finishStage] = advanceStage(x)
-            for (let i = 0; i < x.length; ++i) used(names.get(x[i]))
-            return name
-          }
-        } finally { uncertain != null && (write(`stage=${uncertain};continue\n`), jumped = true, s[backpatch] = advanceStage(x)); compiledStack.delete(x) }
       }
       function spillVars(inside) {
         const vars = getVars(inside, undefined, true)
@@ -8860,11 +8916,11 @@ compile (jsEval '{comments:true}') x ^(if ((jsEval '(a,b) => a<b') 0 a) a x) a=x
         for (let v of vars.keys()) write(`.set(${outside(v)},${use(v)})`)
         write(`\n`, `spill vars`)
       }
-      function loadVars(inside) {
+      function loadVars(inside, usedVars) {
         const vars = getVars(inside, undefined, true)
         if (!vars) return
         for (let [v, parents] of vars)
-          if (names.has(v) && used(names.get(v), parents.size), refCount.get(v))
+          if (usedVars && names.has(v) && used(names.get(v), parents.size), refCount.get(v))
             write(`${use(v)}=${outside(finish)}.env[${_id(label)}].get(${outside(v)})\n`, `load vars`)
       }
       function getVars(inside, parent, ignoreHead = false) {
@@ -10157,15 +10213,14 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
   strValue:{
-    txt:`\`(strValue String)\`: parses and evaluates String, cached.`,
+    txt:`\`(strValue String)\`: parses (cached) and evaluates String.`,
     call(s) {
       impure()
       if (typeof s != 'string') throw 'Expected a string'
       if (!strValue.cache) strValue.cache = Object.create(null)
-      if (s in strValue.cache) return strValue.cache[s]
-      let [x = parse(s)] = interrupt(strValue)
+      let [x = s in strValue.cache ? strValue.cache[s] : (strValue.cache[s] = parse(s))] = interrupt(strValue)
       if (x === _onlyUndefined) x = undefined
-      try { return strValue.cache[s] = finish(x) }
+      try { return finish(x) }
       catch (err) { if (err === interrupt) interrupt(strValue, 1)(x !== undefined ? x : _onlyUndefined);  throw err }
       // .cache
     },
@@ -10262,19 +10317,11 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
-  /*
-I don't know what I'm doing. My best things aren't good enough to reach that far. But maybe nothing is?
-
-I'm too used to things *making sense* and me being able to create a comprehensive solution, at least theoretically. But in the end, only composing very simple and hacky solutions will do.
-
-It appears to me that typing should be done as simple markers that define composition, without any peval and dependent typing nonsense (which would significantly slow things down anyway) — just objects, not infinite limited=fragile families of objects; *then* I'd be able to at least specify and compose things easily.
-
-Should I have `context(...functions)` (with every function defining `compose` as `(…inputs output)`) and `compose(ctx, ...inputs, output)` to generate an example from it?
-
-Minimalism — just functions and their composition? We wouldn't be able to have infinite families of objects to connect with finite morphisms, but maybe that's fine? All that matters is making something I can very comfortably use and extend (which potentially implies function contexts, and/or overridable `compose` actions), not a super-advanced comprehensive solution.
-  */
 
   context:{
+    future:`This static creation really prevents us from being able to handle self-reference in any dynamic re-composers (where we'd put the thing inside the context it uses). Should switch to structs and on-demand hashing, like the old system did. …Except, this won't catch inputs, and so would be useless.
+…Actually, no: those dynamic things should use \`currentOptions(out)\` when staging, and, uh, go out of scope when it's time to execute — no…
+Fuck. What to do? All searches I can think of are so fragile. How to search for search then?`,
     txt:`\`(context …Functions)\`: creates a context that consists of functions and/or contexts, for use with \`compose\`.
 Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a function of \`OutputType\` to be a context, or a map).`,
     philosophy:`These types are just markers, not potentially-infinite families like \`V:T\` on actual function inputs/outputs allows. We move beyond imposition of a particular (AKA limited and thus ultimately fragile) structure on objects, and instead allow contexts to override search arbitrarily (via being a function from \`OutputType\` to a disposable array of all functions that likely return that).`,
@@ -10338,7 +10385,7 @@ Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a fu
           lookup(v).forEach(k => add(v[k]))
         } else if (v && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)) {
           Object.keys(v).forEach(k => add(v[k]))
-        } else error(v, 'in a context')
+        } // Else ignore v.
       }
 
       // .got, .ctx, .m
@@ -10374,11 +10421,8 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
       let result
       try {
-        result = compile({cause:us,comments:true}, ...vars, resultExpr) // ### Compilation has trouble with phantom-ref allocation when we create `if`s here.
+        result = compile({cause:us}, ...vars, resultExpr)
       } catch (err) { log(jsRejected(err), resultExpr);  throw err }
-          // …Honestly… maybe we should completely switch to the simpler function-only interpreter loop (and/or a compiler for that simple thing). The compiler that we made doesn't generate very great code.
-            // Complexity is bad, anyway.
-            // evalCalls and compileCalls, here we go.
       const d = result[defines.key] = Object.create(null)
       d[_id(argCount)] = types.length-1
       d[_id(deconstruct)] = array(_function, ...vars, resultExpr)
@@ -10437,7 +10481,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
                 else expr.unshift(f), f = expr
               } catch (err) { // If our override throws, remove this option and search for another one.
                 if (err === interrupt) throw err
-                // log('Error', jsRejected(err))
+                // log('Error for', f, ...expr, ':', jsRejected(err))
                 ;[options[i], options[options.length-1]] = [options[options.length-1], options[i]], options.pop()
                 ;[ints[i], ints[ints.length-1]] = [ints[ints.length-1], ints[i]], ints.pop()
                 _allocArray(expr)
@@ -10492,9 +10536,10 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       ;='And allow feedback of performance into state… And an expr-run+eval function, taking Input and State and producing Performance…'
       ;='The — run, evaluate performance, adjust — cycle… And each function must know how it was produced, and *that* can be copied and adjusted too…'
       ;='And a picker… And measures…'
-      )
-      'Input'
-      'Performance'
+        ;='All of these are really important; without them, nothing can ever be done.'
+    )
+    'Input'
+    'Performance'
   `,
 
 
@@ -10510,17 +10555,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
     Evaluate = (function ?:Input ?:State ?:Goal  ?:Performance)
     Compare = (function ?:Performance ?:Performance  ?)
     Adjust = (function ?:Input ?:State ?:Goal  ?:State)
-    (either
-      ;='We need examples of \`Adjust\`, so that we can actually adjust stuff. Even a simple Evaluate-twice-then-apply-best will do as a start. In fact, does evolution *really* need anything else?'
-      (function i i=?:Input s s=?:State g g=?:Goal  ( ;='An example of Adjust.'
-        ;='Evaluate twice then commit the best-performing one.'
-        ;='This relies on \`Evaluate\` being essentially random.'
-        a=(journalMeasures (get Evaluate) i s g)
-        b=(journalMeasures (get Evaluate) i s g)
-        (if ((get Compare) (peekMeasures a) (peekMeasures b)) (commitMeasures a) (commitMeasures b))
-          ;='And, our peval (and/or _outputIsStructured) are not nearly advanced enough to infer the proper types here.'
-      ))
-      )
+        ;='Like, evaluate twice then commit the best-performing one.'
   `,
 
 
@@ -10533,6 +10568,8 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
       ;="Measure generators:"
       (function (map):Measure) ;="A map to store numbers in."
+
+      ;='Creating measures, reading measures to pick from options, writing measures when delivered from a goal…'
 
       ;="Multiply a measure by a number when read; only blame the measure."
       (function m:Measure a:Scalar (array o->(readMeasure m o)*a m):Measure)
