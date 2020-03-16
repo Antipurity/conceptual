@@ -446,11 +446,7 @@ Globals={
 
   Numeric:{
     txt:`A namespace for some very primitive numeric-computation-related functionality.`,
-    future:[
-      `Zero-overhead typed numeric operations (on i32/i64/f32/f64; const.… and +-*/ and some mathy stuff), compiling to Wasm and WebGPU.`,
-      `Have \`(reorderDims In NewOrder)\`. Have a named-dimension decorator that uses that.`,
-      `Have \`(Dense dims data dtype strides)\` for dense mostly-numeric tensors.`,
-    ],
+    future:`Expose all ops of Wasm and WebGPU as parts of generative concepts.`,
     lookup:{
       reduce:__is(`reduce`),
       transform:__is(`transform`),
@@ -986,7 +982,6 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   Extension:{
     txt:`Not implemented. Or is it?`,
-    future:`Have an action button, and inject a script with this js into null on click.`,
     call() { throw "Being a browser extension not supported for now" },
   },
 
@@ -3228,7 +3223,12 @@ All these are automatically tested to be correct at launch.`,
           if (!_isArray(a)) throw "Examples must be arrays or comments"
           if (!finish.env[_id(log)]) return a
           const from = parse(a[0], fancy, undefined, parse.dom)[1]
-          const to = a[1] ? parse(a[1]) : elemCollapse(() => elem(evaluator, from, to))
+          const env = finish.env
+          const to = a[1] ? parse(a[1]) : elemCollapse(() => {
+            const prev = finish.env;  finish.env = env
+            try { return elem(evaluator, parse(a[0]), to) }
+            finally { finish.env = prev }
+          })
           return elem('div', [from, elem('span', '\n⇒ '), serialize(to, L, B, serialize.displayed)])
         })
         return r.length != 1 ? r : r[0]
@@ -3262,7 +3262,6 @@ All these are automatically tested to be correct at launch.`,
   philosophy:{
     txt:`Does that matter to you?`,
     lookup:[
-      `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
       [
         `Reward hacking isn't an AI issue, it's a human issue. Evolution has not caught up to modern society at all, and static reward function plus very dynamic behavior equals trouble. Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about artificial intelligence that's not in intelligence, it's just more clear and efficient.`,
         `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached: exponential curves do not exist in reality, only logistic curves.`,
@@ -3299,6 +3298,13 @@ Walls of text and heaps of little code snippets, created only to give rise to be
 I have finally reclaimed my power of ages past.
 It only took thinking hard about optimizer optimizer search search. …That thing technically preceded this too, so I'll leave it in.
 I hope it'll be enough to implement it. It's too easily absorbed by humanity's imperfections.`,
+      `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
+      `Hit and run. Once a part is good, move on.
+Things small enough to master, understand how they could be used/modified, and make others.
+Our advancedness will be a huge hindrance.
+A work of art? A well-designed system? Forget it. Throw in everything you can think of, including the most broken copy/modify operations on the most basic objects.
+Search-for-search-for-search rage-quit counter:
+4`,
       ],
     ],
   },
@@ -3386,7 +3392,6 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
 
   delay:{
     txt:`\`(delay)\` or \`(delay Value)\`: Just a function for testing promises. It should have no effect on evaluation.`,
-    future:`Test that this still works.`,
     nameResult:[
       `delayed`,
     ],
@@ -3455,7 +3460,7 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
     call(expr, env, then, ID = _newJobId()) {
       // Call this to initiate a later evaluation of an expression; the callback will be called with the result.
       if (typeof then != 'function') throw "Expected a function continuation"
-      if (!_jobs.expr) _jobs.expr = []
+      if (!_jobs.expr) _jobs.expr = [], _jobs.limbo = []
       if (!_jobs.expr.length) setTimeout(_jobs, 0)
       if (!_jobs.begin) _jobs.begin = 0
       for (let i = _jobs.begin; i < _jobs.expr.length; i += 4) // Don't add the same job twice.
@@ -3479,6 +3484,11 @@ If any promises the job depends on have a method .cancel, calls those.`,
           if (returnJob) return _jobs.expr.splice(i, 4)
           return _jobs.expr.splice(i, 4), true
         }
+      for (let i = 0; i < _jobs.limbo.length; i += 4)
+        if (_jobs.limbo[i+3] === ID) {
+          if (returnJob) return _jobs.limbo.splice(i, 4)
+          return _jobs.limbo.splice(i, 4), true
+        }
       call.locked.forEach((ownerID, v) => ownerID === ID && (call.cache.delete(v), call.locked.delete(v)))
       return false
     },
@@ -3493,8 +3503,8 @@ If any promises the job depends on have a method .cancel, calls those.`,
     // One iteration of the interpreter loop.
     if (ID === undefined) console.log('BAD', new Error().stack)
     const microstart = env[_id(realTime)] = _timeSince()
-    if (_isDeferred(expr))
-      expr = _deferredPrepare(expr, env, then, ID)
+
+    if (env[_id(log)] && !_isArray(env[_id(log)]) && !env[_id(log)].parentNode) return
 
     finish.env = env, call.ID = ID
     finish.pure = false, finish.inFunction = 0, finish.noSystem = false, finish.depth = 0
@@ -3503,6 +3513,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
     interrupt.started = microstart // So that we can interrupt on timeout.
     _jobs.reEnter = true // So that code can specify custom _schedule overrides.
     let v, interrupted = false
+
+    if (_isDeferred(expr))
+      expr = _deferredPrepare(expr, env, then, ID)
 
     if (typeof document != ''+void 0 && env[_id(_checkInterrupt)] !== undefined)
       _highlightOriginal(env[_id(_checkInterrupt)], false)
@@ -3567,11 +3580,21 @@ If any promises the job depends on have a method .cancel, calls those.`,
         _jobs.display(_jobs.indicator)
       } else if (_jobs.expr.length)
         _jobsResume()
-      // _jobs.expr (Array), _jobs.duration (Number), _jobs.reEnter (true or a _schedule-replacing function), _jobs.indicator, _jobs.cpu
+      // _jobs.expr (Array), _jobs.limbo (Array), _jobs.duration (Number), _jobs.reEnter (true or a _schedule-replacing function), _jobs.indicator, _jobs.cpu
     },
   },
 
   _jobsResume(delay) { delay === false && _jobs.indicator.classList.toggle('yes', false);  if (_jobs.expr.length) setTimeout(_jobs, delay || 0) },
+
+  _pauseJob(expr, env, then, ID) {
+    _jobs.limbo.push(expr, env, then, ID)
+  },
+
+  _continueJob(ID) {
+    for (let i = 0; i < _jobs.limbo.length; i += 4)
+      if (_jobs.limbo[i+3] === ID)
+        _schedule(..._jobs.limbo.splice(i, 4))
+  },
 
   _deferredPrepare(expr, env, then, ID) {
     // Go through all expr's promises and bind their instances inside to promise.result if present.
@@ -3582,9 +3605,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
       if ('result' in p)
         ctx.set(p, p.result instanceof Error ? array(error, ''+p.result) : !_isError(p.result) ? quote(p.result) : p.result)
       // Remove us from the promise's continuation (and only us, since there might be different jobs listening to the same promise).
-      for (let i = 0; i < p.cont.length; i += 4)
-        if (p.cont[i] === expr && p.cont[i+1] === env && p.cont[i+2] === then && p.cont[i+3] === ID) {
-          p.cont.splice(i, 4)
+      for (let i = 0; i < p.cont.length; ++i)
+        if (p.cont[i] === ID) {
+          p.cont.splice(i, 1)
           break
         }
     }
@@ -3594,19 +3617,19 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _deferredResult(v, env, then, ID) {
     // Remember to continue when any promise returns.
-    log('<Deferring', v.slice(2).filter(_isPromise).length, 'promises…>')
+    if (typeof document != ''+void 0) log(elemValue(elem('unimportant', ['<Deferring '+v.slice(2).filter(_isPromise).length+' promises…>']), v))
     v.forEach(p => {
       if (_isPromise(p)) {
         if (!p.cont)
           p.cont = [],
-          p.then(result => {
-            _scheduleAndConsumeMany(p.cont, p.result = result)
-          }, reason => {
-            _scheduleAndConsumeMany(p.cont, p.result = jsRejected(reason))
-          })
-        p.cont.push(v, env, then, ID)
+          p.then(
+            result => (p.cont.forEach(_continueJob), p.cont.length = 0, p.result = result),
+            reason => (p.cont.forEach(_continueJob), p.cont.length = 0, p.result = jsRejected(reason))
+          )
+        p.cont.push(ID)
       }
     })
+    _pauseJob(v, env, then, ID)
   },
 
   _jobsDisplay(el, n = _jobs.expr.length>>>2) {
@@ -3617,13 +3640,6 @@ If any promises the job depends on have a method .cancel, calls those.`,
     for (; i = ch && ch.nextSibling, ch; ch = i) el.removeChild(ch)
     el.title = el.title.replace(/[0-9]+/, n)
     if (!n) el.classList.toggle('yes', false)
-  },
-
-  _scheduleAndConsumeMany(a) {
-    // A little function for very slight efficiency gains in promise-handling.
-    for (let i = 0; i < a.length; i += 4)
-      _schedule(a[i], a[i+1], a[i+2], a[i+4])
-    a.length = 0
   },
 
   _highlightOriginal(expr, working) {
@@ -3856,7 +3872,6 @@ When in an array that is assigned to, collects the rest of arguments into an arr
 
   if:{
     txt:`Finishing \`(if Condition Then Else)\`: Evaluates \`Condition\`, then evaluates \`Then\` if it was \`true\`, or \`Else\` otherwise.`,
-    future:`Have the _if.takenThen and _if.takenElse WeakMaps (from \`if …?\` nodes to times taken), and have \`if\` peval only the most frequent branch, and have \`compile\` guard for only the most frequent branch.`,
     nameResult:[
       `picked`,
       `result`,
@@ -4108,7 +4123,6 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
     txt:`\`Name\` or \`(label "Name")\`, or \`?\` or \`(label)\`: represents a variable that can be bound or assigned.
 Equal-name labels are bound to the same thing within the same binding. Each unnamed label is unique.
 Evaluating a bound label results in its value, in the current function call. Evaluating an unbound named label results in an \`(error)\`.`,
-    future:`Fix \`a a=(0 (a) a)\` not serializing correctly.`,
     examples:[
       [
         `a a=1`,
@@ -4162,7 +4176,7 @@ Evaluating a bound label results in its value, in the current function call. Eva
 
   _isLabel(v) { return _isArray(v) && v[0] === label && typeof v[1] == 'string' && v.length == 2 },
 
-  _promiseToDeferred(p) { const u = _unknown(p); u.push(p); return p },
+  _promiseToDeferred(p) { const u = _unknown(p); u.push(p); return u },
 
   _unknown:{
     txt:`\`(_unknown Expr)\`: denotes that Expr is dependent on unknown factors and cannot be evaluated now, so it has to be deferred.
@@ -4681,7 +4695,7 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
             try {
               r = i > 0 ? (finished[i] = finish(v)) : v
             } catch (err) { if (err === impure) r = _unknown(finished); else throw err }
-            if (_isPromise(r)) r = _promiseToDeferred(r)
+            if (_isPromise(r)) r = finished[i] = 'result' in r ? r.result : _promiseToDeferred(r)
 
             if (_isUnknown(r) && !_isDeferred(record)) record = !wasVar ? r : true
             else if (_isDeferred(r)) record = r
@@ -4708,11 +4722,10 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           if (!record || doInline)
             try {
               // return result = call(finished, v, true)
-              finish.v = v, _checkArgCount(finished)
-              let r = defines(finished, call)
-              if (typeof r == 'function' && (finished[0] !== rest || finished.length != 2)) {
-                _checkInterrupt(v)
-                result = finished.length == 3 ? r.call(finished[0], finished[1], finished[2]) :  r.call(...finished)
+              _checkArgCount(finished)
+              if (typeof finished[0] == 'function' && (finished[0] !== rest || finished.length != 2)) {
+                _checkInterrupt(v), finish.v = v
+                result = finished.length == 3 ? finished[0].call(finished[0], finished[1], finished[2]) : finished[0].call(...finished)
                 return _allocArray(finished), result
               }
               return result = finished
@@ -6129,7 +6142,6 @@ Infers structural terms where possible.`,
 
   elem:{
     txt:`\`(elem TagName Content Extra)\`: creates an HTML DOM element.`,
-    future:`Figure out why elems get cloned when outputted.`,
     nameResult:[
       `element`,
       `DOM`,
@@ -7647,6 +7659,7 @@ Not for use inside that paused job.
 (Technically, we could use \`_continuation\` to save/restore execution states, and also have per-cause breakpoints, and also have a way of inspecting function state when interpreting, but debuggers are dime-a-dozen anyway, so who cares.)`,
     call(expr, env, then, ID, before = env[_id(log)] || Self.into) {
       _cancel(ID)
+      env[_id(_pausedToStepper)] = Infinity
       // Hide `before`, and insert a <div> with <button>s inside.
       const el = elem('div')
         const justRun = elem('button', '▶')
@@ -8488,7 +8501,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       write(`//# sourceURL=${sourceURL}`)
       let result
       try { result = Function(...Object.keys(nameToEnv), s.join(''))(...Object.values(nameToEnv)) }
-      catch (err) { log(s.join(''), jsRejected(err));  throw err}
+      catch (err) { log('Error when compiling', ...a, body, ':', s.join(''), jsRejected(err));  throw err}
       result[jsEval.ctx] = nameToEnv
       if (lines) result.lines = lines, typeof cause == 'function' && (cause.lines = lines)
       _resolveStack.functions[sourceURL] = cause
@@ -9242,6 +9255,7 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
       types:__is(`types`),
       input:__is(`input`),
       output:__is(`output`),
+      pick:__is(`pick`),
       use:__is(`use`),
       get:__is(`get`),
       using:__is(`using`),
@@ -9380,9 +9394,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
             // Look into both branches.
             result = _addUsesToContext(result, as, d ? f : f[f.length-1], ctx, values, inp)
           } else
-            try { // Check the structural output.
-              _assign(_bindFunc(d ? f : f[f.length-1], _turnComputedIntoVars), values, true)
-            } catch (err) { k = endK+1 }
+            try { _outputIsStructured(v, values) } catch (err) { k = endK+1 }
         }
         if (k < endK+1) {
           // Everything succeeded; add the function to the resulting context.
@@ -9940,22 +9952,6 @@ Use \`picker\` to override behavior.`,
       picker:__is(`picker`),
     },
     philosophy:`Intended to be a target for future developments in structural learning, so that choices can be improved.`,
-    future:`Setup = ?:TaskDescription -> ?:State
-Run = ?:State -> ?:Result
-Evaluate = (function ?:State ?:Goal ?:Performance)
-Adjust = (function ?:State ?:Performance ?:State)
-;="And, to evaluate, all we do is \`(get ?:Result OurInput:TaskDescription)\`, and automatically do learning if it proves to be good (under all conceivable goals, with all conceivable methods).
-Huuuuuuuh.
-But, what would serve as basic blocks for such a search?"
-
-
-
-Index-based per-cause choice optimization (a base that could optimize more advanced optimizer families):
-\`pick.best Result→Measure Expr\`, blending estimated-measures of all choices made during evaluation into Measure.
-    (Wouldn't we like to store that measure in the decision procedure, and have all those pickers alter the decision procedures?)
-\`pick.sample Result→ProbabilityAdjustment Expr\`, adding probability to all. (Well, with mutable choice sets, we'd need to sum metrics and sample each time.)
-\`best Metric Expr Repeats=2\`, \`journal\`ing everything and commiting the best.
-"Freeze all all choices but one, which is changed every 50 ms". (A generative function family would be a more complete solution here.)`,
     call(from, cause = finish.v, extra) {
       if (_pickCount(from) === 1) return 0
       if (pick.depth > pick.ers.length)
@@ -10015,14 +10011,6 @@ Index-based per-cause choice optimization (a base that could optimize more advan
   picker:{
     txt:`Finishing \`(picker With Expr)\`: sets the function that will pick choices when evaluating \`Expr\`.
 \`With\` is like \`function InnerPicker From Cause\`, copying \`From\` if needed, where \`InnerPicker\` is \`randomPicker\` unless set otherwise with this.`,
-    future:[
-      `\`(readMeasure Object Measure)\` and \`(writeMeasure Object Measure Is)\`, for persistent designed-for-low-measure-count (\`(Measure Is Measure Is)\` at \`Object\`) storage, using _read and writing directly if not journaling for efficiency.`,
-      `Pickers \`(bestMeasure Measure)\` and \`(sampleMeasure Measure)\`.`,
-      `\`(alter PickedMap→? Expr)\`, for assigning blame and changing to fit a goal.
-Linear blend to goal of measures, add goal to measures, backprop to number variables. Fixate on one choice to alter. Make a measure that is a weighted sum of measures.
-
-A small set of measures stuck to thoughts, like hormones' effects. Searching through how to use those measures and how to alter them, in the middle of the generated expressions. That is what real optimization is, about as good as a human mind.`,
-    ],
     argCount:2,
     finish(With, expr) {
       let [er] = interrupt(picker)
@@ -10067,10 +10055,6 @@ This is the default when no picker is specified.`,
 
   askUser:{
     txt:`A \`With\` for \`picker\` that pauses execution and asks the user.`,
-    future:[
-      `Test this.`,
-      `Have \`ChoicesElem(ctx = CurrentUsage)\` for inspecting/modifying the remembered choices, and/or decision procedures, "Write the decision function \`(function Next From Cause Extra)->?\` for this cause:" editor.`,
-    ],
     lookup:{
       Choices:__is(`Choices`),
     },
@@ -10082,11 +10066,11 @@ This is the default when no picker is specified.`,
     call(next, from, cause, extra) {
       call.impure = true
       if (!askUser.got) askUser.got = new Map
-      let a = array(askUser, next, from, cause, extra)
+      const a = array('askUser', next, from, cause, extra)
       if (askUser.got.has(a))
         try {
           return askUser.got.get(a) !== _notFound ? askUser.got.get(a) : next(from, cause, extra)
-        } finally { askUser.got.delete(a, a = askUser.got.get(a)) }
+        } finally { askUser.got.delete(a) }
 
       // Remember from `Choices`.
       if (Choices.has(cause)) {
@@ -10131,15 +10115,15 @@ This is the default when no picker is specified.`,
 
       // A "remember" checkbox.
       let remember = false
-      const det = elem('details')
-      const sum = elem('summary')
-      const checkbox = elem('input')
-      checkbox.type = 'checkbox'
-      checkbox.oninput = checkbox.onchange = () => remember = checkbox.checked
-      checkbox.title = 'Remember the choice'
-      sum.append(checkbox)
-      det.append(sum)
-      el.append(det)
+      // const det = elem('details')
+      // const sum = elem('summary')
+      // const checkbox = elem('input')
+      // checkbox.type = 'checkbox'
+      // checkbox.oninput = checkbox.onchange = () => remember = checkbox.checked
+      // checkbox.title = 'Remember the choice'
+      // sum.append(checkbox)
+      // det.append(sum)
+      // el.append(det)
 
       // A table of choices.
       if (_isArray(from)) {
@@ -10156,17 +10140,20 @@ This is the default when no picker is specified.`,
         for (let i = 0; i < from; ++i)
           el.append(elemValue(elem('button', ''+i), i))
       }
+      const env = finish.env
       let job
       el.onclick = evt => {
-        if (evt.target.tagName !== 'BUTTON' || !('to' in evt.target) || typeof evt.target.to != 'number') return
+        if (evt.target.tagName !== 'BUTTON' || !('to' in evt.target) || evt.target.to !== _notFound && typeof evt.target.to != 'number') return
         if (remember) {
           const picked = typeof from == 'number' ? evt.target.to : from[evt.target.to-1]
           Choices.set(cause, typeof picked != 'function' ? picked : array(_disabled, picked))
         }
+        env[_id(log)] && env[_id(log)].style.removeProperty('display')
         askUser.got.set(a, evt.target.to), _schedule(...job)
         elemRemove(el), el.onclick = null
       }
       log(el)
+      env[_id(log)] && (env[_id(log)].style.display = 'none')
 
       _causeInterrupt(cause, (expr, env, then, ID) => job = [expr, env, then, ID])
     },
@@ -10212,43 +10199,23 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
-  strValue:{
-    txt:`\`(strValue String)\`: parses (cached) and evaluates String.`,
+  Eval:{
+    txt:`\`(Eval String)\`: parses (cached) and evaluates String.`,
     call(s) {
       impure()
       if (typeof s != 'string') throw 'Expected a string'
-      if (!strValue.cache) strValue.cache = Object.create(null)
-      let [x = s in strValue.cache ? strValue.cache[s] : (strValue.cache[s] = parse(s))] = interrupt(strValue)
+      if (!Eval.cache) Eval.cache = Object.create(null)
+      let [x = s in Eval.cache ? Eval.cache[s] : (Eval.cache[s] = parse(s))] = interrupt(Eval)
       if (x === _onlyUndefined) x = undefined
       try { return finish(x) }
-      catch (err) { if (err === interrupt) interrupt(strValue, 1)(x !== undefined ? x : _onlyUndefined);  throw err }
+      catch (err) { if (err === interrupt) interrupt(Eval, 1)(x !== undefined ? x : _onlyUndefined);  throw err }
       // .cache
     },
   },
 
-  EvaluationContext:`
-    ;="A context for evaluating expressions, via \`get ?:Output (either X:Input (strValue EvaluationContext))\` for dynamic eval or \`get ?:Input->?:Output (strValue EvaluationContext)\` for static eval."
-    (either
-      ;='Not a rich one. (Concepts like being pure (for caching), and wasm-format and its evaluation, and parallel execution, and goals and optimization, could potentially be added.)'
-      x:Input -> (finish x):Output
-      x:Input -> ((compile undefined x)):Output
-    )
-  `,
-  Input:{txt:`The input to evaluate in EvaluationContext: an arbitrary bound value-flow graph represented via JS arrays.`},
-  Output:{txt:`The output of expression evaluation in EvaluationContext: any JS value.`},
 
 
 
-  getter:{
-    // I think `using` should be replaced with this…
-    call(out, ctx) {
-      // Just one impl? Really? Well, which one then?
-    },
-  },
-
-
-
-  // Another good thing would be re-searchers (shadows of `get`): probGet(out, ctx, prob), best(out, ctx)… There are hints of having been found by random search in these, and I cannot imagine a concrete impl; how to make a family of such re-searchers?
 
 
 
@@ -10296,7 +10263,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
   peekMeasures:{
     txt:`\`(peekMeasures Journal)\`: Returns the result contained in a journal without applying the journal.`,
     input:[['Deferred measure changes', [__is(`label`)]]],
-    output:[__is(`Output`), [__is(`label`)]],
+    output:['Output', [__is(`label`)]],
     argCount:1,
     call(journal) { return journal[0] },
   },
@@ -10304,7 +10271,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
   commitMeasures:{
     txt:`\`(commitMeasures Journal)\`: performs the actual writes stored in a journal, and returns its result. A journal can only be committed once.`,
     input:[['Deferred measure changes', [__is(`label`)]]],
-    output:[__is(`Output`), [__is(`label`)]],
+    output:['Output', [__is(`label`)]],
     argCount:1,
     call(journal) { return journal[1].forEach(_commitMeasureChanges), _allocMap(journal[1]), journal[0] },
   },
@@ -10320,7 +10287,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
   context:{
     future:`This static creation really prevents us from being able to handle self-reference in any dynamic re-composers (where we'd put the thing inside the context it uses). Should switch to structs and on-demand hashing, like the old system did. …Except, this won't catch inputs, and so would be useless.
-…Actually, no: those dynamic things should use \`currentOptions(out)\` when staging, and, uh, go out of scope when it's time to execute — no…
+…Actually, no: those dynamic things should use \`currentOptions(out)\` when staging, and, uh, go out of scope when it's time to execute and recurse — no…
 Fuck. What to do? All searches I can think of are so fragile. How to search for search then?`,
     txt:`\`(context …Functions)\`: creates a context that consists of functions and/or contexts, for use with \`compose\`.
 Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a function of \`OutputType\` to be a context, or a map).`,
@@ -10393,6 +10360,10 @@ Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a fu
   },
 
   compose:{
+    future:`
+Allow higher-order outputs.
+…Or just switch to concepts-that-are-arrays-of-options directly?
+`,
     txt:`\`(compose Context …InputTypes OutputType)\`: generates a function that connects inputs of specified types to output.
 A function can define \`compose Context …InputExprs OutputType\` to stage any code it wants in place of itself (or throw to deny composition in this case).`,
     examples:[
@@ -10419,10 +10390,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       catch (err) { if (err === interrupt) err(compose, 2)(exprs, vars), exprs = null;  throw err }
       finally { exprs && _allocMap(exprs) }
 
-      let result
-      try {
-        result = compile({cause:us}, ...vars, resultExpr)
-      } catch (err) { log(jsRejected(err), resultExpr);  throw err }
+      const result = compile({cause:us}, ...vars, resultExpr)
       const d = result[defines.key] = Object.create(null)
       d[_id(argCount)] = types.length-1
       d[_id(deconstruct)] = array(_function, ...vars, resultExpr)
@@ -10503,7 +10471,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
   // Now, what I need are, well, example contexts… in particular a function that re-composes itself dynamically (able to handle self-reference)… and goals, and dynamic-recomposition-with-goal that keeps the best things… and copy/mutation by culling the context… And deferring `pick`s till runtime — how is this one done (more importantly, *when*); maybe it is better to have a `dynamic` function-composing (with a choice source) function?
 
   atan(x) { return Math.atan(x) },
-  numbersRandomSearch:`
+  numbersRandomSearch:` ;="repeat (Eval numbersRandomSearch)"
     compose
     (context
       ;='A goal to maximize, fitting to some function.'
@@ -10544,47 +10512,6 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
 
 
-  // How to combine a goal with journalMeasures (a `'Deferred measure changes' ?` result) to create an optimizer?
-  /*\
-  Uh, would this context help at all?
-  \*/
-  OptimizerContext:`
-    ;='A context for optimizing everything.'
-    Setup = ?:TaskDescription -> ?:State
-    Run = (function ?:Input ?:State  ?:Output)
-    Evaluate = (function ?:Input ?:State ?:Goal  ?:Performance)
-    Compare = (function ?:Performance ?:Performance  ?)
-    Adjust = (function ?:Input ?:State ?:Goal  ?:State)
-        ;='Like, evaluate twice then commit the best-performing one.'
-  `,
-
-
-
-  MeasureContext:`
-    ;="A context for generating and using measures."
-    (either
-      (function x:Measure y:Option  (readMeasure x y):MeasureIs)
-      (function x:Measure y:Option z:MeasureIs  (writeMeasure x y z):Measure)
-
-      ;="Measure generators:"
-      (function (map):Measure) ;="A map to store numbers in."
-
-      ;='Creating measures, reading measures to pick from options, writing measures when delivered from a goal…'
-
-      ;="Multiply a measure by a number when read; only blame the measure."
-      (function m:Measure a:Scalar (array o->(readMeasure m o)*a m):Measure)
-      ;="Sum two measures when read; only blame one measure."
-      (function m1:Measure m2:Measure (array o->(readMeasure m1 o)+(readMeasure m2 o) m1):Measure)
-
-      ;="Combine measures in any way."
-        ;="We need ReadMeasureOp and WriteMeasureOp, though. Where would we get such a thing?"
-      (function m1:Measure m2:Measure (array o->(ReadMeasureOp (readMeasure m1 o) (readMeasure m2 o)) (function o is [(WriteMeasureOp m1 o is),(WriteMeasureOp m2 o is)]:Measure)
-    )
-  `,
-  // And Scalar… Or do we want to be able to generate constant measures?
-  Measure:{txt:`An object that stores judgements of \`Option\`s.`},
-  Option:{txt:`A branch that could be selected.`},
-  MeasureIs:{txt:`The stored judgement by a \`Measure\` of an \`Option\`.`},
 
 
 
