@@ -139,7 +139,7 @@ __base({
       ctx.set(label('_globalScope'), net) // Deconstructions are very ugly otherwise.
       const backctx = _invertBindingContext(ctx)
       parse.ctx = ctx
-      Self[defines.key][_id(lookup)] = net
+      Self[defines.key][_id(lookup)] = net, Object.freeze(Self[defines.key])
 
       // Fill globals' id-to-key mapping for deconstruction of concepts.
       concept.idToKey = Object.create(null)
@@ -995,7 +995,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
         if (int.unref) int.unref()
         return void Deinitialize.intervals.push(int)
       }
-      addEventListener(type, listener, opt)
+      Self.into.addEventListener(type, listener, opt)
       Deinitialize.events.push(type, listener, opt)
     },
   },
@@ -1008,7 +1008,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       Deinitialize.intervals.forEach(clearInterval)
       const e = Deinitialize.events
       for (let i = 0; i < e.length; i += 3)
-        removeEventListener(e[i], e[i+1], e[i+2])
+        Self.into.removeEventListener(e[i], e[i+1], e[i+2])
       _jobs.expr.length = 0
       Self.into.remove()
     },
@@ -1020,7 +1020,8 @@ Supported browsers: modern Chrome and Firefox.`,
     lookup:{
       icon:__is(`BrowserIconURL`),
     },
-    style:`.into * {transition: all .2s, margin 0s, padding 0s; vertical-align: top; box-sizing: border-box; animation: fadein .2s; font-family: monospace}
+    style:`.into * {transition: all .2s, margin 0s, padding 0s; vertical-align: top; box-sizing: border-box; animation: fadein .2s; font-family: monospace; font-size:initial}
+.into:not(body) { box-shadow:var(--highlight) 0 0 .1em .1em }
 
 @keyframes fadein { from {opacity:0} }
 
@@ -1096,9 +1097,9 @@ prompt { width:2ch; color:red; float:left }
 prompt::before { content:'▶' /* > ⊱ ▶ */ }
 .editable>prompt::before { content:'⊱' }
 
-JobIndicator { width:1em; height:1em; margin:.2em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
+JobIndicator { width:14px; height:14px; margin:.2em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
 JobIndicator.yes { background-color:var(--highlight); animation: rotate 4s infinite linear, fadein .2s }
-JobIndicator>div { width:.3em; height:.3em; margin:.35em; position:absolute; background-color:var(--highlight); border-radius:50%; transform: rotate(var(--turns)) translate(.7em); animation:none }
+JobIndicator>div { width:4px; height:4px; margin:5px; position:absolute; background-color:var(--highlight); border-radius:50%; transform: rotate(var(--turns)) translate(10px); animation:none }
 @keyframes rotate {
   0% { transform: rotate(-0.25turn) }
   100% { transform: rotate(0.75turn) }
@@ -1158,7 +1159,6 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 .removed { margin:0 }`,
     call(into = document.body) {
       Self.into = into
-      into.classList.add('into')
       serialize.displayed = serialize.dom
       const passive = {passive:true}, passiveCapture = {passive:true, capture:true}
 
@@ -1166,15 +1166,18 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       if (into === null) {
         into = elem('div')
         const close = elem('button', '❌')
+        close.title = `Close`
         close.onclick = () => (delete finish.v, Deinitialize(), close.onclick = null)
         into.append(close)
         into.style.position = 'absolute'
         into.style.left = scrollX + innerWidth/2 + 'px'
         into.style.top = scrollY + innerHeight/2 + 'px'
         allowDragging(into)
-        const doc = document.documentElement
-        doc.attachShadow ? doc.attachShadow({mode:'closed'}).appendChild(into) : doc.append(into)
+        const doc = document.body
+        const parent = doc.attachShadow ? doc.appendChild(document.createElement('div')).attachShadow({mode:'closed'}) : doc
+        parent.appendChild(into)
       }
+      into.classList.add('into')
       Self.into = into
 
       // Insert favicon.
@@ -1194,8 +1197,8 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       // Create a REPL.
       const env = finish.env = _newExecutionEnv()
       const repl = finish.env[_id(log)] = REPL(fancy, new Map(parse.ctx))
-      into.insertBefore(repl, into.firstChild)
-      document.querySelector('[contenteditable]').focus()
+      into.appendChild(repl)
+      Self.into.querySelector('[contenteditable]').focus()
 
       // If our URL has `#…` at the end, parse and evaluate that command.
       function evalHash(hash) {
@@ -1208,19 +1211,21 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       // On click, run `(log (picker askUser (use (targetElem clientX clientY):'clicked')))` (or typed as `clicked elsewhere`) daintily.
       _listen('click', evt => {
         finish.env = undefined
-        if (evt.shiftKey && !evt.ctrlKey && !evt.altKey && !Self.into.contains(evt.target)) {
+        const t = evt.target || evt.explicitOriginalTarget
+        if (evt.shiftKey && !evt.ctrlKey && !evt.altKey && !Self.into.contains(t)) {
           // Shift+clicked outside of us.
           const ctx = OnShiftClickOutside
-          atCursor(daintyEvaluator([log, [picker, askUser, [[[lookup, ctx, [sum, [pick, ctx], 1]]], [quote, [evt.target, evt.clientX, evt.clientY]]]]]))
+          atCursor(daintyEvaluator([log, [picker, askUser, [[[lookup, ctx, [sum, [pick, ctx], 1]]], [quote, [t, evt.clientX, evt.clientY]]]]]))
         }
       }, passive)
 
       // Select the <node> under cursor on triple-click.
       // Also make <details> open smoothly, and allow them to be closed by clicking.
       _listen('click', evt => {
-        if (evt.target.tagName === 'DETAILS') return evt.target.firstChild.click()
-        if (evt.target.tagName === 'SUMMARY' && evt.detail !== 3 && !_smoothHeight.disabled) {
-          const el = evt.target.parentNode
+        const t = evt.target || evt.explicitOriginalTarget
+        if (t.tagName === 'DETAILS') return t.firstChild.click()
+        if (t.tagName === 'SUMMARY' && evt.detail !== 3 && !_smoothHeight.disabled) {
+          const el = t.parentNode
           const pre = _smoothHeightPre(el)
           el.style.height = pre + 'px'
           setTimeout(_removeHeight, 1000, el)
@@ -1228,16 +1233,16 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
           el.addEventListener('toggle', smooth)
         }
         if (evt.detail !== 3) return
-        const p = _closestNodeParent(evt.target)
+        const p = _closestNodeParent(t)
         p && getSelection().selectAllChildren(p)
       }, passive)
 
       // Open a custom <context-menu> when a context menu is requested, or when a <known> thing is clicked, or when a pointer is pressed in place for 1 second.
       function openMenu(evt, r) {
-        contextMenu(_closestNodeParent(evt.target), r || getSelection().rangeCount && getSelection().getRangeAt(0), evt), evt.preventDefault()
+        contextMenu(_closestNodeParent(evt.target || evt.explicitOriginalTarget), r || getSelection().rangeCount && getSelection().getRangeAt(0), evt), evt.preventDefault()
       }
       _listen('contextmenu', evt => openMenu(evt))
-      _listen('click', evt => !evt.shiftKey && !evt.ctrlKey && !evt.altKey && evt.target.tagName === 'KNOWN' && openMenu(evt))
+      _listen('click', evt => !evt.shiftKey && !evt.ctrlKey && !evt.altKey && (evt.target || evt.explicitOriginalTarget).tagName === 'KNOWN' && openMenu(evt))
       let contextMenuId, pointerId = null, startX, startY
       _listen('pointerdown', evt => {
         atCursor.lastEvt = evt
@@ -1257,9 +1262,10 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
       // Close not-containing-target <context-menu>s on a click elsewhere.
       const closeMenus = evt => {
-        if (_isEditable(evt.target) || !atCursor.opened) return
-        const bad = atCursor.opened.filter(el => !el.contains(evt.target))
-        atCursor.opened = atCursor.opened.filter(el => el.contains(evt.target))
+        const t = evt.target || evt.explicitOriginalTarget
+        if (_isEditable(t) || !atCursor.opened) return
+        const bad = atCursor.opened.filter(el => !el.contains(t))
+        atCursor.opened = atCursor.opened.filter(el => el.contains(t))
         bad.forEach(elemRemove)
       }
       _listen('pointerdown', closeMenus)
@@ -1276,17 +1282,19 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       // On transition end, remove .style.height (for _smoothHeightPost/elemInsert).
       let atEnd = false
       _listen('transitionstart', evt => {
-        if (evt.propertyName !== 'height' || evt.target.tagName === 'SCROLL-HIGHLIGHT') return
+        if (evt.propertyName !== 'height' || (evt.target || evt.explicitOriginalTarget).tagName === 'SCROLL-HIGHLIGHT') return
         const el = repl.lastChild.previousSibling, top = el.getBoundingClientRect().top
+        if (evt.propertyName !== 'height' || Self.into !== document.body) return
         const d = document.documentElement, max = d.scrollHeight - d.clientHeight
         atEnd && scrollY < max - d.clientHeight - 100 && scrollTo(scrollX, max, atEnd = false)
         atEnd = atEnd || scrollY && top <= innerHeight - 10
       }, passive)
       _listen('transitionend', evt => {
-        if (evt.target.tagName === 'SCROLL-HIGHLIGHT') return
-        evt.target.style.removeProperty('height')
-        _clearStyle(evt.target)
-        if (evt.propertyName !== 'height') return
+        const t = evt.target || evt.explicitOriginalTarget
+        if (t.tagName === 'SCROLL-HIGHLIGHT') return
+        t.style.removeProperty('height')
+        _clearStyle(t)
+        if (evt.propertyName !== 'height' || Self.into !== document.body) return
         const d = document.documentElement, max = d.scrollHeight - d.clientHeight
         atEnd && scrollY < max - d.clientHeight - 100 && scrollTo(scrollX, max, atEnd = false)
       }, passive)
@@ -1296,7 +1304,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
       _listen('pointerdown', evt => {
         if (!evt.ctrlKey || evt.shiftKey || evt.altKey) return
         if (!getSelection().rangeCount) return
-        const el = _closestNodeParent(evt.target), r = getSelection().getRangeAt(0)
+        const el = _closestNodeParent(evt.target || evt.explicitOriginalTarget), r = getSelection().getRangeAt(0)
         if (el) insertLinkTo(r, el)
       }, passive)
 
@@ -1335,7 +1343,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         // const active = document.activeElement && document.activeElement.contentEditable == 'true'
         const s = getSelection()
         let el
-        if (s.isCollapsed && evt) el = evt.type.slice(-3) !== 'out' ? evt.target : evt.relatedTarget
+        if (s.isCollapsed && evt) el = evt.type.slice(-3) !== 'out' ? evt.target || evt.explicitOriginalTarget : evt.relatedTarget
         else el = s
         return _closestNodeParent(el)
       }
@@ -1401,8 +1409,8 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
           updateScrollHighlights()
           scrollHighlights.forEach(v => {!v.parentNode && (v.style.opacity = 0, into.append(v))})
           _reflow().then(() => scrollHighlights.forEach(v => v.style.opacity !== '' && (v.style.removeProperty('opacity'))))
-        } else if (document.querySelector('scroll-highlight'))
-          [...document.querySelectorAll('scroll-highlight')].forEach(el => !el.removed && (console.error('Dangling scroll highlight:', el), el.remove()))
+        } else if (into.querySelector('scroll-highlight'))
+          [...into.querySelectorAll('scroll-highlight')].forEach(el => !el.removed && (console.error('Dangling scroll highlight:', el), el.remove()))
       }, .2)
       function updateScrollHighlights() {
         if (!scrollHighlights.size) return
@@ -1541,6 +1549,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   _bracketize(range, brackets = '()') {
     // Appends brackets at range's start and end.
+    if (range.commonAncestorContainer.classList && range.commonAncestorContainer.classList.contains('editable')) return
     range.insertNode(elem('span', brackets[0]))
     range.collapse(false)
     range.insertNode(elem('span', brackets[1]))
@@ -1727,7 +1736,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       if (typeof start == 'function')
         col.append(elem('hidden')),
         col.onclick = evt => {
-          const col = evt.target, p = col.parentNode, pre = _smoothHeightPre(p)
+          const col = evt.target || evt.explicitOriginalTarget, p = col.parentNode, pre = _smoothHeightPre(p)
           const el = start()
           if (p) _isArray(el) ? el.forEach(el => p.insertBefore(el, col)) : el.parentNode !== p && p.insertBefore(el, col), p.removeChild(col)
           if (_getOuterWindow(p) || _getOuterContextMenu(p)) _updateBroken(_getOuterWindow(p) || _getOuterContextMenu(p)); else if (p) _updateBroken(p)
@@ -1753,7 +1762,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
         }
         col.append(d)
         col.onclick = (evt, instant = false) => {
-          const col = evt.target, d = col.firstChild, p = col.parentNode, pre = !instant && _smoothHeightPre(p)
+          const col = evt.target || evt.explicitOriginalTarget, d = col.firstChild, p = col.parentNode, pre = !instant && _smoothHeightPre(p)
           if (d.firstChild === d.lastChild)
             col.replaceWith(d.firstChild)
           else {
@@ -1816,7 +1825,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       let pointerId = null, startX, startY, scrX, scrY
       const passive = {passive:true}
       el.addEventListener('pointerdown', evt => {
-        const t = evt.target
+        const t = evt.target || evt.explicitOriginalTarget
         if (_isEditable(t) || t.tagName === 'KNOWN' || t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON' || t.tagName === 'INPUT' || t.tagName === 'DETAILS' || t.tagName === 'SUMMARY' || t.tagName === 'COLLAPSED' || t.classList && t.classList.contains('resizable')) return
         if (_closestNodeParent(t) && _closestNodeParent(t) !== el) return
         pointerId = evt.pointerId, startX = evt.clientX, startY = evt.clientY, el.setPointerCapture(pointerId)
@@ -1845,7 +1854,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   _isEditable(el) { return el && (el.contentEditable === 'true' ? el : _isEditable(el.parentNode)) },
 
-  _getOuterContextMenu(el) { return !el ? document.body : (el.tagName === 'CONTEXT-MENU' ? el : _getOuterContextMenu(el.parentNode)) },
+  _getOuterContextMenu(el) { return !el ? Self.into : (el.tagName === 'CONTEXT-MENU' ? el : _getOuterContextMenu(el.parentNode)) },
 
   _escapeLabel(name, lang = _langAt() || fancy) {
     return typeof defines(lang, _escapeLabel) == 'function' ? defines(lang, _escapeLabel)(name) : name
@@ -1867,7 +1876,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
             inp.type = 'text'
             let prev = _unescapeLabel(el.textContent, el), updating = false
             inp.value = prev
-            const updateGlobal = _throttled(() => (_updateBroken(document.body), updating = false), .05)
+            const updateGlobal = _throttled(() => (_updateBroken(Self.into), updating = false), .05)
             const editor = _isEditable(el)
             inp.oninput = _throttled(() => {
               if (inp.value && +inp.value === +inp.value) return
@@ -2137,7 +2146,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
     ],
     call(el, range, evt) {
       impure()
-      if (!el && evt.target === document.documentElement) el = evt.target
+      if (!el && (evt.target || evt.explicitOriginalTarget) === document.documentElement)
+        el = evt.target || evt.explicitOriginalTarget
       if (!el) return
       const v = el.to
       const menu = elem('context-menu')
@@ -2145,14 +2155,17 @@ Remember to quote the link unless you want to evaluate the insides.`,
       allowDragging(menu)
 
       // Close (when unfocused or) on a click on a <button> inside.
-      menu.addEventListener('click', evt => evt.target.tagName === 'BUTTON' && _getOuterContextMenu(evt.target) === menu && elemRemove(menu))
+      menu.addEventListener('click', evt => {
+        const t = evt.target || evt.explicitOriginalTarget
+        t.tagName === 'BUTTON' && _getOuterContextMenu(t) === menu && elemRemove(menu)
+      })
       menu.tabIndex = 0
 
       // Append a daintyEvaluator, executing `(_logAll contextMenu ^(el range v))`.
       menu.append(daintyEvaluator([_logAll, contextMenu, [quote, [el, range, v]]]))
 
       let inside = _getOuterContextMenu(el)
-      if (_getOuterContextMenu(inside.parentNode) !== document.body) inside = document.body // Only one nesting layer.
+      if (_getOuterContextMenu(inside.parentNode) !== Self.into) inside = Self.into // Only one nesting layer.
       atCursor(menu, evt, inside)
 
       menu.focus({preventScroll:true})
@@ -2182,7 +2195,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   atCursor:{
     txt:`Positions an element at cursor.`,
-    call(el, pointerEvt = atCursor.lastEvt, inside = document.body) {
+    call(el, pointerEvt = atCursor.lastEvt, inside = Self.into) {
       let x = pointerEvt ? pointerEvt.clientX : 0, y = pointerEvt ? pointerEvt.clientY : 0
       if (el.parentNode) error('Only position new elements at cursor')
       if (!inside.isConnected) error('Only position elements inside the visible document')
@@ -2458,7 +2471,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
           while (editor.firstChild) editor.removeChild(editor.firstChild)
           editor.append(structured(styled))
           _smoothHeightPost(editor, pre)
-          if (i !== undefined && editor.contains(document.activeElement)) _loadCaret(editor, i, s)
+          if (i !== undefined && (document.activeElement === Self.into.parentNode.host || editor.contains(document.activeElement))) _loadCaret(editor, i, s)
           onInput && Promise.resolve().then(() => onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false))
         } catch (err) {
           if (err instanceof Error) throw err
@@ -2880,7 +2893,7 @@ Return stopIteration to stop iteration.`,
 
   _reflow() {
     if (_reflow.p) return _reflow.p
-    return _reflow.p = Promise.resolve().then(() => (_reflow.p = null, document.body.offsetWidth))
+    return _reflow.p = Promise.resolve().then(() => (_reflow.p = null, Self.into.offsetWidth))
   },
 
   _removeHeight(el) {
@@ -2942,7 +2955,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       if (!(el instanceof Element)) return el.remove ? el.remove() : error('Not an element')
 
       if (particles) {
-        const r1 = el.getBoundingClientRect(), r2 = document.documentElement.getBoundingClientRect()
+        const r1 = el.getBoundingClientRect(), r2 = (Self.into !== document.body ? Self.into : document.documentElement).getBoundingClientRect()
         _reflow().then(() => _particles(r1.left - r2.left, r1.top - r2.top, r1.width, r1.height))
       }
 
@@ -2998,7 +3011,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
         p.style.setProperty('--y', (Math.random()*20-10) + 'px')
         into.append(p)
       }
-      document.body.append(into)
+      Self.into.append(into)
       setTimeout(() => into.remove(), 300)
     },
   },
@@ -3297,9 +3310,12 @@ Quick and snappy movements that waste nothing, dissonant parts suppressed to irr
 Walls of text and heaps of little code snippets, created only to give rise to better understanding, then be discarded; small and accurate changes for code that remains.
 I have finally reclaimed my power of ages past.
 It only took thinking hard about optimizer optimizer search search. …That thing technically preceded this too, so I'll leave it in.
-I hope it'll be enough to implement it. It's too easily absorbed by humanity's imperfections.`,
-      `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
-      `Hit and run. Once a part is good, move on.
+I hope it'll be enough to implement it. It's too easily swallowed by humanity's imperfections.`,
+      ],
+      [
+        `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
+        `If the full context that was made to get something to work is left in a human mind, then it will be erased after a long period of time, and will have to be reconstructed for every single new human. Not that I know how to replicate it.`,
+        `Hit and run. Once a part is good, move on.
 Things small enough to master, understand how they could be used/modified, and make others.
 Our advancedness will be a huge hindrance.
 A work of art? A well-designed system? Forget it. Throw in everything you can think of, including the most broken copy/modify operations on the most basic objects.
@@ -6387,7 +6403,7 @@ Also wraps C-style strings in <string>.`,
 
   nameResult:{
     txt:`\`(nameResult Expr)\`: provides a list of suggestions for naming Expr. Used in \`serialize\` for more human-readable graph serializations.`,
-    call(func) { return typeof func == 'string' && +func !== +func && func.length < 20 ? array(func) : _isArray(defines(func, nameResult)) ? defines(func, nameResult) : typeof defines(func, nameResult) == 'string' ? [defines(func, nameResult)] : null },
+    call(func) { return typeof func == 'string' && +func !== +func && func.length < 20 && !/\s/.test(func) ? array(func) : _isArray(defines(func, nameResult)) ? defines(func, nameResult) : typeof defines(func, nameResult) == 'string' ? [defines(func, nameResult)] : null },
   },
 
   serialize:{
@@ -7925,16 +7941,17 @@ The correctness of quining of functions can be tested by checking that the rewri
     call(net = Self, opt) {
       const execOnClickSrc = `browser.browserAction.onClicked.addListener(tab => browser.tabs.executeScript({file:browser.runtime.getURL('self.js'), runAt:"document_start"}))`
       const manifest = {
+        version:'0',
         manifest_version:2,
         content_security_policy:"script-src 'self' 'unsafe-eval'; object-src 'self';",
         homepage_url:"https://github.com/Antipurity/conceptual",
-        icons: { 64:BrowserIconURL },
+        icons: { 64:'icon.png' },
         name:"REPL",
         description:"Allows opening a REPL in pages",
         permissions:["activeTab"],
         web_accessible_resources:['self.js'],
         browser_action:{
-          default_icon:BrowserIconURL,
+          default_icon:'icon.png',
           default_title:"Open a REPL in this page",
         },
         background:{
@@ -7946,6 +7963,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         ['manifest.json']:JSON.stringify(manifest),
         ['self.js']:ToScopedJS(net, opt),
         ['execonclick.js']:execOnClickSrc,
+        ['icon.png']:BrowserIconURL,
       })
     },
   },
@@ -7954,7 +7972,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     txt:`Converts Self to a human-readable form that pollutes the global scope on execution.`,
     examples:[
       [
-        `ToReadableJS Self (jsEval '{markLines:true, into:'document.body.appendChild(document.createElement(''div'')))'}'`,
+        `ToReadableJS Self (jsEval '{markLines:true, into:"document.body.appendChild(document.createElement(\\"div\\")))"}')`,
       ],
     ],
     call(net = Self, opt) {
@@ -8073,7 +8091,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         if (!markLines && isFunc(v) && v[1].slice(0,8) === 'function' && (ignoreName || !names.has(v)))
           write(key), v[1] = v[1].slice(v[1].indexOf('(')), put(v, ignoreName), write(',')
         else
-          write(key), write('='), put(v, ignoreName), write(',')
+          write(key), write(':'), put(v, ignoreName), write(',')
       }
 
       // The bootstrapper for this.
@@ -8190,9 +8208,9 @@ The correctness of quining of functions can be tested by checking that the rewri
       if (net instanceof Map)
         net = Object.fromEntries(net.entries().map(([k,v]) => _isLabel(k) ? [k[1], v] : [k, v]))
       if (!net || net[defines.key] || typeof net != 'object') throw "Invalid net"
-      if (!net[_id]) throw "Net must have _id"
-      if (!net[label]) throw "Net must have label"
-      if (!net[concept]) throw "Net must have concept"
+      if (!net._id) throw "Net must have _id"
+      if (!net.label) throw "Net must have label"
+      if (!net.concept) throw "Net must have concept"
       const markLines = opt ? !!opt.markLines : true
       Object.keys(net).forEach(k => k[0] === '$' && error('$ is reserved for hidden names, use something other than', k))
       Object.keys(net).forEach(k => !_isValidIdentifier(k) && error('Not a valid JS identifier:', k))
@@ -8215,8 +8233,9 @@ The correctness of quining of functions can be tested by checking that the rewri
       names.forEach((name, v) => { if (name[0] === '$') write('\n'), write(name), write('='), put(v, true), write(',') })
       write('$' + (n++).toString(36))
       write('\ndefines.key=Symbol(\'defines\')\n')
-      write('finish.env=Object.create(null)\n')
-      write('finish.env[_id(label)]=new Map\n')
+      if (net._read) write(`_read.marks = new Map\n`)
+      if (net.finish && net._newExecutionEnv) write(`finish.env = _newExecutionEnv()\n`)
+      if (net.interrupt) write(`interrupt.noInterrupt = true\n`)
       // Fill the values of variables in.
       names.forEach((name, v) => {
         if (_isArray(v) || defines(v, deconstruct) === undefined) if (!fill(v)) write('\n')
@@ -8248,7 +8267,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       return s.join('')
 
       function mark(x) {
-        if (x == null || typeof x == 'string' || typeof x == 'number' || typeof x == 'boolean') return
+        if (x == null || typeof x == 'number' || typeof x == 'boolean') return
         let name
         if (names.has(x)) return; else names.set(x, name = '$' + (n++).toString(36))
         try {
@@ -8295,11 +8314,11 @@ The correctness of quining of functions can be tested by checking that the rewri
           return true
         } else if (x && x[defines.key]) { // Set name[defines.key][...] one by one.
           write(name), write('[defines.key]=Object.create(null)\n')
-          Object.keys[x[defines.key]].forEach(k => {
+          Object.keys(x[defines.key]).forEach(k => {
             const key = concept.idToKey[+k]
             write(name), write('[defines.key]['), put(net._id), write('('), put(key), write(')]='), put(x[defines.key][k]), write('\n')
           })
-          write('Object.freeze('), write(name), write('[defines.key])\n')
+          if (x !== net.Self) write('Object.freeze('), write(name), write('[defines.key])\n')
           return true
         } else return true
       }
@@ -8441,7 +8460,7 @@ The correctness of quining of functions can be tested by checking that the rewri
           if (restIndexInA < a.length)
             write(`${outside(_assign)}(${outside(a[restIndexInA][1])},args)\n`)
         }
-        write(`return finish(${outside(body)})\n`)
+        write(`return ${outside(finish)}(${outside(body)})\n`)
         write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},1)(LE),LE=null;throw err}\n`)
         write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)})(LE)}\n`)
         jumped = true, advanceStage(a)
@@ -8998,7 +9017,7 @@ The correctness of quining of functions can be tested by checking that the rewri
     if (typeof value == 'string') {
       const ch = elem('a', name)
       ch.download = name
-      ch.href = 'data:,' + encodeURIComponent(value)
+      ch.href = value.slice(0,5) === 'data:' ? value : 'data:,' + encodeURIComponent(value) // Content sniffing (like here) is bad.
       to.append(ch)
     } else if (value instanceof Map || typeof value == 'object' && !value[defines.key])
       to.append(defines(files, elem)(files, value, name))
@@ -10143,13 +10162,14 @@ This is the default when no picker is specified.`,
       const env = finish.env
       let job
       el.onclick = evt => {
-        if (evt.target.tagName !== 'BUTTON' || !('to' in evt.target) || evt.target.to !== _notFound && typeof evt.target.to != 'number') return
+        const t = evt.target || evt.explicitOriginalTarget
+        if (t.tagName !== 'BUTTON' || !('to' in t) || t.to !== _notFound && typeof t.to != 'number') return
         if (remember) {
-          const picked = typeof from == 'number' ? evt.target.to : from[evt.target.to-1]
+          const picked = typeof from == 'number' ? t.to : from[t.to-1]
           Choices.set(cause, typeof picked != 'function' ? picked : array(_disabled, picked))
         }
         env[_id(log)] && env[_id(log)].style.removeProperty('display')
-        askUser.got.set(a, evt.target.to), _schedule(...job)
+        askUser.got.set(a, t.to), _schedule(...job)
         elemRemove(el), el.onclick = null
       }
       log(el)
@@ -10398,7 +10418,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       Object.freeze(d)
       return result
 
-      function genExpr(out) {
+      function genExpr(out) { // ### Why not put it in a separate function?
         // A complex interrupt/free game here.
         let [options, i, firstStep, expr, j = 0, known = true, ints = _allocArray()] = interrupt(compose)
         try {
@@ -10437,15 +10457,17 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
               // log('Getting inputs', ...d.slice(0,-1), 'for', f)
               for (; j < d.length-1; ++j) {
                 const r = genExpr(d[j])
-                if (_isArray(r) || defines(r, compose) !== undefined || _isVar(r)) known = false
+                if (_isArray(r)) known = false
                 expr.push(r)
               }
               // log('  got', d[d.length-1], ...expr)
               try {
-                if (typeof defines(f, compose) == 'function')
-                  f = defines(f, compose)(ctx, ...expr, out)
-                else if (typeof f == 'function' && known)
-                  f = f(...expr)
+                if (typeof defines(f, compose) == 'function') {
+                  const r = defines(f, compose)(ctx, ...expr, out)
+                  if (r !== undefined) f = r, _allocArray(expr)
+                  else expr.unshift(f), f = expr
+                } else if (typeof f == 'function' && known)
+                  f = f(...expr), _allocArray(expr)
                 else expr.unshift(f), f = expr
               } catch (err) { // If our override throws, remove this option and search for another one.
                 if (err === interrupt) throw err
@@ -10470,6 +10492,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
   // Now, what I need are, well, example contexts… in particular a function that re-composes itself dynamically (able to handle self-reference)… and goals, and dynamic-recomposition-with-goal that keeps the best things… and copy/mutation by culling the context… And deferring `pick`s till runtime — how is this one done (more importantly, *when*); maybe it is better to have a `dynamic` function-composing (with a choice source) function?
 
+  less(a,b) { return a<b },
   atan(x) { return Math.atan(x) },
   numbersRandomSearch:` ;="repeat (Eval numbersRandomSearch)"
     compose
@@ -10482,11 +10505,9 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       (concept { call id compose (function ctx x x) context ('Input' 'Number') })
       (concept { call id compose (function ctx x x) context ('Number' 'Output') })
 
-      ;='Allow single-number generation.'
+      ;='Allow single-number generation and basic arithmetic operations.'
       (concept { call (function 0) context ('Number') })
       (concept { call (function 1) context ('Number') })
-
-      ;='Allow basic arithmetic operations.'
       (concept { call sum compose (jsEval "(ctx,a,b) => !a ? b : !b ? a : typeof a == 'number' && typeof b == 'number' ? a+b : [sum,a,b]" {'sum' sum}) context ('Number' 'Number' 'Number') })
       (concept { call sub compose (jsEval "(ctx,a,b) => !b ? a : typeof a == 'number' && typeof b == 'number' ? a-b : [sub,a,b]" {'sub' sub}) context ('Number' 'Number' 'Number') })
       (concept { call mult compose (jsEval "(ctx,a,b) => !a || !b ? 0 : a === 1 ? b : b === 1 ? a : typeof a == 'number' && typeof b == 'number' ? a*b : [mult,a,b]" {'mult' mult}) context ('Number' 'Number' 'Number') })
