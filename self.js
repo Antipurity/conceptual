@@ -452,19 +452,87 @@ Globals={
       transform:__is(`transform`),
       broadcasted:__is(`broadcasted`),
       [`+`]:__is(`sum`),
-      [`-`]:__is(`sub`),
+      [`-`]:__is(`subtract`),
       [`*`]:__is(`mult`),
-      [`/`]:__is(`div`),
+      [`/`]:__is(`divide`),
       Random:__is(`Random`),
     },
+  },
+
+  FlatOps:{
+    future:`This doesn't do anything. Delete?`,
+    txt:`A namespace for operations on flat arrays.`,
+    lookup:{
+      Types:{
+        lookup:{
+          i8:__is(`i8`),
+          i16:__is(`i16`),
+          i32:__is(`i32`),
+          u8:__is(`u8`),
+          u16:__is(`u16`),
+          u32:__is(`u32`),
+          f32:__is(`f32`),
+          f64:__is(`f64`),
+        },
+      },
+    },
+  },
+
+  i8:{
+    txt:`\`(i8 (…Numbers))\`: creates a flat array of signed 8-bit integers.`,
+    argCount:1,
+    call(x) { return new Int8Array(x) },
+  },
+
+  i16:{
+    txt:`\`(i16 (…Numbers))\`: creates a flat array of signed 16-bit integers.`,
+    argCount:1,
+    call(x) { return new Int16Array(x) },
+  },
+
+  i32:{
+    txt:`\`(i32 (…Numbers))\`: creates a flat array of signed 32-bit integers.`,
+    argCount:1,
+    call(x) { return new Int32Array(x) },
+  },
+
+  u8:{
+    txt:`\`(u8 (…Numbers))\`: creates a flat array of unsigned 8-bit integers.`,
+    argCount:1,
+    call(x) { return new Uint8Array(x) },
+  },
+
+  u16:{
+    txt:`\`(u16 (…Numbers))\`: creates a flat array of unsigned 16-bit integers.`,
+    argCount:1,
+    call(x) { return new Uint16Array(x) },
+  },
+
+  u32:{
+    txt:`\`(u32 (…Numbers))\`: creates a flat array of unsigned 32-bit integers.`,
+    argCount:1,
+    call(x) { return new Uint32Array(x) },
+  },
+
+  f32:{
+    txt:`\`(f32 (…Numbers))\`: creates a flat array of 32-bit floats.`,
+    argCount:1,
+    call(x) { return new Float32Array(x) },
+  },
+
+  f64:{
+    txt:`\`(f64 (…Numbers))\`: creates a flat array of 64-bit floats.`,
+    argCount:1,
+    call(x) { return new Float64Array(x) },
   },
 
   Data:{
     txt:`A namespace for some data-representation-related functions.`,
     lookup:{
       map:__is(`map`),
-      array:__is(`array`),
       merge:__is(`merge`),
+      array:__is(`array`),
+      struct:__is(`struct`),
       lookup:__is(`lookup`),
       string:__is(`string`),
       concept:__is(`concept`),
@@ -524,7 +592,7 @@ Label-binding environment is not preserved.`,
       try {
         while (true) {
           v = finish(expr)
-          if (_isUnknown(v)) return _stage(_cameFrom(array(repeat, v[1], iterations), us), v)
+          if (_isUnknown(v)) return _stage(_cameFrom(struct(repeat, v[1], iterations), us), v)
           _checkInterrupt(us)
           newLabel.clear()
           done = true
@@ -664,7 +732,7 @@ Staging (code generating code when not everything is known) is done in some nati
       try {
         const r = finish(x)
         if (!_isUnknown(r) || !_isDeferred(r)) return r
-        else return _stage(array(purify, r[1]), r)
+        else return _stage(struct(purify, r[1]), r)
       }
       catch (err) { if (err !== interrupt) return _unknown(jsRejected(err)); else throw err }
       finally { finish.pure = prev }
@@ -786,13 +854,13 @@ Does not count memory allocated in interruptions (between executions of Expr) as
           const v = a[i]
           if (result === undefined) result = v
           else if (f === sum && typeof result == 'number' && typeof v == 'number') result += v
-          else if (f === sub && typeof result == 'number' && typeof v == 'number') result -= v
+          else if (f === subtract && typeof result == 'number' && typeof v == 'number') result -= v
           else if (f === mult && typeof result == 'number' && typeof v == 'number') result *= v
-          else if (f === div && typeof result == 'number' && typeof v == 'number') result /= v
+          else if (f === divide && typeof result == 'number' && typeof v == 'number') result /= v
           else result = f.call(f, result, v)
           if (_isArray(result) && result[0] === stopIteration) return result[1]
 
-          if (_isUnknown(result)) return _stage(array(reduce, quote(f), a.slice(i), result[1]), result)
+          if (_isUnknown(result)) return _stage(struct(reduce, quote(f), a.slice(i), result[1]), result)
         }
       } catch (err) { if (err === interrupt) interrupt(reduce, 2)(result, i);  throw err }
       return result
@@ -909,7 +977,8 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       }
       _cameFrom(impl, finish.v)
       const d = impl[defines.key] = Object.create(null)
-      d[_id(deconstruct)] = array(broadcasted, f)
+      f[defines.key] && Object.keys(f[defines.key]).forEach(k => d[k] = f[defines.key][k])
+      d[_id(deconstruct)] = struct(broadcasted, f)
       if (defines(f, merge))
         d[_id(merge)] = true
       if (defines(f, argCount) !== undefined)
@@ -938,16 +1007,28 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   _sum:{
     argCount:2,
     merge:__is(`true`),
+    examples:[
+      () => {
+        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+        return [[sum, a, b], a+b]
+      },
+    ],
     call(a,b) { return _toNumber(a) + _toNumber(b) },
   },
 
   _mult:{
     argCount:2,
     merge:__is(`true`),
+    examples:[
+      () => {
+        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+        return [[mult, a, b], a*b]
+      },
+    ],
     call(a,b) { return _toNumber(a) * _toNumber(b) },
   },
 
-  sub:__is([
+  subtract:__is([
     __is(`broadcasted`),
     __is([
       __is(`overridable`),
@@ -955,7 +1036,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     ]),
   ]),
 
-  div:__is([
+  divide:__is([
     __is(`broadcasted`),
     __is([
       __is(`overridable`),
@@ -966,13 +1047,25 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   _subtract:{
     argCount:2,
     merge:__is(`true`),
-    call(a,b) { return _isVar(a) || _isVar(b) ? array(_subtract, a, b) : _toNumber(a) - _toNumber(b) },
+    examples:[
+      () => {
+        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+        return [[subtract, a, b], a-b]
+      },
+    ],
+    call(a,b) { return _isVar(a) || _isVar(b) ? struct(_subtract, a, b) : _toNumber(a) - _toNumber(b) },
   },
 
   _divide:{
     argCount:2,
     merge:__is(`true`),
-    call(a,b) { return _isVar(a) || _isVar(b) ? array(_divide, a, b) : _toNumber(a) / _toNumber(b) },
+    examples:[
+      () => {
+        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+        return [[divide, a, b], a/b]
+      },
+    ],
+    call(a,b) { return _isVar(a) || _isVar(b) ? struct(_divide, a, b) : _toNumber(a) / _toNumber(b) },
   },
 
   OnShiftClickOutside:[
@@ -1758,7 +1851,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
             'to' in el && a.push(el.to)
             if (next && next.tagName === 'BRACKET' && !next.nextSibling) end = next, nextCol = next
           }
-          elemValue(col, array(rest, _maybeMerge(a)))
+          elemValue(col, struct(rest, _maybeMerge(a)))
         }
         col.append(d)
         col.onclick = (evt, instant = false) => {
@@ -2363,7 +2456,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
           }
         }
       }
-      elemValue(el, array(elem, evaluator, expr, then))
+      elemValue(el, struct(elem, evaluator, expr, then))
 
       // Evaluate the requested expression.
       const env = _newExecutionEnv(finish.env)
@@ -2460,7 +2553,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       editor.spellcheck = false
       // Set the initial string.
       try { editor.append(parse(editor, lang, binds, parse.dom)[1]) }
-      catch (err) { editor.append(initialString) }
+      catch (err) { editor.append(initialString ? parse(initialString, lang, binds, parse.dom)[1] : initialString) }
       // On any mutations inside, re-parse its contents, and show purified output.
       const obs = new MutationObserver(_throttled(record => {
         const s = getSelection()
@@ -2560,23 +2653,24 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         if (evt.key === 'Z' && evt.shiftKey && evt.ctrlKey && redo.length)
           undo.push(children(editor)), children(editor, redo.pop()), evt.preventDefault()
       }
-      elemValue(query, array(editor, initialString, lang, binds, onInput, onEnter))
+      elemValue(query, struct(editor, initialString, lang, binds, onInput, onEnter))
       return query
 
       function evaluate(evt) {
         let clear = false
-        try {
-          const expr = parse(editor, lang, binds)
-          evt.preventDefault()
-          clear = onEnter ? onEnter(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false) : false
-        } catch (err) {
-          if (_isArray(err) && err[0] === 'give more') err = err[1]
-          else evt.preventDefault()
-          const el = elem('error', err instanceof Error ? [String(err), '\n', err.stack] : String(err))
-          el.style.left = '1em'
-          el.style.position = 'absolute'
-          return elemInsert(query, el), setTimeout(elemRemove, 1000, el)
-        }
+        if (onEnter)
+          try {
+            const expr = parse(editor, lang, binds)
+            evt.preventDefault()
+            clear = onEnter(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false)
+          } catch (err) {
+            if (_isArray(err) && err[0] === 'give more') err = err[1]
+            else evt.preventDefault()
+            const el = elem('error', err instanceof Error ? [String(err), '\n', err.stack] : String(err))
+            el.style.left = '1em'
+            el.style.position = 'absolute'
+            return elemInsert(query, el), setTimeout(elemRemove, 1000, el)
+          }
         if (clear) editor.textContent = ''
         onInput && onInput(undefined, true)
       }
@@ -2661,7 +2755,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
 
       const repl = elem('node')
       repl.isREPL = true, repl.classList.add('REPL')
-      elemValue(repl, array(REPL, lang, binds))
+      elemValue(repl, struct(REPL, lang, binds))
 
       // Display purified output.
       const pureOutput = elem('div')
@@ -2686,7 +2780,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
           if (bindAs) expr = expr[2]
           elemInsert(pureOutput, waiting)
           _langAt.lang = lang, _bindingsAt.binds = binds
-          _doJob([purify, array(quote, expr)], e, result => {
+          _doJob([purify, struct(quote, expr)], e, result => {
             if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
               result = result[1] // Display errors too.
             if (bindAs) result = [_extracted, bindAs, result]
@@ -2773,7 +2867,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       if (typeof href != 'string') throw "Must be a string"
       if (tag !== url || typeof document == ''+void 0) return href
       const el = elem('a', href)
-      elemValue(el, array(elem, url, href))
+      elemValue(el, struct(elem, url, href))
       el.href = href
       el.title = decodeURI(href)
       if (el.title.slice(0,8) === 'https://') el.title = el.title.slice(8)
@@ -3170,7 +3264,7 @@ Quite expensive.`,
       docsToHTML:__is(`docsToHTML`),
     },
     call() {
-      if (call.cache.has(array(docs))) return call.cache.get(array(docs))
+      if (call.cache.has(struct(docs))) return call.cache.get(struct(docs))
       const net = defines(Self, lookup)
       const m = new Map
       Object.keys(net).forEach(k => {
@@ -3179,7 +3273,7 @@ Quite expensive.`,
         return k[0] !== '_' && m.set(net[k], t && elem('div', stringToDoc(t)))
       })
       const el = elem('div', hierarchy(m, Self))
-      call.cache.set(array(docs), el)
+      call.cache.set(struct(docs), el)
       return el
     },
   },
@@ -3233,10 +3327,20 @@ All these are automatically tested to be correct at launch.`,
         if (!_isArray(r)) return
         r = r.map(a => {
           if (typeof a == 'string') return elem('div', stringToDoc(a))
+          const env = finish.env
+          if (typeof a == 'function') {
+            const to = elemValue(elemCollapse(() => {
+              const b = a()
+              const prev = finish.env;  finish.env = env
+              try { return elem(evaluator, ['Equals', b[0], b[1]], to) }
+              finally { finish.env = prev }
+            }), a)
+            return to
+          }
+          // If `a` is a function, we should (collapsed-ly) call it to get actual a[0]
           if (!_isArray(a)) throw "Examples must be arrays or comments"
           if (!finish.env[_id(log)]) return a
           const from = parse(a[0], fancy, undefined, parse.dom)[1]
-          const env = finish.env
           const to = a[1] ? parse(a[1]) : elemCollapse(() => {
             const prev = finish.env;  finish.env = env
             try { return elem(evaluator, parse(a[0]), to) }
@@ -3244,7 +3348,7 @@ All these are automatically tested to be correct at launch.`,
           })
           return elem('div', [from, elem('span', '\n⇒ '), serialize(to, L, B, serialize.displayed)])
         })
-        return r.length != 1 ? r : r[0]
+        return elem('div', r.length != 1 ? r : r[0])
       }
       if (f !== undefined) return transform(defines(f, examples))
       const result = new Map
@@ -3349,7 +3453,7 @@ An alternative for the default fitting-for-scripting-usage partial evaluation. B
               promise.then(cont, cont)
             })
           }
-          return _stage(array(_await, r[1]), r)
+          return _stage(struct(_await, r[1]), r)
         }
         return r
       } catch (err) { if (err === interrupt) interrupt(_await, 1)(doing !== undefined ? doing : _onlyUndefined); throw err }
@@ -3458,9 +3562,9 @@ Do not call this directly.`,
     call(err) {
       // Convert a caught error to its displayable representation.
       if (err instanceof Error)
-        return err.stack ? array(jsRejected, elem('error', String(err)), _resolveStack(err.stack)) : array(jsRejected, elem('error', String(err)))
+        return err.stack ? struct(jsRejected, elem('error', String(err)), _resolveStack(err.stack)) : struct(jsRejected, elem('error', String(err)))
       else if (!_isError(err))
-        return array(jsRejected, err)
+        return struct(jsRejected, err)
       else
         return err
     },
@@ -3619,7 +3723,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
       const p = expr[i]
       if (!(_isPromise(p))) continue
       if ('result' in p)
-        ctx.set(p, p.result instanceof Error ? array(error, ''+p.result) : !_isError(p.result) ? quote(p.result) : p.result)
+        ctx.set(p, p.result instanceof Error ? struct(error, ''+p.result) : !_isError(p.result) ? quote(p.result) : p.result)
       // Remove us from the promise's continuation (and only us, since there might be different jobs listening to the same promise).
       for (let i = 0; i < p.cont.length; ++i)
         if (p.cont[i] === ID) {
@@ -3733,7 +3837,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
           try {
             const v = finish(branches[i])
             if (_isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-              return _stage(_cameFrom(array(first, v[1], ...branches.slice(i+1)), us), v)
+              return _stage(_cameFrom(struct(first, v[1], ...branches.slice(i+1)), us), v)
             return v
           } catch (err) { if (err === interrupt) throw err }
         }
@@ -3775,7 +3879,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
         for (; i < branches.length-1; ++i) {
           const v = finish(branches[i])
           if (_isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-            return _stage(_cameFrom(array(last, v[1], ...branches.slice(i+1)), us), v)
+            return _stage(_cameFrom(struct(last, v[1], ...branches.slice(i+1)), us), v)
         }
         return finish(branches[branches.length-1])
       } catch (err) { if (err === interrupt) interrupt(last, 1)(i);  throw err }
@@ -3814,7 +3918,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
               if (typeof defines(f, argCount) == 'number' && defines(f, argCount) != data.length) continue
               const v = f.apply(f, data)
               if (_isUnknown(v) && (_isDeferred(v) || _hasCallableParts(v[1], true)))
-                return _stage(_cameFrom(array(first, v[1], _cameFrom(array(_cameFrom(array(_try, ...functions.slice(i+1)), us), ...data), us)), us), v)
+                return _stage(_cameFrom(struct(first, v[1], _cameFrom(struct(_cameFrom(struct(_try, ...functions.slice(i+1)), us), ...data), us)), us), v)
               return v
             } catch (err) { if (err === interrupt) throw err }
           return functions[functions.length-1].apply(functions[functions.length-1], data)
@@ -3823,7 +3927,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
       }
       _cameFrom(impl, finish.v)
       const d = impl[defines.key] = Object.create(null)
-      d[_id(deconstruct)] = array(_try, ...functions)
+      d[_id(deconstruct)] = struct(_try, ...functions)
       d[_id(inline)] = true
       if (functions.every(x => defines(x, merge)))
         d[_id(merge)] = true
@@ -3867,7 +3971,7 @@ When in an array that is assigned to, collects the rest of arguments into an arr
         `5`,
       ],
     ],
-    call(a) { return array(rest, a) },
+    call(a) { return struct(rest, a) },
   },
 
   _findRest(a) {
@@ -3943,7 +4047,7 @@ When in an array that is assigned to, collects the rest of arguments into an arr
             if (_isUnknown(A)) v.push(...A.slice(2)), A = A[1]
             if (_isUnknown(B)) v.push(...B.slice(2)), B = B[1]
             if (A === B && state === 2) // (if A B B) => A,B
-              return _stage(finish(_cameFrom(array(last, v[1], A), us)), v)
+              return _stage(finish(_cameFrom(struct(last, v[1], A), us)), v)
             state = 3
             // If A and B construct the same structure except for one part, lift that structure to result.
             v = _unknown(v)
@@ -3952,7 +4056,7 @@ When in an array that is assigned to, collects the rest of arguments into an arr
               const i = _unequalIndex(A,B)
               if (i) {
                 encountered.push(A),
-                v[1] = _cameFrom(array(...A.slice(0,i), v[1], ...A.slice(i+1)), A),
+                v[1] = _cameFrom(struct(...A.slice(0,i), v[1], ...A.slice(i+1)), A),
                 A = A[i], B = B[i]
               } else break
             }
@@ -3983,7 +4087,7 @@ When in an array that is assigned to, collects the rest of arguments into an arr
 
   quote:{
     txt:`Finishing \`(quote Expr)\` or \`^Expr\`: Returns Expr unevaluated, quoting the exact array structure.
-If there are no labels inside, has the same effect as adding \`array\` at the beginning of every array seen inside, copying.`,
+If there are no labels inside, has mostly the same effect as adding \`array\` at the beginning of every array seen inside, copying.`,
     examples:[
       [
         `(quote x)`,
@@ -4002,11 +4106,11 @@ If there are no labels inside, has the same effect as adding \`array\` at the be
       if (_invertBindingContext(parse.ctx).has(x)) return x
       if (_isArray(x) && x[0] === typed) return x
       if (_isUnknown(x)) return x
-      if (_isArray(x) && (_isLabel(x[0]) || _isArray(x[0])) && _hasCallableParts(x)) return array(quote, x)
+      if (_isArray(x) && (_isLabel(x[0]) || _isArray(x[0])) && _hasCallableParts(x)) return struct(quote, x)
       if (_isFunc(x)) return x
       if (typeof x == 'function') return x
       if (!_hasCallableParts(x)) return x
-      return array(quote, x)
+      return struct(quote, x)
     },
   },
 
@@ -4240,11 +4344,17 @@ Check _isUnknown to materialize the inner structure but only on demand.`,
   },
 
   array:{
-    txt:`\`(array …Items)\`: an array of items with semantically constant content.
+    txt:`\`(array …Items)\`: creates a new array.`,
+    noInterrupt:true,
+    call(...x) { return x },
+  },
+
+  struct:{
+    txt:`\`(struct …Items)\`: an array of items with semantically constant content.
 If a function (\`Array\`'s head) defines \`merge\` to be \`true\`, then calls to this guaranteed-pure function (arrays of function-then-args) are merged.`,
     examples:[
       [
-        `array sum 1 2`,
+        `struct sum 1 2`,
         `sum 1 2`,
       ],
     ],
@@ -4379,23 +4489,23 @@ Prove that all of (_all  1|2|3  4|5) are 3::x… Become (_any  3::1|2|3  3::4|5)
     //   // Demand ref-equality.
     //   if (_isArray(a) && a[0] === _only) a = a[1]
     //   if (_isArray(b) && b[0] === _only) b = b[1]
-    //   return a === b ? a : array(error, "Not ref-equal")
+    //   return a === b ? a : struct(error, "Not ref-equal")
     // },
     _when(lt, gt) {
       if (_isArray(lt) && lt[0] === _any)
-        return _repack(lt, el => call(array(_when, el, gt)), _any)
+        return _repack(lt, el => call(struct(_when, el, gt)), _any)
       if (_isArray(lt) && lt[0] === _all)
-        return _repack(lt, el => call(array(_when, el, gt)), _all)
+        return _repack(lt, el => call(struct(_when, el, gt)), _all)
 
       // (_when X (_only Y)) => (_when (_when (_only X) (_only Y)))
       const a = _isArray(lt) && lt[0] === _only && lt.length == 2 ? lt[1] : lt
       // (_when (_only X) Y) => (_when (_when (_only X) (_only Y)))
       const b = _isArray(gt) && gt[0] === _only && gt.length == 2 ? gt[1] : gt
       // (_when (_only X) (_only X)) => (_only X), (_when (_only X) (_only Y)) => (_any)
-      return a === b ? (a===lt ? lt : b===gt ? gt : array(_only, a)) : _emptyAny
+      return a === b ? (a===lt ? lt : b===gt ? gt : struct(_only, a)) : _emptyAny
     },
-    _forany(type, prop) { return call(array(prop, type)) },
-    _forall(type, prop) { return call(array(prop, type)) },
+    _forany(type, prop) { return call(struct(prop, type)) },
+    _forall(type, prop) { return call(struct(prop, type)) },
   },
 
   _any:{
@@ -4424,7 +4534,7 @@ Prove that all of (_all  1|2|3  4|5) are 3::x… Become (_any  3::1|2|3  3::4|5)
     let [i = fromIndex, result] = interrupt(_repack)
     try {
       for (; i < from.length; ++i) {
-        const x = transformer !== undefined ? call(array(transformer, from[i])) : from[i]
+        const x = transformer !== undefined ? call(struct(transformer, from[i])) : from[i]
 
         // Ignore cyclic parts of proofs (we get induction for free, then).
         if (x === cycle) continue
@@ -4455,9 +4565,9 @@ Prove that all of (_all  1|2|3  4|5) are 3::x… Become (_any  3::1|2|3  3::4|5)
   _whenRepack(lt, gt, side) {
     // The definition of (is X (_all …)) is exactly the same as (is X (_any …)), just with _any/_all changed around. They are symmetric in this regard.
     if (_isArray(gt) && gt[0] === side)
-      return _repack(gt, elem => call(array(_when, lt, elem)), side)
+      return _repack(gt, elem => call(struct(_when, lt, elem)), side)
     if (_isArray(lt) && lt[0] === side)
-      return _repack(lt, elem => call(array(_when, elem, gt)), side)
+      return _repack(lt, elem => call(struct(_when, elem, gt)), side)
   },
 
   _emptyAny:[
@@ -4738,13 +4848,15 @@ Don't call this in top-level JS code directly — use \`_schedule\` instead.`,
           if (!record || doInline)
             try {
               // return result = call(finished, v, true)
+              if (finished[0] === array) return finished.shift(), result = finished
+              if (finished[0] === struct) return finished.shift(), result = merge(finished)
               _checkArgCount(finished)
               if (typeof finished[0] == 'function' && (finished[0] !== rest || finished.length != 2)) {
                 _checkInterrupt(v), finish.v = v
                 result = finished.length == 3 ? finished[0].call(finished[0], finished[1], finished[2]) : finished[0].call(...finished)
                 return _allocArray(finished), result
               }
-              return result = finished
+              return result = merge(finished)
             }
             catch (err) { if (err !== impure) throw err }
 
@@ -4827,8 +4939,10 @@ Array data gets its head consulted (once, not recursively). A function acts like
     argCount:2,
     merge:true,
     call(data, code) {
-      if (code === call && typeof data == 'function') return data
-      if (code === call && _isArray(data) && typeof data[0] == 'function') return data[0]
+      if (code === call && typeof data == 'function')
+        return data[defines.key] && data[defines.key][_id(call)] || data
+      if (code === call && _isArray(data) && typeof data[0] == 'function')
+        return data[0][defines.key] && data[0][defines.key][_id(call)] || data[0]
 
       const d = _view(data)
       return d ? d[_id(code, true)] : undefined
@@ -4906,7 +5020,7 @@ Views and non-_unknown arrays are considered immutable.`,
       const d = impl[defines.key] = Object.create(null)
       if (_view(f))
         Object.assign(d, _view(f))
-      d[_id(deconstruct)] = array(overridable, f)
+      d[_id(deconstruct)] = struct(overridable, f)
       if (defines(f, merge))
         d[_id(merge)] = true
       if (defines(f, argCount) !== undefined)
@@ -4942,17 +5056,17 @@ Read keys with \`lookup\`.`,
         const p = lookup.parents.get(v)
         if (defines(p, lookup))
           for (let k of lookup(p))
-            if (lookup(p, k) === v) return array(lookup, p, k)
+            if (lookup(p, k) === v) return struct(lookup, p, k)
         if (_view(p))
           for (let k of Object.keys(_view(p)))
             if (k !== _id(deconstruct) && _view(p)[k] === v)
-              return array(defines, p, concept.idToKey[+k])
+              return struct(defines, p, concept.idToKey[+k])
       }
 
       if (typeof document != ''+void 0) {
         // Not precise at all.
         if (v instanceof Node && 'to' in v) return v.to
-        if (v instanceof Element) return array(elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch, true)))
+        if (v instanceof Element) return struct(elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch, true)))
         if (v instanceof Node) return v.textContent
       }
 
@@ -4972,7 +5086,7 @@ Read keys with \`lookup\`.`,
           val === v ? arr.push(quote(concept.idToKey[+k]), _unevalFunction(v)) : arr.push(quote(concept.idToKey[+k]), quote(val))
         })
         if (typeof v == 'function' && !(_id(call) in d)) arr.push(call, _unevalFunction(v))
-        return array(concept, arr)
+        return struct(concept, arr)
       }
       if (typeof v == 'function')
         return _unevalFunction(v)
@@ -4997,7 +5111,7 @@ Read keys with \`lookup\`.`,
     try { Function('('+src+')') }
     catch (err) { src = 'function'+src }
 
-    return ctx !== undefined ? array(jsEval, src, ctx) : array(jsEval, src)
+    return ctx !== undefined ? struct(jsEval, src, ctx) : struct(jsEval, src)
   },
 
   _isValidJS(s) {
@@ -5198,7 +5312,7 @@ Read keys with \`lookup\`.`,
           return body.map(deepJoin).join('')
         return String(body)
       }
-      body.push(sep(), opt.return(compile(array(jsEval, src, ctx))))
+      body.push(sep(), opt.return(compile(struct(jsEval, src, ctx))))
       opt.debugStructure && opt.debugStructure(body)
       const linked = opt.link(args, deepJoin(body), opt.newFilename(), body)
       if (typeof linked == 'function') linked[jsEval.ctx] = ctx
@@ -5430,7 +5544,7 @@ Putting all variables in a single global namespace allows for easy development. 
       try {
         switch (stage) {
           case 0: a = finish(ctx), stage = 1
-            if (_isUnknown(a)) return _stage(array(bound, a[1], v), a)
+            if (_isUnknown(a)) return _stage(struct(bound, a[1], v), a)
           case 1: a = bound(a, v), stage = 2
           case 2: return finish(a)
         }
@@ -5680,7 +5794,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
       stack:__is(`errorStack`),
     },
     merge:__is(`true`),
-    call(...msg) { throw array(error, ...msg) },
+    call(...msg) { throw struct(error, ...msg) },
   },
 
   errorFast:{
@@ -5690,12 +5804,12 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   errorIn:{
     txt:`Adds slightly more information to an error.`,
-    call(...msg) { throw array(error, ...msg, 'in', finish.v) },
+    call(...msg) { throw struct(error, ...msg, 'in', finish.v) },
   },
 
   errorStack:{
     txt:`Adds the execution stack to the raised error.`,
-    call(...msg) { throw array(error, ...msg, 'at', _resolveStack()) },
+    call(...msg) { throw struct(error, ...msg, 'at', _resolveStack()) },
   },
 
   parseURL:{
@@ -5794,7 +5908,7 @@ Uses \`bound\`, and partially-evaluates the result before returning.`,
         }
       })] = interrupt(closure)
       try {
-        const r = !trivial ? finish(b) : _unknown(array(closure, deconstruct(finish(b))))
+        const r = !trivial ? finish(b) : _unknown(struct(closure, deconstruct(finish(b))))
         return r
       }
       catch (err) { if (err === interrupt) interrupt(closure, 2)(trivial, b);  throw err }
@@ -5992,7 +6106,7 @@ Variables within non-\`closure\` functions will not be changed by application.`,
         if (call.cache && call.cache.has(f)) return call.cache.get(f)
 
         // Quote args if needed (cyclic structs aren't quoted).
-        let dec = f.map((x, i, arr) => i && i < arr.length-1 && _hasCallableParts(x, true) ? array(quote, x) : x)
+        let dec = f.map((x, i, arr) => i && i < arr.length-1 && _hasCallableParts(x, true) ? struct(quote, x) : x)
         if (!skipped) dec = merge(dec)
 
         // Ensure that work doesn't have to be repeated pointlessly.
@@ -6051,12 +6165,12 @@ Infers structural terms where possible.`,
             const prev = finish.inFunction;  finish.inFunction = 1
             try { A = purify(a) }
             finally { finish.inFunction = prev }
-            if (_isDeferred(A)) return _stage(array(_assign, A[1], b), A)
+            if (_isDeferred(A)) return _stage(struct(_assign, A[1], b), A)
             if (_isUnknown(A)) A = A[1]
             ++stage
           case 1:
             B = finish(b)
-            if (_isUnknown(B)) return _stage(array(_assign, _hasCycles(A) || _hasCallableParts(A, true) ? array(quote, A) : A, B[1]), B)
+            if (_isUnknown(B)) return _stage(struct(_assign, _hasCycles(A) || _hasCallableParts(A, true) ? struct(quote, A) : A, B[1]), B)
             ++stage
           case 2:
             return _assign(A,B)
@@ -6073,7 +6187,6 @@ Infers structural terms where possible.`,
           return _assign.env.get(a) !== b ? (!readonly ? error : errorFast)("Non-matching graph: expected", _assign.env.get(a), "for", a, "but got", b) : void(!readonly && finish.env[_id(label)].set(a, b))
         !_isVar(b) && _assign.env.set(a, b)
 
-        if (a === b) return
         if (_isUnknown(a) && !_isDeferred(a)) {
           if (!_isStruct(a[1])) throw impure
           if (_isVar(a[1])) a = a[1]
@@ -6149,7 +6262,7 @@ Infers structural terms where possible.`,
             else _assign(a[i][1], b.slice(i, i + b.length - a.length + 1), readonly)
           return
         }
-        (!readonly ? error : errorFast)(a, "cannot be assigned", b)
+        if (a !== b) (!readonly ? error : errorFast)(a, "cannot be assigned", b)
       }
       finally { _assign.inside = inside, !inside && _assign.env.clear() }
       // .inferred (a Map from variables to their inferred values), .env (a Map from a to b), .inside (false to the outside world)
@@ -6403,7 +6516,7 @@ Also wraps C-style strings in <string>.`,
 
   nameResult:{
     txt:`\`(nameResult Expr)\`: provides a list of suggestions for naming Expr. Used in \`serialize\` for more human-readable graph serializations.`,
-    call(func) { return typeof func == 'string' && +func !== +func && func.length < 20 && !/\s/.test(func) ? array(func) : _isArray(defines(func, nameResult)) ? defines(func, nameResult) : typeof defines(func, nameResult) == 'string' ? [defines(func, nameResult)] : null },
+    call(func) { return typeof func == 'string' && +func !== +func && func.length < 20 && !/\s/.test(func) ? [func] : _isArray(defines(func, nameResult)) ? defines(func, nameResult) : typeof defines(func, nameResult) == 'string' ? [defines(func, nameResult)] : null },
   },
 
   serialize:{
@@ -6930,7 +7043,7 @@ And parsing is more than just extracting meaning from a string of characters (it
           (ctx || (ctx = new Map)).set(v[1], v[2])
         else arr.push(v)
       }
-      if (ctx) return array(bound, ctx, arr)
+      if (ctx) return struct(bound, ctx, arr)
       return arr
     }
     if (!_isArray(u)) throw "Must be an array"
@@ -7031,8 +7144,8 @@ And parsing is more than just extracting meaning from a string of characters (it
       if (obj === undefined) return
       while (match(/\s*\.(?!\.\.)\s*/y)) {
         let key = match(_basicLabel)
-        if (key === undefined) obj = array(label('lookup'), obj)
-        else obj = array(label('lookup'), obj, _isLabel(key) ? key[1] : key)
+        if (key === undefined) obj = struct(label('lookup'), obj)
+        else obj = struct(label('lookup'), obj, _isLabel(key) ? key[1] : key)
       }
       return obj
     }
@@ -7049,12 +7162,12 @@ And parsing is more than just extracting meaning from a string of characters (it
       if (match('…') || match('...')) {
         const r = match(_fancyLookup)
         r === undefined && match.notEnoughInfo('Expected the rest')
-        return array(label('rest'), r)
+        return struct(label('rest'), r)
       }
       if (match('^')) {
         const r = match(_fancyRest)
         r === undefined && match.notEnoughInfo('Expected the quoted value')
-        return array(label('quote'), r)
+        return struct(label('quote'), r)
       }
       return match(_fancyLookup)
     }
@@ -7073,12 +7186,12 @@ And parsing is more than just extracting meaning from a string of characters (it
       while (op = match(/(\s*)(?:\*|\/)\1/y)) {
         const b = match(_fancyRest)
         b === undefined && match.notEnoughInfo('Expected the second arg of +')
-        a = array(label(op.trim() === '*' ? 'mult' : 'div'), a, b)
+        a = struct(label(op.trim() === '*' ? 'mult' : 'divide'), a, b)
       }
       return a
     }
     let g
-    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('mult') || u[0] === _unctx('div')))
+    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('mult') || u[0] === _unctx('divide')))
       g = _emitGrouping(match),
       match(_fancyMultDiv, u[1]), match(u[0] === _unctx('mult') ? '*' : '/'), match(_fancyRest, u[2]),
       _emitGrouping(match, g)
@@ -7094,12 +7207,12 @@ And parsing is more than just extracting meaning from a string of characters (it
       while (op = match(/(\s*)(?:\+|-(?!>))\1/y)) {
         const b = match(_fancyMultDiv)
         b === undefined && match.notEnoughInfo('Expected the second arg of '+op)
-        a = array(label(op.trim() === '+' ? 'sum' : 'sub'), a, b)
+        a = struct(label(op.trim() === '+' ? 'sum' : 'subtract'), a, b)
       }
       return a
     }
     let g
-    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('sum') || u[0] === _unctx('sub')))
+    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('sum') || u[0] === _unctx('subtract')))
       g = _emitGrouping(match),
       match(_fancySumSub, u[1]), match(u[0] === _unctx('sum') ? '+' : '-'), match(_fancyMultDiv, u[2]),
       _emitGrouping(match, g)
@@ -7113,7 +7226,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       if (match(parseOp)) {
         const t = match(base)
         t === undefined && match.notEnoughInfo('Expected the type')
-        return array(label(str), v, t)
+        return struct(label(str), v, t)
       }
       return v
     }
@@ -7144,7 +7257,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       if (match(/\s*(?:→|->)\s*/y)) {
         const b = match(_fancyClosure)
         b === undefined && match.notEnoughInfo('Expected the body of an arrow function')
-        return array(label('function'), a, b)
+        return struct(label('function'), a, b)
       }
       return a
     }
@@ -7160,7 +7273,7 @@ And parsing is more than just extracting meaning from a string of characters (it
     if (u === _specialParsedValue) {
       if (match('!')) {
         const r = match(_fancyArrowFunc)
-        return r !== undefined ? array(label('closure'), r) : undefined
+        return r !== undefined ? struct(label('closure'), r) : undefined
       }
       return match(_fancyArrowFunc)
     }
@@ -7381,7 +7494,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
         if (s[i+1].nodeName === 'EXTRACTED') break
         if (s[i+3].nodeName === 'EXTRACTED') break
         const row = elem('tr', [elem('td', [s[i], s[i+1]]), elem('td', [s[i+2], s[i+3]])])
-        if (_isArray(v)) elemValue(row, array(rest, array(v[++a], v[++a])))
+        if (_isArray(v)) elemValue(row, struct(rest, struct(v[++a], v[++a])))
         else elemValue(row, [label])
         rows.push(row)
         i += 4
@@ -8399,7 +8512,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       const body = a.pop()
       const loadVarsFromEnv = opt && opt.loadVarsFromEnv || false // true if label env can contain variable values that we'd need to load to local vars.
 
-      const cause = opt ? opt.cause : !a.length ? body : array(_function, ...a, body) // For interrupts.
+      const cause = opt ? opt.cause : !a.length ? body : struct(_function, ...a, body) // For interrupts.
       const noInterrupts = opt && opt.noInterrupts || false
       const markLines = opt && opt.markLines || false
       const comments = opt && opt.comments || false
@@ -8435,7 +8548,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       write(`'use strict'\n`)
       const funcBackpatch = write(`(FUNC PLACEHOLDER {\n`)
       const varsDeclarationBackpatch = write(`\n`)
-      let needCleanLabelEnv = false
       const labelEnvBackpatch = write(`\n`)
       const varsUsedBackpatch = write(`\n`)
       const stageBackpatch = write(`while(true)switch(stage){case 0:\n`)
@@ -8447,8 +8559,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       // Handle interpretation if escaped.
       const argNames = []
       if (a.length) {
-        write(`let[LE=${outside(_allocMap)}()]=${outside(interrupt)}(${outside(cause)})\n`)
-        write(`try{\n`)
         if (restIndexInA < a.length-1)
           write(`${outside(_assign)}(${outside(a)},args)\n`)
         else {
@@ -8461,8 +8571,6 @@ The correctness of quining of functions can be tested by checking that the rewri
             write(`${outside(_assign)}(${outside(a[restIndexInA][1])},args)\n`)
         }
         write(`return ${outside(finish)}(${outside(body)})\n`)
-        write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},1)(LE),LE=null;throw err}\n`)
-        write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)})(LE)}\n`)
         jumped = true, advanceStage(a)
 
         // Compile assignment of args.
@@ -8490,11 +8598,10 @@ The correctness of quining of functions can be tested by checking that the rewri
       // Make the body able to interrupt and re-enter.
       const vars = new Array(nextVar).fill(0).map((_, i) => 'V' + i.toString(36)).filter(el => !args.has(el))
       vars.push(...new Array(nextThen).fill(0).map((_, i) => 'S' + i.toString(36)))
-      if (needCleanLabelEnv) vars.push(`LE`), s[labelEnvBackpatch] = `LE=${outside(_allocMap)}()\n`
+      vars.push(`LE`), s[labelEnvBackpatch] = `LE=${outside(_allocMap)}()\n`
       if (nextStage > 1 || vars.length) {
         s[varsDeclarationBackpatch] = `let[${nextStage > 1 ? `stage=${a.length ? 1 : 0},` : ''}${vars}]=${outside(interrupt)}(${outside(cause)})\n`
-        const savePE = !needCleanLabelEnv ? '' : `const PE=${outside(finish)}.env[${outside(_id(label))}];${outside(finish)}.env[${outside(_id(label))}]=LE;`
-        s[varsUsedBackpatch] = `${savePE}try{\n`
+        s[varsUsedBackpatch] = `const PE=${outside(finish)}.env[${outside(_id(label))}];${outside(finish)}.env[${outside(_id(label))}]=LE;try{\n`
         if (nextStage > 1) vars.unshift('stage')
         write(`}catch(err){if(err===${outside(interrupt)})err(${outside(cause)},${vars.length})(`)
         // `if (err === interrupt) interrupt(cause, vars.length)(...)(...)(...); throw err`:
@@ -8504,11 +8611,8 @@ The correctness of quining of functions can be tested by checking that the rewri
           vars[i+2] && write(',' + vars[i+2]),
           vars[i+3] && write(',' + vars[i+3]),
           vars[i+4] && write(')(')
-        write(`)`)
-        if (needCleanLabelEnv) write(`,LE=null`)
-        write(`; throw err}\n`)
-        if (needCleanLabelEnv)
-          write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)}(LE)),${outside(finish)}.env[${outside(_id(label))}]=PE}\n`)
+        write(`),LE=null; throw err}\n`)
+        write(`finally{LE!==null&&(LE.delete(${outside(body)}),${outside(_allocMap)}(LE)),${outside(finish)}.env[${outside(_id(label))}]=PE}\n`)
       }
       if (nextStage === 1) s[stageBackpatch] = '\n'
 
@@ -8611,7 +8715,6 @@ The correctness of quining of functions can be tested by checking that the rewri
         const err = `${outside(error)}(${outside(a)},${outside("cannot be assigned")},${bVar})\n`
 
         if (!demandEq) {
-          write(`if(${outside(a)}!==${bVar}){\n`, `destructure array`)
 
           // If expecting a function, deconstruct both pattern and input.
           if (!_isArray(a) && _isArray(defines(a, deconstruct))) {
@@ -8648,7 +8751,6 @@ The correctness of quining of functions can be tested by checking that the rewri
               compileAssign(a[i], name), used(name)
             }
           }
-          write(`}\n`)
         } else 
           write(`if(${outside(a)}!==${bVar})${err}`, `demand ref-equality`)
       }
@@ -8716,7 +8818,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         write(`${args[0]}.call(${rested(x, args)})\n`, `call`)
       }
       function compileStruct(x, into, args) {
-        // Compile args, then create-and-fill-and-merge the struct — array(...) (or [...] if head is statically-known and !_shouldMerge).
+        // Compile args, then create-and-fill-and-merge the struct — struct(...) (or [...] if head is statically-known and !_shouldMerge).
         let returning = null
         if (!into) returning = nextVar+1, into = use(x)
         write(x.length ? `${into}=[];${into}.length=${x.length};${into}.length=0\n` : `${into}=[]\n`)
@@ -8770,9 +8872,9 @@ The correctness of quining of functions can be tested by checking that the rewri
 
           compiledStack.add(x)
           if (!compiledStack.has(x[0]) && !_hasCallableParts(x[0], true) && (!_isArray(x[0]) || defines(x[0], finish) !== undefined || defines(x[0], call) !== undefined)) {
-            if (x[0] === _if && x.length == 4)
+            if (x.length == 4 && (x[0] === _if || !_isArray(x[0]) && defines(x[0], finish) === defines(_if, finish)))
               compileIf(x, name)
-            else if (x[0] === last)
+            else if (x[0] === last || !_isArray(x[0]) && defines(x[0], finish) === defines(last, finish))
               compileLast(x, name)
             else {
               const code = compileExpr(x[0])
@@ -8943,7 +9045,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       function spillVars(inside) {
         const vars = getVars(inside, undefined, true)
         if (!vars) return
-        needCleanLabelEnv = true
         write(`${outside(finish)}.env[${_id(label)}]`)
         for (let v of vars.keys()) write(`.set(${outside(v)},${use(v)})`)
         write(`\n`, `spill vars`)
@@ -9067,8 +9168,8 @@ The correctness of quining of functions can be tested by checking that the rewri
     let d
     if (_isUnknown(v) && v.length == 2)
       v = v[1]
-    if (!inp && _isArray(v) && v[0] === array)
-      // If `array ...?`, treat it as v.slice(1).
+    if (!inp && _isArray(v) && v[0] === struct)
+      // If `struct ...?`, treat it as v.slice(1).
       v = v.slice(1)
 
     if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
@@ -9311,8 +9412,8 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && _isFunction(d))
       // If a macro, treat it as a call.
       v = d
-    if (_isArray(v) && v[0] === array)
-      // If `array ...?`, treat it as v.slice(1).
+    if (_isArray(v) && v[0] === struct)
+      // If `struct ...?`, treat it as v.slice(1).
       v = v.slice(1)
 
     if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
@@ -9363,8 +9464,8 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length))
       // If a macro, unwrap unknowns inside `values` and treat it as a call.
       [v, values] = [d, bound(_unwrapUnknown, values, false)]
-    if (!inp && _isArray(v) && v[0] === array)
-      // If `array ...?`, treat it as v.slice(1).
+    if (!inp && _isArray(v) && v[0] === struct)
+      // If `struct ...?`, treat it as v.slice(1).
       v = v.slice(1)
 
 
@@ -9613,7 +9714,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
   _visitNode:{
     txt:`Remembers to visit the node in this graph search.`,
     call(ctx, v, wantedInputs, wantedOutput, actualArgs, then) {
-      const node = array(ctx, v, wantedInputs, wantedOutput, actualArgs, then)
+      const node = struct(ctx, v, wantedInputs, wantedOutput, actualArgs, then)
       if (!_search.visited.has(node)) {
         _search.nodes.push(node)
         _search.visited.add(node)
@@ -9672,7 +9773,7 @@ Args are taken from \`Inputs\` in order or \`pick\`ed from the \`Context\` where
       // If `wantedOutput` is a function, look for its output assuming its inputs and ctx then bind the function with the result.
       if (_isFunction(wantedOutput)) {
         const d = deconstruct(wantedOutput)
-        const subCtx = array(either, ...bound(x => !_isVar(x) ? undefined : _unknown(x), d.slice(1,-1), false), ctx)
+        const subCtx = struct(either, ...bound(x => !_isVar(x) ? undefined : _unknown(x), d.slice(1,-1), false), ctx)
         _visitNode(subCtx, _functionComposer(wantedOutput), null, use.var, null, then)
         return
       }
@@ -9837,7 +9938,7 @@ Nothing unthinkable. Long searches are quite expensive (especially memory-wise);
     txt:`Like \`get\`, but returns \`(Result Continuation)\` if successful (so that the _search can be continued).`,
     call(out, ctx) {
       const prev = get.ctx
-      let [sub, c = get.ctx && ctx ? array(either, get.ctx, ctx) : get.ctx ? get.ctx : ctx] = interrupt(_get)
+      let [sub, c = get.ctx && ctx ? struct(either, get.ctx, ctx) : get.ctx ? get.ctx : ctx] = interrupt(_get)
       get.ctx = c
       try {
         if (!sub) sub = typeof out != 'function' ? output(out, ctx) : ctx
@@ -9993,7 +10094,7 @@ Use \`picker\` to override behavior.`,
         let [next = _nextPickerAsFunction()] = interrupt(pick)
         try {
           if (next === undefined) next = _nextPickerAsFunction()
-          return finish(array(f, next, quote(from), quote(cause), quote(extra)))
+          return finish(struct(f, next, quote(from), quote(cause), quote(extra)))
         } catch (err) { if (err === interrupt) interrupt(pick, 1)(next);  throw err }
       }
       // pick.ers (array of the current picker array), .inlineCache (for _nextPickerAsFunction), .depth (for the current index into pick.ers)
@@ -10014,9 +10115,9 @@ Use \`picker\` to override behavior.`,
       for (let i = 0; i <= pick.ers.length - pick.depth; ++i)
         if (_isUnknown(pick.ers[i])) closeOver = true
       try {
-        if (d === undefined) d = array(f, _nextPickerAsFunction(), a, b, c)
+        if (d === undefined) d = struct(f, _nextPickerAsFunction(), a, b, c)
         const r = defines(_function, finish)(a, b, c, d)
-        return pick.inlineCache[pick.ers.length - pick.depth] = closeOver ? array(closure, r) : r
+        return pick.inlineCache[pick.ers.length - pick.depth] = closeOver ? struct(closure, r) : r
       } catch (err) { if (err === interrupt) interrupt(_nextPickerAsFunction, 4)(a,b,c,d);  throw err }
     } finally { --pick.depth }
   },
@@ -10051,8 +10152,8 @@ Use \`picker\` to override behavior.`,
                 if (_isArray(x) && x[0] === quote) return x
               }, x[1], false)
             } catch (err) { if (err !== null) throw err }
-            if (b && !_isUnknown(er)) return _stage(array(picker, er, x[1]), x)
-            if (b) return [_unknown, array(picker, er[1], x[1]), ...er.slice(2), ...x.slice(2)]
+            if (b && !_isUnknown(er)) return _stage(struct(picker, er, x[1]), x)
+            if (b) return [_unknown, struct(picker, er[1], x[1]), ...er.slice(2), ...x.slice(2)]
           }
           return x
         } finally { pick.ers.pop(), pick.inlineCache.pop() }
@@ -10085,7 +10186,7 @@ This is the default when no picker is specified.`,
     call(next, from, cause, extra) {
       call.impure = true
       if (!askUser.got) askUser.got = new Map
-      const a = array('askUser', next, from, cause, extra)
+      const a = struct('askUser', next, from, cause, extra)
       if (askUser.got.has(a))
         try {
           return askUser.got.get(a) !== _notFound ? askUser.got.get(a) : next(from, cause, extra)
@@ -10166,7 +10267,7 @@ This is the default when no picker is specified.`,
         if (t.tagName !== 'BUTTON' || !('to' in t) || t.to !== _notFound && typeof t.to != 'number') return
         if (remember) {
           const picked = typeof from == 'number' ? t.to : from[t.to-1]
-          Choices.set(cause, typeof picked != 'function' ? picked : array(_disabled, picked))
+          Choices.set(cause, typeof picked != 'function' ? picked : struct(_disabled, picked))
         }
         env[_id(log)] && env[_id(log)].style.removeProperty('display')
         askUser.got.set(a, t.to), _schedule(...job)
@@ -10189,13 +10290,13 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
     call(ctx, ...a) {
       // Return a function that does `pick(2, func) ? impl.impl(...args) : (impl.impl = get(f, ctx))(...args)`.
         // This is a really limited implementation, though it does encompass everything. A real implementation would search for the best of itself.
-      const f = finish(array(_function, ...a))
+      const f = finish(struct(_function, ...a))
       function impl(...args) {
         let [r = impl.impl] = interrupt(impl)
         try {
           if (r === _notFound || pick(2, func, "1 to get a new implementation")) {
             r = _notFound, r = get(f, ctx)
-            if (_isUnknown(r)) return _unknown(array(using, r[1][2], ...a))
+            if (_isUnknown(r)) return _unknown(struct(using, r[1][2], ...a))
             impl.impl = r
           }
           return r.apply(impl, args)
@@ -10339,7 +10440,7 @@ Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a fu
         }
       const d = result[defines.key] = Object.create(null)
       d[_id(context)] = m
-      d[_id(deconstruct)] = array(context, ...f)
+      d[_id(deconstruct)] = struct(context, ...f)
       d[_id(argCount)] = 1
       Object.freeze(d)
       return result
@@ -10381,7 +10482,7 @@ Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a fu
 
   compose:{
     future:`
-Allow higher-order outputs.
+Allow higher-order outputs. …For that, we'd need to have something that can apply those functions and produce a dependently-typed result, which sounds like the old dep-typed search arch.
 …Or just switch to concepts-that-are-arrays-of-options directly?
 `,
     txt:`\`(compose Context …InputTypes OutputType)\`: generates a function that connects inputs of specified types to output.
@@ -10396,7 +10497,11 @@ F=(concept { call x->x+1 context ('In' 'Med') })
 G=(concept { call x->x*2 context ('Med' 'Out') })`,
       ],
     ],
+    lookup:{
+      getExpr:__is(`getExpr`),
+    },
     call(ctx, ...types) {
+      // None of this works well…
       const out = types[types.length-1], us = finish.v
       let [exprs, vars] = interrupt(compose)
       if (exprs === undefined) {
@@ -10406,91 +10511,132 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
           !exprs.has(types[i]) && exprs.set(types[i], _allocArray()), exprs.get(types[i]).push(vars[i] = [label])
       }
       let resultExpr
-      try { resultExpr = genExpr(out) }
+      try { resultExpr = getExpr(ctx, exprs, out) }
       catch (err) { if (err === interrupt) err(compose, 2)(exprs, vars), exprs = null;  throw err }
       finally { exprs && _allocMap(exprs) }
+
+      // Should also `purify` resultExpr, to allow different searches.
 
       const result = compile({cause:us}, ...vars, resultExpr)
       const d = result[defines.key] = Object.create(null)
       d[_id(argCount)] = types.length-1
-      d[_id(deconstruct)] = array(_function, ...vars, resultExpr)
+      d[_id(deconstruct)] = struct(_function, ...vars, resultExpr)
       d[_id(context)] = types
       Object.freeze(d)
       return result
-
-      function genExpr(out) { // ### Why not put it in a separate function?
-        // A complex interrupt/free game here.
-        let [options, i, firstStep, expr, j = 0, known = true, ints = _allocArray()] = interrupt(compose)
-        try {
-          _checkInterrupt()
-          while (true) {
-            // Get our options: those of the context and those of exprs.get(out).
-            if (options === undefined) {
-              options = ctx(out)
-              if (!options && !exprs.has(out)) error(out, 'is not in', ctx)
-              if (!options) options = _allocArray()
-              exprs.has(out) && options.push(...exprs.get(out))
-              ints.length = options.length
-            }
-            if (!options.length) error(out, 'is not in', ctx)
-            if (firstStep === undefined) firstStep = finish.env[_id(step)]
-
-            // On first entry, just pick an option.
-            if (i === undefined) i = pick(options, us, out)
-            // If we interrupted here or down below, remember and clean option's re-entry state (if down below), re-pick i, and restore the re-entry state.
-            else if (options.length > 1 && Math.random()<.1) if (ints[i] || expr !== undefined) {
-              // This reduces generated expression complexity (potentially, from infinity).
-              if (!ints[i]) {
-                ints[i] = _allocArray();  ints[i].push(expr, j, known, finish.env[_id(interrupt)], finish.env[_id(step)])
-                expr = undefined, j = 0, known = true, finish.env[_id(interrupt)] = _allocArray(), finish.env[_id(step)] = firstStep+1
-              }
-              const next = pick(options, us, out)
-              if (ints[next])
-                [expr, j, known, finish.env[_id(interrupt)], finish.env[_id(step)]] = ints[next], _allocArray(ints[next]), ints[next] = null
-              i = next
-            }
-
-            let f = options[i], d = !_isArray(f) && defines(f, context)
-            if (_isArray(d)) {
-              // genExpr every input, then add [f, ...inputs] to `exprs`.
-              if (!expr) expr = _allocArray()
-              // log('Getting inputs', ...d.slice(0,-1), 'for', f)
-              for (; j < d.length-1; ++j) {
-                const r = genExpr(d[j])
-                if (_isArray(r)) known = false
-                expr.push(r)
-              }
-              // log('  got', d[d.length-1], ...expr)
-              try {
-                if (typeof defines(f, compose) == 'function') {
-                  const r = defines(f, compose)(ctx, ...expr, out)
-                  if (r !== undefined) f = r, _allocArray(expr)
-                  else expr.unshift(f), f = expr
-                } else if (typeof f == 'function' && known)
-                  f = f(...expr), _allocArray(expr)
-                else expr.unshift(f), f = expr
-              } catch (err) { // If our override throws, remove this option and search for another one.
-                if (err === interrupt) throw err
-                // log('Error for', f, ...expr, ':', jsRejected(err))
-                ;[options[i], options[options.length-1]] = [options[options.length-1], options[i]], options.pop()
-                ;[ints[i], ints[ints.length-1]] = [ints[ints.length-1], ints[i]], ints.pop()
-                _allocArray(expr)
-                i = undefined, expr = undefined, j = 0
-                continue
-              }
-            }
-            // Remember and return the option.
-            !exprs.has(out) && exprs.set(out, _allocArray()), exprs.get(out).push(f)
-            _allocArray(options)
-            _allocArray(ints)
-            return f
-          }
-        } catch (err) { if (err === interrupt) err(compose, 7)(options, i, firstStep, expr)(j, known, ints); else _allocArray(ints);  throw err }
-      }
     },
   },
 
-  // Now, what I need are, well, example contexts… in particular a function that re-composes itself dynamically (able to handle self-reference)… and goals, and dynamic-recomposition-with-goal that keeps the best things… and copy/mutation by culling the context… And deferring `pick`s till runtime — how is this one done (more importantly, *when*); maybe it is better to have a `dynamic` function-composing (with a choice source) function?
+
+  getExpr:{
+    txt:`Generates and remembers an expression of a type.`,
+    call(Static, Dynamic, out) {
+      // A complex interrupt/free game here.
+      const us = finish.v
+      let [options, i, firstStep, expr, j = 0, known = true, ints = _allocArray()] = interrupt(compose)
+      try {
+        _checkInterrupt()
+        while (true) {
+          // Get our options: those of the context and those of Dynamic.get(out).
+          if (options === undefined) {
+            options = Static(out)
+            if (!options && !Dynamic.has(out)) error(out, 'is not in', Static)
+            if (!options) options = _allocArray()
+            Dynamic.has(out) && options.push(...Dynamic.get(out))
+            ints.length = options.length
+          }
+          if (!options.length) error(out, 'is not in', Static)
+          if (firstStep === undefined) firstStep = finish.env[_id(step)]
+
+          // On first entry, just pick an option.
+          if (i === undefined) i = pick(options, us, out)
+          // If we interrupted here or down below, remember and clean option's re-entry state (if down below), re-pick i, and restore the re-entry state.
+          else if (options.length > 1 && Math.random()<.1) if (ints[i] || expr !== undefined) {
+            // This reduces generated expression complexity without ruling out any possibilities (potentially, from infinity, in cycles).
+            if (!ints[i]) {
+              ints[i] = _allocArray();  ints[i].push(expr, j, known, finish.env[_id(interrupt)], finish.env[_id(step)])
+              expr = undefined, j = 0, known = true, finish.env[_id(interrupt)] = _allocArray(), finish.env[_id(step)] = firstStep+1
+            }
+            const next = pick(options, us, out)
+            if (ints[next])
+              [expr, j, known, finish.env[_id(interrupt)], finish.env[_id(step)]] = ints[next], _allocArray(ints[next]), ints[next] = null
+            i = next
+          }
+
+          let f = options[i], d = !_isArray(f) && defines(f, context)
+          if (_isArray(d)) {
+            // getExpr every input, then add [f, ...inputs] to `Dynamic`.
+            if (!expr) expr = _allocArray()
+            // log('Getting inputs', ...d.slice(0,-1), 'for', f)
+            for (; j < d.length-1; ++j) {
+              const r = getExpr(Static, Dynamic, d[j])
+              if (_isArray(r)) known = false
+              expr.push(r)
+            }
+            // log('  got', d[d.length-1], ...expr)
+            try {
+              if (typeof defines(f, compose) == 'function') {
+                const r = defines(f, compose)(Static, ...expr, out)
+                  // ### Such a thing prevents expr conceptuality checking, for "accept any search, not just this particular search architecture".
+                    // What we want is a static function that both checks conceptuality and stages code as defined and compiles; don't do staging in search.
+                      // …Or maybe, we shouldn't ever do staging, but only do peval through standard mechanisms (`purify`), instead?
+                if (r !== undefined) f = r, _allocArray(expr)
+                else expr.unshift(f), f = expr
+              }
+              // Else peval.
+                // …We probably want to do this only after the search, right?
+              else if (known || !_isArray(f) && defines(f, inline)) {
+                if (!_isArray(f) && typeof defines(f, finish) == 'function')
+                  f = defines(f, finish).apply(f, expr), _allocArray(expr)
+                else if (typeof f == 'function')
+                  f = f.apply(f, expr), _allocArray(expr)
+                else error('Creating structs is not allowed during search:', f)
+              }
+              else expr.unshift(f), f = expr
+            } catch (err) { // If our override throws, remove this option and search for another one.
+              if (err === interrupt) throw err
+              // log('Error for', f, ...expr, ':', jsRejected(err))
+              ;[options[i], options[options.length-1]] = [options[options.length-1], options[i]], options.pop()
+              ;[ints[i], ints[ints.length-1]] = [ints[ints.length-1], ints[i]], ints.pop()
+              _allocArray(expr)
+              i = undefined, expr = undefined, j = 0
+              continue
+            }
+          }
+          // Remember and return the option.
+            // ### Should we remember the escaped option instead (and unescape it if picked), so that functions (`context`-definers) can actually be returned? Or would we wrap all such functions in extra arrays?
+          !Dynamic.has(out) && Dynamic.set(out, _allocArray()), Dynamic.get(out).push(f)
+          _allocArray(options)
+          _allocArray(ints)
+          return f
+        }
+      } catch (err) { if (err === interrupt) err(compose, 7)(options, i, firstStep, expr)(j, known, ints); else _allocArray(ints);  throw err }
+    },
+  },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   less(a,b) { return a<b },
   atan(x) { return Math.atan(x) },
@@ -10509,14 +10655,14 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       (concept { call (function 0) context ('Number') })
       (concept { call (function 1) context ('Number') })
       (concept { call sum compose (jsEval "(ctx,a,b) => !a ? b : !b ? a : typeof a == 'number' && typeof b == 'number' ? a+b : [sum,a,b]" {'sum' sum}) context ('Number' 'Number' 'Number') })
-      (concept { call sub compose (jsEval "(ctx,a,b) => !b ? a : typeof a == 'number' && typeof b == 'number' ? a-b : [sub,a,b]" {'sub' sub}) context ('Number' 'Number' 'Number') })
+      (concept { call subtract compose (jsEval "(ctx,a,b) => !b ? a : typeof a == 'number' && typeof b == 'number' ? a-b : [subtract,a,b]" {'subtract' subtract}) context ('Number' 'Number' 'Number') })
       (concept { call mult compose (jsEval "(ctx,a,b) => !a || !b ? 0 : a === 1 ? b : b === 1 ? a : typeof a == 'number' && typeof b == 'number' ? a*b : [mult,a,b]" {'mult' mult}) context ('Number' 'Number' 'Number') })
-      (concept { call div compose (jsEval "(ctx,a,b) => !b ? errorFast() : b === 1 ? a : typeof a == 'number' && typeof b == 'number' ? a/b : [div,a,b]" {'div' div}) context ('Number' 'Number' 'Number') })
+      (concept { call divide compose (jsEval "(ctx,a,b) => !b ? errorFast() : b === 1 ? a : typeof a == 'number' && typeof b == 'number' ? a/b : [divide,a,b]" {'divide' divide}) context ('Number' 'Number' 'Number') })
 
       ;='Allow comparisons and branching.'
       (concept { call (jsEval '(a,b) => a<b') context ('Number' 'Number' 'Boolean') })
       (concept { call (jsEval '(a,b) => a===b') context ('Number' 'Number' 'Boolean') })
-      (concept { compose (jsEval '(ctx,c,a,b) => c===false ? b : c===true ? a : a===b ? a : [_if, c, a, b]' {'_if' if}) context ('Boolean' 'Number' 'Number' 'Number') })
+      (concept { finish (defines if finish) context ('Boolean' 'Number' 'Number' 'Number') })
 
       ;='Allow setting up and modifying state. …Except, shouldn''t state be local to decision sites, and be completely contained in measures anyway?'
       (concept { call id compose (function ctx x x) context ('State' 'Number') })
@@ -10534,6 +10680,48 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  WA:{
+    txt:`A namespace for operations that directly compile to WebAssembly.`,
+    lookup:{
+      write:__is(`writeWA`),
+    },
+  },
+
+  writeWA() { // Ehhhh, too complicated for no immediate gain.
+    const into = []
+    into.push(0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0) // \0asm, version 1
+    writeSection(1, [1, 0x60, 1, 0x7f, 1, 0x7f]) // One type: accept i32 and return i32, both pointers into linear memory.
+    return WebAssembly.compile(new Uint8Array(into))
+
+    function writeSection(sectionByte, contentsArray) {
+      into.push(sectionByte)
+      const n = contentsArray.length | 0
+      while (true) {
+        const byte = n & 0x7f
+        n >>= 7
+        if ((n === 0 && (byte & 0x40) === 0) || (n === -1 && (byte & 0x40) !== 0))
+          { into.push(byte); break }
+        result.push(byte | 0x80)
+      }
+      into.push(...contentsArray)
+    }
+  },
 
 
 
