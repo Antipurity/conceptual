@@ -228,7 +228,8 @@ Globals={
 
       if (x[0] === quote) return x[1] // Quoting stops evaluation.
       if (x[0] === label) return x // Labels self-evaluate.
-      if (x[0] === func) return func(x[1], x[2]) // Functions do not partially-evaluate here.
+      if (x[0] === func) return func(x[1], x[2]) // Functions do not partially-evaluate their bodies here.
+        // (Though peval is as simple as "if all inputs are known, or the function says it handles peval, call, else record" — which can handle value promises too.)
 
       // Evaluate each array item.
       const y = _arrayCache.length ? _arrayCache.pop() : [];  y.length = x.length
@@ -422,7 +423,6 @@ Globals={
       userTime:__is(`userTime`),
       realTime:__is(`realTime`),
       memory:__is(`memory`),
-      journal:__is(`journal`),
       graphSize:__is(`graphSize`),
     },
   },
@@ -443,7 +443,6 @@ Globals={
 
   Numeric:{
     txt:`A namespace for some very primitive numeric-computation-related functionality.`,
-    future:`Expose all ops of Wasm and WebGPU as parts of generative concepts.`,
     lookup:{
       reduce:__is(`reduce`),
       transform:__is(`transform`),
@@ -679,7 +678,6 @@ Globals={
 
   UI:{
     txt:`A namespace for user interface functionality.`,
-    future:`Search an HTML tree via-function or for-string, collapsing elements not containing the searched-for things and opening collapsed things where needed, replacing an element (with the option to put things back), and give contextMenu the option to do that.`,
     philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).
 Keep names short and rely on the IDE.`,
     lookup:{
@@ -800,14 +798,12 @@ Label-binding environment is not preserved.`,
 
   Self:{
     txt:`A namespace for every function here. Project's GitHub page: https://github.com/Antipurity/conceptual`,
-    future:[
-      `\`(while VarsList Condition ChangedVars …RememberNodes)\`, auto-staging \`RememberNodes\` correctly if not present, for efficient loops.`,
-      `Compile-to-wasm functions that manipulate structures and call/finish native functions.`,
-      `Zero-overhead {local {immutable-seeming mutable memory} management} (like an image that is drawn on, or an array sorted in-place): \`(Resource OnDisposal OnClone Value)\` and an \`argClone\` marker (index of what to clone), analyzing the graph on compilation to minimize cloning and dispose right after the last use.`,
-      `Global immediately-freeing memory management (for resources that are quite expensive and/or should really be released): ref-counting (with shared ref-counters for cycles) of objects with \`dispose\`.`,
-    ],
     lookup:__is(`undefined`),
-    philosophy:`An old painting of deceit and rot.`,
+    philosophy:`An old painting of deceit and rot.
+    
+Cancelled futures:
+* Zero-overhead {local {immutable-seeming mutable memory} management} (like an image that is drawn on, or an array sorted in-place): \`(Resource OnDisposal OnClone Value)\` and an \`argClone\` marker (index of what to clone), analyzing the graph on compilation to minimize cloning and dispose right after the last use.
+* Global immediately-freeing memory management (for resources that are quite expensive and/or should really be released): ref-counting (with shared ref-counters for cycles) of objects with \`dispose\`.`,
   },
 
   scope:{
@@ -1252,7 +1248,7 @@ Supported browsers: modern Chrome and Firefox.`,
     lookup:{
       icon:__is(`BrowserIconURL`),
     },
-    style:`.into * {transition: all .2s, margin 0s, padding 0s; vertical-align: top; box-sizing: border-box; animation: fadein .2s; font-family: monospace; font-size:initial}
+    style:`.into * {transition: all .2s, margin 0s, padding 0s; box-sizing: border-box; animation: fadein .2s; font-family: monospace; font-size:initial}
 .into:not(body) { box-shadow:var(--highlight) 0 0 .1em .1em }
 
 @keyframes fadein { from {opacity:0} }
@@ -1272,6 +1268,9 @@ Supported browsers: modern Chrome and Firefox.`,
   --main:white;
 }
 .into>* {display:table; white-space:pre-wrap}
+.into.noComplexity:not(.dark) .hover { box-shadow:none; background-color:#ccc }
+.into.noComplexity.dark .hover { box-shadow:none; background-color:#333 }
+.into.noComplexity string, .into.noComplexity node, into.noComplexity.extracted { display:inline }
 
 :focus {outline:none; box-shadow:var(--highlight) 0 0 .1em .1em}
 input[type=range]::-moz-focus-outer { border:0 }
@@ -1313,9 +1312,9 @@ waiting {
 }
 
 
-.broken { padding-left:1em }
-.broken>:not(extracted) { display:table; max-width:100%}
-.broken>bracket {margin-left:-1em}
+.into:not(.noComplexity) .broken { padding-left:1em }
+.into:not(.noComplexity) .broken>:not(extracted) { display:table; max-width:100%}
+.into:not(.noComplexity) .broken>bracket {margin-left:-1em}
 .code>* {display:block}
 
 node.code {display:table; font-family:monospace}
@@ -1602,7 +1601,10 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         const Coloring = elem('input')
         Coloring.id = 'Coloring', Coloring.type = 'checkbox', Coloring.title = 'Color variables in serializations?'
         ;(Coloring.oninput = () => {_valuedColor.enabled = Coloring.checked})()
-      bottombar.append(JobIndicator, Darkness, CPU, Smoothness, Coloring)
+        const NoComplexity = elem('input')
+        NoComplexity.id = 'NoComplexity', NoComplexity.type = 'checkbox', NoComplexity.title = 'Disable boxes, only do inline styling?'
+        ;(NoComplexity.oninput = () => into.classList.toggle('noComplexity', NoComplexity.checked, true))()
+      bottombar.append(JobIndicator, Darkness, CPU, Smoothness, Coloring, NoComplexity)
       into.append(bottombar)
 
       // Highlight all current jobs' logging areas when hovering over the job indicator.
@@ -2015,7 +2017,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   log:{
     txt:`\`(log …Values)\`: For debugging; logs to the current DOM node or console.`,
-    future:`Be sensitive to finish.depth, by grouping all previous logs of greater depth into a single <details>.`,
     lookup:{
       structured:__is(`structured`),
       structuredSentence:__is(`structuredSentence`),
@@ -2301,6 +2302,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       expandAll:__is(`elemExpandAll`),
       insertLinkTo:__is(`insertLinkTo`),
       atCursor:__is(`atCursor`),
+      addSearchElem:__is(`addSearchElem`),
     },
     _logAll:[
       {
@@ -2341,6 +2343,10 @@ Remember to quote the link unless you want to evaluate the insides.`,
             return result
           }
         },
+      },
+      {
+        txt:`Allow searching for substrings.`,
+        call([el, range, v]) { return button(function search() { addSearchElem(el) }, 'search…') },
       },
       {
         txt:`If the cursor is in editor, present an option to replace the currently-selected contents with a link to the value.`,
@@ -3559,6 +3565,7 @@ I hope it'll be enough to implement it. It's too easily swallowed by humanity's 
         `Things small enough to master, understand how they could be used/modified, and make others.
 There isn't even one grand model for search search, and instead, every *thing* expresses itself to the fullest. Self-rewrites and their measurements (like fuzzing tests), and accepting change proposals if the measure increases, may prove beneficial, but such considerations are so advanced that no base exists that can even remotely support them.`,
         `Machine learning needs a good way to combine its things, like sorting algorithms do. And the best way of combining also combines with itself, ever-improving.`,
+        `In humans, absolutely everything is adapting to things like inputs, even work ethic and hobbies and self. Absolutely everything has inputs that it does not work well on.`,
       ],
     ],
   },
@@ -4234,7 +4241,7 @@ If there are no labels inside, has mostly the same effect as adding \`array\` at
     ],
     argCount:1,
     merge:__is(`true`),
-    finish:__is(`id`),
+    finish(x) { _isArray(x) && finish.inFunction === 2 && impure();  return x },
     call(x) { // Value ⇒ Expr
       // Create the `(quote Expr)` representation if needed.
       if (_invertBindingContext(parse.ctx).has(x)) return x
@@ -7648,7 +7655,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
         rows.push(row)
         i += 4
       }
-      s = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
+      if (i > start) s = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
     }
     const A = s[0], B = s[s.length-1]
     if (_isArray(s) && typeof s[0] == 'string' && (A === '(' || A === '[' || A === '{') && (B === ')' || B === ']' || B === '}'))
@@ -7658,7 +7665,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     let hasOperators = false
     if (_isArray(s) && _isArray(u) && !_isLabel(u) && s.length > 1)
       for (let i = 0; i < s.length; ++i)
-        if (typeof s[i] == 'string' && s[i] !== '[' && s[i] !== ']')
+        if (s[i] && typeof s[i] == 'string' && s[i] !== '[' && s[i] !== ']')
           s[i] = elem('operator', s[i]), hasOperators = true
 
     const backctx = _invertBindingContext(ctx)
@@ -8069,7 +8076,8 @@ Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2
   },
 
   journal:{
-    txt:`\`(journal Func …Args)\`: virtualizes writes during \`Func\`'s call. Returns a journal that can be passed to peekResult or commit.`,
+    txt:`\`(journal Func …Args)\`: virtualizes writes during \`Func\`'s call. Returns a journal that can be passed to peekResult or commit.
+(Note: kind of superseded by \`journalMeasures\` and the like.)`,
     argCount:1,
     call(f, ...args) {
       let [j = new Map] = interrupt(journal)
@@ -8080,7 +8088,7 @@ Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2
     },
     lookup:{
       read:__is(`_read`),
-      peed:__is(`peekResult`),
+      peek:__is(`peekResult`),
       commit:__is(`commit`),
     },
   },
@@ -8172,6 +8180,7 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
       toBase64:__is(`toBase64`),
       Usage:__is(`Usage`),
       compose:__is(`compose`),
+      journal:__is(`journal`),
     },
   },
 
@@ -9611,13 +9620,13 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
     if (!inp && _isVar(values) && result === false) return true
     let d
 
-    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || defines(v, argCount) === values.length))
+    const args = defines(v, argCount)
+    if (!_isArray(v) && typeof (d = defines(v, finish)) == 'function' && (!inp || _isFunction(d) || args === values.length))
       // If a macro, unwrap unknowns inside `values` and treat it as a call.
       [v, values] = [d, bound(_unwrapUnknown, values, false)]
     if (!inp && _isArray(v) && v[0] === struct)
       // If `struct ...?`, treat it as v.slice(1).
       v = v.slice(1)
-
 
     if (!inp && _isArray(v) && v[0] === _if && v.length == 4) {
       // If `if ? ? ?`, check both branches.
@@ -9675,7 +9684,7 @@ All functions and all APIs must be written by gradually connecting in-the-mind n
       } catch (err) { if (err === interrupt) interrupt(_addUsesToContext, 2)(j, k);  throw err }
 
     // If a JS function with the exact arg count we need, and seeking input, and all args are non-arrays (non-structural):
-    } else if (typeof v == 'function' && values && inp && defines(v, argCount) === values.length && !values.some(_isArray)) {
+    } else if (typeof v == 'function' && values && inp && args === values.length && !values.some(_isArray)) {
       // Native functions bear no hint of the required structure, so the only thing we can do is call them and see if an error arises.
       try {
         try { v(...values) }
@@ -10219,6 +10228,12 @@ Wishlist for measure-generation:
 6. Have the ability to randomly rewrite code with a rule, a rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "make this always-pick-first marker into a dynamic and optimized choice" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here".
 7. A function that can accept suggestions of its impl (and possibly generate them), to improve its measure better. Or even a subexpr like that?
 8. A function that adds (some) examples of past inputs to the generative context, and optimizes a thing like execution time.
+9. An auto-generate-in-THIS-way self-improving-function creator bestFunction(nothingToNullOrPicker, ...inputTypes, outputType) that can be added to a dynamic context (a concept⇒waysToGet map), possibly at creation.
+10. Move to completely dynamic get(concept) + withContext(context, func, ...args) + withPicker(picker, func, ...args) + withAdjuster(adjuster, func, ...args) that can see and alter, so that we don't have to perform end-to-end expr gen to alter anything? It's not a complete solution either.
+11. All that dynamic generation will run down our memory pretty fast. Perhaps have a limited number of slots, and overwrite things in any way when full?
+
+12. Have an interpreter loop that has 4 counters and stores the executed node in one of known places on each Nth iteration.
+13. Do not merge nor compile nor stage any (generated) function body. Instead, have growArrays(expr, magnitude) that can grow and shrink expressions themselves. (The idea is that if an inner thing does not learn to shrink, then it will be destroyed on an upper level, making an incentive for learning proper shrinkage.)
 MADNESS!
 
 (Probably, the problem is that these are all so simple and individually-powerless that my mind doesn't register them as something to work on.)
@@ -10851,46 +10866,198 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
 
 
+  addSearchElem:{
+    txt:`Adds an element that can search for a string in a DOM tree, collapsing all that do not contain such things.`,
+    call(el) {
+      const container = elem('div')
+        const row = elem('div')
+        const str = elem('input')
+        str.type = 'text'
+        str.title = 'Search for this.'
+        const end = elem('button', '❌')
+        end.onclick = () => { const h = _smoothHeightPre(container); container.replaceWith(el); _smoothHeightPost(el, h) }
+        row.append(str, end)
+      el.replaceWith(container)
+      container.append(el)
+      elemInsert(container, row, el)
+      let ID = null
+      str.oninput = _throttled(() => {
+        const s = str.value
+        const bad = [-1];  bad.length = s.length
+        for (let i = 1, j = 0; i < s.length; ++i, ++j) {
+          if (s[i] === s[j])
+            bad[i] = bad[j]
+          else {
+            bad[i] = j
+            while (j > 0 && s[i] !== s[j]) j = bad[j]
+          }
+        }
+        let i = 0
+        const env = _newExecutionEnv()
+        ID !== null && _cancel(ID)
+        _doJob([last, [search, el], () => ID = null], env, id, ID = _newJobId())
 
-
-
-
-
-
-
-
-
-
-
-
-
-  WA:{
-    txt:`A namespace for operations that directly compile to WebAssembly.`,
-    lookup:{
-      write:__is(`writeWA`),
+        function search(el) {
+          // Return true if el contains s (if any children return true, or if we're a text node and have a match inside), else false.
+          if (!el.childNodes.length && el.nodeValue) {
+            // Search the string.
+            if (!s.length) return true
+            let result = false
+            for (let j = 0; j < el.nodeValue.length; ++i, ++j) {
+              if (s[i] === el.nodeValue[j]) {
+                if (i === s.length-1) result = true, i = bad[i]
+              } else
+                i = bad[i], i >= 0 && (--i, --j)
+            }
+            return result
+          } else {
+            // If some children are true and others are false, collapse the false children. Return whether any children are true.
+            // If we are collapsed and want to return true, un-collapse us.
+            finish.env = env
+            Math.random()<.01 && _checkInterrupt()
+            let [v = _allocArray(), anyTrue = false, anyFalse = false, i1 = 0, ch1 = el.firstChild, next1 = ch1 && ch1.nextSibling, i2 = 0, ch2 = el.firstChild, next2 = ch2 && ch2.nextSibling] = interrupt(search)
+            try {
+              v.length = el.childNodes.length
+              for (; ch1; [ch1, next1] = [next1, next1 && next1.nextSibling], ++i1)
+                v[i1] = search(ch1), v[i1] ? (anyTrue = true) : (anyFalse = true)
+              if (anyTrue && anyFalse)
+                for (; ch2; [ch2, next2] = [next2, next2 && next2.nextSibling], ++i2) {
+                  const t = ch2.tagName
+                  if (t === 'DETAILS')
+                    ch2.open !== v[i2] && ch2.firstChild.click()
+                  else if (!v[i2] && !ch2.nodeValue && t !== 'COLLAPSED' && t !== 'BRACKET' && t !== 'SPACE' && t !== 'NUMBER' && t !== 'STRING' && t !== 'KNOWN' && t !== 'SUMMARY' && t !== 'TR' && t !== 'TD')
+                    elemCollapse(ch2)
+                }
+              if (anyTrue && el.tagName === 'DETAILS')
+                !el.open && el.firstChild.click && el.firstChild.click()
+              if (anyTrue && el.tagName === 'COLLAPSED')
+                el.click()
+              return anyTrue
+            } catch (err) { if (err === interrupt) err(search, 9)(v, anyTrue, anyFalse, i1)(ch1, next1, i2, ch2)(next2), v = null;  throw err }
+            finally { v && _allocArray(v) }
+          }
+        }
+      }, .5)
     },
   },
 
-  writeWA() { // Ehhhh, too complicated for no immediate gain.
-    const into = []
-    into.push(0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0) // \0asm, version 1
-    writeSection(1, [1, 0x60, 1, 0x7f, 1, 0x7f]) // One type: accept i32 and return i32, both pointers into linear memory.
-    return WebAssembly.compile(new Uint8Array(into))
 
-    function writeSection(sectionByte, contentsArray) {
-      into.push(sectionByte)
-      const n = contentsArray.length | 0
-      while (true) {
-        const byte = n & 0x7f
-        n >>= 7
-        if ((n === 0 && (byte & 0x40) === 0) || (n === -1 && (byte & 0x40) !== 0))
-          { into.push(byte); break }
-        result.push(byte | 0x80)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Experiment1:{
+    call() {
+      const isNumber = x => typeof x == 'number'
+      let currentJournal = null
+      const basicFunctions = {
+        call:{
+          call(f, ...inputs) { return (typeof f == 'function' ? f : f.call)(...inputs) },
+        },
+        eval:{
+          call(globals, at, state = undefined) {
+            // A DAG expression evaluator: eval array items then call, not going into cycles and re-using results.
+            if (state === undefined) state = _allocArray(), state.length = globals.length
+            if (state[at] !== undefined) return state[at]
+            const g = globals[at]
+            if (!_isArray(g)) return g
+            state[at] = null
+            const a = _allocArray();  a.length = g.length-1
+            try {
+              let f = basicFunctions.eval.call(globals, g[0], state)
+              if (typeof f == 'object' && f && f.call) f = f.call // Accept functions in basicFunctions format.
+              for (let i=0; i < a.length; ++i) a[i] = basicFunctions.eval.call(globals, g[i+1], state)
+              try { state[at] = f.apply(f, a) } catch (err) {} // Ignore exceptions.
+              return state[at]
+            } finally { _allocArray(a) }
+          },
+        },
+
+        read(array, at) {
+          if (currentJournal && currentJournal.has(array) && (at in currentJournal.get(array)))
+            return currentJournal.get(array)[at]
+          return array[at]
+        },
+        write(array, at, value) {
+          if (currentJournal) {
+            !currentJournal.has(array) && currentJournal.set(array, _allocArray())
+            currentJournal.get(array)[at] = value
+          } else array[at] = value
+        },
+        journalCall:{
+          inputs:['Function', undefined],
+          output:'Journal',
+          call(func, input) {
+            const prev = currentJournal;  currentJournal = _allocMap()
+            try { return [typeof func == 'function' ? func(input) : func.call(input), currentJournal] }
+            finally { currentJournal = prev }
+          },
+        },
+        journalResult:{
+          inputs:['Journal'],
+          output:'Result',
+          call(j) { return j[0] },
+        },
+        commitJournal:{
+          inputs:['Journal'],
+          call(j) { j.forEach((changes, array) => Object.keys(changes).forEach(at => array[at] = changes[at])) },
+        },
+
+        zero:    { inputs:[],  output:isNumber,  call() { return 0 } },
+        one:     { inputs:[],  output:isNumber,  call() { return 1 } },
+        add:     { inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a+b }, },
+        subtract:{ inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a-b }, },
+        mult:    { inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a*b }, },
+        divide:  { inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a/b }, },
+
+        // createFunction(globals, inputAt, bodyAt).
+        // createEvolvingFunction(globals, inputAt, bodyAt, measureAt), doing the call twice and committing the best-measure one.
+        // createChangingFunction(globals, inputAt, bodyAt, changerAt), doing the call then calling changer(Result) then returning Result.
+
+        getRandomBasicFunction:{ call() { return basicFunctions[basicFunctionKeys[randomNat(basicFunctionKeys.length)]] } },
+        // createRandomCall(globals), getting the list of all functions and choosing from it, then getting lists of suitable inputs and choosing from them.
+          // An input is suitable if either f.inputs[i] === undefined, or v.output === f.inputs[i], or f.inputs[i] is a function and f.inputs[i](v).
+        // createRandomFunction(globals, inputType = undefined, outputType = undefined), getting the list of all calls (arrays in globals[i]) and choosing from it.
+        // useInputRandomly(globals, at), getting the list of all functions that have the value as one of their results.
+
+        // filterFitting(array, predicate).
+        // best(array), sample(array).
+
+        // makeMore(globals, at), makeLess(globals, at); functions should define these.
       }
-      into.push(...contentsArray)
-    }
-  },
+      // …This memory model is far too inconvenient. Should we do this on actual arrays (and use `makeLess` to limit memory use)?
+      const basicFunctionKeys = Object.keys(basicFunctions)
+      const globals = []; globals.length = 1000
+      globals[0] = [label]
+      // What do we put as the default executor? Something that journals two calls and commits the best — createEvolvingFunction?
 
+      function evaluateOn(input, at = 1) {
+        const state = _allocArray(); state.length = globals.length
+        state[0] = input
+        try { return basicFunctions.eval.call(globals, at, state) }
+        catch (err) {}
+        finally { _allocArray(state) }
+      }
+    },
+  },
 
 
 
