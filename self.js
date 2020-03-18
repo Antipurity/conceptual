@@ -116,7 +116,6 @@ __base({
     lookup:{
       Browser:__is(`Browser`),
       NodeJS:__is(`NodeJS`),
-      Extension:__is(`Extension`),
       WebWorker:__is(`WebWorker`),
     },
     nameResult:[
@@ -191,8 +190,6 @@ __base({
           NodeJS(), ok = true
         if (this.document)
           Browser(into), ok = true
-        if (this.browser)
-          Extension(), ok = true
       }
       if (!ok)
         throw "What is this JS environment? Submit a bug report so that we know of it."
@@ -451,18 +448,104 @@ Globals={
       reduce:__is(`reduce`),
       transform:__is(`transform`),
       broadcasted:__is(`broadcasted`),
-      [`+`]:__is(`sum`),
-      [`-`]:__is(`subtract`),
-      [`*`]:__is(`mult`),
-      [`/`]:__is(`divide`),
+      Arithmetic:__is(`Arithmetic`),
       Random:__is(`Random`),
+      FlatOps:__is(`FlatOps`),
     },
   },
 
+  Arithmetic:{
+    equals:__is(`equals`),
+    less:__is(`less`),
+    min:__is(`min`),
+    max:__is(`max`),
+
+    sum:__is(`sum`),
+    subtract:__is(`subtract`),
+    mult:__is(`mult`),
+    divide:__is(`divide`),
+  },
+
+  equals:__is([
+    __is(`broadcasted`),
+    __is([
+      __is(`overridable`),
+      {
+        argCount:2,
+        merge:true,
+        noInterrupt:true,
+        examples:[
+          () => {
+            const a = Math.random()*10000-5000, b = Math.random() < .5 ? a : Math.random()*10000-5000
+            return [[equals, a, b], a === b]
+          },
+        ],
+        call(a,b) { return a === b },
+      },
+    ]),
+  ]),
+
+  less:__is([
+    __is(`broadcasted`),
+    __is([
+      __is(`overridable`),
+      {
+        argCount:2,
+        merge:true,
+        noInterrupt:true,
+        examples:[
+          () => {
+            const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+            return [[less, a, b], a < b]
+          },
+        ],
+        call(a,b) { return a < b },
+      },
+    ]),
+  ]),
+
+  min:__is([
+    __is(`broadcasted`),
+    __is([
+      __is(`overridable`),
+      {
+        argCount:2,
+        merge:true,
+        noInterrupt:true,
+        examples:[
+          () => {
+            const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+            return [[min, a, b], Math.min(a,b)]
+          },
+        ],
+        call(a,b) { return Math.min(a,b) },
+      },
+    ]),
+  ]),
+
+  max:__is([
+    __is(`broadcasted`),
+    __is([
+      __is(`overridable`),
+      {
+        argCount:2,
+        merge:true,
+        noInterrupt:true,
+        examples:[
+          () => {
+            const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+            return [[max, a, b], Math.max(a,b)]
+          },
+        ],
+        call(a,b) { return Math.max(a,b) },
+      },
+    ]),
+  ]),
+
   FlatOps:{
-    future:`This doesn't do anything. Delete?`,
-    txt:`A namespace for operations on flat arrays.`,
+    txt:`A namespace for low-level operations on flat arrays.`,
     lookup:{
+      flatMap:__is(`flatMap`),
       Types:{
         lookup:{
           i8:__is(`i8`),
@@ -475,6 +558,61 @@ Globals={
           f64:__is(`f64`),
         },
       },
+    },
+  },
+
+  flatMap:{
+    txt:`\`(flatMap with size (…inputs) out (…inputOffsets) outOffset)\`: maps \`size\` elements with \`(with …in.i)\` and writes results into \`out.i\`.`,
+    examples:[
+      [
+        `flatMap sum 5 (array (f32 (1 2 3 4 5 6 7 8 9)) (f32 (9 8 7 6 50 4 3 2 1))) (f32 (0 0 0 0 0 0 0 0))`,
+        `f32 (10 10 10 10 55 0 0 0)`,
+      ],
+    ],
+    call(f, sz, i, o, io, oo) {
+      // How to make WebGL do this for us? It doesn't actually have CPU memory, it has GPU buffers. Obviously, we need to convert stuff to buffers and back, but how to do that dynamically like compilation is dynamic?
+      if (typeof f != 'function') throw error('Expected a function, got', f)
+      if (sz !== sz>>>0) throw error('Expected uint32 size, got', sz)
+      if (!_isArray(i)) throw error('Expected an array of inputs, got', i)
+      if (defines(f, flatMap)) f = defines(f, flatMap)
+      if (!oo) oo = 0
+      if (defines(f, noInterrupt)) {
+        const args = _allocArray()
+        args.length = i.length
+        if (io)
+          for (let j = 0; j < sz; ++j) {
+            for (let k = 0; k < i.length; ++k)
+              args[k] = i[k][j + io[k]]
+            o[oo + j] = f.apply(f, args)
+          }
+        else
+          for (let j = 0; j < sz; ++j) {
+            for (let k = 0; k < i.length; ++k)
+              args[k] = i[k][j]
+            o[oo + j] = f.apply(f, args)
+          }
+        _allocArray(args)
+      } else {
+        let [j = 0, args = _allocArray()] = interrupt(flatMap)
+        try {
+          const args = _allocArray()
+          args.length = i.length
+          if (io)
+            for (; j < sz; ++j) {
+              for (let k = 0; k < i.length; ++k)
+                args[k] = i[j + io[k]]
+              o[oo + j] = f.apply(f, args)
+            }
+          else
+            for (; j < sz; ++j) {
+              for (let k = 0; k < i.length; ++k)
+                args[k] = i[j]
+              o[oo + j] = f.apply(f, args)
+            }
+        } catch (err) { if (err === interrupt) err(flatMap, 2)(j, args);  throw err }
+        _allocArray(args)
+      }
+      return o
     },
   },
 
@@ -915,9 +1053,8 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   },
 
   _toNumber(a) {
-    if (_isArray(a)) return a.length == 1 ? _toNumber(a[0]) : a.map(_toNumber)
     if (typeof a == 'number') return a
-    if (a === cycle) throw cycle
+    if (a === cycle) error(cycle)
     if (typeof a != 'string') error("Cannot convert to a number", a, "in", finish.v)
     return +a
   },
@@ -928,7 +1065,8 @@ Does not count memory allocated in interruptions (between executions of Expr) as
   },
 
   broadcasted:{
-    txt:`\`(broadcasted Function)\`: creates a function that is broadcasted over array arguments (\`((broadcasted Func) …Args)\`). No array inputs means just applying Function; having array inputs means returning an array of applying \`(broadcasted Function)\` to each element, with the same index for all arguments, using the last element if out-of-bounds for an argument, and non-array inputs treated as arrays of length 1.`,
+    txt:`\`(broadcasted Function)\`: creates a function that is broadcasted over array arguments (\`((broadcasted Func) …Args)\`). No array inputs means just applying Function; having array inputs means returning an array of applying \`(broadcasted Function)\` to each element, with the same index for all arguments, using the last element if out-of-bounds for an argument, and non-array inputs treated as arrays of length 1.
+(This is extremely primitive compared to something like Julia's syntactic loop fusion.)`,
     examples:[
       [
         `1.2345*(1e0 1e-10 1e-20 1e-30 1e-40 1e-50)+1`,
@@ -977,7 +1115,9 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       }
       _cameFrom(impl, finish.v)
       const d = impl[defines.key] = Object.create(null)
-      f[defines.key] && Object.keys(f[defines.key]).forEach(k => d[k] = f[defines.key][k])
+      if (_view(f))
+        Object.assign(d, _view(f))
+      d[_id(flatMap)] = defines(f, flatMap) || f
       d[_id(deconstruct)] = struct(broadcasted, f)
       if (defines(f, merge))
         d[_id(merge)] = true
@@ -1004,30 +1144,6 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     ]),
   ]),
 
-  _sum:{
-    argCount:2,
-    merge:__is(`true`),
-    examples:[
-      () => {
-        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[sum, a, b], a+b]
-      },
-    ],
-    call(a,b) { return _toNumber(a) + _toNumber(b) },
-  },
-
-  _mult:{
-    argCount:2,
-    merge:__is(`true`),
-    examples:[
-      () => {
-        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[mult, a, b], a*b]
-      },
-    ],
-    call(a,b) { return _toNumber(a) * _toNumber(b) },
-  },
-
   subtract:__is([
     __is(`broadcasted`),
     __is([
@@ -1044,39 +1160,62 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     ]),
   ]),
 
+  _sum:{
+    argCount:2,
+    merge:true,
+    noInterrupt:true,
+    examples:[
+      () => {
+        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+        return [[sum, a, b], a+b]
+      },
+    ],
+    call(a,b) { return a + b },
+  },
+
+  _mult:{
+    argCount:2,
+    merge:true,
+    noInterrupt:true,
+    examples:[
+      () => {
+        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
+        return [[mult, a, b], a*b]
+      },
+    ],
+    call(a,b) { return a * b },
+  },
+
   _subtract:{
     argCount:2,
-    merge:__is(`true`),
+    merge:true,
+    noInterrupt:true,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
         return [[subtract, a, b], a-b]
       },
     ],
-    call(a,b) { return _isVar(a) || _isVar(b) ? struct(_subtract, a, b) : _toNumber(a) - _toNumber(b) },
+    call(a,b) { return a - b },
   },
 
   _divide:{
     argCount:2,
-    merge:__is(`true`),
+    merge:true,
+    noInterrupt:true,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
         return [[divide, a, b], a/b]
       },
     ],
-    call(a,b) { return _isVar(a) || _isVar(b) ? struct(_divide, a, b) : _toNumber(a) / _toNumber(b) },
+    call(a,b) { return a / b },
   },
 
   OnShiftClickOutside:[
     __is(`either`),
     // Accepting [target, X, Y].
   ],
-
-  Extension:{
-    txt:`Not implemented. Or is it?`,
-    call() { throw "Being a browser extension not supported for now" },
-  },
 
   _listen:{
     txt:`Registers a global event listener, or sets an interval if \`type\` is a number (ms).`,
@@ -1203,9 +1342,9 @@ button:hover, a:hover, collapsed:hover, prompt:hover { filter:brightness(120%) }
 button:active, a:active, collapsed:active, prompt:active { filter:brightness(80%) }
 button::-moz-focus-inner { border:0 }
 
-table {border-spacing:1ch 0}
+table {border-spacing:0}
 table>* {border-spacing:0}
-td {padding:0}
+td {padding:0 0 0 1ch}
 td>space { display:none }
 
 particle {
@@ -3328,16 +3467,15 @@ All these are automatically tested to be correct at launch.`,
         r = r.map(a => {
           if (typeof a == 'string') return elem('div', stringToDoc(a))
           const env = finish.env
-          if (typeof a == 'function') {
+          if (typeof a == 'function') { // If a function, it is an example generator.
             const to = elemValue(elemCollapse(() => {
               const b = a()
               const prev = finish.env;  finish.env = env
-              try { return elem(evaluator, ['Equals', b[0], b[1]], to) }
+              try { return elem(evaluator, [_if, [equals, b[0], b[1]], 'ok', [error, 'Not equal:', b[0], quote(b[1])]], to) }
               finally { finish.env = prev }
             }), a)
             return to
           }
-          // If `a` is a function, we should (collapsed-ly) call it to get actual a[0]
           if (!_isArray(a)) throw "Examples must be arrays or comments"
           if (!finish.env[_id(log)]) return a
           const from = parse(a[0], fancy, undefined, parse.dom)[1]
@@ -3418,13 +3556,9 @@ I hope it'll be enough to implement it. It's too easily swallowed by humanity's 
       ],
       [
         `Those programming languages sure are diverse, solving different tasks, adapted for different uses. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
-        `If the full context that was made to get something to work is left in a human mind, then it will be erased after a long period of time, and will have to be reconstructed for every single new human. Not that I know how to replicate it.`,
-        `Hit and run. Once a part is good, move on.
-Things small enough to master, understand how they could be used/modified, and make others.
-Our advancedness will be a huge hindrance.
-A work of art? A well-designed system? Forget it. Throw in everything you can think of, including the most broken copy/modify operations on the most basic objects.
-Search-for-search-for-search rage-quit counter:
-4`,
+        `Things small enough to master, understand how they could be used/modified, and make others.
+There isn't even one grand model for search search, and instead, every *thing* expresses itself to the fullest. Self-rewrites and their measurements (like fuzzing tests), and accepting change proposals if the measure increases, may prove beneficial, but such considerations are so advanced that no base exists that can even remotely support them.`,
+        `Machine learning needs a good way to combine its things, like sorting algorithms do. And the best way of combining also combines with itself, ever-improving.`,
       ],
     ],
   },
@@ -5020,6 +5154,7 @@ Views and non-_unknown arrays are considered immutable.`,
       const d = impl[defines.key] = Object.create(null)
       if (_view(f))
         Object.assign(d, _view(f))
+      d[_id(flatMap)] = defines(f, flatMap) || f
       d[_id(deconstruct)] = struct(overridable, f)
       if (defines(f, merge))
         d[_id(merge)] = true
@@ -5051,6 +5186,23 @@ Read keys with \`lookup\`.`,
       if (defines(v, deconstruct)) return defines(v, deconstruct)
       else if (_isArray(v)) return quote(v.slice())
       else if (typeof v == 'string') return !v ? [string] : v.length == 1 ? [lookup, v+' ', 0] : [string, v[0], v.slice(1)]
+
+      if (v instanceof Int8Array)
+        return [i8, Array.from(v)]
+      if (v instanceof Int16Array)
+        return [i16, Array.from(v)]
+      if (v instanceof Int32Array)
+        return [i32, Array.from(v)]
+      if (v instanceof Uint8Array)
+        return [u8, Array.from(v)]
+      if (v instanceof Uint16Array)
+        return [u16, Array.from(v)]
+      if (v instanceof Uint32Array)
+        return [u32, Array.from(v)]
+      if (v instanceof Float32Array)
+        return [f32, Array.from(v)]
+      if (v instanceof Float64Array)
+        return [f64, Array.from(v)]
 
       if (allowPath && lookup.parents.has(v)) {
         const p = lookup.parents.get(v)
@@ -5466,19 +5618,17 @@ Somewhat usable in a REPL.`,
       const r = defines(v, examples)
       if (_isArray(r))
         r.forEach(a => {
+          if (typeof a == 'function') return [0,1,2].map(a).forEach(([a,b]) => eq(a,b))
           if (!_isArray(a)) return
           const [code, becomes] = a
           if (typeof code != 'string' || typeof becomes != 'string') return
-          eq(code, becomes)
+          eq(parse(code), parse(becomes))
         })
     })
 
     function eq(a,b) {
-      if (b === undefined) [a,b] = a instanceof Array ? a[0].split('=') : a.split('=')
       ++total
       try {
-        a = parse(a), b = parse(b)
-
         const s = lookup(fast, 'serialize')(a, undefined, true)
         const p2 = lookup(fast, 'parse')(s)
         const s2 = lookup(fast, 'serialize')(p2, undefined, true)
@@ -5646,7 +5796,6 @@ Putting all variables in a single global namespace allows for easy development. 
         let n = 0
         nameAllocator = (_, undo) => undo === undefined && 'v'+n++
       }
-      maxDepth = _toNumber(maxDepth)
       let depth = 0
       markParents(x, 0, x)
       liftChildDependencies(x)
@@ -8017,11 +8166,12 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
   Garbage:{
     txt:`It's a nice thought, but it doesn't play well with others.`,
     lookup:{
-      Usage:__is(`Usage`),
       philosophy:__is(`philosophy`),
       enumerableTypes:__is(`enumerableTypes`),
       fromBase64:__is(`fromBase64`),
       toBase64:__is(`toBase64`),
+      Usage:__is(`Usage`),
+      compose:__is(`compose`),
     },
   },
 
@@ -8034,7 +8184,8 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
 
   Rewrite:{
     txt:`A namespace for rewriting Self's code to a different form.`,
-    future:`Have iframe/textarea/link acceptors of selves.
+    future:`Have \`TestsPassed(Self)\` that executes scoped self in an iframe, which posts a message back, which makes the promise return.
+Have iframe/textarea/link acceptors of selves.
 Have ToGraph and ToHTML.`,
     lookup:{
       extension:__is(`ToExtension`),
@@ -8048,9 +8199,8 @@ The correctness of quining of functions can be tested by checking that the rewri
   BrowserIconURL:`data:image/png;base64,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`,
 
   ToExtension:{
-    txt:`Converts Self to a set of files that can be loaded as an extension, to provide an action button that opens self in any page.
+    txt:`Converts Self to a set of files that can be loaded as a WebExtension, to provide an action button that opens self in any page.
 (In Firefox, these can be loaded temporarily in about:debugging.)`,
-    future:`Test this.`,
     call(net = Self, opt) {
       const execOnClickSrc = `browser.browserAction.onClicked.addListener(tab => browser.tabs.executeScript({file:browser.runtime.getURL('self.js'), runAt:"document_start"}))`
       const manifest = {
@@ -10047,8 +10197,37 @@ Int='Int' Float="Float"`,
   },
 
   pick:{
+    future:`Have picker-creating functions: best-of-measure and sample-measure. Have measure-combining functions and namespace.
+
+\`adjust Adjuster Function …Inputs\`: executes \`(Adjuster)\`, then \`Function …Inputs\`, then executes \`Adjuster AdjusterResult Output Function …Inputs\` (which should modify any state that the function depends on as it wants) and returns the function's output.
+…How would this compose with itself though? Pick:
+  1. Constructing measures+adjusters with the same function is good and all, but is it really enough?
+  2. Have \`adjust\` automatically collect an array of picked options inside of it (which include inner \`adjust\`s as just one option), and pass that array to the adjuster. Or is it too much? I feel like this won't be enough.
+
+
+
+Wishlist for measure-generation:
+1. Adjustable object measure — one number that becomes exactly as mandated each time.
+  1.5. Use a measure to get a concrete read/write place — do not associate dynamically/automatically, but have the ability to generate.
+2. Weigh two measures together with a number, which *might* be adjusted in any way.
+  2.5. Randomly select between two measures based on a probability, which *might* be adjusted in any way.
+3. Arithmetic on numbers.
+4. Linearly blend a number to another number (to adjust) with a coefficient, which *might* be adjusted in any way.
+  4.5. Throttling the blend, by having an unconfidence measure of a thing that's adjusted more directly (and slowly).
+5. Focus. For picking, sample-measure; for adjusting, sample-blame. For picking, max-measure; for adjusting, max-blame.
+  …A lot of things are repeated in picking and adjusting; is it possible to have more generic generators, that have measuring/blaming spots and can gen/use them like any other expr? HOW?
+6. Have the ability to randomly rewrite code with a rule, a rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "make this always-pick-first marker into a dynamic and optimized choice" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here".
+7. A function that can accept suggestions of its impl (and possibly generate them), to improve its measure better. Or even a subexpr like that?
+8. A function that adds (some) examples of past inputs to the generative context, and optimizes a thing like execution time.
+MADNESS!
+
+(Probably, the problem is that these are all so simple and individually-powerless that my mind doesn't register them as something to work on.)
+
+`,
+
     txt:`\`(pick From Cause Extra)\`: Picks any option from presented ones (an array or the count of options), returning the picked index.
-Use \`picker\` to override behavior.`,
+Use \`picker\` to override behavior.
+\`From\` can override \`pick\`.`,
     examples:[
       `\`picker\` and \`pick\` almost never get left behind:`,
       [
@@ -10074,6 +10253,7 @@ Use \`picker\` to override behavior.`,
     philosophy:`Intended to be a target for future developments in structural learning, so that choices can be improved.`,
     call(from, cause = finish.v, extra) {
       if (_pickCount(from) === 1) return 0
+      if (!_isArray(from) && typeof defines(from, pick) == 'function') return defines(from, pick)()
       if (pick.depth > pick.ers.length)
         return randomPicker(null, from)
       // Execute pick.ers[pick.ers.length - pick.depth], or record the call if _isUnknown.
@@ -10407,9 +10587,6 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
   context:{
-    future:`This static creation really prevents us from being able to handle self-reference in any dynamic re-composers (where we'd put the thing inside the context it uses). Should switch to structs and on-demand hashing, like the old system did. …Except, this won't catch inputs, and so would be useless.
-…Actually, no: those dynamic things should use \`currentOptions(out)\` when staging, and, uh, go out of scope when it's time to execute and recurse — no…
-Fuck. What to do? All searches I can think of are so fragile. How to search for search then?`,
     txt:`\`(context …Functions)\`: creates a context that consists of functions and/or contexts, for use with \`compose\`.
 Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a function of \`OutputType\` to be a context, or a map).`,
     philosophy:`These types are just markers, not potentially-infinite families like \`V:T\` on actual function inputs/outputs allows. We move beyond imposition of a particular (AKA limited and thus ultimately fragile) structure on objects, and instead allow contexts to override search arbitrarily (via being a function from \`OutputType\` to a disposable array of all functions that likely return that).`,
@@ -10481,10 +10658,6 @@ Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a fu
   },
 
   compose:{
-    future:`
-Allow higher-order outputs. …For that, we'd need to have something that can apply those functions and produce a dependently-typed result, which sounds like the old dep-typed search arch.
-…Or just switch to concepts-that-are-arrays-of-options directly?
-`,
     txt:`\`(compose Context …InputTypes OutputType)\`: generates a function that connects inputs of specified types to output.
 A function can define \`compose Context …InputExprs OutputType\` to stage any code it wants in place of itself (or throw to deny composition in this case).`,
     examples:[
@@ -10498,6 +10671,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       ],
     ],
     lookup:{
+      context:__is(`context`),
       getExpr:__is(`getExpr`),
     },
     call(ctx, ...types) {
@@ -10514,8 +10688,6 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
       try { resultExpr = getExpr(ctx, exprs, out) }
       catch (err) { if (err === interrupt) err(compose, 2)(exprs, vars), exprs = null;  throw err }
       finally { exprs && _allocMap(exprs) }
-
-      // Should also `purify` resultExpr, to allow different searches.
 
       const result = compile({cause:us}, ...vars, resultExpr)
       const d = result[defines.key] = Object.create(null)
@@ -10577,9 +10749,6 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
             try {
               if (typeof defines(f, compose) == 'function') {
                 const r = defines(f, compose)(Static, ...expr, out)
-                  // ### Such a thing prevents expr conceptuality checking, for "accept any search, not just this particular search architecture".
-                    // What we want is a static function that both checks conceptuality and stages code as defined and compiles; don't do staging in search.
-                      // …Or maybe, we shouldn't ever do staging, but only do peval through standard mechanisms (`purify`), instead?
                 if (r !== undefined) f = r, _allocArray(expr)
                 else expr.unshift(f), f = expr
               }
@@ -10638,7 +10807,6 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
 
 
-  less(a,b) { return a<b },
   atan(x) { return Math.atan(x) },
   numbersRandomSearch:` ;="repeat (Eval numbersRandomSearch)"
     compose
