@@ -1223,7 +1223,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
         if (int.unref) int.unref()
         return void Deinitialize.intervals.push(int)
       }
-      Self.into.addEventListener(type, listener, opt)
+      (Self.into !== document.body ? Self.into : self).addEventListener(type, listener, opt)
       Deinitialize.events.push(type, listener, opt)
     },
   },
@@ -1236,7 +1236,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
       Deinitialize.intervals.forEach(clearInterval)
       const e = Deinitialize.events
       for (let i = 0; i < e.length; i += 3)
-        Self.into.removeEventListener(e[i], e[i+1], e[i+2])
+        (Self.into !== document.body ? Self.into : self).removeEventListener(e[i], e[i+1], e[i+2])
       _jobs.expr.length = 0
       Self.into.remove()
     },
@@ -1536,8 +1536,8 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
         if (!evt.ctrlKey || evt.shiftKey || evt.altKey) return
         if (!getSelection().rangeCount) return
         const el = _closestNodeParent(evt.target || evt.explicitOriginalTarget), r = getSelection().getRangeAt(0)
-        if (el) insertLinkTo(r, el)
-      }, passive)
+        if (el) insertLinkTo(r, el), evt.preventDefault()
+      })
 
       // Ensure that selection cannot end up inside <collapsed> elements.
       _listen('selectionchange', () => {
@@ -1963,8 +1963,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
   },
 
   elemCollapse:{
-    txt:`Collapses an element (or a range of elements) in-place. Click to expand again. Pass in a function to create the element only if needed. Pass in null as \`end\` to collapse all consequent siblings.`,
-    future:`Fix collapsed elems in contentEditable areas not handled properly in Chrome.`,
+    txt:`Collapses an element (or a range of elements) in-place. Click to expand again. Pass in a function to create the element only if needed. Pass in null as \`end\` to collapse all consequent non-bracket siblings.`,
     call(start, end = undefined) {
       const col = elem('collapsed')
       if (typeof start == 'function')
@@ -2632,14 +2631,14 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         }
 
         const pre = _smoothHeightPre(el)
-        waiting.remove()
+        elemRemove(waiting)
         // Merge `_updateBroken` of both logged children into one.
         _updateBroken(el)
         finish.env = env
 
         // Display `_logAll evaluator ^(Result UserDuration RealDuration EndTime)`.
         el.append(daintyEvaluator([_logAll, evaluator, [quote, [r, env[_id(userTime)], real, end]]]))
-        _smoothHeightPost(el, pre)
+        setTimeout(() => _smoothHeightPost(el, pre), 80)
       }, ID)
       finish.env = prev
       _langAt.lang = null, _bindingsAt.binds = null
@@ -2705,10 +2704,8 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         const i = _saveCaret(editor, s)
         try {
           const [expr, styled] = parse(editor, lang, binds, parse.dom)
-          const pre = _smoothHeightPre(editor)
           while (editor.firstChild) editor.removeChild(editor.firstChild)
-          editor.append(structured(styled))
-          _smoothHeightPost(editor, pre)
+          editor.append(elem('div', styled))
           if (i !== undefined && (document.activeElement === Self.into.parentNode.host || editor.contains(document.activeElement))) _loadCaret(editor, i, s)
           onInput && Promise.resolve().then(() => onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false))
         } catch (err) {
@@ -2757,15 +2754,16 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
               focusNode = r.endContainer, focusOffset = r.endOffset
           }
           const delta = !s.isCollapsed && !evt.shiftKey ? 0 : evt.key === 'ArrowLeft' ? -1 : 1
-          if (!focusNode.nodeValue || focusOffset+delta < 0 || focusOffset+delta > focusNode.nodeValue.length) {
-            const i = _saveCaret(editor, focusNode, focusOffset) + delta
-            const arr = _loadCaret(editor, i)
-            if (evt.shiftKey)
-              s.extend(...arr)
-            else
-              s.collapse(...arr)
-            evt.preventDefault()
-          }
+          if (focusNode)
+            if (!focusNode.nodeValue || focusOffset+delta < 0 || focusOffset+delta > focusNode.nodeValue.length) {
+              const i = _saveCaret(editor, focusNode, focusOffset) + delta
+              const arr = _loadCaret(editor, i)
+              if (evt.shiftKey)
+                s.extend(...arr)
+              else
+                s.collapse(...arr)
+              evt.preventDefault()
+            }
         }
 
         // On Escape, blur editor (originally, so hover-highlighting becomes available, but now, just why not).
@@ -3052,11 +3050,13 @@ Return stopIteration to stop iteration.`,
 
     let j = i || 0
     _visitText(el, (s, el) => {
-      // Non-contenteditable elements in contenteditable are treated atrociously, so we resort to these hacks.
-      if (el.tagName === 'COLLAPSED' && (!el.firstChild || el.firstChild.tagName !== 'HIDDEN'))
-        el.insertBefore(elem('hidden'), el.firstChild)
-      while (el.tagName === 'COLLAPSED' && el.parentNode && el.firstChild !== el.lastChild)
-        el.parentNode.insertBefore(el.firstChild.nextSibling, el.nextSibling)
+      // Non-contenteditable elements in contenteditable are treated atrociously, so we resort to these hacks (pull everything in <collapsed> out of it — not relevant if selection went through _loadCaret, but there is no guarantee of that).
+      if (el.tagName === 'COLLAPSED') {
+        if (!el.firstChild || el.firstChild.tagName !== 'HIDDEN')
+          el.insertBefore(elem('hidden'), el.firstChild)
+        while (el.parentNode && el.firstChild !== el.lastChild)
+          el.parentNode.insertBefore(el.firstChild.nextSibling, el.nextSibling)
+      }
 
       return el === ch ? stopIteration : s === false ? ++j : j += s.length
     })
@@ -3075,11 +3075,13 @@ Return stopIteration to stop iteration.`,
     let ch = result
     if (ch && !(ch instanceof Element) && i === ch.nodeValue.length && _getNextSibling(ch)) ch = _getNextSibling(ch), i = 0
     if (index == null) ch = null
-    if (ch && !i && ch.special && ch.previousSibling) ch = ch.previousSibling, i = Infinity
+    if (ch && ch.special)
+      [ch, i] = [ch.parentNode, [...ch.parentNode.childNodes].indexOf(ch) + (i ? 1 : 0)]
     if (ch && ch instanceof Element && i > ch.childNodes.length) i = ch.childNodes.length
     if (ch && !(ch instanceof Element) && i > ch.nodeValue.length) i = ch.nodeValue.length
-    if (into instanceof Selection) ch ? into.collapse(ch, i) : into.collapse(el, el.childNodes.length)
-    else return ch ? [ch, i] : [el, el.childNodes.length]
+    !ch && ([ch, i] = [el, el.childNodes.length])
+    if (into instanceof Selection) into.collapse(ch, i)
+    else return [ch, i]
   },
 
   _innerText:{
@@ -3136,7 +3138,7 @@ Return stopIteration to stop iteration.`,
   },
 
   _removeHeight(el) {
-    // ontransitionend does not always fire, so we have to also remove height on timeout..
+    // ontransitionend does not always fire, so we have to also remove height on timeout.
     el.style.removeProperty('height')
   },
 
@@ -3238,6 +3240,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     philosophy:`Most people create programming languages to improve performance for specific cases or to prove their way of thinking superior to others, but I actually just wanted to be a wizard and use a PL to enhance my craft.`,
     call(x,y,w,h, n = Math.sqrt(w*h)/10) {
       if (_smoothHeight.disabled) return
+      if (Math.random()<.8) return
       const into = document.createElement('div')
       into.style.left = x + 'px'
       into.style.top = y + 'px'
@@ -6677,7 +6680,6 @@ Also wraps C-style strings in <string>.`,
 
   serialize:{
     txt:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes Expr into a string or a DOM tree (that can be parsed to retrieve the original structure).`,
-    future:`Style only after we fully have the struct, then lazily create/style the tree.`,
     philosophy:`Options must be undefined or a JS object like { style=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.
 
 In theory, having symmetric parse+serialize allows updating the language of written code via "read in with the old, write out with the new", but we don't curently do that here.`,
@@ -7193,7 +7195,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       let ctx
       while (true) {
         match(/\s+/y)
-        const v = match(_specialParsedValue) || match(_basicExtracted, value)
+        const v = match(_basicExtracted, value)
         if (v === undefined) break
         if (_isArray(v) && v[0] === _extracted)
           (ctx || (ctx = new Map)).set(v[1], v[2])
@@ -10230,13 +10232,12 @@ Wishlist for measure-generation:
 8. A function that adds (some) examples of past inputs to the generative context, and optimizes a thing like execution time.
 9. An auto-generate-in-THIS-way self-improving-function creator bestFunction(nothingToNullOrPicker, ...inputTypes, outputType) that can be added to a dynamic context (a concept⇒waysToGet map), possibly at creation.
 10. Move to completely dynamic get(concept) + withContext(context, func, ...args) + withPicker(picker, func, ...args) + withAdjuster(adjuster, func, ...args) that can see and alter, so that we don't have to perform end-to-end expr gen to alter anything? It's not a complete solution either.
-11. All that dynamic generation will run down our memory pretty fast. Perhaps have a limited number of slots, and overwrite things in any way when full?
+11. All that dynamic generation will run down our memory pretty fast. Perhaps have a limited number of slots, and overwrite things in any way when full? …It's less fragile to shrink actual array graphs; so, remove this?
 
 12. Have an interpreter loop that has 4 counters and stores the executed node in one of known places on each Nth iteration.
 13. Do not merge nor compile nor stage any (generated) function body. Instead, have growArrays(expr, magnitude) that can grow and shrink expressions themselves. (The idea is that if an inner thing does not learn to shrink, then it will be destroyed on an upper level, making an incentive for learning proper shrinkage.)
-MADNESS!
 
-(Probably, the problem is that these are all so simple and individually-powerless that my mind doesn't register them as something to work on.)
+…Should maybe make them separate \`future\`s?
 
 `,
 
