@@ -852,6 +852,9 @@ Evaluates as much as is possible, so manual pre-calculations of any kind are nev
         `(_unknown (randomNat 5))`,
       ],
     ],
+    lookup:{
+      purifyInWorker:__is(`purifyInWorker`),
+    },
     nameResult:[
       `purified`,
     ],
@@ -866,7 +869,7 @@ Staging (code generating code when not everything is known) is done in some nati
       finish.pure = true
       try {
         const r = finish(x)
-        if (!_isUnknown(r) || !_isDeferred(r)) return r
+        if (!_isDeferred(r)) return r
         else return _stage(struct(purify, r[1]), r)
       }
       catch (err) { if (err !== interrupt) return _unknown(jsRejected(err)); else throw err }
@@ -903,7 +906,7 @@ Browsers reduce the precision of this to prevent timing attacks. Putting that pr
     call(mark = 0) {
       if (typeof performance != ''+void 0 && performance.now) // Browser
         return performance.now() - mark
-      else if (typeof process != ''+void 0 && process.hrtime && process.hrtime.bigint()) { // NodeJS
+      else if (typeof process != ''+void 0 && process.hrtime && process.hrtime.bigint) { // NodeJS
         if (!mark) return process.hrtime.bigint()
         return Math.max(0, Number(process.hrtime.bigint() - mark)/1e6)
       } else if (typeof require != ''+void 0) { // NodeJS
@@ -1711,28 +1714,52 @@ nodejs self.js basic`)
   },
 
   WebWorker:{
-    txt:`Not implemented.`,
+    txt:`Used for \`purifyInWorker\`.
+For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:config\` needs to be false.`,
     call() {
-      // const w = new Worker('self.js')
-      // w.onmessageerror = w.onmessage = console.log, w.onerror = console.log
-        // There is some error, but *what* error? It doesn't tell me anything specific at all.
-
-      console.log('worker')
       onmessage = evt => {
-        console.log(evt)
         const msg = evt.data
         if (_isArray(msg) && typeof msg[0] == 'number' && typeof msg[1] == 'string' && msg.length == 2) {
           // Schedule parsing-and-serialization.
-          console.log('scheduling')
-          const [ID, fastProgramToPurify] = msg
-          _schedule([lookup(fast, 'parse'), fastProgramToPurify], _newExecutionEnv(finish.env), expr => {
-            // postMessage the serialized result back.
+          const [ID, str] = msg
+          _doJob(lookup(fast, 'parse')(str), _newExecutionEnv(), expr => {
+            // When done, postMessage the serialized result back.
             postMessage([ID, lookup(fast, 'serialize')(expr)])
           }, ID)
         } else if (typeof msg == 'number')
           _cancel(msg)
         else throw "Bad message"
       }
+    },
+  },
+
+  purifyInWorker:{
+    txt:`\`(purifyInWorker Expr)\`: calls \`purify\` on (a copy of) \`Expr\` in parallel; returns a promise.`,
+    examples:[
+      [
+        `purifyInWorker ^[1*2+3*4]`,
+      ]
+    ],
+    await:true,
+    call(expr) {
+      if (!purifyInWorker.workers) {
+        const w = []
+        for (let i = navigator.hardwareConcurrency-1; i; --i)
+          w[i-1] = {
+            worker:new Worker('self.js'), // Assuming our script's name here.
+            tasks:{},
+          },
+          w[i-1].worker.onmessage = ({data:[ID, str]}) => w[i-1].tasks[ID](lookup(fast, 'parse')(str))
+        purifyInWorker.workers = w
+      }
+      if (!purifyInWorker.workers.length) return purify(expr)
+
+      return new Promise(then => {
+        const ID = _newJobId(), str = lookup(fast, 'serialize')([purify, [quote, expr]])
+        const w = purifyInWorker.workers[Math.floor(Math.random() * purifyInWorker.workers.length)]
+        w.worker.postMessage([ID, str])
+        w.tasks[ID] = then
+      })
     },
   },
 
@@ -3764,7 +3791,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _doJob(expr, env, then, ID) {
     // One iteration of the interpreter loop.
-    if (ID === undefined) console.log('BAD', new Error().stack)
+    if (typeof ID != 'number') console.log('BAD', new Error().stack)
     const microstart = env[_id(realTime)] = _timeSince()
 
     if (env[_id(log)] && !_isArray(env[_id(log)]) && !env[_id(log)].parentNode) return
@@ -3822,7 +3849,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
       const DOM = typeof document != ''+void 0
       if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
       if (_jobs.expr.length) {
-        let start = _timeSince(), end = start + (typeof document != ''+void 0 ? 10 : BigInt(100 * 1000))
+        let start = _timeSince(), end = start + (typeof process == ''+void 0 || !process.hrtime || !process.hrtime.bigint ? 10 : BigInt(100 * 1000))
         if (!_jobs.duration) _jobs.duration = 0
 
         _jobs.running = true
