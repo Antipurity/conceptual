@@ -1743,22 +1743,30 @@ For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:confi
     await:true,
     call(expr) {
       if (!purifyInWorker.workers) {
-        const w = []
+        const ws = []
         for (let i = navigator.hardwareConcurrency-1; i; --i)
-          w[i-1] = {
+          ws[i-1] = {
             worker:new Worker('self.js'), // Assuming our script's name here.
             tasks:{},
           },
-          w[i-1].worker.onmessage = ({data:[ID, str]}) => w[i-1].tasks[ID](lookup(fast, 'parse')(str))
-        purifyInWorker.workers = w
+          ws[i-1].worker.onmessage = ({data:[ID, str]}) => ws[i-1].tasks[ID][1](lookup(fast, 'parse')(str)),
+          ws[i-1].worker.onerror = () => {
+            ws.forEach(w => Object.keys(w.tasks).forEach(ID => {
+              _doJob([purify, [quote, w.tasks[ID][0]]], _newExecutionEnv(), w.tasks[ID][1], +ID)
+            }))
+            ws.length = 0
+          }
+        purifyInWorker.workers = ws
       }
-      if (!purifyInWorker.workers.length) return purify(expr)
 
       return new Promise(then => {
-        const ID = _newJobId(), str = lookup(fast, 'serialize')([purify, [quote, expr]])
+        const ID = _newJobId()
+        if (!purifyInWorker.workers.length)
+          return _doJob([purify, [quote, expr]], _newExecutionEnv(), then, ID)
+        const str = lookup(fast, 'serialize')([purify, [quote, expr]])
         const w = purifyInWorker.workers[Math.floor(Math.random() * purifyInWorker.workers.length)]
         w.worker.postMessage([ID, str])
-        w.tasks[ID] = then
+        w.tasks[ID] = [expr, then]
       })
     },
   },
