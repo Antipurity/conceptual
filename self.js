@@ -11142,29 +11142,85 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
 
   blame:{
-    txt:``,
-    /*
-    - Overridable `blame(expr, feedback)⇒expr` that does a random `alt`-defining selection by default, to be used in `alt`.
-    */
-    call() {
+    txt:`\`blame Expr\` or \`blame Expr Feedback\`: returns the (disposable) stack trace of what \`alt\` needs to change in \`Expr\`. Can be overriden by functions in \`Expr\`.`,
+    call(expr, feedback) {
+      if (!blame.visited) blame.visited = new Set, blame.result = [], blame.trace = []
+      blame.result = _allocArray(), blame.feedback = feedback
+      blame.n = 0, blame.knownBits = 0, blame.knownBitsCount = 0
+      _blameAccumulate(expr)
+      blame.visited.clear(), blame.trace.length = 0
+      return blame.result
+
+      // .visited, .result, .trace; .n, .knownBits, .knownBitsCount
     },
+  },
+  
+  _blameAccumulate(x) {
+    if (!_isArray(x) || !x.length) return
+    if (!_isArray(x[0]) && typeof defines(x[0], blame) == 'function')
+      return defines(x[0], blame)(x, blame.feedback)
+    if (blame.visited.has(x)) return; else blame.visited.add(x)
+    blame.trace.push(x)
+    let [i = x.length] = interrupt(blame)
+    try {
+      if (i === x.length && !_isArray(x[0]) && _isArray(defines(x[0], alt))) {
+        // See if we pick `x`.
+        // To not need to waste time and memory on storing traces of every single graph node, pick it dynamically: assume a power-of-two node count, generate the picked node's index least-significant-bit-first, and do not pick nodes with indexes that do not fit known-so-far bits. (Frequencies of just-over-last-power-of-two indexes are dramatically lower though.)
+        if (blame.n === blame.knownBits) blame.result.length = 0, blame.result.push(...blame.trace)
+        if ((blame.n & ++blame.n) === 0) // When index becomes a power of 2, generate the next picked bit.
+          blame.knownBits = ((Math.random() < .5 ? 0 : 1) << blame.knownBitsCount++) + blame.knownBits
+      }
+      if (i === x.length) i = 0
+      // Accumulate all children of `x`.
+      for (; i < x.length; ++i) _blameAccumulate(x[i])
+    } catch (err) { if (err === interrupt) err(blame, 1)(i);  throw err }
+    finally { blame.trace.pop() }
   },
 
   alt:{
-    txt:``,
-    /*
-  - Have the ability to rewrite code with a rule in order to improve it, a rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "make this always-pick-first marker into a dynamic and optimized choice" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here" — `alt(expr, reason)`.
-    - Rewrite code in-place and in a defined manner, by having functions define `alt` (with an array of two patterns each).
-    - A completely random generator of functions and their `alt`s and `adjust`ments.
-    */
-    call() {
+    txt:`\`alt Expr\` or \`alt Expr Feedback\`: replaces any part of \`Expr\` in-place in a defined manner, for changing structure.
+Functions' overrides of \`alt\` will be consulted for alternatives (either a function that accepts the expr trace (the result of \`blame\`) or an array of from-pattern and to-pattern).`,
+    future:[
+      `A rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "make this always-pick-first marker into a dynamic and optimized choice" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here".`,
+      `A completely random generator of functions and their \`alt\`ernatives and \`blame\`rs and \`adjust\`ments.`,
+    ],
+    lookup:{
+      blame:__is(`blame`),
+    },
+    call(expr, feedback) {
+      let [trace, picked] = interrupt(alt)
+      try {
+        if (trace === undefined) {
+          trace = blame(expr, feedback)
+          if (!_isArray(trace)) return
+          let i = trace.length, a // Make sure that trace[trace.length-1] overrides `alt` properly.
+          while (i && !_isArray(a = defines(trace[i], alt))) --i
+          if (!i) return expr
+          trace.length = i+1
+          picked = a[Math.floor(Math.random() * a.length)]
+        }
+        let into
+        if (typeof picked == 'function') into = picked(trace) // Pass in the expr trace.
+        else if (_isArray(picked) && picked.length == 2) {
+          // If an array of two (from→to), assign `from` then bind `to`.
+          const e = finish.env, L = _id(label)
+          const prevL = e[L], prevI = _assign.inferred;  e[L] = _allocMap(), _assign.inferred = undefined
+          try { _assign(picked[0], trace[trace.length-1]), into = bound(e[L], picked[1]) }
+          catch (err) {}
+          finally { _allocMap(e[L]), e[L] = prevL, _assign.inferred = prevI }
+        }
+        else error('An alt should be a function or a rewriting rule, got', picked)
+        _isArray(into) && replaceArray(trace[trace.length-1], into)
+        return expr
+      } catch (err) { if (err === interrupt) err(alt, 2)(trace, picked), trace = null;  throw err }
+      finally { trace && _allocArray(trace) }
     },
   },
 
   rollingBack:{
     txt:``,
     /*
-  - Periodically save the code and restore if it gets worse by a measure (or if `deconstruct`ing): `rollingBack(expr, measure, when)`.
+  - Periodically save the code and restore if it gets worse by a measure (or if `deconstruct`ing): `rollingBack(expr, measure, when)`. …So, wait, is this finishing? Can't we make this a function (that creates a function); do we need to pass in inputs then, though?
     - Have an `executionCounter N` function-creator to plug into `when` here.
     */
     call() {
@@ -11172,13 +11228,22 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
   },
 
   adjust:{
-    txt:``,
+    txt:`\`adjust Expr Change\`: modifies \`Expr\` by propagating \`Change\` from result into holes that accept it, for learning in a structure.`,
     /*
-  - Do not merge nor compile nor stage any (generated) function body. Instead, have `adjust(expr, magnitude)` that can grow and shrink expressions themselves. (The idea is that if an inner thing does not learn to shrink, then it will be destroyed on an upper level by evolution, making an incentive for learning proper shrinkage.)
-    - Properly distribute the adjustment into subexpressions by calling definitions of `adjust`, def(expr, magnitude) that calls `adjust` on parts of `expr`, or distributing to all if not defined.
-    - Have adjust-via-backprop ops.
+    - Have adjust-via-backprop ops. (Integrate the currently-most-complete web-oriented ML lib, Tensorflow.js?)
     */
-    call() {
+    call(expr, ch) {
+      if (!_isArray(expr)) return
+      if (!_isArray(expr[0]) && typeof defines(expr[0], adjust) == 'function')
+        return defines(expr[0], adjust)(expr, ch)
+
+      // expr.forEach(item => adjust(item, ch))
+      let [i = 0] = interrupt(adjust)
+      try {
+        for (; i < expr.length; ++i)
+          adjust(expr[i], ch)
+        // If expr[i] is shared, we do nothing special here and just allow exponential explosions.
+      } catch (err) { if (err === interrupt) err(adjust, 1)(i);  throw err }
     },
   },
 
