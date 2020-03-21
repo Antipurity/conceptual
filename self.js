@@ -1700,6 +1700,7 @@ nodejs self.js basic`)
       if (process.stdin.isTTY) // REPL for terminals.
         REPL(lang), _test(finish.env = _newExecutionEnv())
       else { // Read+execute for files.
+        interrupt.noInterrupt = true
         require('fs').readFile(process.stdin.fd, 'utf-8', (err, data) => {
           if (err) throw err
           const env = _newExecutionEnv()
@@ -3530,7 +3531,7 @@ All these are automatically tested to be correct at launch.`,
       `\`(map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy)))\``,
       [
         `Reward hacking isn't an AI issue, it's a human issue. Evolution has not caught up to modern society at all, and static reward function plus very dynamic behavior equals trouble. Paper(clip) optimizers are a human problem too. It's called money and greed. There's absolutely nothing about artificial intelligence that's not in intelligence, it's just more clear and efficient.`,
-        `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached: exponential curves do not exist in reality, only logistic curves.`,
+        `Some people are scared of or impressed by AI's exponentially self-improving potential. They forgot that life only grows exponentially to fill a niche, until the next limit is reached: exponential curves do not exist in reality, only logistic curves. They forgot that certain humans exhibit this exact pattern, and the world hasn't ended, only improved.`,
         `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. To fix that, continuously create and maintain an AI-like personality-within-personality (also called willpower, since it does not connect to built-ins in the manner that firmware does) and reroute as much of the primary data loop (consciousness/identity) as possible through that. Break it down then build it up.`,
         `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. Like all life, concepts spread and consume others; a great sales-pitcher thus drives out a great idea-developer, just as concepts that humans are made of. And without the fires of infinite self-improvement, which no software system currently has (only their effects), the minds of those who intertwine with software rot.`,
         `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computational base and trust that spawns from that, or perfect internal honesty and self-awareness of each part, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity. Humanity is like a moon sinking into the sea of darkness that it came from.`,
@@ -3566,7 +3567,7 @@ I hope it'll be enough to implement it. It's too easily swallowed by humanity's 
         `Look at all these academic CS papers of no practical use. Look at all these programming languages, solving different tasks, adapted for different uses, usually used for nothing. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
         `Things small enough to master, understand how they could be used/modified, and make others.
 There isn't even one grand model for search search, and instead, every *thing* expresses itself to the fullest. Self-rewrites and their measurements (like fuzzing tests), and accepting change proposals if the measure increases, may prove beneficial, but such considerations are so advanced that no base exists that can even remotely support and build on them.`,
-        `Machine learning needs a good way to combine its things, like sorting algorithms do. And the best way of combining also combines with itself, ever-improving. In humans, absolutely everything is adapting to things like inputs, even work ethic and hobbies and self. Absolutely everything has inputs that it does not work well on, and will cause it to destabilize. It's good. Advancedness causes blindness, so any mind must periodically be torn down.`,
+        `Machine learning needs a good way to combine its things, like sorting algorithms do. And the best way of combining also combines with itself, ever-improving, and also includes a way to escape back into primordial chaos. In humans, absolutely everything is adapting to things like inputs, even work ethic and hobbies and self. Absolutely everything has inputs that it does not work well on, and will cause it to destabilize. It's good. Advancedness causes blindness, so any mind must periodically be torn down.`,
       ],
     ],
   },
@@ -8648,8 +8649,12 @@ The correctness of quining of functions can be tested by checking that the rewri
     call(arr, becomes) {
       if (compile.assumptions && compile.assumptions.has(arr)) {
         const ass = compile.assignments.get(arr)
-        if (typeof ass == 'function') ass.compiled = undefined
-        else finish.compiled.delete(arr)
+        if (typeof ass == 'function')
+          ass.compiled = undefined
+        else if (Object.getPrototypeOf(ass) !== compile)
+          finish.compiled.delete(ass)
+        else
+          ass.ass.forEach(a => typeof a == 'function' ? (a.compiled = undefined) : finish.compiled.delete(a))
       }
       arr.length = becomes.length
       for (let i = 0; i < arr.length; ++i) arr[i] = becomes[i]
@@ -8694,7 +8699,7 @@ The correctness of quining of functions can be tested by checking that the rewri
 
       const loadVarsFromEnv = opt && opt.loadVarsFromEnv || false // true if label env can contain variable values that we'd need to load to local vars.
       const cause = opt ? opt.cause : !a.length ? body : struct(_function, ...a, body) // For interrupts and compile.assumptions invalidation.
-      const noInterrupts = opt && opt.noInterrupts || false
+      const noInterrupts = opt && opt.noInterrupts || interrupt.noInterrupt || false
       const markLines = opt && opt.markLines || false
       const comments = opt && opt.comments || false
       const debugLog = opt && opt.debugLog || false
@@ -8822,8 +8827,17 @@ The correctness of quining of functions can be tested by checking that the rewri
         return s.length-1 // Return the backpatchable index.
       }
       function markRefCounts(x) {
+        // Record the assumption of immutability so that `replaceArray` can invalidate it.
+        if (_isArray(x)) {
+          let ass
+          if (!compile.assumptions.has(x))
+            compile.assumptions.set(x, cause)
+          else if (Object.getPrototypeOf(ass = compile.assumptions.get(x)) !== compile)
+            compile.assumptions.set(x, Object.create(compile)), compile.assumptions.get(x).ass = [ass, cause]
+          else
+            ass.ass.push(cause)
+        }
         // Go through the array-graph and mark the ref-count of each reachable node.
-        _isArray(x) && compile.assumptions.set(x, cause)
         if (!_isArray(x) || x[0] === quote || x[0] === _const) return
         refCount.set(x, (refCount.get(x) || 0) + 1)
         if (!_isArray(x) && _isArray(defines(x, deconstruct)))
@@ -8992,7 +9006,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       function usedArgs(args) { for (let i = 1; i < args.length; ++i) used(args[i]) }
       function compileCall(x, into, args) {
         // Compile args, emit call, then used() on each arg. Emit each statically-known …R as ...R.
-        if (x[0] === finish) spillVars(x)
+        if (x[0] === finish && _isArray(x[1]) && x[1][0] === quote) spillVars(x[1][1])
         advanceStageIfInterrupting(x)
 
         awaitArgs(x, args)
@@ -9000,7 +9014,7 @@ The correctness of quining of functions can be tested by checking that the rewri
           write(`${outside(finish)}.v=${outside(x)}\n`)
         into ? write(`${into}=`) : write(`return `)
         write(`${args[0]}.call(${rested(x, args)})\n`, `call`)
-        if (x[0] === finish) loadVars(x, false)
+        if (x[0] === finish && _isArray(x[1]) && x[1][0] === quote) loadVars(x[1][1], false)
       }
       function compileStruct(x, into, args) {
         // Compile args, then create-and-fill-and-merge the struct — struct(...) (or [...] if head is statically-known and !_shouldMerge).
@@ -10252,16 +10266,6 @@ Wishlist for measure-generation:
 
 
 - Have an interpreter loop that has 4 counters (31, 63, 127, 255) and stores the executed node in one of known places on each Nth iteration. (Absolutely dynamic, no peval that will hinder semantic meaning.)
-- Blame, equivalencies, evolution:
-  - Do not merge nor compile nor stage any (generated) function body. Instead, have \`adjust(expr, magnitude)\` that can grow and shrink expressions themselves. (The idea is that if an inner thing does not learn to shrink, then it will be destroyed on an upper level by evolution, making an incentive for learning proper shrinkage.)
-    - Properly distribute the adjustment into subexpressions by calling definitions of \`adjust\`, def(expr, magnitude) that calls \`adjust\` on parts of \`expr\`, or distributing to all if not defined.
-    - Have adjust-via-backprop ops.
-  - Have the ability to randomly rewrite code with a rule, a rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "make this always-pick-first marker into a dynamic and optimized choice" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here".
-    - Do we want an \`alt\` transformation to be an expr-\`adjust\`er, or happen randomly on execution?
-    - Rewrite code in-place and in a defined manner, by having functions define \`alt\` (with an array of two patterns each).
-    - A completely random generator of functions and their \`alt\`s and \`adjust\`ments.
-  - Periodically save the code and restore if it gets worse by a measure (or if \`deconstruct\`ing): \`rollingBack(expr, measure, when)\`.
-    - Have a \`executionCounter N\` to plug into \`when\` here.
 
 
 `,
@@ -10505,7 +10509,9 @@ This is the default when no picker is specified.`,
 
   using:{
     txt:`\`(using Context …InputShape OutputShape)\`: a function that can connect inputs to output in any way present in \`Context\`.`,
-    philosophy:`No matter how fancy optimization algorithms get, there is nothing more fundamental than "use any of these things in any way you want".
+    philosophy:`This is dynamically-generating, and so can be put into contexts that contain this, to be able to generate self-referential functions.
+
+No matter how fancy optimization algorithms get, there is nothing more fundamental than "use any of these things in any way you want".
 But to make such an immaterial thing perform as well as the particulars, must enrichen it without end: not a static self, but a search for self.
 Usage suggestions pulled in and tried with but a click. Code libraries used not by naming their functions manually, but by automatically connecting user's typed inputs easily, optimized for a user's purposes. Networks of applicable meaning, made to try and discard everything as wanted. Slightly convenient.`,
     call(ctx, ...a) {
@@ -10996,6 +11002,7 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
   Experiment1:{
     call() {
+      // This MUST be destroyed.
       const isNumber = x => typeof x == 'number'
       let currentJournal = null
       const basicFunctions = {
@@ -11090,6 +11097,55 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
   },
 
 
+
+
+
+
+
+
+
+
+
+  blame:{
+    txt:``,
+    /*
+    - Overridable `blame(expr, feedback)⇒expr` that does a random `alt`-defining selection by default, to be used in `alt`.
+    */
+    call() {
+    },
+  },
+
+  alt:{
+    txt:``,
+    /*
+  - Have the ability to rewrite code with a rule in order to improve it, a rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "make this always-pick-first marker into a dynamic and optimized choice" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here" — `alt(expr, reason)`.
+    - Rewrite code in-place and in a defined manner, by having functions define `alt` (with an array of two patterns each).
+    - A completely random generator of functions and their `alt`s and `adjust`ments.
+    */
+    call() {
+    },
+  },
+
+  rollingBack:{
+    txt:``,
+    /*
+  - Periodically save the code and restore if it gets worse by a measure (or if `deconstruct`ing): `rollingBack(expr, measure, when)`.
+    - Have an `executionCounter N` function-creator to plug into `when` here.
+    */
+    call() {
+    },
+  },
+
+  adjust:{
+    txt:``,
+    /*
+  - Do not merge nor compile nor stage any (generated) function body. Instead, have `adjust(expr, magnitude)` that can grow and shrink expressions themselves. (The idea is that if an inner thing does not learn to shrink, then it will be destroyed on an upper level by evolution, making an incentive for learning proper shrinkage.)
+    - Properly distribute the adjustment into subexpressions by calling definitions of `adjust`, def(expr, magnitude) that calls `adjust` on parts of `expr`, or distributing to all if not defined.
+    - Have adjust-via-backprop ops.
+    */
+    call() {
+    },
+  },
 
 
 
