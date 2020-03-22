@@ -3575,6 +3575,9 @@ All these are automatically tested to be correct at launch.`,
       [
         `An idea isn't good unless it's been refactored and rethought five times. But those times must still be lived through.`,
         `The problem with being publically confident in your words is that it brings out the confident beliefs of other people too. And most people are also wrong, because it takes a lot of specific effort to be right (like trying to be wrong to weed it out).`,
+        `I used to think that people are fundamentally different from rocks. But I see now that that was a false dichotomy. With enough precision and advancement, even rocks can gain all parts contained in 'human'.`,
+      ],
+      [
         `A need for a source of hatred towards this self has become apparent, to develop something new faster.
 I do not have it in me. How could I create such a thing?
 "What, you think that representing every possible goal in one mind is anything but mediocrity? You are disgusting. Get out of my sight."
@@ -3601,7 +3604,7 @@ I hope it'll be enough to implement it. It's too easily swallowed by humanity's 
       [
         `Look at all these academic CS papers of no practical use. Look at all these programming languages, solving different tasks, adapted for different uses, usually used for nothing. That's not a sign that some super-language will come along and implement everything in the best possible way; it's a sign that the search for PLs that happens now should be automated entirely, since computers can think so much faster. Even bases of bases do not have the universal and pure representation, and nothing is immune to infinite self-searching.`,
         `Things small enough to master, understand how they could be used/modified, and make others.
-There isn't even one grand model for search search, and instead, every *thing* expresses itself to the fullest. Self-rewrites and their measurements (like fuzzing tests), and accepting change proposals if the measure increases, may prove beneficial, but such considerations are so advanced that no base exists that can even remotely support and build on them.`,
+There isn't even one grand model for search search, and instead, every *thing* expresses itself to the fullest. A JIT compiler, and self-rewrites and their measurements (like fuzzing tests), and accepting change proposals if the measure increases, may prove beneficial, but such considerations are too advanced.`,
         `Machine learning needs a good way to combine its things, like sorting algorithms do. And the best way of combining also combines with itself, ever-improving, and also includes a way to escape back into primordial chaos. In humans, absolutely everything is adapting to things like inputs, even work ethic and hobbies and self. Absolutely everything has inputs that it does not work well on, and will cause it to destabilize. It's good. Advancedness causes blindness, so any mind must periodically be torn down.`,
       ],
     ],
@@ -5149,6 +5152,7 @@ Concepts are used to give each function a free extensibility point.
 Rather than co-opting strings and files (duck typing, docstrings, documentation, READMEs) to convey parts of a concept, refer to defined functionality directly.
 Try to use this only as explicitly suggested by functions.
 Views and non-_unknown arrays are considered immutable.`,
+    philosophy:`Intended to be immutable for one execution, but mutable between them (with \`Rewrite\`).`,
     examples:[
       [
         `(sum 2 (concept (map sum (function a b 3))))`,
@@ -8214,8 +8218,6 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
       enumerableTypes:__is(`enumerableTypes`),
       fromBase64:__is(`fromBase64`),
       toBase64:__is(`toBase64`),
-      Usage:__is(`Usage`),
-      compose:__is(`compose`),
       journal:__is(`journal`),
     },
   },
@@ -8229,9 +8231,6 @@ Correctness is defined per usage context (see \`get\`). It is not an evident-by-
 
   Rewrite:{
     txt:`A namespace for rewriting Self's code to a different form.`,
-    future:`Have \`TestsPassed(Self)\` that executes scoped self in an iframe, which posts a message back, which makes the promise return.
-Have iframe/textarea/link acceptors of selves.
-Have ToGraph and ToHTML.`,
     lookup:{
       extension:__is(`ToExtension`),
       readableJS:__is(`ToReadableJS`),
@@ -8680,6 +8679,7 @@ The correctness of quining of functions can be tested by checking that the rewri
   _escapeToInterpretation:{txt:`An object that is thrown when the label-env contains unknowns, and we tried to execute the compiled version of an expression.`},
 
   replaceArray:{
+    future:`Make partial evaluation of func body be an invalidate-able assumption of functions, and invalidate it here.`,
     txt:`\`(replaceArray Array Becomes)\`: replaces an array with another array in-place, re-compiling all code that depends on it.`,
     call(arr, becomes) {
       if (compile.assumptions && compile.assumptions.has(arr)) {
@@ -9600,7 +9600,9 @@ For context modification, either use \`(_addUsage Ctx Value)\` or \`(_removeUsag
   },
 
   Usage:{
-    txt:`A namespace for contextual structural enumeration and generation.`,
+    txt:`A namespace for contextual structural enumeration and generation.
+
+(Largely superseded by \`compose\`, because it is quite a lot more efficient to *not* manipulate types just to specify generation groups.)`,
     lookup:{
       typed:__is(`typed`),
       either:__is(`either`),
@@ -10273,37 +10275,7 @@ Int='Int' Float="Float"`,
   },
 
   pick:{
-    future:`Have picker-creating functions: best-of-measure and sample-measure. Have measure-combining functions and namespace.
-
-\`adjust Adjuster Function …Inputs\`: executes \`(Adjuster)\`, then \`Function …Inputs\`, then executes \`Adjuster AdjusterResult Output Function …Inputs\` (which should modify any state that the function depends on as it wants) and returns the function's output.
-…How would this compose with itself though? Pick:
-  1. Constructing measures+adjusters with the same function is good and all, but is it really enough?
-  2. Have \`adjust\` automatically collect an array of picked options inside of it (which include inner \`adjust\`s as just one option), and pass that array to the adjuster. Or is it too much? I feel like this won't be enough.
-
-
-
-\/ Probably garbage: \/
-Wishlist for measure-generation:
-1. Adjustable object measure — one number that becomes exactly as mandated each time.
-  1.5. Use a measure to get a concrete read/write place — do not associate dynamically/automatically, but have the ability to generate.
-2. Weigh two measures together with a number, which *might* be adjusted in any way.
-  2.5. Randomly select between two measures based on a probability, which *might* be adjusted in any way.
-3. Arithmetic on numbers.
-4. Linearly blend a number to another number (to adjust) with a coefficient, which *might* be adjusted in any way.
-  4.5. Throttling the blend, by having an unconfidence measure of a thing that's adjusted more directly (and slowly).
-5. For picking and adjusting, max-measure and sample-measure.
-7. A function that can accept suggestions of its impl (and possibly generate them), to improve its measure better. Or even a subexpr like that?
-8. A function that adds (some) examples of past inputs to the generative context, and optimizes a thing like execution time.
-9. An auto-generate-in-THIS-way self-improving-function creator bestFunction(nothingToNullOrPicker, ...inputTypes, outputType) that can be added to a dynamic context (a concept⇒waysToGet map), possibly at creation.
-10. Move to completely dynamic get(concept) + withContext(context, func, ...args) + withPicker(picker, func, ...args) + withAdjuster(adjuster, func, ...args) that can see and alter, so that we don't have to perform end-to-end expr gen to alter anything? It's not a complete solution either.
-11. All that dynamic generation will run down our memory pretty fast. Perhaps have a limited number of slots, and overwrite things in any way when full? …It's less fragile to shrink actual array graphs; so, remove this?
-
-
-
-- Have an interpreter loop that has 4 counters (31, 63, 127, 255) and stores the executed node in one of known places on each Nth iteration. (Absolutely dynamic, no peval that will hinder semantic meaning.)
-
-
-`,
+    future:`Have picker-creating functions: best-of-measure and sample-measure. Have measure-combining functions and namespace.`,
 
     txt:`\`(pick From Cause Extra)\`: Picks any option from presented ones (an array or the count of options), returning the picked index.
 Use \`picker\` to override behavior.
@@ -10545,6 +10517,7 @@ This is the default when no picker is specified.`,
   using:{
     txt:`\`(using Context …InputShape OutputShape)\`: a function that can connect inputs to output in any way present in \`Context\`.`,
     philosophy:`This is dynamically-generating, and so can be put into contexts that contain this, to be able to generate self-referential functions.
+It is said by some that true genius lies in formalizing a few really fitting things, and leaving the rest as-is; analogously, self-referential functions allow remembering and building on a few past searches, and searching dynamically elsewhere.
 
 No matter how fancy optimization algorithms get, there is nothing more fundamental than "use any of these things in any way you want".
 But to make such an immaterial thing perform as well as the particulars, must enrichen it without end: not a static self, but a search for self.
@@ -10602,6 +10575,16 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
 
 
 
+  Measures:{
+    txt:`A namespace for measures.`,
+    lookup:{
+      readMeasure:__is(`readMeasure`),
+      writeMeasure:__is(`writeMeasure`),
+      journalMeasures:__is(`journalMeasures`),
+      peekMeasures:__is(`peekMeasures`),
+      commitMeasures:__is(`commitMeasures`),
+    },
+  },
   readMeasure:{
     txt:`\`(readMeasure ?:Measure ?:Option):MeasureIs\`: reads the current remembered measure of an object, for use in selecting from a set of branches.`,
     call(m, obj) {
@@ -10630,7 +10613,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
     },
   },
   journalMeasures:{
-    txt:`\`(journalMeasures Func …Args)\`: returns a journal that can be applied with \`commitMeasures\`.`,
+    txt:`\`(journalMeasures Func …Args):Journal\`: returns a journal that can be applied with \`commitMeasures\`.`,
     output:['Deferred measure changes', [__is(`label`)]],
     call(f, ...args) {
       const prev = Measure.journal
@@ -10644,7 +10627,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
   },
 
   peekMeasures:{
-    txt:`\`(peekMeasures Journal)\`: Returns the result contained in a journal without applying the journal.`,
+    txt:`\`(peekMeasures ?:Journal):Result\`: Returns the result contained in a journal without applying the journal.`,
     input:[['Deferred measure changes', [__is(`label`)]]],
     output:['Output', [__is(`label`)]],
     argCount:1,
@@ -10652,7 +10635,7 @@ Usage suggestions pulled in and tried with but a click. Code libraries used not 
   },
 
   commitMeasures:{
-    txt:`\`(commitMeasures Journal)\`: performs the actual writes stored in a journal, and returns its result. A journal can only be committed once.`,
+    txt:`\`(commitMeasures ?:Journal):Result\`: performs the actual writes stored in a journal, and returns its result. A journal can only be committed once.`,
     input:[['Deferred measure changes', [__is(`label`)]]],
     output:['Output', [__is(`label`)]],
     argCount:1,
@@ -10674,6 +10657,11 @@ Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a fu
     philosophy:`These types are just markers, not potentially-infinite families like \`V:T\` on actual function inputs/outputs allows. We move beyond imposition of a particular (AKA limited and thus ultimately fragile) structure on objects, and instead allow contexts to override search arbitrarily (via being a function from \`OutputType\` to a disposable array of all functions that likely return that).`,
     noInterrupt:true,
     merge:true,
+    lookup:{
+      numbersRandomSearch:__is(`numbersRandomSearch`),
+      atan:__is(`atan`),
+      Eval:__is(`Eval`),
+    },
     call(...f) {
       const m = _allocMap()
       if (!context.got) context.got = new Set, context.ctx = Symbol('customContext')
@@ -10741,7 +10729,9 @@ Each function must define \`context\` as \`(…InputTypes OutputType)\` (or a fu
 
   compose:{
     txt:`\`(compose Context …InputTypes OutputType)\`: generates a function that connects inputs of specified types to output.
-A function can define \`compose Context …InputExprs OutputType\` to stage any code it wants in place of itself (or throw to deny composition in this case).`,
+A function can define \`compose Context …InputExprs OutputType\` to stage any code it wants in place of itself (or throw to deny composition in this case).
+
+(Largely superseded by \`alt\` and \`bestFunction\`: most of the time, most of the structure that is learned on is fine, and only needs a few changes sometimes.)`,
     examples:[
       [
         `(compose (context F G) 'In' 'Out')
@@ -11035,101 +11025,6 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
 
 
-  Experiment1:{
-    call() {
-      // This MUST be destroyed.
-      const isNumber = x => typeof x == 'number'
-      let currentJournal = null
-      const basicFunctions = {
-        call:{
-          call(f, ...inputs) { return (typeof f == 'function' ? f : f.call)(...inputs) },
-        },
-        eval:{
-          call(globals, at, state = undefined) {
-            // A DAG expression evaluator: eval array items then call, not going into cycles and re-using results.
-            if (state === undefined) state = _allocArray(), state.length = globals.length
-            if (state[at] !== undefined) return state[at]
-            const g = globals[at]
-            if (!_isArray(g)) return g
-            state[at] = null
-            const a = _allocArray();  a.length = g.length-1
-            try {
-              let f = basicFunctions.eval.call(globals, g[0], state)
-              if (typeof f == 'object' && f && f.call) f = f.call // Accept functions in basicFunctions format.
-              for (let i=0; i < a.length; ++i) a[i] = basicFunctions.eval.call(globals, g[i+1], state)
-              try { state[at] = f.apply(f, a) } catch (err) {} // Ignore exceptions.
-              return state[at]
-            } finally { _allocArray(a) }
-          },
-        },
-
-        read(array, at) {
-          if (currentJournal && currentJournal.has(array) && (at in currentJournal.get(array)))
-            return currentJournal.get(array)[at]
-          return array[at]
-        },
-        write(array, at, value) {
-          if (currentJournal) {
-            !currentJournal.has(array) && currentJournal.set(array, _allocArray())
-            currentJournal.get(array)[at] = value
-          } else array[at] = value
-        },
-        journalCall:{
-          inputs:['Function', undefined],
-          output:'Journal',
-          call(func, input) {
-            const prev = currentJournal;  currentJournal = _allocMap()
-            try { return [typeof func == 'function' ? func(input) : func.call(input), currentJournal] }
-            finally { currentJournal = prev }
-          },
-        },
-        journalResult:{
-          inputs:['Journal'],
-          output:'Result',
-          call(j) { return j[0] },
-        },
-        commitJournal:{
-          inputs:['Journal'],
-          call(j) { j.forEach((changes, array) => Object.keys(changes).forEach(at => array[at] = changes[at])) },
-        },
-
-        zero:    { inputs:[],  output:isNumber,  call() { return 0 } },
-        one:     { inputs:[],  output:isNumber,  call() { return 1 } },
-        add:     { inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a+b }, },
-        subtract:{ inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a-b }, },
-        mult:    { inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a*b }, },
-        divide:  { inputs:[isNumber, isNumber],  output:isNumber,  call(a,b) { return a/b }, },
-
-        // createFunction(globals, inputAt, bodyAt).
-        // createEvolvingFunction(globals, inputAt, bodyAt, measureAt), doing the call twice and committing the best-measure one.
-        // createChangingFunction(globals, inputAt, bodyAt, changerAt), doing the call then calling changer(Result) then returning Result.
-
-        getRandomBasicFunction:{ call() { return basicFunctions[basicFunctionKeys[randomNat(basicFunctionKeys.length)]] } },
-        // createRandomCall(globals), getting the list of all functions and choosing from it, then getting lists of suitable inputs and choosing from them.
-          // An input is suitable if either f.inputs[i] === undefined, or v.output === f.inputs[i], or f.inputs[i] is a function and f.inputs[i](v).
-        // createRandomFunction(globals, inputType = undefined, outputType = undefined), getting the list of all calls (arrays in globals[i]) and choosing from it.
-        // useInputRandomly(globals, at), getting the list of all functions that have the value as one of their results.
-
-        // filterFitting(array, predicate).
-        // best(array), sample(array).
-
-        // makeMore(globals, at), makeLess(globals, at); functions should define these.
-      }
-      // …This memory model is far too inconvenient. Should we do this on actual arrays (and use `makeLess` to limit memory use)?
-      const basicFunctionKeys = Object.keys(basicFunctions)
-      const globals = []; globals.length = 1000
-      globals[0] = [label]
-      // What do we put as the default executor? Something that journals two calls and commits the best — createEvolvingFunction?
-
-      function evaluateOn(input, at = 1) {
-        const state = _allocArray(); state.length = globals.length
-        state[0] = input
-        try { return basicFunctions.eval.call(globals, at, state) }
-        catch (err) {}
-        finally { _allocArray(state) }
-      }
-    },
-  },
 
 
 
@@ -11145,13 +11040,22 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
     txt:`\`blame Expr\` or \`blame Expr Feedback\`: returns the (disposable) stack trace of what \`alt\` needs to change in \`Expr\`. Can be overriden by functions in \`Expr\`.`,
     call(expr, feedback) {
       if (!blame.visited) blame.visited = new Set, blame.result = [], blame.trace = []
-      blame.result = _allocArray(), blame.feedback = feedback
-      blame.n = 0, blame.knownBits = 0, blame.knownBitsCount = 0
-      _blameAccumulate(expr)
-      blame.visited.clear(), blame.trace.length = 0
-      return blame.result
+      const empty = !blame.visited.size, pfb = blame.feedback
+      const {result, n, knownBits, knownBitsCount} = blame
+      try {
+        blame.trace = _allocArray()
+        blame.result = _allocArray(), blame.feedback = feedback
+        blame.n = 0, blame.knownBits = 0, blame.knownBitsCount = 0
+        _blameAccumulate(expr) // <- The actual body
+        
+        return blame.result
+      } finally { // Ensure that we (mostly) restore previous state to allow blame-in-blame.
+        empty && blame.visited.clear(), _allocArray(blame.trace)
+        blame.feedback = pfb
+        blame.result = result, blame.n = n, blame.knownBits = knownBits, blame.knownBitsCount = knownBitsCount
+      }
 
-      // .visited, .result, .trace; .n, .knownBits, .knownBitsCount
+      // .visited, .result, .trace; .feedback; .n, .knownBits, .knownBitsCount
     },
   },
   
@@ -11179,9 +11083,13 @@ G=(concept { call x->x*2 context ('Med' 'Out') })`,
 
   alt:{
     txt:`\`alt Expr\` or \`alt Expr Feedback\`: replaces any part of \`Expr\` in-place in a defined manner, for changing structure.
-Functions' overrides of \`alt\` will be consulted for alternatives (either a function that accepts the expr trace (the result of \`blame\`) or an array of from-pattern and to-pattern).`,
+Functions' overrides of \`alt\` will be consulted to pick an alternative (either a function that accepts the expr trace (the result of \`blame\`) or an array of from-pattern and to-pattern).`,
+    philosophy:`As long as one little reference to the generative "absolutely anything" is accessible, even the littlest thing can grow into the largest and most advanced thing. That possibility vs not is the main difference between what humans do and what they have done.
+
+Working with and applying code equivalencies is done at dev time and in logic and such; the made code only does one path, judged sufficient. Alt application can itself be adjusted and improved, like memorizing and reinforcing useful alt chains.`,
     future:[
-      `A rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "make this always-pick-first marker into a dynamic and optimized choice" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here".`,
+      `"When executed, finish the first thing, but when alt-ed, swap the first and the random thing" — \`any …Branches\`.`,
+      `A rule like "mult a random number by 1.2 and see what happens" or "merge these two measure-spots" or "don't do this choice dynamically, just pick the most likely" or "change a measuring/adjusting spot, and see how the goal changes" or "add the minimize-runtime adjuster here".`,
       `A completely random generator of functions and their \`alt\`ernatives and \`blame\`rs and \`adjust\`ments.`,
     ],
     lookup:{
@@ -11217,18 +11125,39 @@ Functions' overrides of \`alt\` will be consulted for alternatives (either a fun
     },
   },
 
-  rollingBack:{
-    txt:``,
-    /*
-  - Periodically save the code and restore if it gets worse by a measure (or if `deconstruct`ing): `rollingBack(expr, measure, when)`. …So, wait, is this finishing? Can't we make this a function (that creates a function); do we need to pass in inputs then, though?
-    - Have an `executionCounter N` function-creator to plug into `when` here.
-    */
-    call() {
+  proposeFunction:{
+    txt:`Attempts to (in-place) replace a function with another function if supported.`,
+    call(func, newFunc) { if (!_isArray(func) && typeof defines(func, proposeFunction) == 'function') defines(func, proposeFunction)(newFunc) },
+  },
+
+  bestFunction:{
+    txt:`Returns a function that can be replaced by any better implementation.`,
+    lookup:{
+      proposeFunction:__is(`proposeFunction`),
+    },
+    call(initial, measure) {
+      if (typeof initial != 'function' || typeof measure != 'function') error('Expected functions, got', initial, measure)
+      let curMeasurement = measure(initial)
+      function patchable(...args) { return patchable.d[1].apply(this, args) }
+      patchable.d = [bestFunction, initial, measure]
+      return concept(map(
+        proposeFunction, newFunc => {
+          if (typeof newFunc != 'function') error('Expected function, got', newFunc)
+          const m = measure(newFunc)
+          return m > curMeasurement ? (patchable.d[1] = newFunc, curMeasurement = m, true) : false
+        },
+        deconstruct, patchable.d,
+        call, patchable,
+      ))
     },
   },
 
   adjust:{
-    txt:`\`adjust Expr Change\`: modifies \`Expr\` by propagating \`Change\` from result into holes that accept it, for learning in a structure.`,
+    txt:`\`adjust Expr Change\`: modifies \`Expr\` by propagating \`Change\` from result into holes that accept it, for learning in a structure.
+
+…No, this isn't enough to specify backprop: while it's technically possible to preserve the last inputs/output, the state in complex function call graphs is lost.
+This should be removed.
+The proper way would be to return an array of result and the expression that would adjust the function (or \`adjustable Result AdjustExpr\`), and partially-evaluate both near using measure.`,
     /*
     - Have adjust-via-backprop ops. (Integrate the currently-most-complete web-oriented ML lib, Tensorflow.js?)
     */
@@ -11245,6 +11174,18 @@ Functions' overrides of \`alt\` will be consulted for alternatives (either a fun
         // If expr[i] is shared, we do nothing special here and just allow exponential explosions.
       } catch (err) { if (err === interrupt) err(adjust, 1)(i);  throw err }
     },
+  },
+
+  Search:{
+    txt:`A search for a search.`,
+    lookup:[
+      __is(`Usage`),
+      __is(`compose`),
+      __is(`Measures`),
+      __is(`bestFunction`),
+      __is(`adjust`),
+      __is(`alt`),
+    ],
   },
 
 
