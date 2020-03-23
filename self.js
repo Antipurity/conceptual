@@ -3523,7 +3523,7 @@ All these are automatically tested to be correct at launch.`,
             return to
           }
           if (!_isArray(a)) throw "Examples must be arrays or comments"
-          if (!finish.env[_id(log)]) return a
+          if (env && !env[_id(log)]) return a
           const from = parse(a[0], fancy, undefined, parse.dom)[1]
           const to = a[1] ? parse(a[1]) : elemCollapse(() => {
             const prev = finish.env;  finish.env = env
