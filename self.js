@@ -1252,7 +1252,7 @@ Supported browsers: modern Chrome and Firefox.`,
     lookup:{
       icon:__is(`BrowserIconURL`),
     },
-    style:`.into * {transition: all .2s, margin 0s, padding 0s; box-sizing: border-box; animation: fadein .2s; font-family: monospace; font-size:initial}
+    style:`.into * {transition: all .2s, margin 0s, padding 0s; box-sizing: border-box; vertical-align:top; animation: fadein .2s; font-family: monospace; font-size:initial}
 .into:not(body) { box-shadow:var(--highlight) 0 0 .1em .1em }
 
 @keyframes fadein { from {opacity:0} }
@@ -4069,6 +4069,16 @@ Don't ever re-use the same env in _schedule, use this instead.`,
 
   try:{
     txt:`\`a|b|c\` or \`(try …Functions)\`: returns a function that tries to call functions in order, returning the first non-error result or error.`,
+    future:`Fix (quadratic) merge sort (all sorts of errors in compilation, and peval, and \`try\`):
+
+f = (function x y (if (less a1 a2)
+  (array a1 ...(merger r1 y))
+  (array a2 ...(merger x r2)))) 
+x = (a1 ...r1)  y = (a2 ...r2)
+merger = (function x y (f x y)\(array ...x ...y))
+divideAndMerge = (x y …r)->(merge (divideAndMerge r) (merge (array x) (array y)))\(x)->(x)
+merger (1) (2)
+;='divideAndMerge (8 3 1 8 5 0)'`,
     examples:[
       [
         `(f 1) f=(try 0->5 1->10 2->15)`,
@@ -4086,7 +4096,7 @@ Don't ever re-use the same env in _schedule, use this instead.`,
     merge:__is(`true`),
     call(...functions) {
       for (let i = 0; i < functions.length; ++i)
-        if (typeof functions[i] != 'function') throw "Expected a function"
+        if (typeof functions[i] != 'function') error("Expected a function, but got", functions[i])
       if (functions.length == 1) return functions[0]
 
       const impl = function tryInOrder(...data) {
@@ -6072,6 +6082,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   _funcPlaceholder:{
     txt:`An implementation detail of \`function\`. Do not use.`,
+    call() { return _unknown(finish.v) },
   },
 
   closure:{
