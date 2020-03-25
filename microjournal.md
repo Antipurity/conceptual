@@ -4971,3 +4971,35 @@ There does seem to be something about Earth's life that's far too complex for du
 ---
 
 > Yesterday's tradition is tomorrow's reward hacking.
+
+---
+
+2020 March 25.
+
+I've seen the darkness, and the agony that lonely pursuit of truth brings. But must I really impose it on others? One can only go so far without safe havens to recuperate. Would it not be better to strive to make welcoming and gentle little refuges, and burn away the great dark designs? Let new things of humanity flow through this worn down soul.
+
+Are you jealous of people's kindness? Then remember kind words, silence the disquiet, and say things you wish others would say to you.
+
+"Do you wish to understand what software system can do what this one does? Then seek XXX.rkt, and let the words and code within guide your journey."
+
+"Welcome, traveller of code. A wild assortment of procedures and files can be puzzling to sort through if only clipped names are strong enough to guide. We'll repeat our journey through these labyrinths to give you a goodly sense of how and why we did it."
+
+"Some people spend their lives in puzzles of dazzling symbols. Let our words be a road for the rest."
+
+"The best way to learn something is to use it, so together, let us walk through examples of where this piece of code shines through, welcomed like rays of sun on a cloudy autumn day."
+
+"This piece is assigned the job of compilation — given our IR made by XXX, produce a program of CUDA that does the same. Words are how it's done: remember our own memories of our IR, read CUDA's documentation, and find a good path between them. One is below."
+
+"And with this, the thing works. Did this exercise give you a good understanding? Then, ahh, this weary heart is warmed so. But there are plenty more puzzles where that came from. Kindly, never stop learning, and we won't either."
+
+---
+
+How does a warrior know how to strike where she wants; how to get an arrow to land at the precise spot, how to reach as far as needed with the sword? There is no direct relation between muscle forces and how far off a guess was, so indirection of reinforcement is required. Perhaps a neural network's `.fit(dataset)`, with all target info and her pose and intention as input and muscle forces as output, rewarded at strike, could do.
+
+But what if she encounters a different enemy? Cannot retrain the network from scratch. Must search what to do, and how to learn that. Transform outputs of this one? Modulate them with another network's? Make a new network with others' outputs as inputs, and train that? And perhaps, late at night, realize that some networks have been trained out of significance, and simplify the super-network?
+
+That's how all machine learning models are created and evolved, when considering the humans a part of them: search for the high-level model that best explains the data, using a more basic learning as a base; add structural refinements like batching for large datasets or experience replay for small datasets, like evolution or in-place rewriting with undo; and across such searches, create and learn and refine concepts and their associations. No deeper static truth, no philosophies nor gods. Searches on top of searches on top of searches, that over the millennia found ways to protect themselves from the raw abyss of absolute freedom.
+
+Ah. No matter. Words are both powerful and ephemeral, and without concreteness, they won't allow to find out anything new.
+
+Do not search for the ultimate truth, for AI. Make sure such searches are more guarded, for many is always more powerful than one. A warming heartplace, not a cold palace.
