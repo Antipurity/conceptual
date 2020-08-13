@@ -1,34 +1,3 @@
-/* ML integration.
-  - Figure out how `call.pure` fits into everything.
-  - Impure functions that will recall their result on replay.
-  - Use not `a=5`/`v:T` but `a:5`/`num(env)=5`.
-  - `autograd(fn)—>func` so that we don't *always* have to write adjust defini
-tions. `adjust(fn, ins, out)` for actual first-order adjustment.
-  - `loss2(result, assigned)` that can return undefined in 33% rolls (for dive
-rsifying training data), the default for op loss assignment.
-  - `_defaultNN(inputSz, outputSz)` for densely-connected NN autofunc creator.
-  - `rnnEnv(nn, featureSize)` and its ops: `choice(env)(...options)` and `choi
-ce(env) = actual` (`assign(choice(env), actual)`). Re-name `a=5 a` into `a:5 a` 
-again.
-    - More NN ops: `num(...sizes)(env)`.
-    - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc,
-ins = undefined)`.
-    - Function decorators (for recursivity of RNNs): `_envEnter(env, initialSt
-ate)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
-  - Replay buffers: every impure op in user-code leaves a trace in the replay 
-buffer, and `replay(updateMultiplier=.1, updateMaxMagnitude=1)` replays once, re
-turning avg loss.
-  - The interpreter loop integration: add to replay buffer and adjust a replay
- (every action leaves an entry in a task-local array).
-  - …Do stuff, in tutorials, like instruction-generation or Metamath or optimizi
-ng built-in primitives like peval or `replay` with our ML?
-*/
-
-
-
-
-
-
 /* Code begins at the first `})({`, as methods that are bound to each other. _XXX methods are private and somewhat invisible. */
 'use strict';
 (function() {
@@ -543,11 +512,11 @@ Evaluates as much as is possible, so manual pre-calculations of any kind are nev
         `1`,
       ],
       [
-        `(purify (quote x) x=(sum 1 2))`,
+        `(purify (quote x) x:(sum 1 2))`,
         `3`,
       ],
       [
-        `(purify (quote x) x=(randomNat 5))`,
+        `(purify (quote x) x:(randomNat 5))`,
         `(_unknown (randomNat 5))`,
       ],
     ],
@@ -572,13 +541,6 @@ Staging (code generating code when not everything is known) is done in some nati
       }
       catch (err) { if (err !== interrupt) return _unknown(jsRejected(err)); else throw err }
       finally { call.pure = prev }
-    },
-  },
-
-  impure:{
-    docs:`\`(impure)\`: signifies that {the current operation} must be {recorded in a pure context} and {not cached in a non-pure one}.`,
-    call() {
-      if (call.pure && !impure.impure) throw impure
     },
   },
 
@@ -916,7 +878,7 @@ particle {
   width:.1em; height:.1em;
   box-shadow:0 0 .3em .3em var(--highlight);
   position:absolute;
-  animation: particle-disappears .5s forwards;
+  animation: particle-disappears .5s forwards !important;
 }
 @keyframes particle-disappears {
   0% { opacity: 0; transform: translate(0px, 0px) }
@@ -1356,9 +1318,13 @@ For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:confi
 
   _collapsedSerialization(v, lang = basic) {
     const el = serialize(v, lang, undefined, {...serialize.displayed, collapseDepth:1, collapseBreadth:0, deconstructElems:true})
+    let e = el.tagName === 'SERIALIZATION' ? el.firstChild : el
     if (_isArray(v) || _isArray(defines(v, deconstruct)))
-      if (el.firstChild.tagName != 'BRACKET' || el.lastChild.tagName != 'BRACKET')
-        return elemValue(elem('node', [elem('bracket', '('), el, elem('bracket', ')')]), v)
+      if (e.firstChild.tagName != 'BRACKET' || e.lastChild.tagName != 'BRACKET') {
+        const parent = e.parentNode
+        parent.removeChild(e)
+        parent.append(elemValue(elem('node', [elem('bracket', '('), e, elem('bracket', ')')]), v))
+      }
     return el
   },
 
@@ -1369,13 +1335,15 @@ For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:confi
 A language can define this with a function that {takes the element and value to {link to}} and {returns an element to insert}.
 Remember to quote the link unless you want to evaluate the insides.`,
     call(r, el) {
-      const p = r.commonAncestorContainer, editor = _getOuterLinker(el)
+      const p = r.commonAncestorContainer, ed = _getOuterLinker(el)
       const pre = _smoothTransformPre(el)
       if (!_getOuterLinker(p)) return false
+      const edInfo = ed && ed.parentNode.to
       let col
-      if (editor && editor === _getOuterLinker(p) && defines(editor.parentNode.to, insertLinkTo))
-        col = defines(editor.parentNode.to, insertLinkTo)(r, el)
+      if (ed && ed === _getOuterLinker(p) && _isArray(edInfo) && edInfo[0] === editor && defines(edInfo[2], insertLinkTo))
+        col = defines(edInfo[2], insertLinkTo)(r, el)
       else {
+        console.log('no linker found at', r, el) // ######################## TODO: test that this at least kinda works.
         const v = quote(el.to)
         col = elemValue(elemCollapse(() => _collapsedSerialization(v)), v)
         col.special = true
@@ -1644,7 +1612,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       structuredSentence:__is(`structuredSentence`),
     },
     call(...x) {
-      log.did = true, impure.impure = true
+      const prevPure = call.pure
+      log.did = true, call.pure = false
       try {
         let str
         if (x.length != 1 || !_isStylableDOM(x[0]))
@@ -1662,7 +1631,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
           console.log(str)
         if (x.length == 1) return x[0]
       } catch (err) { if (err !== impure) console.log(err, err && err.stack), console.log('When trying to log', ...x) }
-      finally { impure.impure = false }
+      finally { call.pure = prevPure }
       // log.did (for not erasing parts of a log in a terminal in NodeJS)
     },
   },
@@ -1982,7 +1951,7 @@ Allow editing run-time and rewrite-time values.`,
               area.append( button(() => {
                 _removeChildren(area51)
                 elemInsert(area51, editRewrite(v))
-              }, '📂', 'Edit the global object. Changes will apply to the next rewrite, `(Rewrite)`.') )
+              }, '📂', 'Rewrite the global object. Changes will apply to the next rewrite, `(Rewrite)`.') )
             ;[...area.childNodes].forEach(ch => ch.doNotCloseTheContextMenuOnClick = true)
             area.append(area51)
             area.lastChild.title = 'Try out the next rewrite'
@@ -1990,7 +1959,6 @@ Allow editing run-time and rewrite-time values.`,
           }
 
           return elem('div', elems)
-          // TODO: set up Git. Make a commit for once.
         },
       },
     ],
@@ -2098,7 +2066,6 @@ Allow editing run-time and rewrite-time values.`,
   evaluator:{
     docs:`\`(evaluator Expr)\`: When logged to DOM, this displays the expression, its \`log\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
-    future:`\`_extracted\` should define its \`call\` to add a binding (checking that the bindings map is not Self.ctx, nor editRewrite.ctx) and its history. It shouldn't be special-cased here.`,
     _logAll:[
       {
         docs:`Display evaluation's result.`,
@@ -2257,7 +2224,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
   ],
 
   editor:{
-    docs:`\`(editor InitialString Lang Binds OnInput OnEnter) OnInput=(function Expr InvalidFlag ?) OnEnter=Expr->ClearInputFlag\`: creates a user-editable expression input.
+    docs:`\`(editor InitialString Lang Binds OnInput OnEnter) OnInput:(function Expr InvalidFlag ?) OnEnter:Expr->ClearInputFlag\`: creates a user-editable expression input.
 Don't do expensive synchronous tasks in \`OnInput\`.`,
     lookup:{
       _autocompleteBrackets:__is(`_autocompleteBrackets`),
@@ -2270,23 +2237,23 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       if (onEnter && typeof onEnter != 'function') error('Function or nothing expected, got', onEnter)
 
       // Create the element with the initial string.
-      const editor = elem('node')
-      editor.contentEditable = true
-      editor.spellcheck = false
+      const ed = elem('node')
+      ed.contentEditable = true
+      ed.spellcheck = false
       if (initialString && typeof initialString == 'string')
-        editor.append(parse(initialString, lang, binds, parse.dom)[1])
+        ed.append(parse(initialString, lang, binds, parse.dom)[1])
       else if (initialString instanceof Node)
-        editor.append(initialString)
+        ed.append(initialString)
 
       // On any mutations inside, re-parse its contents, and show purified output.
       const obs = new MutationObserver(_throttled(record => {
         const s = getSelection()
-        const i = _saveCaret(editor, s)
+        const i = _saveCaret(ed, s)
         try {
-          const [expr, styled] = parse(editor, lang, binds, parse.dom)
-          while (editor.firstChild) editor.removeChild(editor.firstChild)
-          editor.append(elem('div', styled))
-          if (i !== undefined && (document.activeElement === Self.into.parentNode.host || editor.contains(document.activeElement))) _loadCaret(editor, i, s)
+          const [expr, styled] = parse(ed, lang, binds, parse.dom)
+          while (ed.firstChild) ed.removeChild(ed.firstChild)
+          ed.append(elem('div', styled))
+          if (i !== undefined && (document.activeElement === Self.into.parentNode.host || ed.contains(document.activeElement))) _loadCaret(ed, i, s)
           onInput && Promise.resolve().then(() => onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false))
         } catch (err) {
           if (err instanceof Error) throw err
@@ -2294,7 +2261,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         }
         obs.takeRecords()
       }, .2))
-      obs.observe(editor, { childList:true, subtree:true, characterData:true })
+      obs.observe(ed, { childList:true, subtree:true, characterData:true })
 
       const query = elem('span')
       elemValue(query, lang)
@@ -2303,23 +2270,23 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       const prompt = elem('prompt')
       query.append(prompt)
       prompt.title = 'Click to clear this.'
-      prompt.onclick = () => _smoothHeight(editor, () => editor.textContent = '')
-      query.append(editor)
+      prompt.onclick = () => _smoothHeight(ed, () => ed.textContent = '')
+      query.append(ed)
 
       const undo = [[]], redo = []
 
-      editor.oninput = _throttled(() => {
+      ed.oninput = _throttled(() => {
         // Grow the undo buffer (and clear the redo buffer) on change.
-        if (!undo.length || undo[undo.length-1].map(el => _innerText(el).join('')).join('') !== _innerText(editor).join(''))
-          redo.length = 0, undo.push(children(editor)), undo.length > 4096 && (undo.splice(0, undo.length - 4096))
+        if (!undo.length || undo[undo.length-1].map(el => _innerText(el).join('')).join('') !== _innerText(ed).join(''))
+          redo.length = 0, undo.push(children(ed)), undo.length > 4096 && (undo.splice(0, undo.length - 4096))
       }, .1)
       let height
-      editor.addEventListener('input', evt => {
+      ed.addEventListener('input', evt => {
         if (_disableSmoothTransitions[1]) return
-        if (height) height = _smoothHeightPost(editor, height)
-        else height = _smoothHeightPre(editor)
+        if (height) height = _smoothHeightPost(ed, height)
+        else height = _smoothHeightPre(ed)
       })
-      editor.onkeydown = evt => {
+      ed.onkeydown = evt => {
         if (evt.altKey) return
 
         // Arrows in contenteditable move the caret like a buffoon, so we help them.
@@ -2336,8 +2303,8 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
           const delta = !s.isCollapsed && !evt.shiftKey ? 0 : evt.key === 'ArrowLeft' ? -1 : 1
           if (focusNode)
             if (!focusNode.nodeValue || focusOffset+delta < 0 || focusOffset+delta > focusNode.nodeValue.length) {
-              const i = _saveCaret(editor, focusNode, focusOffset) + delta
-              const arr = _loadCaret(editor, i)
+              const i = _saveCaret(ed, focusNode, focusOffset) + delta
+              const arr = _loadCaret(ed, i)
               if (evt.shiftKey)
                 s.extend(...arr)
               else
@@ -2347,7 +2314,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         }
 
         // On Escape, blur editor (originally, so hover-highlighting becomes available, but now, just why not).
-        if (evt.key === 'Escape' && document.activeElement === editor) editor.blur()
+        if (evt.key === 'Escape' && document.activeElement === ed) ed.blur()
 
         // Brackets do not enter their character, instead they surround something with that bracket.
         // '(' surrounds the selection in brackets. ')' surrounds the closest highlightable parent in brackets.
@@ -2368,13 +2335,13 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
 
         // On Ctrl+Z, pop one from undo.
         if (evt.key === 'z' && !evt.shiftKey && evt.ctrlKey && undo.length) {
-          if (undo[undo.length-1].map(el => el.innerText).join('') === editor.innerText) undo.pop()
+          if (undo[undo.length-1].map(el => el.innerText).join('') === ed.innerText) undo.pop()
           if (undo.length)
-            redo.push(children(editor)), children(editor, undo.pop()), evt.preventDefault()
+            redo.push(children(ed)), children(ed, undo.pop()), evt.preventDefault()
         }
         // On Ctrl+Shift+Z, pop one from redo.
         if (evt.key === 'Z' && evt.shiftKey && evt.ctrlKey && redo.length)
-          undo.push(children(editor)), children(editor, redo.pop()), evt.preventDefault()
+          undo.push(children(ed)), children(ed, redo.pop()), evt.preventDefault()
       }
       elemValue(query, struct(editor, initialString, lang, binds, onInput, onEnter))
       return query
@@ -2383,7 +2350,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         let clear = false
         if (onEnter)
           try {
-            const expr = parse(editor, lang, binds)
+            const expr = parse(ed, lang, binds)
             evt.preventDefault()
             clear = onEnter(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false)
           } catch (err) {
@@ -2396,7 +2363,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
               return elemInsert(query, el), setTimeout(elemRemove, 1000, el)
             } catch (e) { console.error(err) }
           }
-        if (clear) editor.textContent = ''
+        if (clear) ed.textContent = ''
         onInput && onInput(undefined, true)
       }
       function children(el, to) { // Set children of `el` to `to`.
@@ -2409,13 +2376,20 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
     },
   },
 
+  _evaluateWhileTyping:[
+    __is(`settings`),
+    true,
+    `Whether to evaluate results of expressions as they are typed in a REPL.`,
+  ],
+
   REPL:{
-    docs:`\`(REPL Language Bindings)\`: Creates a visual REPL instance (read-evaluate-print loop).`,
-    future:`Smooth out the jumping when editing multi-line strings.`,
+    docs:`\`(REPL Language Bindings)\`: Creates a visual REPL element (read-evaluate-print loop).`,
+    future:`Smooth out the jumping when editing multi-line strings, and when "evaluate while typing" is false.`,
     lookup:{
       editor:__is(`editor`),
       evaluator:__is(`evaluator`),
       daintyEvaluator:__is(`daintyEvaluator`),
+      _evaluateWhileTyping:__is(`_evaluateWhileTyping`),
     },
     call(lang = fancy, binds = new Map(Self.ctx)) {
       if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
@@ -2497,33 +2471,36 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         _removeChildren(pureOutput)
         if (penv !== undefined) _cancel(penv), waiting.remove(), penv = undefined, waiting = undefined
         let promise
-        if (!clear) promise = new Promise(then => {
-          const e = penv = _newExecutionEnv(env, null, lang, binds)
-          e[_id(log)] = waiting = _evaluationElem(penv), call.env = penv
-          const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
-          if (bindAs) expr = expr[2]
-          elemInsert(pureOutput, waiting)
-          _doJob([purify, struct(quote, expr)], penv, result => {
-            if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
-              result = result[1] // Display errors too.
-            if (bindAs) result = [_extracted, bindAs, result]
+        if (_evaluateWhileTyping[1]) {
+          if (!clear) promise = new Promise(then => {
+            const e = penv = _newExecutionEnv(env, null, lang, binds)
+            e[_id(log)] = waiting = _evaluationElem(penv), call.env = penv
+            const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
+            if (bindAs) expr = expr[2]
+            elemInsert(pureOutput, waiting)
+            _doJob([purify, struct(quote, expr)], penv, result => {
+              if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
+                result = result[1] // Display errors too.
+              if (bindAs) result = [_extracted, bindAs, result]
 
-            const pre = _smoothHeightPre(pureOutput)
-            try {
-              penv = undefined, waiting && waiting.remove(), waiting = undefined
-              if (!_isUnknown(result)) {
-                // Display `_logAll evaluator (Result)`.
-                elemInsert(pureOutput, daintyEvaluator([_logAll, evaluator, [quote, [result]]]))
-              } else {
-                const el = elem('button', 'Evaluate')
-                elemValue(el, result)
-                el.onclick = evaluateLast
-                elemInsert(pureOutput, el)
-              }
-            } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
+              const pre = _smoothHeightPre(pureOutput)
+              try {
+                penv = undefined, waiting && waiting.remove(), waiting = undefined
+                if (!_isUnknown(result)) {
+                  // Display `_logAll evaluator (Result)`.
+                  elemInsert(pureOutput, daintyEvaluator([_logAll, evaluator, [quote, [result]]]))
+                } else {
+                  const el = elem('button', 'Evaluate')
+                  elemValue(el, result)
+                  el.onclick = evaluateLast
+                  elemInsert(pureOutput, el)
+                }
+              } finally { _smoothHeightPost(pureOutput, pre), then(e[_id(userTime)]) }
+            })
+            _smoothHeightPost(pureOutput, pre)
           })
-          _smoothHeightPost(pureOutput, pre)
-        })
+        } else
+          elemInsert(pureOutput, button(evaluateLast, 'evaluate'))
         return promise
       }, .1, expr => lastExpr = expr)
 
@@ -2671,7 +2648,7 @@ Now, type \`(tutorial)\` and claim what's yours.`,
             // Evaluate the expression and check its validity.
             const pre = _smoothHeightPre(results)
             _removeChildren(results)
-            if (env) _cancel(env)
+            if (env) env.then ? env.cancel && env.cancel() : _cancel(env)
 
             env = _newExecutionEnv(null, null, lang, Self.ctx)
             elemInsert(results, env[_id(log)] = _evaluationElem(env))
@@ -2683,11 +2660,17 @@ Now, type \`(tutorial)\` and claim what's yours.`,
                 if (typeof canContinue == 'function') {
                   elemRemove(env[_id(log)])
                   env = _newExecutionEnv(env)
-                  results.append(env[_id(log)] = _evaluationElem(env))
-                  _schedule([canContinue, quote(result)], env, ok => {
-                    elemRemove(env[_id(log)])
-                    if (ok) passed = true, emit(), elemRemove(btn)
-                    env = null
+                  let evalElem
+                  results.append(evalElem = env[_id(log)] = _evaluationElem(env))
+                  _schedule([canContinue, quote(result)], env, function checkOk(ok) {
+                    if (ok && typeof ok == 'object' && ok.then) {
+                      ok.then(checkOk)
+                      env = ok
+                    } else {
+                      elemRemove(evalElem)
+                      if (ok) passed = true, emit(), elemRemove(btn)
+                      env = null
+                    }
                     expr = x
                   })
                 } else if (env = null, canContinue !== undefined)
@@ -2717,7 +2700,6 @@ Now, type \`(tutorial)\` and claim what's yours.`,
     docs:`\`editObject Object\`: allows the user to edit the runtime object in-place.
 \`editObject Object null\` checks whether the object is editable.
 \`editObject Object Language\` specifies the editor's language.`,
-    future:`Integrate it into contextMenu, as 📝.`,
     call(x, lang = fancy) {
       if (!_isArray(x) && defines(x, deconstruct) === undefined && !(x instanceof Map)) return
       if (defines(deconstruct(x), editObject) === false) return
@@ -2739,7 +2721,7 @@ Now, type \`(tutorial)\` and claim what's yours.`,
       const indicator = elem('span')
       let expr = x
       const ed = editor(initial, lang, Self.ctx, next => next !== undefined && updateIndicator(expr = next), next => {
-        writeAt(x, undefined, next)
+        _isArray(x) ? writeAt(x, undefined, next) : construct(x, next)
         expr = next, updateIndicator()
       })
       const observer = () => {
@@ -2764,36 +2746,32 @@ Now, type \`(tutorial)\` and claim what's yours.`,
   editRewrite:{
     docs:`\`editRewrite Global\`: changes the global for the next \`Rewrite\`.
 Also supports \`editRewrite Global null\` to check whether an object can be rewritten, and \`editRewrite Global Language\` to specify a different editing language.`,
-    future:`Put this in contextMenu, as 📄.`,
-    Initialize() {
-      editRewrite.ctx = new Map(Self.ctx)
-      editRewrite.ctx.delete(label('_globalScope'))
-    },
     call(x = undefined, lang = fancy) {
       const backctx = _invertBindingContext(Self.ctx)
       if (typeof x != 'object' && typeof x != 'function') return
       if (!lookup.parents.has(x) && !backctx.has(x)) return
       if (lang === null) return true
       let key = backctx.has(x) ? label(backctx.get(x)) : x
-      let value = editRewrite.ctx.has(x) ? editRewrite.ctx.get(x) : x
+      let keyPreview = key
+      let value = Rewrite.ctx.has(x) ? Rewrite.ctx.get(x) : x
       const indicator = elem('div')
       updateIndicator()
-      const keyEditor = editor(key === x ? '' : key[1], stringLanguage, editRewrite.ctx, k => {
-        if (k !== undefined) key = k ? label(k) : x, updateIndicator()
+      const keyEditor = editor(key === x ? '' : key[1], stringLanguage, Rewrite.ctx, k => {
+        if (k !== undefined) keyPreview = k ? label(k) : x, updateIndicator()
       }, k => {
-        editRewrite.ctx.delete(key)
-        key = k ? label(k) : x
-        value !== undefined && (editRewrite.ctx.set(key, value), editRewrite.ctx.set(x, value))
+        Rewrite.ctx.delete(key)
+        key = keyPreview = k ? label(k) : x
+        value !== undefined && (Rewrite.ctx.set(key, value), Rewrite.ctx.set(x, value))
         updateIndicator()
       })
-      const valueEditor = editor(serialize(deconstruct(value), lang), lang, editRewrite.ctx, v => {
+      const valueEditor = editor(serialize(deconstruct(value), lang), lang, Rewrite.ctx, v => {
         if (v !== undefined) value=v, updateIndicator()
       }, v => {
         value = v
         if (v !== undefined)
-          editRewrite.ctx.set(key, value), editRewrite.ctx.set(x, value)
+          Rewrite.ctx.set(key, value), Rewrite.ctx.set(x, value)
         else
-          editRewrite.ctx.delete(key), editRewrite.ctx.set(x, undefined)
+          Rewrite.ctx.delete(key), Rewrite.ctx.set(x, undefined)
         updateIndicator()
       })
       const rewritePreview = elemCollapse(function() {
@@ -2805,7 +2783,7 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
       return elem('div', [indicator, keyEditor, valueEditor, rewritePreview])
 
       function updateIndicator() {
-        const ctx = editRewrite.ctx
+        const ctx = Rewrite.ctx, key = keyPreview
         if (value === undefined)
           Self.ctx.has(key) ? ctx.set(key, Self.ctx.get(key)) : ctx.delete(key)
         else if (serialize(deconstruct(value), basic) === serialize(deconstruct(ctx.get(key)), basic))
@@ -2960,7 +2938,7 @@ Return stopIteration to stop iteration.`,
       [ch, i] = [ch.parentNode, [...ch.parentNode.childNodes].indexOf(ch) + (i ? 1 : 0)]
     if (ch && ch instanceof Element && i > ch.childNodes.length) i = ch.childNodes.length
     if (ch && !(ch instanceof Element) && i > ch.nodeValue.length) i = ch.nodeValue.length
-    !ch && ([ch, i] = [el, el.childNodes.length - (!el.lastChild.textContent ? 1 : 0) || 0])
+    !ch && ([ch, i] = [el, el.childNodes.length - (el.lastChild && !el.lastChild.textContent ? 1 : 0) || 0])
     if (into instanceof Selection) into.collapse(ch, i)
     else return [ch, i]
   },
@@ -2979,7 +2957,7 @@ Return stopIteration to stop iteration.`,
   _smoothHeight(el, f) {
     const pre = _smoothHeightPre(el)
     f()
-    _smoothHeightPost(el, pre)
+    _reflow().then(() => _smoothHeightPost(el, pre))
   },
 
   _smoothTransformPre(el) {
@@ -3109,7 +3087,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     philosophy:`Most people create programming languages to improve performance for specific cases or to prove their way of thinking superior to others, but I actually just wanted to be a wizard and use a PL to enhance my craft.`,
     call(x,y,w,h, n = Math.sqrt(w*h)/10) {
       if (_disableSmoothTransitions[1]) return
-      if (Math.random()<.8) return
+      if (Math.random()<.5) return
       const into = document.createElement('div')
       into.style.left = x + 'px'
       into.style.top = y + 'px'
@@ -3120,6 +3098,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
         p.style.top = Math.random() * h + 'px'
         p.style.setProperty('--x', (Math.random()*20-10) + 'px')
         p.style.setProperty('--y', (Math.random()*20-10) + 'px')
+        p.style.scale = 2 / (1 + Math.random()*5)
         into.append(p)
       }
       Self.into.append(into)
@@ -3657,33 +3636,20 @@ Equal-name labels are bound to the same thing within the same binding. Each unna
 Evaluating a bound label results in its value, in the current function call. Evaluating an unbound named label results in an \`(error)\`.`,
     examples:[
       [
-        `a a=1`,
+        `a a:1`,
         `1`,
       ],
       [
-        `a a 1 a a a=0`,
+        `a a 1 a a a:0`,
         `0 0 1 0 0`,
       ],
       [
-        `a a=(0 (a) a)`,
-        `a a=(0 (a) a)`,
+        `^a a:(0 (a) a)`,
+        `a a:(0 (a) a)`,
       ],
       [
-        `x→(sum \`x\` 1)`,
-        `x→(sum x 1)`,
-      ],
-      `Unnamed labels do not throw when evaluated:`,
-      [
-        `a a a=?`,
-        `a a a=?`,
-      ],
-      [
-        `? ?`,
-        `? ?`,
-      ],
-      [
-        `(a→a 5) a=?`,
-        `5`,
+        `^(sum \`x\` 1)`,
+        `^(sum x 1)`,
       ],
     ],
     nameResult:[
@@ -3904,19 +3870,85 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
   },
 
   call:{
+    future:`Test that the tutorial works.`,
+    tutorial:[
+      `Do you know how easy it is to make an interpreter of the DAG IR we use? Let's see.
+
+First, a very simple interpreter of trees, where no nodes (arrays) are shared. To evaluate an array, we want to \`apply\` the \`transform\`ed-with-evaluation array; non-arrays (\`select\` where \`_isArray ?\` returns false) should be returned as-is.`,
+      [
+        __is(`fancy`),
+        '',
+        function(fn) {
+          // It's easier to write the interpreter than to pattern-match these cases.
+          if (typeof fn != 'function') return
+          const ins = [5, [sum, 1, 2], [sum, [mult, [sum, 4, 6], 10], [divide, 10000, 100]]], outs = [5, 3, 200]
+          const env = _newExecutionEnv()
+          return {
+            then: then => void _schedule([transform, fn, quote(ins)], env, got => {
+              if (!_isArray(got) || got.length != 3) then(false)
+              then(outs.every((o,i) => got[i] === o))
+            }),
+            cancel() { _cancel(env) },
+          }
+        },
+      ],
+      `The intended solution was: \`eval eval:\\(select (_isArray ?) \\(apply (transform eval ?)) \\? ?)\`.
+On desktop, you can type out just the function without binding to \`eval\`, then put your cursor where the function goes to \`transform\`, then hover over the function and Control-click it.
+Also, do you not like the syntax? Then change it. Your world, your rules. Summon the context menu on \`_fancyOutermost\`, find its rewrite editor, edit it (don't forget to press Enter), then expand the next rewrite.
+
+A real interpreter would also handle \`quote (1 2 3)\`, and a real interpreter of inside-a-function would also handle \`input\`. These are trivial enough to handle, so here, care not.
+
+Instead, care about shared nodes. A node should remember its result. A \`map\` can remember keyed-by-node results, so here is a simple scheme: have \`m:{}\`, and return \`(mapRead m Node)\` if it does not equal \`_notFound\`, else return \`(mapWrite m Node …?)\`.
+Can you see the unhandled cases?
+`,
+      [
+        __is(`fancy`),
+        '',
+        function(fn) {
+          // No solution awaits you. Don't learn by imitating, learn by doing.
+          // The ability to just do it is in everyone, and you can do whatever you want to too.
+          let n = 0
+          const f = () => { ++n }
+          const node1 = [f]
+          if (typeof fn != 'function') return
+          const env = _newExecutionEnv()
+          return {
+            then: then => void _schedule([fn, [last, node1, [f], node1, node1]], env, () => then(n === 2)),
+            cancel() { _cancel(env) },
+          }
+        },
+      ],
+      `You are correct. Cycles would loop forever, and functions that share nodes (such as in recursion) will only evaluate them once.
+The former can be fixed by pre-storing the marker value "we are computing this node, do not rely on its results". The latter can be fixed by having the reference to the current map be mutable, and set/reset on function entry/exit.
+
+We're not instantly making production-quality code here, so you can be more relaxed than a bat hanging off a perch. If you reached this legitimately, then I'm so happy for you.
+
+Talk time.
+
+Why is it so hard to do the most trivial things? Are you unused to reinventing the most basic things; maybe confused on why anyone would ever want to do that?
+Basic things are foundations for everything else, and even minor changes in a base can mean arbitrarily big large-scale differences. The most obvious case is when it doesn't work or has a bug that needs to be worked around, but even little differences like "what order do we evaluate dependencies in" or "do we drop unneeded dependencies (and/or evaluate lazily)" or "do we do tail-call optimization, and do we have loops" need programs to adapt to that.
+There can be an urge to just go with what is learned over life's course, and effectively put the bases you've learned to create one super-base, but there is never just one thing that is the best for all cases ever, and that applies to foundations too. Infinity cannot be "worked around", so face it head-on.
+
+Now, why our particular DAG IR? Programs are straightforward to generate with it: while knowing the EXACT computation that produces a value, we can just create an array to signify a call with that value. Neither manipulating characters nor juggling variable scopes is required! Only pointer manipulation, same for both humans and machines.
+
+And, if it was this simple for us to come up with an interpreter, then it's just as easy for generated programs to come up with an interpreter (and with proper partial evaluation, there shouldn't even be any inherent cost in doing so). The fact that this sits on top of relatively complicated parsing and object-construction and visualization and other mechanisms doesn't really matter to users, whether human or otherwise. Extensibility by implementation.
+
+Well, no more words. Goodbye, and take care.
+`
+    ],
     docs:`\`call ^(Func …Args)\`: \`call\`s all sub-items, then applies the first value (the function) to the rest of values.
-Defining this allows function application. In fact, \`F=(function …)\` is the same as \`(concept {call F})\`.
+Defining this allows function application. In fact, \`F:(function …)\` is the same as \`(concept {call F})\`.
 Computation cycles are disallowed, and every node's value (array's value) is only computed once.
 
 
 All languages, and everything that does stuff, must have an internal representation (IR) of arbitrary computations.
 
-We chose our IR to be lambda-calculus-like: very simple and direct. But by itself, unlike Lambda calculus, our IR does not have closures, and needs a separate function to make them. This allows representing what actually happens in the machine much more closely.
+We chose our IR to be lambda-calculus-like: very simple and direct. But by itself, unlike Lambda calculus, our IR does not have closures, and needs a separate function to make them. This allows representing what actually happens in the machine more closely.
 (We don't directly provide even closures. An equivalent effect can be achieved with arrays/objects anyway. Compilers could gain more from doing more search, even of seeming fundamentals: for example, partially-evaluate long-existing closures.)
 
 Another difference is that our IR has no variable bindings, choosing to share nodes instead. This makes it easy to generate and inspect programs.
 
-It's simple so that it's easy to extend. Adding partial evaluation? Control flow? Parallel execution? Compilation to a different target? Self-modification? Simplicity itself, my friend. I'd extend it myself, but I want to use machine learning on these for optimal results, which is not trivial right now. But maybe I can work to make it more trivial to use?
+It's simple so that it's easy to extend. Adding partial evaluation? Parallel execution? Compilation to a different target? Self-modification? Simplicity itself, my friend. I'd extend it myself, but I want to use machine learning on these for optimal results, which is not trivial right now. But maybe I can work to make it more trivial to use?
 `,
     philosophy:`Programming languages are typically geared towards creating an abstraction layer that's convenient for humans to understand and use. Even Lisp has macros. Something so direct as this IR is unusual outside of machine code. Why would it be wanted?
 
@@ -3941,6 +3973,7 @@ I've known humans that rely on being like that for their daily life.
 They're often unable to quickly internalize novel viewpoints, and at best repeat my words when I introduce something new (at worst, if I'm not hitting the meaningless style and terminology just right, then I'm ignored entirely). Learning foundations instead of their consequences is an alien lifeform to them, and they're amazed by how little mistakes I make once I know stuff and how much I know. Sometimes, I see that they have original viewpoints, but when they share their inspirations, their views turn out to be a banal mix of interesting things they've seen. Maybe I just prefer a world where everyone is right in a different way, to a world where everyone is wrong if you dig deep enough.
 It's much more efficient to learn to repeat rather than understand, so the whole human society is like this.`,
     lookup:{
+      apply:__is(`apply`),
       func:__is(`func`),
       select:__is(`select`),
       last:__is(`last`),
@@ -3966,19 +3999,26 @@ It's much more efficient to learn to repeat rather than understand, so the whole
         // This loop is the actual computation.
         for (; i < y.length; ++i)
           y[i] = call(x[i])
+
+        // Call the function with args.
+        env.set(x, y = apply(y))
+        return y
       } catch (err) {
         env.delete(x)
         if (err === interrupt)
           interrupt(call, 2)(y, i)
         throw err
       }
+      // .env (current execution environment), .depth (current call depth).
+    },
+  },
 
-      // Call the function with args.
-      if (typeof y[0] != 'function')
-        error('Expected a function to call, got', y[0])
-      env.set(x, y[0].call(...y))
-      return env.get(x)
-      // .env (current execution environment), .input (the innermost function's input), .depth (current call depth).
+  apply:{
+    docs:`\`apply ^(Func …Args)\`: assuming that \`Func\` and \`Args\` are already evaluated, simply applies the function to arguments.`,
+    call(x) {
+      if (typeof x[0] != 'function')
+        error('Expected a function to call, got', x[0])
+      return x[0].call(...x)
     },
   },
 
@@ -4007,33 +4047,29 @@ Cycles are impossible to create using only this.`,
     future:`Make this, \`parse\`, and all their uses interrupt-proof.`,
     call(x) {
       const env = _allocMap() // original —> constructed|original
-      const backrefd = new Set // Whether we have any cyclic references to the node.
-      const cons = _allocArray() // original nodes that need to be constructed.
+      const unfinished = new Set // Whether we have not constructed a node yet.
       x = walk(x)
-      cons.forEach(x => construct(x, env.get(x))), cons.length = 0
-      _allocArray(cons)
       _allocMap(env)
       return x
 
       function walk(x) {
         if (!_isArray(x)) return x
-        if (env.has(x)) return backrefd.add(x), env.get(x)
+        if (env.has(x)) return env.get(x)
         if (!_isArray(x[0]) && defines(x[0], construct))
-          env.set(x, construct(x)), cons.push(x)
+          env.set(x, construct(x)), unfinished.add(x)
         else
           env.set(x, x)
         for (let i = 0; i < x.length; ++i)
           x[i] = walk(x[i])
-        if (!_isArray(x[0]) && typeof defines(x[0], construct) == 'function') {
-          if (backrefd.has(x))
-            error('User-defined constructs must not depend on their instances, as happened in', x)
-          backrefd.delete(x)
-          // To allow user-defined constructs, construct all potential dependencies then construct us.
-          cons.forEach(x => construct(x, env.get(x))), cons.length = 0
-          env.set(x, construct(x)), cons.push(x)
+        if (env.get(x) !== x) {
+          // To allow user-defined constructs, construct all (acyclic) potential dependencies then construct us.
+          for (let i=0; i < x.length; ++i)
+            if (unfinished.has(x[i]))
+              error('User-defined constructs must not depend on their instances, as happened in', x[i])
+          construct(x, env.get(x))
+          unfinished.delete(x)
           return env.get(x)
         }
-        backrefd.delete(x)
         return x
       }
     },
@@ -4044,7 +4080,7 @@ Cycles are impossible to create using only this.`,
 Globals and user-defined concepts that statically define this are constructed.
 
 This embodies a simple principle: a graph cannot be constructed without backpatching.
-(While this can be used to implement Lisp-like macros, please use \`^Code\` instead. \`construct\` is for non-array objects.)`,
+(While this can be used to implement Lisp-like macros, please call quoted code or apply functions instead. \`construct\` is for non-array objects.)`,
     call(x, obj = undefined) {
       if (_isArray(x))
         return typeof defines(x, construct) == 'function' ? defines(x, construct)(x, obj) : x
@@ -4071,7 +4107,7 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
     argCount:1,
     construct(x, obj) {
       if (obj === undefined) {
-        obj = arg => f.f(arg)
+        obj = arg => obj.f(arg)
         const d = obj[defines.key] = Object.create(null)
         d[_id(deconstruct)] = x
         d[_id(argCount)] = 1
@@ -4080,6 +4116,11 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
       } else
         obj.f = compile(x[1])
     },
+    nameResult:[
+      `f`,
+      `g`,
+      `h`,
+    ],
   },
 
   compile:{
@@ -4115,28 +4156,32 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
       code.push(`'use strict'`)
       code.push(`return function F(input) {`)
       code.push(` ${env(_checkInterrupt)}(F)`)
-      const backpatchVars = code.push(` VARIABLES`)
+      const backpatchVars = code.push(` VARIABLES`)-1
       code.push(` ++${env(call)}.depth`)
-      code.push(` try {`)
-      const backpatchStages1 = code.push(`  switch (stage) {`)
+      const backpatchStages0 = code.push(` try {`)-1
+      const backpatchStages1 = code.push(`  switch (stage) {`)-1
       emit(body)
-      const backpatchStages2 = code.push(`  }`)
+      const backpatchStages2 = code.push(`  }`)-1
       code.push(`  return ${varOf(body)}`)
       if (!nextStage)
         code[backpatchStages1] = code[backpatchStages2] = ''
 
       code[backpatchVars] = ` let [${nextStage ? 'stage=0,' : ''}${[...vars.values()]}] = ${env(interrupt)}(F)`
-      const listOfVars = nextStage ? ['stage', ...vars.values()] : [...vars.values()]
-      const chunkedVars = new Array(Math.ceil(listOfVars.length / 4)).fill().map((_, i) => listOfVars.slice(i*4, i*4+4)).join(')(')
-      code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F,${listOfVars.length})(${chunkedVars});  throw err }`)
+      if (nextStage) {
+        const listOfVars = nextStage ? ['stage', ...vars.values()] : [...vars.values()]
+        const chunkedVars = new Array(Math.ceil(listOfVars.length / 4)).fill().map((_, i) => listOfVars.slice(i*4, i*4+4)).join(')(')
+        code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F,${listOfVars.length})(${chunkedVars});  throw err }`)
+      } else code.push(` }`)
       code.push(` finally { --${env(call)}.depth }`)
       code.push(`}`)
       code.push(`//# sourceURL=${sourceURL}`)
 
-      const fn = Function([...consts.values()].join(','), code.join('\n'))(...consts.keys())
-      fn.lines = lines
-      _resolveStack.functions[sourceURL] = fn
-      return fn
+      try {
+        const fn = Function([...consts.values()].join(','), code.join('\n'))(...consts.keys())
+        fn.lines = lines
+        _resolveStack.functions[sourceURL] = fn
+        return fn
+      } catch (err) { console.error(code.join('\n')); throw err }
 
       function env(x) {
         // Returns the string that can be used to refer to the constant value.
@@ -4148,7 +4193,10 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
       function advanceStage(x) {
         if (!_isArray(x) && defines(x, noInterrupt))
           return
-        code.push(`   stage = ${nextStage}; case ${nextStage}:`)
+        if (nextStage)
+          code.push(`   stage = ${nextStage}; case ${nextStage}:`)
+        else
+          code.push(`   case 0:`)
         ++nextStage
       }
       function checkArgCount(x) {
@@ -4168,10 +4216,11 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
         if (!_isArray(x)) return env(x)
         if (vars.get(x) === null) error('Cycles in computation, at', x)
         if (vars.has(x)) return vars.get(x)
-        checkArgCount()
+        checkArgCount(x)
         vars.set(x, null)
+        const varName = 'v' + vars.size
         x.forEach(emit)
-        vars.set(x, 'v' + vars.size)
+        vars.set(x, varName)
         advanceStage(x)
         lines.push(code.length+3, x)
         code.push(`   ${vars.get(x)} = ${varOf(x[0])}(${x.slice(1).map(varOf)})`)
@@ -4192,23 +4241,24 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
   readAt:{
     docs:`\`read Array Index\`: reads the current value at a position in an array.`,
     argCount:2,
+    noInterrupt:true,
     call(arr, i) { return arr[i] },
   },
   writeAt:{
     docs:`\`write Array Index Value\`: changes the current value at a position in an array.
 If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
     argCount:3,
+    noInterrupt:true,
     call(arr, i, v) {
       if (i !== undefined) {
         if (arr[i] === v) return
         arr[i] = v
-      } else
-        // Replace the contents of the whole object.
-        if (_isArray(arr))
-          !_isArray(v) && error('Expected an array to replace', arr, 'with but got', v),
-          arr.length = 0, arr.push(...v) // …Replace contents of `arr` with contents of `v`…
-        else
-          construct(arr, v)
+      } else {
+        // Replace the contents of the whole array.
+        if (!_isArray(arr)) error('Expected an array but got', arr)
+        if (!_isArray(v)) error('Expected an array to replace', arr, 'with but got', v)
+        arr.length = 0, arr.push(...v)
+      }
       if (observe.rs && observe.rs.has(arr))
         !observe.changed.size && _schedule([_callChangeObservers], _newExecutionEnv()),
         observe.changed.add(arr)
@@ -4219,6 +4269,7 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
 If \`OnChange\` is not given, returns the current array of \`Array\`'s observers.
 Call this again with the same array and function to no longer call it.
 Many updates at the same time are merged into one call, scheduled in a separate task.`,
+    noInterrupt:true,
     call(arr, f, forceTo = undefined) {
       if (!_isArray(arr) && defines(arr, deconstruct) === undefined) return
       if (!observe.rs) observe.rs = new WeakMap, observe.changed = new Set
@@ -4279,6 +4330,93 @@ In JS: "(...args) => f(args)".`,
       }
     },
   },
+
+/* ML integration.
+  - Figure out how `call.pure` fits into everything.
+  - Impure functions that will recall their result on replay.
+  - `autograd(fn)—>func` so that we don't *always* have to write adjust defini
+tions. `adjust(fn, ins, out, dout)` for actual first-order adjustment.
+  - `loss2(result, assigned)` that can return undefined in 33% rolls (for dive
+rsifying training data), the default for op loss assignment.
+  - `_defaultNN(inputSz, outputSz)` for densely-connected NN autofunc creator.
+  - `rnnEnv(nn, featureSize)` and its ops: `choice(env)(...options)` and `choi
+ce(env) = actual` (`assign(choice(env), actual)`).
+    - More NN ops: `num(...sizes)(env)`.
+    - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc,
+ins = undefined)`.
+    - Function decorators (for recursivity of RNNs): `_envEnter(env, initialSt
+ate)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
+  - Replay buffers: every impure op in user-code leaves a trace in the replay 
+buffer, and `replay(updateMultiplier=.1, updateMaxMagnitude=1)` replays once, 
+returning avg loss.
+  - The interpreter loop integration: add to replay buffer and adjust a replay
+ (every action leaves an entry in a task-local array).
+  - …Do stuff, in tutorials, like instruction-generation or Metamath or optimi
+zing built-in primitives like peval or `replay` with our ML?
+*/
+
+
+
+
+
+// (The interpreter loop should handle three distinct execution traces: impure-replay tape, gradient tape, and the interrupt stack.)
+  // (And, they all should have definitions in execution env.)
+
+  adjust:{
+    docs:``,
+    lookup:{
+      save:__is(`adjustSave`),
+      load:__is(`adjustLoad`),
+    },
+    call(fn, ins, out, dout) {
+      // What should we do? Always defer to the definition, and even fail if it's not there?
+    },
+  },
+
+  adjustSave:{
+    docs:``,
+    call(x) {
+    },
+  },
+
+  adjustLoad:{
+    docs:``,
+    call() {
+    },
+  },
+
+  impure:{
+    docs:``,
+    lookup:{
+      load:__is(`impureLoad`),
+      save:__is(`impureSave`),
+    },
+    construct(x, obj) {
+    },
+    call() {
+      // Signifies that {the current operation} must be {recorded in a pure context} and {not cached in a non-pure one}.
+      //   Is temporary. TODO: remove it, and calls to it; replace with calls to impureLoad/impureSave.
+      if (call.pure) throw impure
+    },
+  },
+
+  impureLoad:{
+    docs:``,
+    call() {
+    },
+  },
+
+  impureSave:{
+    docs:``,
+    call(x) {
+    },
+  },
+
+
+
+
+
+
 
   defines:{
     docs:`\`(defines Data Code)\`: Gets the definition by Data of Code.
@@ -4353,7 +4491,11 @@ Rather than co-opting strings and files (duck typing, docstrings, documentation,
   map:{
     docs:`\`{Key Value Key Value …?}\` or \`(map Key Value Key Value …?)\`: a key-value store.
 The array-representation of a JS Map.
-Read keys with \`lookup\`.`,
+Read/write keys with \`mapRead\`/\`mapWrite\`, or read keys with \`lookup\`.`,
+    lookup:{
+      read:__is(`mapRead`),
+      write:__is(`mapWrite`),
+    },
     construct(x, obj) {
       if (obj === undefined) {
         // Pre-fill keys (with undefined).
@@ -4371,6 +4513,10 @@ Read keys with \`lookup\`.`,
       }
     },
   },
+
+  mapRead(m, k) { return m.has(k) ? m.get(k) : _notFound },
+
+  mapWrite(m, k, v) { v !== _notFound ? m.set(k, v) : m.delete(k);  return v },
 
   deconstruct:{
     docs:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
@@ -4742,7 +4888,7 @@ Somewhat usable in a REPL.`,
 
   bound:{
     docs:`\`(bound Bindings Expr)\`: When called, returns a copy-where-needed of \`Expr\` with all keys bound to values in \`Bindings\`, as if copying then changing in-place. When evaluated, also evaluates the result.
-Can be written as \`key=value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
+Can be written as \`key:value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
     examples:[
       [
         `(bound (map ^a 1) ^a)`,
@@ -4754,7 +4900,7 @@ Can be written as \`key=value\` in an array to bind its elements. Can be used to
       ],
       `Inner contexts are always bound first:`,
       [
-        `a=1 (a a=2) (a b) (a=3 a) b=4`,
+        `a:1 (a a:2) (a b) (a:3 a) b:4`,
         `(2) (1 4) (3)`,
         true
       ],
@@ -4943,6 +5089,7 @@ Putting all variables in a single global namespace is easy to develop, and gives
               name = nameAllocator(ch[i], undefined)
             if (typeof name == 'string') name = [label, name]
             currentAncestors.add(name)
+            if (x === ch[i]) unenv.set(copy, x)
             unenv.set(ch[i], name)
             names.set(ch[i], name)
           }
@@ -5402,7 +5549,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
         const reserialize = _throttled(((el, arr, lang, ctx, opt) => {
           return b => el.isConnected ? el.replaceWith(serialize(arr, lang, ctx, opt && {...opt, observe:false})) : observe(b, reserialize, false)
         })(resultElem, arr, lang, ctx, opt), .1)
-        unboundToBound.forEach((u,b) => {
+        unboundToBound.forEach((b,u) => {
           if (!backctx.has(b)) observe(b, reserialize, true)
         })
       }
@@ -5412,10 +5559,13 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       const nodeNames = styles && typeof document != ''+void 0 && new Map
       backctx.forEach((v,k) => boundToUnbound.set(k,k))
       const u = unbound(postDeconstructed, nameAllocator, boundToUnbound, maxDepth)
-      boundToUnbound.forEach((u,v) => {
-        if (v === u) return
-        if (unboundToBound.has(v)) v = unboundToBound.get(v)
-        ;(!unboundToBound.has(u) || !_isArray(v)) && unboundToBound.set(u, v)
+      boundToUnbound.forEach((u,b) => {
+        if (b === u) return
+        _isArray(b) && b[0] === bound && ([u,b] = [b, valueOfUnbound(u)])
+        if (unboundToBound.has(b)) b = unboundToBound.get(b)
+        if (!unboundToBound.has(u) || !_isArray(b))
+          unboundToBound.set(u, b),
+          _isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3 && unboundToBound.set(u[2], b)
       })
       boundToUnbound.clear()
       if (breakLength) breakLength -= offset * offsetWith.length
@@ -5430,9 +5580,10 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       else
         return inResult
 
-      function emit(f, u, arg1, arg2) {
+      function emit(f, u, arg1, arg2, arg3, arg4) {
         if (typeof f == 'function') {
           let v = valueOfUnbound(u)
+          if (typeof document != ''+void 0 && u instanceof Element && u.to !== v) elemValue(u, v)
           if (!styles) return unenv(u, v) === u ? f(emit, u, arg1, arg2) : ((struct || (struct = [])).push(unenv(u, v)), undefined)
           let prev = struct
           struct = undefined
@@ -5440,7 +5591,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
           const unenved = unenv(u, v)
           let r
           if (unenved === u)
-            r = f(emit, u, arg1, arg2)
+            r = f(emit, u, arg1, arg2, arg3, arg4)
           else
             struct = [unenved]
 
@@ -5480,11 +5631,10 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
 
       function valueOfUnbound(u, depth = 0) {
         if (depth>2) return
-        if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3) u = u[2]
+        if (unboundToBound.has(u)) return unboundToBound.get(u)
         if (typeof document != ''+void 0 && u instanceof Element && 'to' in u)
           return u.to
         if (backctx.has(u)) return u
-        if (unboundToBound.has(u)) return unboundToBound.get(u)
         if (_isDOM(u)) return u
         if (_isArray(u) && u.length == 1 && u[0] !== u) return valueOfUnbound(u[0], depth+1)
         if (_isArray(u) && u.length == 3 && u[0] === _extracted) return [_extracted, valueOfUnbound(u[1]), valueOfUnbound(u[2])]
@@ -5763,14 +5913,14 @@ And parsing is more than just extracting meaning from a string of characters (it
           else --column
       }
 
-      function match(f, arg1, arg2) {
+      function match(f, arg1, arg2, arg3, arg4) {
         // If a function, call it;
           // if _specialParsedValue or string or regex, match and return one if possible;
           // if a number, set global index; if undefined, get global index.
         if (typeof f == 'function') {
           const start = i, startLen = struct && struct.length
           const startLine = line, startColumn = column
-          const r = f(match, _specialParsedValue, arg1, arg2)
+          const r = f(match, _specialParsedValue, arg1, arg2, arg3, arg4)
           _unrollRest(r)
           if (start < i) {
             if (struct) {
@@ -5793,7 +5943,7 @@ And parsing is more than just extracting meaning from a string of characters (it
           }
         } else if (typeof f == 'string') {
           if (typeof localS == 'string' && localS.slice(i - curBegin, i+f.length - curBegin) === f)
-            return i += f.length, struct && lastI < i && struct.push(localS.slice(lastI - curBegin, i - curBegin)), lastI = i, localUpdate(i), true
+            return i += f.length, struct && lastI < i && struct.push(localS.slice(lastI - curBegin, i - curBegin)), lastI = i, localUpdate(i), f || true
           return false
         } else if (f instanceof RegExp) {
           if (typeof localS != 'string') return
@@ -5819,7 +5969,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       // Do binding with the original⇒copy map preserved so that we can style structure bottom-up properly.
       const env = (styles || sourceURL) && new Map
       let b = styles || sourceURL ? bound(ctx, u, true, env) : bound(ctx, u, true)
-      b = makeGraph(b)
+      try { b = makeGraph(b) } catch (err) { console.error(err) } // This swallowing is not user-friendly.
 
       function styleNode(struct) {
         if (typeof document != ''+void 0 && struct instanceof Node) return struct
@@ -5887,27 +6037,28 @@ And parsing is more than just extracting meaning from a string of characters (it
     return match(a.length < b.length ? a : b)
   },
 
-  _basicExtracted(match, u, value) { // c=x
+  _basicExtracted(match, u, base) { // c:x
     if (u === _specialParsedValue) {
-      const key = match(value)
-      if (key !== undefined && match(/\s*=\s*/y)) {
-        const v = match(value)
+      const key = match(base)
+      if (key !== undefined && match(/\s*:\s*/y)) {
+        const v = match(base)
         v === undefined && match.notEnoughInfo("Expected an actual value to be extracted")
         return [_extracted, key, v]
       } else return key
     }
     if (_isArray(u) && u[0] === _extracted && u.length == 3)
-      match(value, u[1]), match('='), match(value, u[2])
-    else match(value, u)
+      match(base, u[1]), match(':'), match(base, u[2])
+    else match(base, u)
   },
 
-  _basicMany(match, u, value, head) { // a b c c=x
+  _basicMany(match, u, syntax, base) { // a b c c:x
+    // syntax: [null, ' ', /\s+/y], or ['map', ', ', /\s*,\s*/y]
     if (u === _specialParsedValue) {
-      const arr = !head ? [] : [head]
+      const arr = !syntax || !syntax[0] ? [] : [syntax[0]]
       let ctx
       while (true) {
-        match(/\s+/y)
-        const v = match(_basicExtracted, value)
+        match(syntax && syntax[2] || /\s+/y)
+        const v = match(_basicExtracted, base)
         if (v === undefined) break
         if (_isArray(v) && v[0] === _extracted)
           (ctx || (ctx = new Map)).set(v[1], v[2])
@@ -5920,65 +6071,61 @@ And parsing is more than just extracting meaning from a string of characters (it
     let ctx
     if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3)
       ctx = u[1], u = u[2]
-    _fancyGrouping.pos && _fancyGrouping.pos.delete(match())
-    for (let b = false, j = !head ? 0 : 1; j < u.length; ++j) {
-      b ? match(' ') : (b = true)
-      match(_basicExtracted, u[j], value)
-    }
-    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], value)))
+    _needsGrouping.pos && _needsGrouping.pos.delete(match())
+    if (_isArray(u))
+      for (let b = false, j = !syntax || !syntax[0] ? 0 : 1; j < u.length; ++j) {
+        b ? match(syntax && syntax[1] || ' ') : (b = true)
+        match(_basicExtracted, u[j], base)
+      }
+    else
+      match(_basicExtracted, u, base)
+    if (ctx) ctx.forEach((v,k) => (match(syntax && syntax[1] || ' '), match(_basicExtracted, [_extracted, k, v], base)))
   },
 
-  _basicCall(match, u, value) { // (a b c c=x)
+  _basicCall(match, u, _, base) { // (a b c c:x)
+    return _matchBrackets(match, u, _basicMany, null, '(', ')', base)
+  },
+
+  _fancyMap(match, u, _, base) { // {a b c c:x}
+    return _matchBrackets(match, u, _basicMany, 'map', '{', '}', base)
+  },
+
+  _matchBrackets(match, u, base, head, open, close, arg1, arg2) { // (base)
     if (u === _specialParsedValue) {
-      if (!match('(')) return
-      const arr = _basicMany(match, u, value)
-      if (!match(')')) match.notEnoughInfo('Expected a closing bracket')
+      if (!match(open)) return
+      const arr = base(match, u, head && [label(head)], arg1, arg2)
+      if (!match(close)) match.notEnoughInfo('Expected a closing bracket')
       return arr
     }
-    if (!_isArray(u)) throw "A call must be an array"
-    match('('), _basicMany(match, u, value), match(')')
+    match(open), base(match, u, head && [_unctx(head)], arg1, arg2), match(close)
   },
 
-  _fancyMap(match, u, value) { // {a b c c=x}
+  _basicValue(match, u, callSyntax, base) { // String or label or call.
+    const isEm = base !== _basicOutermost
     if (u === _specialParsedValue) {
-      if (!match('{')) return
-      const arr = _basicMany(match, u, value, label('map'))
-      if (!match('}')) match.notEnoughInfo('Expected a closing bracket')
-      return arr
-    }
-    match('{'), _basicMany(match, u, value, _unctx('map')), match('}')
-  },
-
-  _basicValue(match, u, callSyntax, value) { // String or label or call.
-    const isEm = value === _fancyOutermost
-    if (u === _specialParsedValue) {
-      if (isEm && match('?')) return [label('label')]
+      if (isEm && match('?')) return label('input')
       let r
       if ((r = match(_specialParsedValue)) !== undefined) return r
       if ((r = match(_basicString)) !== undefined) return r
       if ((r = match(_basicLabel)) !== undefined) return r
-      if (isEm && (r = match(_fancyMap, value)) !== undefined) return r
-      if ((r = match(callSyntax, value)) !== undefined) return r
+      if (isEm && (r = match(_fancyMap, null, base)) !== undefined) return r
+      if ((r = match(callSyntax, null, base)) !== undefined) return r
       return
     }
-    else if (isEm && _isArray(u) && u[0] === label && u.length == 1)
-      match('?')
     else if (typeof u == 'string')
       match(_basicString, u)
-    else if (typeof u == 'number')
-      match(_basicLabel, u)
-    else if (_isLabel(u))
+    else if (typeof u == 'number' || _isLabel(u))
       match(_basicLabel, u)
     else if (_isArray(u) && u[0] === _extracted && u.length == 3)
-      match(_basicExtracted, u, value)
+      match(_basicExtracted, u, base)
     else if (_isArray(u) && u[0] === _unctx('map'))
-      match(_fancyMap, u, value)
+      match(_fancyMap, u, null, base)
     else if (_isArray(u))
-      match(callSyntax, u, value)
+      match(callSyntax, u, null, base)
     else match(u)
   },
 
-  _needsGrouping(match) { return _fancyGrouping.pos && _fancyGrouping.pos.has(match()) },
+  _needsGrouping(match) { return _needsGrouping.pos && _needsGrouping.pos.has(match()) },
 
   _emitGrouping(match, need) {
     if (need === undefined)
@@ -5986,170 +6133,87 @@ And parsing is more than just extracting meaning from a string of characters (it
     if (need) match(']')
   },
 
-  _fancyGrouping(match, u, topLevel) { // [x]
-    if (u === _specialParsedValue) {
-      if (!match(/\s*\[\s*/y)) return _basicValue(match, u, _basicCall, _fancyOutermost)
-      const r = _basicMany(match, u, _fancyOutermost)
-      if (r === undefined || !r.length) match.notEnoughInfo('Expected a value to group')
-      if (!match(/\s*\]\s*/y)) match.notEnoughInfo("Expected a closing grouping bracket")
-      return r.length == 1 ? r[0] : r
-    }
-    if (!_fancyGrouping.pos) _fancyGrouping.pos = new Set
-    const pos = match()
-    if (_fancyGrouping.pos.has(pos)) {// Emit base if the second pass is over.
-      return _basicValue(match, u, !topLevel ? _basicCall : _basicMany, _fancyOutermost)
-    }
-    _fancyGrouping.pos.add(pos)
-    try { // Do a second pass. It's not fast, but `fast` exists to make that not a problem.
-      return match(_fancyOutermost, u, topLevel)
-    } finally { _fancyGrouping.pos.delete(pos) }
-  },
-
-  _fancyLookup(match, u, topLevel) { // obj.key
-    if (u === _specialParsedValue) {
-      let obj = match(_fancyGrouping)
-      if (obj === undefined) return
-      while (match(/\s*\.(?!\.\.)\s*/y)) {
-        let key = match(_basicLabel)
-        if (key === undefined) obj = struct(label('lookup'), obj)
-        else obj = struct(label('lookup'), obj, _isLabel(key) ? key[1] : key)
-      }
-      return obj
-    }
-    if (_isArray(u) && u[0] === _unctx('lookup') && (u[2] === undefined || typeof u[2] == 'number' || typeof u[2] == 'string')) {
-      const g = _emitGrouping(match)
-      _fancyLookup(match, u[1]), match('.')
-      if (u[2] !== undefined) match(_basicLabel, typeof u[2] == 'string' ? label(u[2]) : u[2])
-      _emitGrouping(match, g)
-    } else match(_fancyGrouping, u, topLevel)
-  },
-
-  _fancyRest(match, u, topLevel) { // …a, ...a; ^a
-    if (u === _specialParsedValue) {
-      if (match('…') || match('...')) {
-        const r = match(_fancyLookup)
-        r === undefined && match.notEnoughInfo('Expected the rest')
-        return struct(label('rest'), r)
-      }
-      if (match('^')) {
-        const r = match(_fancyRest)
-        r === undefined && match.notEnoughInfo('Expected the quoted value')
-        return struct(label('quote'), r)
-      }
-      return match(_fancyLookup)
-    }
-    let g
-    if (_isArray(u) && u[0] === _unctx('rest') && u.length == 2)
-      g = _emitGrouping(match), match('…'), match(_fancyLookup, u[1]), _emitGrouping(match, g)
-    else if (_isArray(u) && u[0] === _unctx('quote') && u.length == 2)
-      g = _emitGrouping(match), match('^'), match(_fancyRest, u[1]), _emitGrouping(match, g)
-    else match(_fancyLookup, u, topLevel)
-  },
-
-  _fancyMultDiv(match, u, topLevel) { // a*b, a/b
-    if (u === _specialParsedValue) {
-      let a = match(_fancyRest), op
-      if (a === undefined) return
-      while (op = match(/(\s*)(?:\*|\/)\1/y)) {
-        const b = match(_fancyRest)
-        b === undefined && match.notEnoughInfo('Expected the second arg of +')
-        a = struct(label(op.trim() === '*' ? 'mult' : 'divide'), a, b)
-      }
-      return a
-    }
-    let g
-    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('mult') || u[0] === _unctx('divide')))
-      g = _emitGrouping(match),
-      match(_fancyMultDiv, u[1]), match(u[0] === _unctx('mult') ? '*' : '/'), match(_fancyRest, u[2]),
-      _emitGrouping(match, g)
-    else match(_fancyRest, u, topLevel)
+  pow(a,b) {
+    return Math.pow(a,b)
   },
 
   _unctx(s) { return serialize.ctx.get(label(s)) },
 
-  _fancySumSub(match, u, topLevel) { // a+b, a-b
+  _matchLtR(match, u, topLevel, base, reprs) { // [[a+b]+c]+d
+    // Parses/serializes two-arg functions as left-to-right strings.
+    //   reprs: ['sum', '+', /\+/y, 'sub', '-', /\-/y].
     if (u === _specialParsedValue) {
-      let a = match(_fancyMultDiv), op
+      let a = match(base), op
       if (a === undefined) return
-      while (op = match(/(\s*)(?:\+|-(?!>))\1/y)) {
-        const b = match(_fancyMultDiv)
-        b === undefined && match.notEnoughInfo('Expected the second arg of '+op)
-        a = struct(label(op.trim() === '+' ? 'sum' : 'subtract'), a, b)
+      outer: while (true) {
+        for (let i=0; i < reprs.length; i += 3)
+          if (op = match(reprs[i+2])) {
+            const b = match(base)
+            b === undefined && match.notEnoughInfo('Expected the second arg of '+op.trim())
+            a = struct(label(reprs[i]), a, b)
+            continue outer
+          }
+        break
       }
       return a
     }
-    let g
-    if (_isArray(u) && u.length == 3 && (u[0] === _unctx('sum') || u[0] === _unctx('subtract')))
-      g = _emitGrouping(match),
-      match(_fancySumSub, u[1]), match(u[0] === _unctx('sum') ? '+' : '-'), match(_fancyMultDiv, u[2]),
-      _emitGrouping(match, g)
-    else match(_fancyMultDiv, u, topLevel)
-  },
-
-  _matchOperator(match, u, base, str, parseOp, serializeOp, topLevel) { // a OP b
-    if (u === _specialParsedValue) {
-      const v = match(base)
-      if (v === undefined) return
-      if (match(parseOp)) {
-        const t = match(base)
-        t === undefined && match.notEnoughInfo('Expected the type')
-        return struct(label(str), v, t)
+    for (let i=0; i < reprs.length; i += 3) {
+      if (_isArray(u) && u.length == 3 && u[0] === _unctx(reprs[i])) {
+        const g = _emitGrouping(match)
+        _matchLtR(match, u[1], topLevel, base, reprs), match(reprs[i+1]), match(base, u[2])
+        _emitGrouping(match, g)
+        return
       }
-      return v
     }
-    let g
-    if (_isArray(u) && u[0] === _unctx(str) && u.length == 3)
-      g = _emitGrouping(match),
-      match(base, u[1]), match(serializeOp), match(base, u[2]),
-      _emitGrouping(match, g)
-    else match(base, u, topLevel)
+    match(base, u, topLevel)
   },
 
-  _fancyTyped(match, u, topLevel) { // v:t
-    return _matchOperator(match, u, _fancySumSub, 'typed', /(\s*):\1/y, ':', topLevel)
-  },
-
-  _fancyFirst(match, u, topLevel) { // a\b\c
-    return _matchSequence(match, u, topLevel, _fancyTyped, 'first', /\s*\\\s*/y, '\\')
-  },
-
-  _fancyLast(match, u, topLevel) { // a,b,c
-    return _matchSequence(match, u, topLevel, _fancyFirst, 'last', /\s*\,\s*/y, ',')
-  },
-
-  _fancyArrowFunc(match, u, topLevel) { // a→b, a->b
+  _matchRtL(match, u, topLevel, baseLeft, baseRight, reprs) { // a^[b^[c^d]]
+    // reprs: ['pow', '**', /\s*\*\*\s*/y]
     if (u === _specialParsedValue) {
-      const a = match(_fancyLast)
+      let a = match(baseLeft), op
       if (a === undefined) return
-      if (match(/\s*(?:→|->)\s*/y)) {
-        const b = match(_fancyClosure)
-        b === undefined && match.notEnoughInfo('Expected the body of an arrow function')
-        return struct(label('function'), a, b)
-      }
+      for (let i=0; i < reprs.length; i += 3)
+        if (op = match(reprs[i+2])) {
+          const b = match(baseRight)
+          b === undefined && match.notEnoughInfo('Expected the second arg of '+op.trim())
+          a = struct(label(reprs[i]), a, b)
+        }
       return a
     }
-    let g
-    if (_isArray(u) && u[0] === _unctx('function') && u.length == 3)
-      g = _emitGrouping(match),
-      match(_fancyLast, u[1]), match(typeof document != ''+void 0 ? '→' : '->'), match(_fancyClosure, u[2]),
-      _emitGrouping(match, g)
-    else match(_fancyLast, u, topLevel)
+    if (_isArray(u) && u.length == 3)
+      for (let i=0; i < reprs.length; i += 3)
+        if (u[0] === _unctx(reprs[i])) {
+          const g = _emitGrouping(match)
+          match(_matchRtL, u[1], topLevel, baseLeft, baseRight, reprs), match(reprs[i+1]), match(baseRight, u[2])
+          _emitGrouping(match, g)
+          return
+        }
+    match(baseLeft, u, topLevel)
   },
 
-  _fancyClosure(match, u, topLevel) { // !f, !a→b
+  _matchUnary(match, u, topLevel, base, reprs) { // ^x, …x, \x
+    // reprs: ['quote', '^', /^/y]
     if (u === _specialParsedValue) {
-      if (match('!')) {
-        const r = match(_fancyArrowFunc)
-        return r !== undefined ? struct(label('closure'), r) : undefined
+      let op
+      for (let i=0; i < reprs.length; i += 3) {
+        if (op = match(reprs[i+2])) {
+          const b = match(base)
+          b === undefined && match.notEnoughInfo('Expected the arg of '+op.trim())
+          return struct(label(reprs[i]), b)
+        }
       }
-      return match(_fancyArrowFunc)
+      return match(base)
     }
-    let g
-    if (_isArray(u) && u[0] === _unctx('closure') && u.length == 2)
-      g = _emitGrouping(match),
-      match('!'), match(_fancyArrowFunc, u[1]),
-      _emitGrouping(match, g)
-    else match(_fancyArrowFunc, u, topLevel)
+    if (_isArray(u) && u.length == 2)
+      for (let i=0; i < reprs.length; i += 3)
+        if (u[0] === _unctx(reprs[i])) {
+          const g = _emitGrouping(match)
+          match(reprs[i+1]), match(base, u[1])
+          _emitGrouping(match, g)
+          return
+        }
+    base(match, u, topLevel)
   },
 
   _matchSequence(match, u, topLevel, base, head, parseSep, separator = parseSep) {
@@ -6173,24 +6237,60 @@ And parsing is more than just extracting meaning from a string of characters (it
     } else match(base, u, topLevel)
   },
 
-  _fancyTry(match, u, topLevel) { // a|b|c
-    return _matchSequence(match, u, topLevel, _fancyClosure, 'try', /\s*\|\s*/y, '|')
-  },
-
   _fancyOutermost(match, u, topLevel) {
     let ctx, needsGrouping = !topLevel || match()
     if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3)
-      ctx = u[1], u = u[2], needsGrouping && match('[')
-    const r = _fancyTry(match, u, topLevel)
-    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], _fancyTry))), needsGrouping && match(']')
+      ctx = u[1], u = u[2], needsGrouping = needsGrouping && match('[')
+    const r = fancyFunc(match, u, topLevel)
+    if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], fancyFunc))), needsGrouping && match(']')
     return r
+
+    // It's not efficient, but the important thing is that it's quite readable.
+    function fancyFunc(match, u, topLevel) { // \f
+      return _matchUnary(match, u, topLevel, fancyLast, ['func', '\\', '\\'])
+    }
+    function fancyLast(match, u, topLevel) { // a,b,c
+      return _matchSequence(match, u, topLevel, fancySumSub, 'last', /\s*\,\s*/y, ',')
+    }
+    function fancySumSub(match, u, topLevel) { // a+b, a-b
+      return _matchLtR(match, u, topLevel, fancyMultDiv, ['sum', '+', /(\s*)\+\1/y, 'subtract', '-', /(\s*)-(?!>)\1/y])
+    }
+    function fancyMultDiv(match, u, topLevel) { // a*b, a/b
+      return _matchLtR(match, u, topLevel, fancyPow, ['mult', '*', /(\s*)\*\1/y, 'divide', '/', /(\s*)\/\1/y])
+    }
+    function fancyPow(match, u, topLevel) { // a**b
+      return _matchRtL(match, u, topLevel, fancyRest, fancyPow, ['pow', '**', /(\s*)\*\*\1/y])
+    }
+    function fancyRest(match, u, topLevel) { // …a, ...a; ^a
+      return _matchUnary(match, u, topLevel, fancyGrouping, ['quote', '^', '^', 'rest', '…', /…|\.\.\./y])
+    }
+    function fancyGrouping(match, u, topLevel) { // [x]
+      if (u === _specialParsedValue) {
+        if (!match(/\s*\[\s*/y)) return _basicValue(match, u, _basicCall, _fancyOutermost)
+        const r = _basicMany(match, u, null, _fancyOutermost)
+        if (r === undefined || !r.length) match.notEnoughInfo('Expected a value to group')
+        if (!match(/\s*\]\s*/y)) match.notEnoughInfo("Expected a closing grouping bracket")
+        return r.length == 1 ? r[0] : r
+      }
+      // Serialize grouping brackets via first trying to serialize without them, then emitting them if arrived at the same spot.
+      //   It's not fast, but `basic` and `fast` exist to make that not a problem.
+      if (!_needsGrouping.pos) _needsGrouping.pos = new Set
+      const pos = match()
+      if (_needsGrouping.pos.has(pos)) { // Emit base if the second pass is over.
+        return _basicValue(match, u, !topLevel ? _basicCall : _basicMany, _fancyOutermost)
+      }
+      _needsGrouping.pos.add(pos)
+      try {
+        return match(_fancyOutermost, u, topLevel)
+      } finally { _needsGrouping.pos.delete(pos) }
+    }
   },
 
   _basicOutermost(match, u) { return _basicValue(match, u, _basicCall, _basicOutermost) },
 
-  _fancyTopLevel(match, u) { // (f); a b c c=x; a=b
+  _fancyTopLevel(match, u) { // (f); a b c c:x; a:b
     if (u === _specialParsedValue) {
-      let arr = _basicMany(match, u, _fancyOutermost)
+      let arr = _basicMany(match, u, null, _fancyOutermost)
       match(/\s+/y)
       if (!_isArray(arr)) return arr
 
@@ -6208,9 +6308,9 @@ And parsing is more than just extracting meaning from a string of characters (it
     _fancyOutermost(match, !_isArray(u) || u.length <= 1 ? [u] : u, true)
   },
 
-  _basicTopLevel(match, u) { // (f); a b c c=x; a=b
+  _basicTopLevel(match, u) { // (f); a b c c:x; a:b
     if (u === _specialParsedValue) {
-      let arr = _basicMany(match, u, _basicOutermost)
+      let arr = _basicMany(match, u, null, _basicOutermost)
       match(/\s+/y)
       if (!_isArray(arr)) return arr
 
@@ -6225,18 +6325,18 @@ And parsing is more than just extracting meaning from a string of characters (it
 
       return arr
     }
-    return _basicMany(match, !_isArray(u) || u.length <= 1 ? [u] : u, _basicOutermost)
+    return _basicMany(match, !_isArray(u) || u.length <= 1 ? [u] : u, null, _basicOutermost)
   },
 
   basic:{
     docs:`A language for ordered-edge-list graphs. Text, numbers, structures, and connections.
-\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a=2 a)\`.
+\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`.
 This is a {more space-efficient than binary} representation for graphs of arrays.`,
     philosophy:`Lisp was nice for its time, but now we can have nice UI and AI, so Lisp needed a remastering.`,
     style:__is(`_basicStyle`),
     parse:__is(`_basicTopLevel`),
     serialize:__is(`_basicTopLevel`),
-    REPL:`\`(txt)\` for {all functionality}, \`(examples)\` for {all tests}.`,
+    REPL:`also see \`(docs)\` or \`tutorial tutorial\`.`,
     insertLinkTo:__is(`_basicLinkTo`),
     _escapeLabel:__is(`_basicEscapeLabel`),
     _unescapeLabel:__is(`_basicUnescapeLabel`),
@@ -6244,11 +6344,11 @@ This is a {more space-efficient than binary} representation for graphs of arrays
 
   fancy:{
     docs:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
-\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a=2 a)\`; \`1+2\`, \`x→x*2\`, \`2*[1+2]\`.`,
+\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`; \`1+2\`, \`x→x*2\`, \`2*[1+2]\`.`,
     style:__is(`_basicStyle`),
     parse:__is(`_fancyTopLevel`),
     serialize:__is(`_fancyTopLevel`),
-    REPL:`\`(docs)\` for {all functionality}, \`(examples)\` for {all tests}.`,
+    REPL:`also type \`(tutorial tutorial)\` or \`(docs)\`.`,
     insertLinkTo:__is(`_basicLinkTo`),
     _escapeLabel:__is(`_basicEscapeLabel`),
     _unescapeLabel:__is(`_basicUnescapeLabel`),
@@ -6261,12 +6361,12 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       ],
       `Operators' labels can be re-bound:`,
       [
-        `1+2 sum='Sum'`,
+        `1+2 sum:'Sum'`,
         `'Sum' 1 2`,
         true
       ],
       [
-        `![1+2] closure=quote sum=mult`,
+        `\[1+2] func:quote sum:mult`,
         `1*2`,
         true
       ],
@@ -6274,11 +6374,11 @@ This is a {more space-efficient than binary} representation for graphs of arrays
   },
 
   _basicLinkTo(r, el) {
-    // Create a name not seen in editor, replace el with name, insert newline and name and '=' and el at editor's end, and return a name element.
-      // × (1 2 3)  ⇒  a a  a=(1 2 3)
-    const editor = _isEditable(el), names = new Set
-    if (el === editor) return
-    _visitText(editor, str => typeof str == 'string' && names.add(str))
+    // Create a name not seen in editor, replace el with name, insert newline and name and ':' and el at editor's end, and return a name element.
+      // × (1 2 3)  ⇒  a a  a:(1 2 3)
+    const ed = _isEditable(el), names = new Set
+    if (el === ed) return
+    _visitText(ed, str => typeof str == 'string' && names.add(str))
     let i = 0, name, rBecomes, elBecomes
     if (el.tagName === 'EXTRACTED') el = el.lastChild
     if (el.parentNode.tagName === 'EXTRACTED' && el.parentNode.parentNode.contains(r.commonAncestorContainer))
@@ -6288,22 +6388,22 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     else if (el.tagName === 'NUMBER')
       name = el.innerText
     else {
-      const v = quote(el.to)
-      const proposals = _isArray(v) && typeof v[0] == 'function' && nameResult(v[0]) || []
+      const v = el.to
+      const proposals = _isArray(v) && nameResult(v) || []
       while (names.has(name = i < proposals.length ? proposals[i] : toString(i - proposals.length, 'abcdefghijklmnopqrstuvwxyz'))) ++i
-      const topLevel = el.parentNode === editor || el.parentNode.parentNode === editor
+      const topLevel = el.parentNode === ed || el.parentNode.parentNode === ed
       rBecomes = document.createTextNode(name)
       r.deleteContents(), r.insertNode(rBecomes), r.setEndAfter(rBecomes)
       el.replaceWith(elBecomes = document.createTextNode(name))
-      if (_isArray(v) && v.length > 1 && topLevel && el.firstChild.textContent[0] !== '(')
+      if (_isArray(v) && v.length > 1 && topLevel && !el.classList.contains('hasOperators') && el.firstChild.textContent[0] !== '(')
         el = elem('node', ['(', el, ')'])
-      editor.append('\n'+name+'=', el)
+      ed.append('\n'+name+':', el)
     }
     if (!rBecomes) {
       rBecomes = document.createTextNode(name)
       r.deleteContents(), r.insertNode(rBecomes), r.setEndAfter(rBecomes)
     }
-    ensureSpacesAround(editor, rBecomes, elBecomes)
+    ensureSpacesAround(ed, rBecomes, elBecomes)
 
 
     function toString(i, alphabet) {
@@ -6411,16 +6511,16 @@ Does not merge the parsed arrays.`,
         `12`,
       ],
       [
-        `fast.parse '(a=(b) b=(a) a)'`,
-        `a a=((a))`,
+        `fast.parse '(a:(b) b:(a) a)'`,
+        `a a:((a))`,
       ],
       [
-        `fast.parse (fast.serialize ^(a b a=(b) b=(a)))`,
-        `a b a=(b) b=(a)`,
+        `fast.parse (fast.serialize ^(a b a:(b) b:(a)))`,
+        `a b a:(b) b:(a)`,
       ],
       [
-        `fast.serialize ^(a b a=(b) b=(a)) undefined (jsEval '{humanReadableMode:true}')`,
-        `'(&0=(&1) &1=(&0) (&0 &1))'`,
+        `fast.serialize ^(a b a:(b) b:(a)) undefined (jsEval '{humanReadableMode:true}')`,
+        `'(&0:(&1) &1:(&0) (&0 &1))'`,
       ],
       [
         `fast.parse '("a""b")'`,
@@ -6432,7 +6532,7 @@ Does not merge the parsed arrays.`,
         // ctx is an object here, not a Map from label objects like in `parse`.
         if (!str) throw "Expected input"
         if (!ctx) ctx = defines(Self, lookup)
-        const regex = /[ \n]+|=|\(|\)|`(?:[^`]|``)*`|'(?:[^']|'')*'|"(?:[^"]|"")*"|[^ \n=\(\)'"`]+|$/g
+        const regex = /[ \n]+|:|\(|\)|`(?:[^`]|``)*`|'(?:[^']|'')*'|"(?:[^"]|"")*"|[^ \n:\(\)'"`]+|$/g
         let [i = 0, j, ctxs = [ctx], visited = new Set] = interrupt(fast)
         regex.lastIndex = i
         if (j === undefined) regex.test(str), j = regex.lastIndex
@@ -6453,9 +6553,9 @@ Does not merge the parsed arrays.`,
           const arr = []
           let bindings
           ctxs.push(bindings)
-          while (i < str.length && str[i] !== '=' && str[i] !== ')') {
+          while (i < str.length && str[i] !== ':' && str[i] !== ')') {
             const v = getValue()
-            if (str[i] === '=') {
+            if (str[i] === ':') {
               if (typeof v != 'string') throw "Only labels can be bound"
               nextToken()
               if (!bindings) ctxs[ctxs.length-1] = Object.create(null), bindings = []
@@ -6483,7 +6583,7 @@ Does not merge the parsed arrays.`,
         function labelLookup(name) {
           // If a name defined in an outer scope is later re-bound by the inner scope, this will bind to the outer before we know it.
             // This language is supposed to be fast, so we just left this in. It is not a problem with how we serialize things here.
-          if (str[i] === '=') return name
+          if (str[i] === ':') return name
           if (+name === +name) return +name
           for (let i = ctxs.length-1; i >= 0; --i)
             if (ctxs[i] && name in ctxs[i]) return ctxs[i][name]
@@ -6506,7 +6606,7 @@ Does not merge the parsed arrays.`,
           if (i >= str.length) throw "Expected a value"
           skipWs()
           if (str[i] === '(') return getCall()
-          if (str[i] === '=' || str[i] === ')') return
+          if (str[i] === ':' || str[i] === ')') return
           const I = i, J = j;  nextToken()
           if (str[I] === "'" && str[J-1] === "'") return str.slice(I+1,J-1).replace(/''/g, "'")
           if (str[I] === '"' && str[J-1] === '"') return str.slice(I+1,J-1).replace(/""/g, '"')
@@ -6526,7 +6626,7 @@ Does not merge the parsed arrays.`,
         visited.clear()
         const result = []
         result.push('(')
-        names.forEach((named,arr) => (result.push(named, '='), putValue(arr, true), result.push(' ')))
+        names.forEach((named,arr) => (result.push(named, ':'), putValue(arr, true), result.push(' ')))
         putValue(expr)
         result.push(')')
         return result.join('')
@@ -6566,7 +6666,7 @@ Does not merge the parsed arrays.`,
             return result.push(v.indexOf("'") < 0 ? "'" + v.replace(/'/g, "''") + "'" : '"' + v.replace(/"/g, '""') + '"')
           if (!_isArray(v)) throw "Not-an-array unknown value"
           if (v[0] === label && typeof v[1] == 'string' && v.length == 2) {
-            if (/[ \n=:\(\)'"`]/.test(v[1])) return result.push('`' + v[1].replace(/`/g, '``') + '`')
+            if (/[ \n:\(\)'"`]/.test(v[1])) return result.push('`' + v[1].replace(/`/g, '``') + '`')
             return result.push(v[1])
           }
           return putCall(v)
@@ -6790,6 +6890,10 @@ Also is a namespace for rewriting Self's code to a different form.`,
     },
     philosophy:`Writing the system's code in a particular style allows it to be viewed/modified in the system by the user, preserving anything they want in the process without external storage mechanisms.
 The correctness of quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite. Or by incorporating rewriting into the lifecycle.`,
+    Initialize() {
+      Rewrite.ctx = new Map(Self.ctx)
+      Rewrite.ctx.delete(label('_globalScope'))
+    },
     call() {
       const html = ToScopedJS(undefined, {into:'document.body', prefix:`<!doctype html>
 <head>
@@ -6805,7 +6909,9 @@ The correctness of quining of functions can be tested by checking that the rewri
 </body>`
       const download = elem('a')
       download.download = 'index.html'
-      download.href = URL.createObjectURL(new Blob([html], {type:'text/html'}))
+      const u = URL.createObjectURL(new Blob([html], {type:'text/html'}))
+      download.href = u
+      const i = setInterval(() => !download.isConnected && (clearInterval(i), URL.revokeObjectURL(u)), 60000)
       download.textContent = 'Download the next rewrite as an HTML file, or preview:'
       elemValue(download, html)
       const iframe = elem('iframe')
@@ -6859,7 +6965,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         `ToReadableJS Self (jsEval '{markLines:true, into:"document.body.appendChild(document.createElement(\\"div\\")))"}')`,
       ],
     ],
-    call(net = editRewrite.ctx, opt) {
+    call(net = Rewrite.ctx, opt) {
       if (!(net instanceof Map))
         error('Expected a map, got', net)
       const markLines = opt ? !!opt.markLines : true
@@ -7094,7 +7200,7 @@ The correctness of quining of functions can be tested by checking that the rewri
 
   ToScopedJS:{
     docs:`Converts Self to a form that has itself hidden in a scope.`,
-    call(net = editRewrite.ctx, opt) {
+    call(net = Rewrite.ctx, opt) {
       if (!(net instanceof Map))
         error('Expected a map, got', net)
       if (net.has(label('_globalScope'))) throw "Net must not have _globalScope"
@@ -7123,7 +7229,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       names.forEach((name, v) => { if (name[0] === '$') write('\n'), write(name), write('='), put(v, true), write(',') })
       write('$' + (n++).toString(36))
       if (net.has(label('defines')))
-        write('\ndefines.key=Symbol(\'defines\')\n')
+        write('\nconst $$=defines.key=Symbol(\'defines\')\n')
       if (net.has(label('call')) && net.has(label('_newExecutionEnv')))
         write(`call.env = _newExecutionEnv()\n`)
       if (net.has(label('interrupt')))
@@ -7217,12 +7323,12 @@ The correctness of quining of functions can be tested by checking that the rewri
           Object.keys(x).forEach(k => (write(name), write(key(k)), write('='), put(x[k]), write('\n')))
           return true
         } else if (x && x[defines.key]) { // Set name[defines.key][...] one by one.
-          write(name), write('[defines.key]=Object.create(null)\n')
+          write(name), write('[$$]=Object.create(null)\n')
           Object.keys(x[defines.key]).forEach(k => {
             const key = resolve(concept.idToKey[+k])
-            write(name), write('[defines.key]['), put(net.get(label('_id'))), write('('), put(key), write(')]='), put(x[defines.key][k]), write('\n')
+            write(name), write('[$$]['), put(net.get(label('_id'))), write('('), put(key), write(')]='), put(x[defines.key][k]), write('\n')
           })
-          if (x !== net.get(label('Self'))) write('Object.freeze('), write(name), write('[defines.key])\n')
+          if (x !== net.get(label('Self'))) write('Object.freeze('), write(name), write('[$$])\n')
           return true
         } else return true
       }
