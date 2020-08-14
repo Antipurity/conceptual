@@ -222,7 +222,7 @@ __base({
 
   equals:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random() < .5 ? a : Math.random()*10000-5000
@@ -234,7 +234,7 @@ __base({
 
   less:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
@@ -246,7 +246,7 @@ __base({
 
   min:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
@@ -258,7 +258,7 @@ __base({
 
   max:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
@@ -464,11 +464,11 @@ Label-binding environment is not preserved.`,
         `2`,
       ],
       [
-        `Self.lookup`,
+        `lookup Self 'lookup'`,
         `lookup`,
       ],
     ],
-    noInterrupt:true,
+    interrupt:false,
     call(m,k) {
       if (!_isArray(m) && defines(m, lookup)) m = defines(m, lookup)
       if (m instanceof Map) return k !== undefined ? m.get(k) : [...m.keys()]
@@ -649,13 +649,13 @@ Does not count memory allocated in interruptions (between executions of Expr) as
             result.push(r)
         }
         return result
-      } catch (err) { if (err === interrupt) interrupt(transform, 2)(result, i);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(transform, _tmp().length=0, _tmp().push(result, i));  throw err }
     },
   },
 
   sum:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
@@ -667,7 +667,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   mult:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
@@ -679,7 +679,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   subtract:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
@@ -691,7 +691,7 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 
   divide:{
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
@@ -772,10 +772,12 @@ Supported browsers: modern Chrome/Chromium and Firefox.`,
     js:[
       `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js`,
     ],
-    style:`.into * {transition: all .2s ease-in; box-sizing: border-box; vertical-align:top; animation: fadein .2s; font-family: monospace; font-size:initial}
+    style:`.into * {transition: all .2s ease-in; box-sizing: border-box; vertical-align:top; animation: fadein .2s; font-family: monospace, monospace; font-size:.85rem}
 .into:not(body) { box-shadow:var(--highlight) 0 0 .1em .1em }
 
 @keyframes fadein { from {opacity:0} }
+
+txt { font-family:sans-serif !important }
 
 .into {
   background-color:var(--background);
@@ -808,7 +810,7 @@ string>string { filter:brightness(150%) }
 number {color:cornflowerblue}
 prompt {font-weight:bold; cursor:pointer}
 known {font-weight:bold}
-node {display:inline-block; font-family:monospace}
+node {display:inline-block; font-family:monospace, monospace}
 node.text { display:inline }
 error {color:red; background-color:var(--background)}
 extracted {display:inline-block}
@@ -825,7 +827,7 @@ waiting {
   border-radius: 50%;
   border: .2em solid var(--main);
   border-color: transparent var(--main) transparent var(--main);
-  animation: waiting-dual-ring 1.2s cubic-bezier(.5,0,0,2.5) infinite, waiting-appears .5s forwards;
+  animation: waiting-dual-ring 1.2s cubic-bezier(.5,0,0,2.5) infinite, waiting-appears .5s forwards !important;
 }
 @keyframes waiting-dual-ring {
   0% { transform: rotate(0deg) }
@@ -842,7 +844,7 @@ waiting {
 .into:not(.noComplexity) .broken>bracket {margin-left:-1em}
 .code>* {display:block}
 
-node.code {display:table; font-family:monospace}
+node.code {display:table; font-family:monospace, monospace}
 .editorContainer { display:table }
 .editorContainer>:last-child[contenteditable] { min-height:1.2em; min-width: 1.2em; width:100%; display:table-cell }
 .editorContainer.editable * { animation:none }
@@ -890,7 +892,7 @@ collapsed>hidden { display:none !important }
 collapsed { background-color:var(--highlight, royalblue); opacity:.5; cursor:pointer; border-radius:.2em; text-align:center; display:inline-block }
 collapsed::before { content:'···'; color:var(--background, white) }
 
-.window { z-index:12; position:absolute; background-color:var(--background); overflow:hidden; box-shadow:var(--highlight) 0 0 .1em .1em; transition:all .2s, left 0s, top 0s; padding:.5em; will-change:transform; font-family:monospace }
+.window { z-index:12; position:absolute; background-color:var(--background); overflow:hidden; box-shadow:var(--highlight) 0 0 .1em .1em; transition:all .2s, left 0s, top 0s; padding:.5em; will-change:transform; font-family:monospace, monospace }
 context-menu>node>input { border:none }
 .window extracted.hover { position:static }
 
@@ -2236,15 +2238,6 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       if (onInput && typeof onInput != 'function') error('Function or nothing expected, got', onInput)
       if (onEnter && typeof onEnter != 'function') error('Function or nothing expected, got', onEnter)
 
-      // Create the element with the initial string.
-      const ed = elem('node')
-      ed.contentEditable = true
-      ed.spellcheck = false
-      if (initialString && typeof initialString == 'string')
-        ed.append(parse(initialString, lang, binds, parse.dom)[1])
-      else if (initialString instanceof Node)
-        ed.append(initialString)
-
       // On any mutations inside, re-parse its contents, and show purified output.
       const obs = new MutationObserver(_throttled(record => {
         const s = getSelection()
@@ -2261,6 +2254,15 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         }
         obs.takeRecords()
       }, .2))
+
+      // Create the element with the initial string.
+      const ed = elem('node')
+      ed.contentEditable = true
+      ed.spellcheck = false
+      if (initialString && typeof initialString == 'string')
+        ed.append(parse(initialString, lang, binds, parse.dom)[1])
+      else if (initialString instanceof Node)
+        ed.append(initialString)
       obs.observe(ed, { childList:true, subtree:true, characterData:true })
 
       const query = elem('span')
@@ -3702,7 +3704,7 @@ Check _isUnknown to materialize the inner structure but only on demand.`,
 
   struct:{
     docs:`\`(struct …Items)\`: an array of items with semantically constant content.`,
-    noInterrupt:true,
+    interrupt:false,
     call(...x) { return x },
   },
 
@@ -4005,8 +4007,7 @@ It's much more efficient to learn to repeat rather than understand, so the whole
         return y
       } catch (err) {
         env.delete(x)
-        if (err === interrupt)
-          interrupt(call, 2)(y, i)
+        if (err === interrupt) interrupt(call, _tmp().length=0, _tmp().push(y, i))
         throw err
       }
       // .env (current execution environment), .depth (current call depth).
@@ -4125,6 +4126,7 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
 
   compile:{
     docs:`\`compile DAG\`: compiles a DAG into an SSA form that handles \`interrupt\`s. Exists for speed.`,
+    interrupt:false,
     call(body) {
       /*   Example of what this compiles DAGs to:
        * function(f,g,h) {
@@ -4141,13 +4143,12 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
        *         case 2: v2 = h(v0, v1)
        *         return v2
        *       }
-       *     } catch (err) { if (err === interrupt) interrupt(F,4)(stage, v0, v1, v2);  throw err }
+       *     } catch (err) { if (err === interrupt) interrupt(F, _tmp().length=0, _tmp().push(stage, v0, v1, v2));  throw err }
        *     finally { --call.depth }
        * }
        */
       const code = _allocArray()
       const consts = _allocMap()
-      const vars = _allocMap()
       let nextStage = 0
 
       const sourceURL = new Array(32).fill().map(() => randomNat(16).toString(16)).join('')
@@ -4155,24 +4156,47 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
 
       code.push(`'use strict'`)
       code.push(`return function F(input) {`)
-      code.push(` ${env(_checkInterrupt)}(F)`)
-      const backpatchVars = code.push(` VARIABLES`)-1
-      code.push(` ++${env(call)}.depth`)
-      const backpatchStages0 = code.push(` try {`)-1
-      const backpatchStages1 = code.push(`  switch (stage) {`)-1
-      emit(body)
-      const backpatchStages2 = code.push(`  }`)-1
-      code.push(`  return ${varOf(body)}`)
-      if (!nextStage)
-        code[backpatchStages1] = code[backpatchStages2] = ''
+      if (!_isArray(body) || body[0] === quote)
+        code.push(` return ${env(body)}`)
+      else {
+        code.push(` ${env(_checkInterrupt)}(F)`)
+        const backpatchVars = code.push(` VARIABLES`)-1
+        code.push(` ++${env(call)}.depth`)
+        code.push(` try {`)
+        const backpatchGotoInterrupt = code.push(`  switch (stage) {`)-1
 
-      code[backpatchVars] = ` let [${nextStage ? 'stage=0,' : ''}${[...vars.values()]}] = ${env(interrupt)}(F)`
-      if (nextStage) {
-        const listOfVars = nextStage ? ['stage', ...vars.values()] : [...vars.values()]
-        const chunkedVars = new Array(Math.ceil(listOfVars.length / 4)).fill().map((_, i) => listOfVars.slice(i*4, i*4+4)).join(')(')
-        code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F,${listOfVars.length})(${chunkedVars});  throw err }`)
-      } else code.push(` }`)
-      code.push(` finally { --${env(call)}.depth }`)
+        const [po, ind, rc] = _postorderAndIndexesAndRefs(body)
+        for (let i=0; i < po.length; ++i) {
+          // Walk the DAG in post-order, emits assignment of vars to application results.
+          //   We don't re-use variable slots that won't be used in computation, because adjustment could want them.
+          //     (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
+          const x = po[i], ins = ind[i]
+          _checkArgCount(x)
+          advanceStage(x)
+          lines.push(code.length+3, x)
+
+          const s = _allocArray()
+          for (let j=0; j < x.length; ++j)
+            s.push( ins[j] !== null ? 'v'+ins[j] : env(x[j]) )
+          code.push(`   v${i} = ${s[0]}(${s.slice(1)})`)
+          _allocArray(s)
+        }
+        code.push(`   return v${po.length - 1}`)
+
+        if (!nextStage)
+          code[backpatchGotoInterrupt] = ``
+        else if (nextStage <= 1)
+          code[backpatchGotoInterrupt] = `  switch (0) {`, code.push(`  }`)
+        else code.push(`  }`)
+
+        const listOfVars = po.map((_,i) => 'v'+i)
+        code[backpatchVars] = ` let [${nextStage>1 ? 'stage=0,' : ''}${listOfVars}] = ${env(interrupt)}(F)`
+        if (nextStage) {
+          code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(${nextStage > 1 ? 'stage,' : ''}${listOfVars}));  throw err }`)
+        } else code.push(` }`)
+        code.push(` finally { --${env(call)}.depth }`)
+        _allocArray(po), _allocArray(ind), _allocArray(rc)
+      }
       code.push(`}`)
       code.push(`//# sourceURL=${sourceURL}`)
 
@@ -4186,12 +4210,13 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
       function env(x) {
         // Returns the string that can be used to refer to the constant value.
         if (x === input) return 'input'
-        if (!consts.has(x)) 
+        if (_isArray(x) && x[0] === quote) x = x[1]
+        if (!consts.has(x))
           consts.set(x, 'env' + consts.size)
         return consts.get(x)
       }
       function advanceStage(x) {
-        if (!_isArray(x) && defines(x, noInterrupt))
+        if (!_isArray(x[0]) && defines(x, interrupt) === false)
           return
         if (nextStage)
           code.push(`   stage = ${nextStage}; case ${nextStage}:`)
@@ -4199,34 +4224,46 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
           code.push(`   case 0:`)
         ++nextStage
       }
-      function checkArgCount(x) {
-        if (_isArray(x[0])) return
-        if (typeof x[0] != 'function') error('Expected a function to call, got', x[0])
-        if (typeof defines(x[0], argCount) == 'number')
-          if (defines(x[0], argCount) !== x.length-1)
-            error('Expected', defines(x[0], argCount), 'args but got', x.length-1, 'in', x)
-      }
-      function varOf(x) {
-        return _isArray(x) ? vars.get(x) : env(x)
-      }
-      function emit(x) {
-        // Walks the DAG in post-order, emits assignments to application results.
-        // We don't re-use variable slots that won't be used in computation, because adjustment could want them.
-        //   (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
-        if (!_isArray(x)) return env(x)
-        if (vars.get(x) === null) error('Cycles in computation, at', x)
-        if (vars.has(x)) return vars.get(x)
-        checkArgCount(x)
-        vars.set(x, null)
-        const varName = 'v' + vars.size
-        x.forEach(emit)
-        vars.set(x, varName)
-        advanceStage(x)
-        lines.push(code.length+3, x)
-        code.push(`   ${vars.get(x)} = ${varOf(x[0])}(${x.slice(1).map(varOf)})`)
+    },
+  },
+
+
+  _checkArgCount(x) {
+    // Checks arg count, and function-ness, at compile time. Does not catch all cases, but it's good enough.
+    if (!_isArray(x) || _isArray(x[0])) return
+    if (typeof x[0] != 'function') error('Expected a function to call, got', x[0])
+    if (typeof defines(x[0], argCount) == 'number')
+      if (defines(x[0], argCount) !== x.length-1)
+        error('Expected', defines(x[0], argCount), 'args but got', x.length-1, 'in', x)
+  },
+
+  _postorderAndIndexesAndRefs:{
+    docs:`Linearizes all execution-relevant information about a DAG into 3 equal-sized arrays.`,
+    interrupt:false,
+    call(dag) {
+      const po = _allocArray(), ind = _allocArray(), rc = _allocArray()
+      const toIndex = _allocMap()
+      try { walk(dag) }
+      catch (err) { _allocArray(po), _allocArray(ind), _allocArray(rc);  throw err }
+      finally { _allocMap(toIndex) }
+      return [po, ind, rc]
+
+      function walk(x) {
+        if (!_isArray(x) || x[0] === quote) return
+        if (toIndex.has(x)) {
+          const i = toIndex.get(x)
+          if (i === null)
+            error('Cycles in computation, at', x)
+          return ++rc[i]
+        }
+        toIndex.set(x, null)
+        x.forEach(walk)
+        toIndex.set(x, po.length)
+        po.push(x), ind.push(x.map(ch => toIndex.has(ch) ? toIndex.get(ch) : null)), rc.push(1)
       }
     },
   },
+
 
   array:{
     docs:`\`(array …Items)\`: creates a new array.`,
@@ -4235,20 +4272,20 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
       write:__is(`writeAt`),
       observe:__is(`observe`),
     },
-    noInterrupt:true,
+    interrupt:false,
     call(...x) { return x },
   },
   readAt:{
     docs:`\`read Array Index\`: reads the current value at a position in an array.`,
     argCount:2,
-    noInterrupt:true,
+    interrupt:false,
     call(arr, i) { return arr[i] },
   },
   writeAt:{
     docs:`\`write Array Index Value\`: changes the current value at a position in an array.
 If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
     argCount:3,
-    noInterrupt:true,
+    interrupt:false,
     call(arr, i, v) {
       if (i !== undefined) {
         if (arr[i] === v) return
@@ -4269,7 +4306,7 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
 If \`OnChange\` is not given, returns the current array of \`Array\`'s observers.
 Call this again with the same array and function to no longer call it.
 Many updates at the same time are merged into one call, scheduled in a separate task.`,
-    noInterrupt:true,
+    interrupt:false,
     call(arr, f, forceTo = undefined) {
       if (!_isArray(arr) && defines(arr, deconstruct) === undefined) return
       if (!observe.rs) observe.rs = new WeakMap, observe.changed = new Set
@@ -4301,7 +4338,7 @@ Many updates at the same time are merged into one call, scheduled in a separate 
             obs[i](arr)
           i = 0, observe.changed.delete(arr)
         })
-      } catch (err) { if (err === interrupt) err(_callChangeObservers, 1)(i);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_callChangeObservers, _tmp().length=0, _tmp().push(i));  throw err }
     },
   },
 
@@ -4362,6 +4399,9 @@ zing built-in primitives like peval or `replay` with our ML?
 // (The interpreter loop should handle three distinct execution traces: impure-replay tape, gradient tape, and the interrupt stack.)
   // (And, they all should have definitions in execution env.)
 
+  // TODO: Successfully backprop through `a+b`. Make a backprop compiler, without any optimizations for now.
+  //   …How would we merge backprop signals? In lesca, we could afford to have a global merger, but what about here? Should each adjustable function define its merger (and same-merger functions can be used together)?
+
   adjust:{
     docs:``,
     lookup:{
@@ -4370,7 +4410,12 @@ zing built-in primitives like peval or `replay` with our ML?
     },
     call(fn, ins, out, dout) {
       // What should we do? Always defer to the definition, and even fail if it's not there?
+      //   const d = defines(fn, adjust)
+      //   // …Check that fn and d are functions…
+      //   return d(ins, out, dout)
     },
+    // Also, is there any way we can backprop into array read with `readAt` more efficiently than creating N mostly-empty arrays then merging them?
+      // (I mean, other than partially evaluating that.)
   },
 
   adjustSave:{
@@ -4424,7 +4469,7 @@ It's either a function or undefined, and has to be applied or ignored respective
 
 Array data gets its head consulted (once, not recursively). A function acts like a concept that defined \`call\` as that function. A JS object with a Map \`defines.key\` consults that map with Code as the key.`,
     philosophy:`Culture is polite fiction made for efficiency, and so are programming languages. At some point, you have to define things with no deeper explanation.`,
-    noInterrupt:true,
+    interrupt:false,
     argCount:2,
     call(data, code) {
       if (code === call && typeof data == 'function')
@@ -5316,7 +5361,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         if (i+1 < str.length && str[i] === '{' && str[i+1] !== ' ') ++i, a.push(parseStr(), '')
         else a[a.length-1] += str[i]
       if (!a[a.length-1]) a.pop()
-      const el = elem('span', _highlightGlobalsInString(a, s => lookup.parents.get(Self.ctx.get(label(s))) !== js ? elem('known', s) : s))
+      const el = elem('txt', a)
       return !top && elemValue(el, a), el
     }
   },
@@ -5814,7 +5859,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       if (ch === undefined) ch = el.firstChild
       for (; ch; ch = ch.nextSibling)
         _revisitElemValue(ch)
-    } catch (err) { if (err === interrupt) interrupt(_revisitElemValue, 1)(ch);  throw err }
+    } catch (err) { if (err === interrupt) interrupt(_revisitElemValue, _tmp().length=0, _tmp().push(ch));  throw err }
   },
 
   _whetherToColorVariables:[
@@ -6533,17 +6578,18 @@ Does not merge the parsed arrays.`,
         if (!str) throw "Expected input"
         if (!ctx) ctx = defines(Self, lookup)
         const regex = /[ \n]+|:|\(|\)|`(?:[^`]|``)*`|'(?:[^']|'')*'|"(?:[^"]|"")*"|[^ \n:\(\)'"`]+|$/g
-        let [i = 0, j, ctxs = [ctx], visited = new Set] = interrupt(fast)
+        let [result, i = 0, j, ctxs = [ctx], visited = new Set] = interrupt(fast)
         regex.lastIndex = i
         if (j === undefined) regex.test(str), j = regex.lastIndex
-        let result
-        try { result = getCall() }
-        catch (err) { if (err === interrupt) interrupt(fast, 4)(i, j, ctxs, visited);  throw err }
-        if (i < str.length) throw "Too much information: " + str.slice(i)
-        if (result.length != 1) throw "Wrong count of top-level args"
-        return makeGraph(result[0]) // Note: This is unsafe.
-        //   (To make it safe, inspect all available functions, and make the dangerous ones unable to execute here.)
-        // That top-level pair of brackets serves as a language marker.
+        try {
+          if (result === undefined)
+            result = getCall()
+          if (i < str.length) throw "Too much information: " + str.slice(i)
+          if (result.length != 1) throw "Wrong count of top-level args"
+          return makeGraph(result[0]) // Note: This is unsafe.
+          //   (To make it safe, inspect all available functions, and make the dangerous ones unable to execute here.)
+          // That top-level pair of brackets serves as a language marker.
+        } catch (err) { if (err === interrupt) interrupt(fast, _tmp().length=0, _tmp().push(result, i, j, ctxs, visited));  throw err }
 
         function nextToken() { [i, j] = [j, (regex.test(str), regex.lastIndex)] }
 
@@ -6737,7 +6783,7 @@ Does not merge the parsed arrays.`,
         if (int) int = false, _causeInterrupt(expr, _pausedToStepper)
         if (int === false) ++_checkInterrupt.step, int = 0
         return call(expr)
-      } catch (err) { if (err === interrupt) interrupt(step, 1)(int);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(step, _tmp().length=0, _tmp().push(int));  throw err }
     },
   },
 
@@ -6782,11 +6828,16 @@ Not for use inside that paused job.
     },
   },
 
+  _tmp() {
+    // A little convenience method for getting `interrupt.tmp` in less characters.
+    return interrupt.tmp
+  },
+
   interrupt:{
-    docs:`Used to make functions re-entrant in a non-interruptible host language, for better UX.`,
+    docs:`Used to make functions re-entrant in a non-interruptible host language, for better UX.
+Define this to be \`false\` in a global if it will never interrupt.`,
     lookup:{
       check:__is(`_checkInterrupt`),
-      noInterrupt:__is(`noInterrupt`),
       continuation:__is(`_continuation`),
       step:__is(`step`),
     },
@@ -6796,27 +6847,14 @@ Interruption (and sandboxing) is absolutely essential for being able to actually
 Technical details:
 \`_causeInterrupt(cause)\` to interrupt execution.
 Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(f)\`, in particular for loops. Make sure to put interruptible computations not here but inside the try/catch below, to not corrupt interrupt state.
-Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2)(i,j);  throw err }\`: store 4 values in tmp at a time, up to the requested length (\`...args\` in JS allocates, so this way tries to avoid that).`,
-    call(cause, len = undefined) {
-      if (!interrupt.tmp) interrupt.tmp = []
-      if (!interrupt.populate) interrupt.populate = (a,b,c,d) => {
-        const tmp = interrupt.tmp
-        let index = tmp[tmp.length-1]
-        if (index < tmp.length-1) tmp[index++] = a
-        if (index < tmp.length-1) tmp[index++] = b
-        if (index < tmp.length-1) tmp[index++] = c
-        if (index < tmp.length-1) tmp[index++] = d
-        if (index >= tmp.length-1) {
-          if (!call.env) return
-          if (!call.env[_id(interrupt)]) call.env[_id(interrupt)] = []
-          const stack = call.env[_id(interrupt)]
-          tmp.pop(), stack.push(...tmp), stack.push(tmp.length), tmp.length = 0
-        } else
-          return tmp[tmp.length-1] = index, interrupt.populate
-      }
-      const tmp = interrupt.tmp
-      if (len === undefined) {
+Wrap function body after getting its state in \`try{…}catch(err){ if (err === interrupt) interrupt(f, _tmp().length=0, _tmp().push(i,j));  throw err }\` (\`...args\` in JS allocates, so this way tries to avoid that).`,
+    Initialize() {
+      interrupt.tmp = []
+    },
+    call(cause, got = undefined) {
+      if (got === undefined) {
         // Collect items from the stack into tmp and return it.
+        const tmp = interrupt.tmp
         if (!call.env || !call.env[_id(interrupt)]) return tmp.length = 0, tmp
         const stack = call.env[_id(interrupt)]
         if (!stack.length) return tmp.length = 0, tmp
@@ -6825,35 +6863,29 @@ Wrap function body in \`try{…}catch(err){ if (err === interrupt) interrupt(f,2
         tmp.length = length
         const start = end - length
         for (let i = start; i < end; ++i)
-        tmp[i - start] = stack[i]
+          tmp[i - start] = stack[i]
         stack.length -= length+1
 
         // Check the cause.
         const got = stack.pop()
         if (got !== cause) {
           // Stack corruption.
-          const backctx = _invertBindingContext(Self.ctx)
-          const str = "expected "+backctx.get(cause)+" but got "+backctx.get(got)
-          localStorage.setItem(str, (+localStorage.getItem(str) || 0) + 1)
           const tmpSlice = tmp.slice()
           tmp.length = 0
-          errorStack("Interrupt stack corruption sometime before this — invalid cause: expected", cause, "but got", got, "in", stack, "with tmp", tmpSlice)
+          errorStack("Interrupt stack corruption sometime before this — invalid cause: expected", cause, "but got", got, "in", stack, "with interrupt state", tmpSlice)
         }
 
         return tmp
       }
-      // Return a function that stores 4 values at a time, up to len.
-      if (typeof len != 'number') throw "len must be a number"
-      tmp.length = len+1
-      tmp[len] = 0
 
-      // Allow checking the cause.
+      // Else store the contents of `interrupt.tmp` in the interrupt stack.
+
       if (!call.env[_id(interrupt)]) call.env[_id(interrupt)] = []
-      call.env[_id(interrupt)].push(cause)
+      const stack = call.env[_id(interrupt)]
+      stack.push(cause) // Allow checking the cause, so that debugging is easier.
+      stack.push(...interrupt.tmp, interrupt.tmp.length), interrupt.tmp.length = 0
 
-      return interrupt.populate
-
-      // .tmp, .populate, .noInterrupt
+      // .tmp, .noInterrupt
     },
   },
 
@@ -7365,10 +7397,6 @@ The correctness of quining of functions can be tested by checking that the rewri
     permissionsElem(el) { el.classList.add('warning');  return el },
   },
 
-  noInterrupt:{
-    docs:`A marker that a function cannot interrupt, directly or indirectly.`,
-  },
-
   _allocArray:{
     docs:`_allocArray()⇒Array as a replacement for \`[]\` and _allocArray(Array) to re-use objects.`,
     call(a) {
@@ -7421,7 +7449,7 @@ The correctness of quining of functions can be tested by checking that the rewri
           catch (err) { if (err === interrupt) throw err;  log(jsRejected(err)) }
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
         }
-      } catch (err) { if (err === interrupt) interrupt(_logAll, 2)(ins, i);  throw err }
+      } catch (err) { if (err === interrupt) interrupt(_logAll, _tmp().length=0, _tmp().push(ins, i));  throw err }
     },
   },
 
@@ -7555,7 +7583,7 @@ Preserved for now, because giving the user choices is a valuable idea for explai
       let [x = s in Eval.cache ? Eval.cache[s] : (Eval.cache[s] = parse(s))] = interrupt(Eval)
       if (x === _onlyUndefined) x = undefined
       try { return call(x) }
-      catch (err) { if (err === interrupt) interrupt(Eval, 1)(x !== undefined ? x : _onlyUndefined);  throw err }
+      catch (err) { if (err === interrupt) interrupt(Eval, _tmp().length=0, _tmp().push(x !== undefined ? x : _onlyUndefined));  throw err }
       // .cache
     },
   },
@@ -7640,7 +7668,7 @@ Preserved for now, because giving the user choices is a valuable idea for explai
               if (anyTrue && el.tagName === 'COLLAPSED')
                 el.click()
               return anyTrue
-            } catch (err) { if (err === interrupt) err(search, 9)(v, anyTrue, anyFalse, i1)(ch1, next1, i2, ch2)(next2), v = null;  throw err }
+            } catch (err) { if (err === interrupt) interrupt(search, _tmp().length=0, _tmp().push(v, anyTrue, anyFalse, i1, ch1, next1, i2, ch2, next2)), v = null;  throw err }
             finally { v && _allocArray(v) }
           }
         }
