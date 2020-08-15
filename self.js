@@ -214,10 +214,10 @@ __base({
     min:__is(`min`),
     max:__is(`max`),
 
-    sum:__is(`sum`),
-    subtract:__is(`subtract`),
-    mult:__is(`mult`),
-    divide:__is(`divide`),
+    add:__is(`add`),
+    sub:__is(`sub`),
+    mul:__is(`mul`),
+    div:__is(`div`),
   },
 
   equals:{
@@ -621,11 +621,11 @@ Does not count memory allocated in interruptions (between executions of Expr) as
 \`(transform G (transform F A))\` is the same as \`(transform x -> (F (G x)) A).\``,
     examples:[
       [
-        `(transform x→(sum x 2) 1)`,
+        `(transform x→(add x 2) 1)`,
         `3`,
       ],
       [
-        `(transform x→…(0 (mult x 2) 0) (1 …(2 3) 4))`,
+        `(transform x→…(0 (mul x 2) 0) (1 …(2 3) 4))`,
         `(0 2 0 0 4 0 0 6 0 0 8 0)`,
       ],
     ],
@@ -653,49 +653,37 @@ Does not count memory allocated in interruptions (between executions of Expr) as
     },
   },
 
-  sum:{
+  mul:{
     argCount:2,
     interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[sum, a, b], a+b]
-      },
-    ],
-    call(a,b) { return a + b },
-  },
-
-  mult:{
-    argCount:2,
-    interrupt:false,
-    examples:[
-      () => {
-        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[mult, a, b], a*b]
+        return [[mul, a, b], a*b]
       },
     ],
     call(a,b) { return a * b },
   },
 
-  subtract:{
+  sub:{
     argCount:2,
     interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[subtract, a, b], a-b]
+        return [[sub, a, b], a-b]
       },
     ],
     call(a,b) { return a - b },
   },
 
-  divide:{
+  div:{
     argCount:2,
     interrupt:false,
     examples:[
       () => {
         const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[divide, a, b], a/b]
+        return [[div, a, b], a/b]
       },
     ],
     call(a,b) { return a / b },
@@ -777,7 +765,7 @@ Supported browsers: modern Chrome/Chromium and Firefox.`,
 
 @keyframes fadein { from {opacity:0} }
 
-txt { font-family:sans-serif !important }
+text { font-family:sans-serif !important }
 
 .into {
   background-color:var(--background);
@@ -858,7 +846,7 @@ prompt::before { content:'▶' /* > ⊱ ▶ */ }
 edit-object>.editorContainer.editable { display:inline-block }
 
 JobIndicator { width:14px; height:14px; margin:.2em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
-JobIndicator.yes { background-color:var(--highlight); animation: rotate 4s infinite linear, fadein .2s }
+JobIndicator.yes { background-color:var(--highlight); animation: rotate 4s infinite linear, fadein .2s !important }
 JobIndicator>div { width:4px; height:4px; margin:5px; position:absolute; background-color:var(--highlight); border-radius:50%; transform: rotate(var(--turns)) translate(10px); animation:none }
 @keyframes rotate {
   0% { transform: rotate(-0.25turn) }
@@ -918,7 +906,7 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
 .removed { margin:0 }
 
-text { margin:1em; display:block }
+separated-text { margin:1em; display:block }
 text>span { font-family:sans-serif }
 `,
 
@@ -2479,7 +2467,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
             e[_id(log)] = waiting = _evaluationElem(penv), call.env = penv
             const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
             if (bindAs) expr = expr[2]
-            elemInsert(pureOutput, waiting)
+            pureOutput.append(waiting)
             _doJob([purify, struct(quote, expr)], penv, result => {
               if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
                 result = result[1] // Display errors too.
@@ -2490,7 +2478,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                 penv = undefined, waiting && waiting.remove(), waiting = undefined
                 if (!_isUnknown(result)) {
                   // Display `_logAll evaluator (Result)`.
-                  elemInsert(pureOutput, daintyEvaluator([_logAll, evaluator, [quote, [result]]]))
+                  pureOutput.append(daintyEvaluator([_logAll, evaluator, [quote, [result]]]))
                 } else {
                   const el = elem('button', 'Evaluate')
                   elemValue(el, result)
@@ -2640,7 +2628,7 @@ Now, type \`(tutorial)\` and claim what's yours.`,
         if (i >= t.length) return false
         let v = t[i++]
         if (typeof v == 'string')
-          result.append(elem('text', stringToDoc(v)))
+          result.append(elem('separated-text', stringToDoc(v)))
         else if (_isArray(v)) {
           const [lang, initialCode, canContinue] = v
           const results = elem('div')
@@ -3041,15 +3029,18 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
 
   elemRemove:{
     docs:`Removes a DOM element from the displayed document smoothly (if CSS transitions are enabled for it, and are specified in seconds, with all-props being the first), by transitioning height and opacity to 0.`,
-    call(el, absolutize = false, particles = true, doHeight = true) {
+    lookup:{
+      particles:__is(`particles`),
+    },
+    call(el, absolutize = false, doParticles = true, doHeight = true) {
       if (!el || el.removed) return
       impure()
       el.removed = true
       if (!(el instanceof Element)) return el.remove ? el.remove() : error('Not an element')
 
-      if (particles) {
+      if (doParticles) {
         const r1 = el.getBoundingClientRect(), r2 = (Self.into !== document.body ? Self.into : document.documentElement).getBoundingClientRect()
-        _reflow().then(() => _particles(r1.left - r2.left, r1.top - r2.top, r1.width, r1.height))
+        _reflow().then(() => particles(r1.left - r2.left, r1.top - r2.top, r1.width, r1.height))
       }
 
       let height, dur, from, pre
@@ -3084,12 +3075,25 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     },
   },
 
-  _particles:{
+  _removalParticlesFrequency:[
+    __is(`settings`),
+    .5,
+    `The probability of extra effects for removing a visual element is %%%.`,
+    __is(`rangeSetting`),
+    0,
+    1,
+    .01,
+  ],
+
+  particles:{
     docs:`A splash of magical particles.`,
     philosophy:`Most people create programming languages to improve performance for specific cases or to prove their way of thinking superior to others, but I actually just wanted to be a wizard and use a PL to enhance my craft.`,
-    call(x,y,w,h, n = Math.sqrt(w*h)/10) {
+    lookup:{
+      _removalParticlesFrequency:__is(`_removalParticlesFrequency`),
+    },
+    call(x,y,w,h, n = Math.sqrt(w*h)/10 * Math.random()) {
       if (_disableSmoothTransitions[1]) return
-      if (Math.random()<.5) return
+      if (Math.random() < 1 - _removalParticlesFrequency[1]) return
       const into = document.createElement('div')
       into.style.left = x + 'px'
       into.style.top = y + 'px'
@@ -3161,7 +3165,7 @@ Return a promise to measure non-sync time.`,
     docs:`Ensure that e either contains no soft line breaks directly inside of it, or its every child is on its own line (CSS class .broken).
 Quite expensive.`,
     call(e, available) {
-      if (!_isStylableDOM(e) || e.tagName === 'COLLAPSED' || e.tagName === 'SCROLL-HIGHLIGHT') return
+      if (!_isStylableDOM(e) || e.tagName === 'COLLAPSED' || e.tagName === 'SCROLL-HIGHLIGHT' || e.removed) return
 
       // Throttle outselves a bit.
       if (!_updateBroken.el) _updateBroken.el = new Set, _updateBroken.widths = new Map
@@ -3183,7 +3187,7 @@ Quite expensive.`,
       const noTableInside = !e.childNodes[1] || !e.childNodes[2] || e.childNodes[1].tagName !== 'TABLE' && e.childNodes[2].tagName !== 'TABLE'
       const parentWidth = e.classList.contains('broken') && noTableInside ? available+1 : e.offsetWidth+1 || 1000
         // Not nearly as accurate as removing .broken would have been (with tables in particular), but much faster.
-          // So we special-case the <table>-inside case lol
+          // So we special-case the <table>-inside case
           // Structural learning at its finest
       let Sum = 0, max = 0
       for (let ch = e.firstChild; ch; ch = ch.nextSibling) {
@@ -3584,7 +3588,7 @@ In Scheme, this is called \`begin\`.`,
       `result`,
     ],
     call(...r) {
-      // We shuffle in neither `call` nor `compile`, so we can just do this:
+      // We shuffle in neither `call` nor compilation, so we can just do this:
       return r[r.length-1]
     },
   },
@@ -3883,7 +3887,7 @@ First, a very simple interpreter of trees, where no nodes (arrays) are shared. T
         function(fn) {
           // It's easier to write the interpreter than to pattern-match these cases.
           if (typeof fn != 'function') return
-          const ins = [5, [sum, 1, 2], [sum, [mult, [sum, 4, 6], 10], [divide, 10000, 100]]], outs = [5, 3, 200]
+          const ins = [5, [add, 1, 2], [add, [mul, [add, 4, 6], 10], [div, 10000, 100]]], outs = [5, 3, 200]
           const env = _newExecutionEnv()
           return {
             then: then => void _schedule([transform, fn, quote(ins)], env, got => {
@@ -4100,10 +4104,10 @@ For example, \`(func input+3) 5\` returns \`8\`.`,
   func:{
     docs:`\`func Body\`: A construct that can be called to evaluate \`Body\`.
 This has one \`input\`; see \`multifunc\` for multi-input functions.`,
+    future:`\`observe\` all the nodes, and (un-observe and) re-compile the function when any of them change, meaning that \`compile\` should take the function, or be merged with \`func\` outright. (And be private.)`,
     lookup:{
       input:__is(`input`),
       multifunc:__is(`multifunc`),
-      compile:__is(`compile`),
     },
     argCount:1,
     construct(x, obj) {
@@ -4114,117 +4118,118 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
         d[_id(argCount)] = 1
         Object.freeze(d)
         return obj
-      } else
-        obj.f = compile(x[1])
+      } else {
+        /*     Example of what this compiles DAGs to:
+         * function(f,g,h) {
+         *   'use strict'
+         *   return function F(input) {
+         *     _checkInterrupt(F)
+         *     let v0, v1, v2
+         *     ++call.depth
+         *     try {
+         *         v0 = f(input)
+         *         v1 = g(v0, input)
+         *         v2 = h(v0, v1)
+         *         return v2
+         *     }
+         *     finally { --call.depth }
+         * }
+         *
+         *     Complications:
+         * - `interrupt` handling, to stop and resume execution.
+         *   The variables may be restored on post-interrupt entry,
+         *   and we need an "instruction pointer" to not re-do done work,
+         *   and the work may be wrapped in try/catch that saves all variables on interrupt.
+         */
+        const consts = _allocMap()
+
+        const [src, sourceURL, lines] = toSource(x[1])
+        try {
+          const fn = Function([...consts.values()].join(','), src)(...consts.keys())
+          fn.lines = lines
+          _resolveStack.functions[sourceURL] = fn
+          obj.f = fn
+        } catch (err) { console.error(src); throw err }
+
+        function toSource(body) {
+          // Compiles a DAG into an SSA form in JS that handles `interrupt`s.
+          const code = _allocArray()
+          let nextStage = 0
+
+          const sourceURL = new Array(32).fill().map(() => randomNat(16).toString(16)).join('')
+          const lines = []
+
+          code.push(`'use strict'`)
+          code.push(`return function F(input) {`)
+          if (!_isArray(body) || body[0] === quote)
+            code.push(` return ${env(body)}`)
+          else {
+            code.push(` ${env(_checkInterrupt)}(F)`)
+            const backpatchVars = code.push(` VARIABLES`)-1
+            code.push(` ++${env(call)}.depth`)
+            code.push(` try {`)
+            const backpatchGotoInterrupt = code.push(`  switch (stage) {`)-1
+
+            const [po, ind, rc] = _postorderAndIndexesAndRefs(body)
+            for (let i=0; i < po.length; ++i) {
+              // Walk the DAG in post-order, emits assignment of vars to application results.
+              //   We don't re-use variable slots that won't be used in computation, because adjustment could want them.
+              //     (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
+              const x = po[i], ins = ind[i]
+              _checkArgCount(x)
+              if (_isArray(x[0]) || defines(x, interrupt) !== false) {
+                // Advance the interrupt stage if we cannot guarantee the function is non-interrupting.
+                code.push(nextStage ? `   stage = ${nextStage}; case ${nextStage}:` : `   case 0:`)
+                ++nextStage
+              }
+              lines.push(code.length+3, x)
+
+              const s = _allocArray()
+              for (let j=0; j < x.length; ++j)
+                s.push( ins[j] !== null ? 'v'+ins[j] : env(x[j]) )
+              code.push(`   v${i} = ${s[0]}(${s.slice(1)})`)
+              _allocArray(s)
+            }
+            code.push(`   return v${po.length - 1}`)
+
+            if (!nextStage)
+              code[backpatchGotoInterrupt] = ``
+            else if (nextStage <= 1)
+              code[backpatchGotoInterrupt] = `  switch (0) {`, code.push(`  }`)
+            else code.push(`  }`)
+
+            const listOfVars = po.map((_,i) => 'v'+i)
+            if (nextStage) {
+              code[backpatchVars] = ` let [${nextStage>1 ? 'stage=0,' : ''}${listOfVars}] = ${env(interrupt)}(F)`
+              code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(${nextStage > 1 ? 'stage,' : ''}${listOfVars}));  throw err }`)
+            } else {
+              code[backpatchVars] = ` let ${listOfVars}`
+              code.push(` }`)
+            }
+            code.push(` finally { --${env(call)}.depth }`)
+            _allocArray(po), _allocArray(ind), _allocArray(rc)
+          }
+          code.push(`}`)
+          code.push(`//# sourceURL=${sourceURL}`)
+          const result = code.join('\n')
+          _allocArray(code)
+          return [result, sourceURL, lines]
+        }
+        function env(x) {
+          // Returns the string that can be used to refer to the constant value.
+          if (x === input) return 'input'
+          if (_isArray(x) && x[0] === quote) x = x[1]
+          if (!consts.has(x))
+            consts.set(x, 'env' + consts.size)
+          return consts.get(x)
+        }
+      }
     },
     nameResult:[
       `f`,
       `g`,
       `h`,
     ],
-  },
-
-  compile:{
-    docs:`\`compile DAG\`: compiles a DAG into an SSA form that handles \`interrupt\`s. Exists for speed.`,
-    interrupt:false,
-    call(body) {
-      /*   Example of what this compiles DAGs to:
-       * function(f,g,h) {
-       *   'use strict'
-       *   return function F(arg) {
-       *     _checkInterrupt(F)
-       *     let [stage = 0, v0, v1, v2] = interrupt(F)
-       *     ++call.depth
-       *     try {
-       *       switch (stage) {
-       *         // The real work:
-       *         case 0: v0 = f(arg), stage = 1
-       *         case 1: v1 = g(v0, arg), stage = 2
-       *         case 2: v2 = h(v0, v1)
-       *         return v2
-       *       }
-       *     } catch (err) { if (err === interrupt) interrupt(F, _tmp().length=0, _tmp().push(stage, v0, v1, v2));  throw err }
-       *     finally { --call.depth }
-       * }
-       */
-      const code = _allocArray()
-      const consts = _allocMap()
-      let nextStage = 0
-
-      const sourceURL = new Array(32).fill().map(() => randomNat(16).toString(16)).join('')
-      const lines = []
-
-      code.push(`'use strict'`)
-      code.push(`return function F(input) {`)
-      if (!_isArray(body) || body[0] === quote)
-        code.push(` return ${env(body)}`)
-      else {
-        code.push(` ${env(_checkInterrupt)}(F)`)
-        const backpatchVars = code.push(` VARIABLES`)-1
-        code.push(` ++${env(call)}.depth`)
-        code.push(` try {`)
-        const backpatchGotoInterrupt = code.push(`  switch (stage) {`)-1
-
-        const [po, ind, rc] = _postorderAndIndexesAndRefs(body)
-        for (let i=0; i < po.length; ++i) {
-          // Walk the DAG in post-order, emits assignment of vars to application results.
-          //   We don't re-use variable slots that won't be used in computation, because adjustment could want them.
-          //     (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
-          const x = po[i], ins = ind[i]
-          _checkArgCount(x)
-          advanceStage(x)
-          lines.push(code.length+3, x)
-
-          const s = _allocArray()
-          for (let j=0; j < x.length; ++j)
-            s.push( ins[j] !== null ? 'v'+ins[j] : env(x[j]) )
-          code.push(`   v${i} = ${s[0]}(${s.slice(1)})`)
-          _allocArray(s)
-        }
-        code.push(`   return v${po.length - 1}`)
-
-        if (!nextStage)
-          code[backpatchGotoInterrupt] = ``
-        else if (nextStage <= 1)
-          code[backpatchGotoInterrupt] = `  switch (0) {`, code.push(`  }`)
-        else code.push(`  }`)
-
-        const listOfVars = po.map((_,i) => 'v'+i)
-        code[backpatchVars] = ` let [${nextStage>1 ? 'stage=0,' : ''}${listOfVars}] = ${env(interrupt)}(F)`
-        if (nextStage) {
-          code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(${nextStage > 1 ? 'stage,' : ''}${listOfVars}));  throw err }`)
-        } else code.push(` }`)
-        code.push(` finally { --${env(call)}.depth }`)
-        _allocArray(po), _allocArray(ind), _allocArray(rc)
-      }
-      code.push(`}`)
-      code.push(`//# sourceURL=${sourceURL}`)
-
-      try {
-        const fn = Function([...consts.values()].join(','), code.join('\n'))(...consts.keys())
-        fn.lines = lines
-        _resolveStack.functions[sourceURL] = fn
-        return fn
-      } catch (err) { console.error(code.join('\n')); throw err }
-
-      function env(x) {
-        // Returns the string that can be used to refer to the constant value.
-        if (x === input) return 'input'
-        if (_isArray(x) && x[0] === quote) x = x[1]
-        if (!consts.has(x))
-          consts.set(x, 'env' + consts.size)
-        return consts.get(x)
-      }
-      function advanceStage(x) {
-        if (!_isArray(x[0]) && defines(x, interrupt) === false)
-          return
-        if (nextStage)
-          code.push(`   stage = ${nextStage}; case ${nextStage}:`)
-        else
-          code.push(`   case 0:`)
-        ++nextStage
-      }
-    },
   },
 
 
@@ -4259,7 +4264,10 @@ This has one \`input\`; see \`multifunc\` for multi-input functions.`,
         toIndex.set(x, null)
         x.forEach(walk)
         toIndex.set(x, po.length)
-        po.push(x), ind.push(x.map(ch => toIndex.has(ch) ? toIndex.get(ch) : null)), rc.push(1)
+
+        const indexes = _allocArray();  indexes.length = x.length
+        for (let j=0; j < x.length; ++j) indexes[j] = toIndex.has(x[j]) ? toIndex.get(x[j]) : null
+        po.push(x), ind.push(indexes), rc.push(1)
       }
     },
   },
@@ -4394,12 +4402,38 @@ zing built-in primitives like peval or `replay` with our ML?
 
 
 
+  // TODO: Make `purify` a partial evaluator, just constant-propagation for now: use the postorder and have a "do we know this" array of bools, along with the results/computations array; always return a computation (even if it's just `quote(x)`). We don't know a thing when it's `input` when we haven't had the input specified, or when it tries `impureLoad` (throwing an exception).
+  //   TODO: Change uses of `purify` (mostly in REPL) to use this.
+  //   TODO: Harden all `parse`s against interrupts, by moving them into `_schedule`/`_doJob` in `editor`.
+  //   TODO: Make `func` use `purify`.
+
+
 
 
 // (The interpreter loop should handle three distinct execution traces: impure-replay tape, gradient tape, and the interrupt stack.)
   // (And, they all should have definitions in execution env.)
 
-  // TODO: Successfully backprop through `a+b`. Make a backprop compiler, without any optimizations for now.
+  add:{
+    argCount:2,
+    interrupt:false,
+    call(a,b) {
+      // TODO: should add tensors instead (`tf.add(a,b)`).
+      return a + b
+    },
+    adjust(ins, out, dout) {
+      // TODO: …what do we do, exactly?… For the sum, we just want to return the same gradient for both inputs, right?
+      //   (And, do we even really need to jump through hoops to not create arrays, if we can just allocate and deallocate new arrays?)
+      //   However. If we re-use the same tensor, then we'll be disposing it many times, which is very bad. And, for things like var outputs which should not be disposed of in any case, even partial evaluation won't help (without explicit handling of ref-counts).
+      //     THE CRISIS OF RESOURCE MANAGEMENT IS UPON US, AAAA.
+      //     …Vars could copy tensors though, since they're RELATIVELY rare. But for adjustment of `add`, we do need partial evaluation, because otherwise we would be freeing a lot of things we should not be freeing (and creating temporary arrays, which may or may not be optimized away by JS's JIT).
+      //     FULL CONTROL REQUIRED.
+    },
+    // Shouldn't there also be a way to say which args in `adjust` are needed, like dropping `out`? (And, if an output is unneeded in neither `ins` nor `out`, then it should be dropped in `compile` when its ref-count becomes 0.)
+      // ### Should have definable-by-function `dispose(obj)`.
+      // …Where else do we want to destroy the things? Functions should take the mechanism of their output (### a function for getting all possible node-sources of a function/node, overridable, in particular by `select`) and take on their disposal. Also dispose serialization results, probably in `elemValue`, and don't care about other ways. And `compile` should dispose on exception, and `_cancel` should dispose each in interrupt stack (after being audited for not being used for pausing, possibly adding a switch for that).
+  },
+
+  // TODO: Successfully backprop through `a+b`. Make a backprop compiler, without any optimizations for now ('compiling' into our DAG IR).
   //   …How would we merge backprop signals? In lesca, we could afford to have a global merger, but what about here? Should each adjustable function define its merger (and same-merger functions can be used together)?
 
   adjust:{
@@ -4409,10 +4443,9 @@ zing built-in primitives like peval or `replay` with our ML?
       load:__is(`adjustLoad`),
     },
     call(fn, ins, out, dout) {
-      // What should we do? Always defer to the definition, and even fail if it's not there?
-      //   const d = defines(fn, adjust)
-      //   // …Check that fn and d are functions…
-      //   return d(ins, out, dout)
+      if (typeof fn != 'function') error('Expected a function, got', fn)
+      const d = defines(fn, adjust)
+      return d(ins, out, dout)
     },
     // Also, is there any way we can backprop into array read with `readAt` more efficiently than creating N mostly-empty arrays then merging them?
       // (I mean, other than partially evaluating that.)
@@ -5188,11 +5221,11 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         `(error 'x')`,
       ],
       [
-        `sum 1 (error 'bad stuff')`,
+        `add 1 (error 'bad stuff')`,
         `(error 'bad stuff')`,
       ],
       [
-        `sum (mult 3 (error 'uh')) 2`,
+        `add (mul 3 (error 'uh')) 2`,
         `error 'uh'`,
       ],
     ],
@@ -5342,7 +5375,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         }
       } else {
         // Use offsets with proper depth for pretty-printing.
-        // …or just join them lol.
+        // …or just join them, whatever.
         if (_isArray(x)) return x.map(structured).join('')
         if (typeof x == 'string') return x
         throw 'Bad structure'
@@ -5361,7 +5394,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         if (i+1 < str.length && str[i] === '{' && str[i+1] !== ' ') ++i, a.push(parseStr(), '')
         else a[a.length-1] += str[i]
       if (!a[a.length-1]) a.pop()
-      const el = elem('txt', a)
+      const el = elem('text', a)
       return !top && elemValue(el, a), el
     }
   },
@@ -6186,7 +6219,7 @@ And parsing is more than just extracting meaning from a string of characters (it
 
   _matchLtR(match, u, topLevel, base, reprs) { // [[a+b]+c]+d
     // Parses/serializes two-arg functions as left-to-right strings.
-    //   reprs: ['sum', '+', /\+/y, 'sub', '-', /\-/y].
+    //   reprs: ['add', '+', /\+/y, 'sub', '-', /\-/y].
     if (u === _specialParsedValue) {
       let a = match(base), op
       if (a === undefined) return
@@ -6298,10 +6331,10 @@ And parsing is more than just extracting meaning from a string of characters (it
       return _matchSequence(match, u, topLevel, fancySumSub, 'last', /\s*\,\s*/y, ',')
     }
     function fancySumSub(match, u, topLevel) { // a+b, a-b
-      return _matchLtR(match, u, topLevel, fancyMultDiv, ['sum', '+', /(\s*)\+\1/y, 'subtract', '-', /(\s*)-(?!>)\1/y])
+      return _matchLtR(match, u, topLevel, fancyMultDiv, ['add', '+', /(\s*)\+\1/y, 'sub', '-', /(\s*)-(?!>)\1/y])
     }
     function fancyMultDiv(match, u, topLevel) { // a*b, a/b
-      return _matchLtR(match, u, topLevel, fancyPow, ['mult', '*', /(\s*)\*\1/y, 'divide', '/', /(\s*)\/\1/y])
+      return _matchLtR(match, u, topLevel, fancyPow, ['mul', '*', /(\s*)\*\1/y, 'div', '/', /(\s*)\/\1/y])
     }
     function fancyPow(match, u, topLevel) { // a**b
       return _matchRtL(match, u, topLevel, fancyRest, fancyPow, ['pow', '**', /(\s*)\*\*\1/y])
@@ -6406,12 +6439,12 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       ],
       `Operators' labels can be re-bound:`,
       [
-        `1+2 sum:'Sum'`,
-        `'Sum' 1 2`,
+        `1+2 add:array`,
+        `1 2`,
         true
       ],
       [
-        `\[1+2] func:quote sum:mult`,
+        `\[1+2] func:quote add:mul`,
         `1*2`,
         true
       ],
