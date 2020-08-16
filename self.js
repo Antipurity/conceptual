@@ -163,25 +163,12 @@ __base({
   Execution:{
     docs:`Execution-related functionality.`,
     lookup:{
-      rest:__is(`rest`),
       call:__is(`call`),
       error:__is(`error`),
       await:__is(`await`),
       repeat:__is(`repeat`),
-    },
-  },
-
-  Expression:{
-    docs:`Expression-related functionality.`,
-    lookup:{
-      quote:__is(`quote`),
-      label:__is(`label`),
-      bound:__is(`bound`),
-      unbound:__is(`unbound`),
-      userTime:__is(`userTime`),
-      realTime:__is(`realTime`),
-      memory:__is(`memory`),
-      graphSize:__is(`graphSize`),
+      Numeric:__is(`Numeric`),
+      Data:__is(`Data`),
     },
   },
 
@@ -218,6 +205,7 @@ __base({
     sub:__is(`sub`),
     mul:__is(`mul`),
     div:__is(`div`),
+    pow:__is(`pow`),
   },
 
   equals:{
@@ -333,11 +321,9 @@ __base({
   Data:{
     docs:`A namespace for some data-representation-related functions.`,
     lookup:{
-      map:__is(`map`),
       array:__is(`array`),
       struct:__is(`struct`),
       lookup:__is(`lookup`),
-      concept:__is(`concept`),
     },
   },
 
@@ -346,6 +332,7 @@ __base({
     philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).
 Keep names short and rely on the IDE.`,
     lookup:{
+      Languages:__is(`Languages`),
       Commands:__is(`Commands`),
       settings:__is(`settings`),
       log:__is(`log`),
@@ -353,9 +340,6 @@ Keep names short and rely on the IDE.`,
       REPL:__is(`REPL`),
       contextMenu:__is(`contextMenu`),
       hierarchy:__is(`hierarchy`),
-      button:__is(`button`),
-      files:__is(`files`),
-      url:__is(`url`),
       elem:__is(`elem`),
     },
   },
@@ -366,8 +350,6 @@ One of the world's most annoying problems is tabs vs spaces. With UI support, yo
     philosophy:`Languages just define how the bound-graph structure gets parsed/serialized, not execution.
 Decoupling form from meaning allows composition and trivial changing of forms.`,
     lookup:{
-      style:__is(`style`),
-      parse:__is(`parse`),
       serialize:__is(`serialize`),
       fast:__is(`fast`),
       basic:__is(`basic`),
@@ -375,10 +357,6 @@ Decoupling form from meaning allows composition and trivial changing of forms.`,
       stringLanguage:__is(`stringLanguage`),
       js:__is(`js`),
     },
-  },
-
-  inline:{
-    docs:`A marker for making a function always inlined. Automatically set to true on user-defined functions.`,
   },
 
   repeat:{
@@ -439,15 +417,16 @@ Label-binding environment is not preserved.`,
       // Mark lookup.parents of globals.
       const backctx = _invertBindingContext(Self.ctx)
       lookup.parents = new Map
-      function markParents(x, p) {
-        if (lookup.parents.has(x) || x === Self) return
+      function markParents(x, p, prioritize) {
+        if (lookup.parents.has(x) || x === Self)
+          return prioritize && (lookup.parents.delete(x), lookup.parents.set(x, p))
         if (p !== undefined) lookup.parents.set(x, p)
         if (!x || typeof x != 'object' && typeof x != 'function') return
         if (p === undefined && backctx.has(x) && backctx.get(x)[0] === '_') lookup.parents.set(x, System)
         if (x instanceof Map) {
           x.forEach(v => markParents(v, p))
         } else if (x && !x[defines.key] && typeof x == 'object') {
-          Object.keys(x).forEach(k => markParents(x[k], p))
+          Object.keys(x).forEach(k => markParents(x[k], p, prioritize || +k === _id(lookup)))
         } else if (x && x[defines.key] && !defines(x, deconstruct))
           markParents(x[defines.key], x)
       }
@@ -484,19 +463,6 @@ Label-binding environment is not preserved.`,
 A namespace for every function here. Project's GitHub page: https://github.com/Antipurity/conceptual`,
     philosophy:`What happens when you force a person to change.`,
     lookup:__is(`undefined`),
-  },
-
-  graphSize:{
-    docs:`\`(graphSize Expr)\`⇒Nat: returns the number of distinct objects in Expr, going into arrays.`,
-    nameResult:[
-      `size`,
-    ],
-    call(x, fitting) {
-      const mark = new Set
-      let n = 0
-      function f(x) { if (!mark.has(x)) mark.add(x), (!fitting || fitting(x)) && ++n, _isArray(x) && x.forEach(f) }
-      return f(x), mark.clear(), n
-    },
   },
 
   purify:{
@@ -539,7 +505,7 @@ Staging (code generating code when not everything is known) is done in some nati
         if (!_isDeferred(r)) return r
         else return _stage(struct(purify, r[1]), r)
       }
-      catch (err) { if (err !== interrupt) return _unknown(jsRejected(err)); else throw err }
+      catch (err) { if (err !== interrupt) return _unknown(_errorRepr(err)); else throw err }
       finally { call.pure = prev }
     },
   },
@@ -550,12 +516,18 @@ Staging (code generating code when not everything is known) is done in some nati
 
   userTime:{
     docs:`\`(userTime)\`⇒\`TimeMark\` or \`(userTime TimeMark)\`: returns the time spent on this job as f64 milliseconds, or the non-negative in-job time elapsed since the mark.`,
-    call(mark = 0) { return impure(), call.env[_id(userTime)] + _timeSince(call.env[_id(realTime)]) - mark },
+    call(mark = 0) {
+      const L = impureLoad();  if (L !== undefined) return L
+      return impureSave(call.env[_id(userTime)] + _timeSince(call.env[_id(realTime)]) - mark)
+    },
   },
 
   realTime:{
     docs:`\`(realTime)\`⇒\`TimeMark\` or \`(realTime TimeMark)\`: returns the time since start as f64 milliseconds, or the non-negative time elapsed since the mark.`,
-    call(mark = 0) { return impure(), _timeSince(mark) },
+    call(mark = 0) {
+      const L = impureLoad();  if (L !== undefined) return L
+      return impureSave(_timeSince(mark))
+    },
   },
 
   _timeSince:{
@@ -586,35 +558,14 @@ Browsers reduce the precision of this to prevent timing attacks. Putting that pr
     docs:`\`(memory.since)\`⇒MemMark or \`(memory.since MemMark)\`: Measures required-memory-size change (allocated memory) as non-negative f64 bytes. Always 0 in browsers.
 Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.since))\`.`,
     call(mark = 0) {
-      impure()
       if (typeof process == ''+void 0 || !process.memoryUsage) return 0
+      const L = impureLoad();  if (L !== undefined) return L
       const m = process.memoryUsage()
-      return Math.max(0, m.rss + m.heapUsed - m.heapTotal - mark)
-    },
-  },
-
-  memory:{
-    docs:`\`(memory Expr)\`: Returns \`(Result MemoryIncrease)\`. Doesn't work in the browser.
-Does not count memory allocated in interruptions (between executions of Expr) as part of the reported result.`,
-    nameResult:[
-      `resultAndIncrease`,
-    ],
-    lookup:{
-      since:__is(`memorySince`),
-    },
-    call(x, add = 0) {
-      const start = memorySince()
-      const v = call(x)
-      if (_isUnknown(v)) return _stage([time, v[1], add + memorySince(start)], v)
-      return [v, memorySince(start) + add]
+      return impureSave(Math.max(0, m.rss + m.heapUsed - m.heapTotal - mark))
     },
   },
 
   _isArray(a) { return Array.isArray(a) },
-
-  stopIteration:{
-    docs:`A marker for stopping iteration.`,
-  },
 
   transform:{
     docs:`\`(transform Function Array)\`: transforms each element of Array by applying Function.
@@ -750,7 +701,6 @@ Try creating an array of multi-line strings to see the difference.`,
   Browser:{
     docs:`A REPL interface.
 Supported browsers: modern Chrome/Chromium and Firefox.`,
-    future:`Find out why absolutized elems (such as when clearing \`(settings)\`) have max-width screwed up.`,
     lookup:{
       icon:__is(`BrowserIconURL`),
       _useDarkTheme:__is(`_useDarkTheme`),
@@ -893,13 +843,13 @@ iframe { width:100%; height:100% }
 .hasOperators>.hasOperators>operator, .hasOperators>.hasOperators { margin:0 .1em }
 .hasOperators>.hasOperators>.hasOperators>operator, .hasOperators>.hasOperators>.hasOperators { margin:0 }
 
-hr { border-top:1px }
+hr { border-top:1px;  margin:0 }
 details { padding: .1em; padding-left: 1em; display: table; overflow: hidden }
 summary { margin-left: -1em }
 details>:not(summary):not(hr) { display:block }
 details>div>:not(:first-child) { max-width:75vw }
 details>div { display:table-row }
-details>div>* { padding-left:2ch }
+details>div>:first-child { padding-left:2ch }
 
 time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:hidden }
 .hover>div.code>time-report, time-report:hover { opacity:1; visibility:visible }
@@ -1465,9 +1415,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
   },
 
   elemToWindow:{
-    docs:`Wraps an element in <div.window>.`,
+    docs:`Wraps an element in \`<div.window>\`.`,
     call(el) {
-      impure()
       const pre = _smoothHeightPre(el)
       el.style.position = 'relative' // So that .offsetLeft/Top refer to the same thing as position:absolute.
       const x = el.offsetLeft, y = el.offsetTop
@@ -1497,7 +1446,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
     docs:`Clicks all <collapsed> elements in the element.`,
     call(el, readonly = false) {
       if (!el) return
-      impure()
       if (el.tagName === 'COLLAPSED' && el.onclick && readonly) return true
       if (!(el instanceof Element)) return
       let chs
@@ -1509,7 +1457,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
 
   _restoreWindow(w) {
     if (!w) return
-    impure()
     const inside = w.firstChild, preT = _smoothTransformPre(inside), preH = _smoothHeightPre(w.isWindow)
     w.isWindow.remove()
     w.replaceWith(inside)
@@ -1559,7 +1506,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
         },
         col.special = (original, copy) => copy.onclick = original.onclick
       else {
-        start.isConnected && impure()
         const parent = start.parentNode, pre = parent && _smoothHeightPre(parent)
         let nextCol = end !== undefined ? end : start.nextSibling
         const d = elem('hidden')
@@ -1633,7 +1579,6 @@ Remember to quote the link unless you want to evaluate the insides.`,
   allowDragging:{
     docs:`Allows dragging the element around with a pointer. Only call on absolutely-positioned elements with .style.left and .style.top.`,
     call(el) {
-      impure()
       let pointerId = null, startX, startY, scrX, scrY
       const passive = {passive:true}
       el.addEventListener('pointerdown', evt => {
@@ -1849,7 +1794,7 @@ For anything else, display the globals the expression binds to, and an expandabl
   },
 
   contextMenu:{
-    docs:`Creates and displays a <context-menu> element near the specified element.`,
+    docs:`Creates and displays a \`<context-menu>\` element near the specified element.`,
     philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     lookup:{
       describe:__is(`describe`),
@@ -1882,12 +1827,11 @@ For anything else, display the globals the expression binds to, and an expandabl
         docs:`Fetch URLs and try to display their contents.`,
         call([el, range, v]) {
           if (_isArray(v) && v[0] === elem && v[1] === url && typeof v[2] == 'string' && v.length == 3) {
-            impure()
             const result = elem('div')
             result.classList.add('resizable')
   
             fetch(v[2], {mode:'cors'})
-            .catch(r => elemInsert(result, serialize(jsRejected(r), fancy, undefined, serialize.displayed)))
+            .catch(r => elemInsert(result, serialize(_errorRepr(r), fancy, undefined, serialize.displayed)))
             .then(r => r.arrayBuffer())
             .then(r => new TextDecoder().decode(new Uint8Array(r)))
             .then(r => {
@@ -1953,7 +1897,6 @@ Allow editing run-time and rewrite-time values.`,
       },
     ],
     call(el, range, evt) {
-      impure()
       if (!el && (evt.target || evt.explicitOriginalTarget) === document.documentElement)
         el = evt.target || evt.explicitOriginalTarget
       if (!el) return
@@ -1985,29 +1928,29 @@ Allow editing run-time and rewrite-time values.`,
     docs:`\`(daintyEvaluator Expr)\`: returns an element that will evaluate the expression and display its \`log\`s if any.`,
     call(expr) {
       if (typeof document == ''+void 0) return
-      impure()
 
       // Evaluate the requested expression.
       const env = _newExecutionEnv(call.env)
       const result = _evaluationElem(env)
       const el = elem('div', result)
+      let L;  if ((L = impureLoad()) !== undefined) return L || undefined
       el.classList.add('code')
       env[_id(log)] = el.lastChild
       let ended = false
       const prev = call.env
       _doJob(expr, env, () => (!result.previousSibling ? (ended = true, el.remove()) : result.remove()))
       call.env = prev
-      return !ended ? el : undefined
+      L = impureSave(!ended ? el : null)
+      return L || undefined
     },
   },
 
   atCursor:{
-    docs:`Positions an element at cursor.`,
+    docs:`Positions an element at cursor (as pointed out by an event).`,
     call(el, pointerEvt = atCursor.lastEvt, inside = Self.into) {
       let x = pointerEvt ? pointerEvt.clientX : 0, y = pointerEvt ? pointerEvt.clientY : 0
       if (el.parentNode) error('Only position new elements at cursor')
       if (!inside.isConnected) error('Only position elements inside the visible document')
-      impure()
       const r = (inside !== document.body ? inside : document.documentElement).getBoundingClientRect()
 
       if (!atCursor.opened) atCursor.opened = []
@@ -2086,7 +2029,6 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     },
     call(expr, then) {
       if (typeof document == ''+void 0) return
-      impure()
       const before = call.env[_id(log)]
 
       const lang = _langAt(), binds = _bindingsAt()
@@ -2095,13 +2037,17 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       let bindAs = null, prevBinding = evaluator.none
 
       const el = elem('div')
+
+      let env
+      if ((env = impureLoad()) !== undefined) return env
+
       el.classList.add('code')
       const prompt = elem('prompt')
       const query = elem('span')
       query.classList.add('editorContainer')
       query.append(prompt)
       query.append(serialize(expr, lang, binds, serialize.displayed))
-      let env = _newExecutionEnv(call.env)
+      env = _newExecutionEnv(call.env)
       const waiting = _evaluationElem(env)
       env[_id(log)] = waiting
       el.append(query)
@@ -2129,35 +2075,34 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       if (_isArray(expr) && expr[0] === _extracted && expr.length == 3 && (_isLabel(expr[1]) || _invertBindingContext(binds).has(expr[1])))
         bindAs = _isLabel(expr[1]) ? expr[1] : label(_invertBindingContext(binds).get(expr[1])), expr = expr[2]
       const prev = call.env
-      try {
-        _doJob(expr, env, r => { // Got the result.
-          const end = _timeSince(), real = _timeSince(start)
+      _doJob(expr, env, r => { // Got the result.
+        const end = _timeSince(), real = _timeSince(start)
 
-          if (binds && binds.has(evaluator.history)) { // Add result to bindings.
-            if (_isLabel(bindAs) && binds.get(evaluator.history).has(bindAs))
-              r = struct(error, "Label", bindAs, "is already bound to", binds.get(bindAs))
-            else if (_isLabel(bindAs)) {
-              const L = bindAs
-              const q = quote(r)
-              binds.get(evaluator.history).set(L, binds.has(L) ? binds.get(L) : evaluator.none)
-              binds.set(L, q)
-              _invertBindingContext(binds, true)
-              r = struct(_extracted, q, r)
-            }
+        if (binds && binds.has(evaluator.history)) { // Add result to bindings.
+          if (_isLabel(bindAs) && binds.get(evaluator.history).has(bindAs))
+            r = struct(error, "Label", bindAs, "is already bound to", binds.get(bindAs))
+          else if (_isLabel(bindAs)) {
+            const L = bindAs
+            const q = quote(r)
+            binds.get(evaluator.history).set(L, binds.has(L) ? binds.get(L) : evaluator.none)
+            binds.set(L, q)
+            _invertBindingContext(binds, true)
+            r = struct(_extracted, q, r)
           }
+        }
 
-          const pre = _smoothHeightPre(el)
-          elemRemove(waiting)
-          // Merge `_updateBroken` of both logged children into one.
-          _updateBroken(el)
-          call.env = env
+        const pre = _smoothHeightPre(el)
+        elemRemove(waiting)
+        // Merge `_updateBroken` of both logged children into one.
+        _updateBroken(el)
+        call.env = env
 
-          // Display `_logAll evaluator ^(Result UserDuration RealDuration EndTime)`.
-          el.append(daintyEvaluator([_logAll, evaluator, [quote, [r, env[_id(userTime)], real, end]]]))
-          env = null
-        })
-      } finally { call.env = prev }
-      return el
+        // Display `_logAll evaluator ^(Result UserDuration RealDuration EndTime)`.
+        el.append(daintyEvaluator([_logAll, evaluator, [quote, [r, env[_id(userTime)], real, end]]]))
+        env = null
+      })
+      call.env = prev
+      return impureSave(el)
     },
   },
 
@@ -2374,7 +2319,6 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
 
   REPL:{
     docs:`\`(REPL Language Bindings)\`: Creates a visual REPL element (read-evaluate-print loop).`,
-    future:`Smooth out the jumping when editing multi-line strings, and when "evaluate while typing" is false.`,
     lookup:{
       editor:__is(`editor`),
       evaluator:__is(`evaluator`),
@@ -2384,9 +2328,8 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
     call(lang = fancy, binds = new Map(Self.ctx)) {
       if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
       if (!(binds instanceof Map)) throw "Invalid binding context"
-      impure()
 
-      const env = _newExecutionEnv(null, null, lang, binds)
+      let env = _newExecutionEnv(null, null, lang, binds)
 
       if (typeof document == ''+void 0) { // NodeJS
         // Use the `repl` module to display colored prompts and command inputs/outputs.
@@ -2445,9 +2388,19 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       }
       // Else Browser
 
+      let L;  if ((L = impureLoad()) !== undefined) return L
+
       const repl = elem('node')
       repl.isREPL = true, repl.classList.add('REPL')
-      elemValue(repl, struct(REPL, lang, binds))
+      const us = [REPL, lang, binds]
+      observe(us, function onChange(us) {
+        if (!repl.isConnected) return observe(us, onChange, false)
+        lang = us[1], binds = us[2]
+        env = _newExecutionEnv(null, null, lang, binds)
+        query.replaceWith(editor('', lang, binds, purifyAndDisplay, evaluate))
+        ;[...repl.querySelectorAll('serialization')].forEach(ch => ch.replaceWith(serialize(ch.to, lang, binds, serialize.displayed)))
+      }, true)
+      elemValue(repl, us)
 
       // Display purified output.
       const pureOutput = elem('div')
@@ -2458,10 +2411,10 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       const purifyAndDisplay = _throttled((expr, clear) => {
         if (msg === false && _isArray(expr) && expr[0] === jsEval && typeof expr[1] == 'string' && expr[2]) expr = [randomNat, 2]
         const pre = _smoothHeightPre(pureOutput)
-        _removeChildren(pureOutput)
         if (penv !== undefined) _cancel(penv), waiting.remove(), penv = undefined, waiting = undefined
         let promise
         if (_evaluateWhileTyping[1]) {
+          _removeChildren(pureOutput)
           if (!clear) promise = new Promise(then => {
             const e = penv = _newExecutionEnv(env, null, lang, binds)
             e[_id(log)] = waiting = _evaluationElem(penv), call.env = penv
@@ -2489,8 +2442,12 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
             })
             _smoothHeightPost(pureOutput, pre)
           })
-        } else
-          elemInsert(pureOutput, button(evaluateLast, 'evaluate'))
+        } else {
+          if (pureOutput.lastChild && pureOutput.firstChild === pureOutput.lastChild && pureOutput.lastChild.tagName === 'BUTTON') return
+          _removeChildren(pureOutput)
+          pureOutput.append(button(evaluateLast, 'evaluate'))
+          _reflow().then(() => _smoothHeightPost(pureOutput))
+        }
         return promise
       }, .1, expr => lastExpr = expr)
 
@@ -2503,13 +2460,18 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       repl.classList.add('code')
 
       const msg = defines(lang, REPL)
-      repl.append(elem('div', [structuredSentence('{A REPL} of language '), serialize(lang, basic, undefined, serialize.displayed), typeof msg == 'string' ? stringToDoc(': ' + msg) : elem('span')]))
+      repl.append(elem('text', [
+        'A ',
+        serialize(REPL, basic, undefined, serialize.displayed),
+        ' of language ',
+        serialize(lang, basic, undefined, serialize.displayed),
+        typeof msg == 'string' ? stringToDoc(': ' + msg) : elem('span')]))
 
       const query = editor('', lang, binds, purifyAndDisplay, evaluate)
       repl.append(query)
       repl.append(pureOutput)
       env[_id(log)] = query
-      return repl
+      return impureSave(repl)
     },
   },
 
@@ -2568,7 +2530,6 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
   tutorial:{
     docs:`\`tutorial Func\`: views the unlockable code tutorial of \`Func\`, if available.
 \`(tutorial)\`: views all globally-available tutorials.`,
-    future:`Make the actual tutorial, and test this.`,
     tutorial:[
       `A nice, sunny day out, with not a single cloud in sight. Let's make our understanding of tutorials as clear as the weather.
 
@@ -2725,12 +2686,20 @@ Now, type \`(tutorial)\` and claim what's yours.`,
       function updateIndicator() {
         if (Object.getPrototypeOf(x) !== Object.getPrototypeOf(expr))
           indicator.textContent = '❌ ', indicator.title = 'Invalid type.'
-        else if (serialize(deconstruct(x), basic) === serialize(deconstruct(expr), basic))
+        else if (_hasSameRepr(x, expr))
           indicator.textContent = '✅ ', indicator.title = 'Up-to-date.'
         else
           indicator.textContent = '⬜ ', indicator.title = 'Changed. Can commit this.'
       }
     },
+  },
+
+  _hasSameRepr(a, b) {
+    a = serialize(deconstruct(a), basic)
+    if (_isArray(a)) a = a.join('')
+    b = serialize(deconstruct(b), basic)
+    if (_isArray(b)) b = b.join('')
+    return a === b
   },
 
   editRewrite:{
@@ -2776,10 +2745,10 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
         const ctx = Rewrite.ctx, key = keyPreview
         if (value === undefined)
           Self.ctx.has(key) ? ctx.set(key, Self.ctx.get(key)) : ctx.delete(key)
-        else if (serialize(deconstruct(value), basic) === serialize(deconstruct(ctx.get(key)), basic))
+        else if (_hasSameRepr(value, ctx.get(key)))
           key !== value ? ctx.set(key, value) : ctx.delete(key)
         _invertBindingContext(ctx, true)
-        if (_isLabel(key) ? serialize(deconstruct(value), basic) === serialize(deconstruct(Self.ctx.get(key)), basic) : !ctx.has(key))
+        if (_isLabel(key) ? _hasSameRepr(value, Self.ctx.get(key)) : !ctx.has(key))
           indicator.textContent = '✅ ', indicator.title = 'Up-to-date, non-edited.'
         else if (ctx.get(key) === value)
           indicator.textContent = '➕ ', indicator.title = 'Changed from self. Changes will be seen in the next rewrite.'
@@ -2871,9 +2840,13 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
     return el.nextSibling || el.parentNode && getComputedStyle(el.parentNode).display !== 'block' && _getNextSibling(el.parentNode) || el.nextSibling
   },
 
+  _stopIteration:{
+    docs:`A marker for stopping iteration.`,
+  },
+
   _visitText:{
     docs:`Calls f(String, TextNode) or f(false, SpecialElem) for each substring in el as parsing sees it.
-Return stopIteration to stop iteration.`,
+Return \`_stopIteration\` to stop iteration.`,
     call(el, f) {
       if (!el) return
       if (el.tagName === 'BR') return f(_getNextSibling(el) ? '\n' : '', el)
@@ -2882,9 +2855,9 @@ Return stopIteration to stop iteration.`,
       }
       if (el.special) return f(false, el)
       for (let ch = el.firstChild; ch; ch = ch.nextSibling) {
-        if (_visitText(ch, f) === stopIteration) return stopIteration
+        if (_visitText(ch, f) === _stopIteration) return _stopIteration
         if (_getNextSibling(ch) && (ch.tagName === 'DIV' || ch.tagName === 'P'))
-          if (f('\n', _getNextSibling(ch)) === stopIteration) return stopIteration
+          if (f('\n', _getNextSibling(ch)) === _stopIteration) return _stopIteration
       }
     },
   },
@@ -2907,7 +2880,7 @@ Return stopIteration to stop iteration.`,
           el.parentNode.insertBefore(el.firstChild.nextSibling, el.nextSibling)
       }
 
-      return el === ch ? stopIteration : s === false ? ++j : j += s.length
+      return el === ch ? _stopIteration : s === false ? ++j : j += s.length
     })
     return j
   },
@@ -2918,7 +2891,7 @@ Return stopIteration to stop iteration.`,
     _visitText(el, (s, el) => {
       arr.push(s)
       const len = s === false ? 1 : s.length
-      if (j + len >= index) return result = el, i = index - j, stopIteration
+      if (j + len >= index) return result = el, i = index - j, _stopIteration
       j += len
     })
     let ch = result
@@ -2962,7 +2935,6 @@ Return stopIteration to stop iteration.`,
     call(el, pre, delay = 0) {
       if (_disableSmoothTransitions[1]) return
       if (!pre || !(el instanceof Element)) return
-      impure()
       const post = _smoothTransformPre(el)
       if (!post || el.style.display || el.style.transform || el.style.transform && el.style.transform !== 'none') return
       if (pre[0] === post[0] && pre[1] === post[1]) return post
@@ -2992,7 +2964,6 @@ Call this with the result of _smoothHeightPre to transition smoothly.`,
     call(el, pre) {
       if (!(el instanceof Element)) return
       if (_disableSmoothTransitions[1]) return 0
-      el.isConnected && impure()
       el.style.removeProperty('height')
 
       const post = _smoothHeightPre(el)
@@ -3009,7 +2980,6 @@ Call this with the result of _smoothHeightPre to transition smoothly.`,
 Very bad performance if a lot of inserts happen at the same time, but as good as it can be for intermittent smooth single-element-tree insertions.`,
     call(into, el, before = null) {
       if (el === undefined) return
-      impure()
       if (el.parentNode) el = elemClone(el)
       if (typeof el == 'string') el = document.createTextNode(el)
       const pre = _smoothHeightPre(into)
@@ -3034,7 +3004,6 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
     },
     call(el, absolutize = false, doParticles = true, doHeight = true) {
       if (!el || el.removed) return
-      impure()
       el.removed = true
       if (!(el instanceof Element)) return el.remove ? el.remove() : error('Not an element')
 
@@ -3054,10 +3023,11 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       }
 
       if (absolutize) {
-        const x = el.offsetLeft, y = el.offsetTop
+        const x = el.offsetLeft, y = el.offsetTop, w = el.offsetWidth
         el.style.position = 'absolute'
         el.style.left = x + 'px'
         el.style.top = y + 'px'
+        el.style.width = w+1 + 'px'
       }
 
       _reflow().then(() => {
@@ -3348,14 +3318,14 @@ There isn't even one grand model for search of search, and instead, it should be
     if (_isPromise(p)) {
       p.then(
         r => (p.result = r, _schedule(expr, env, then)),
-        r => (p.result = jsRejected(r), _schedule(expr, env, then)))
+        r => (p.result = _errorRepr(r), _schedule(expr, env, then)))
     } else if (_isArray(p)) { // For arrays of promises, act like Promise.allSettled.
       let n = p.length
       for (let i = 0; i < n; ++i) {
         const d = p[i]
         d.then(
           r => (d.result = r, !--n && _schedule(expr, env, then)),
-          r => (d.result = jsRejected(r), !--n && _schedule(expr, env, then)))
+          r => (d.result = _errorRepr(r), !--n && _schedule(expr, env, then)))
       }
     } else throw "???"
   },
@@ -3380,17 +3350,18 @@ There isn't even one grand model for search of search, and instead, it should be
   },
 
   jsRejected:{
-    docs:`\`(jsRejected Reason)\`: represents an exception or promise rejection of JS.
-Do not call this directly.`,
-    call(err) {
-      // Convert a caught error to its displayable representation.
-      if (err instanceof Error)
-        return err.stack ? struct(jsRejected, elem('error', String(err)), _resolveStack(err.stack)) : struct(jsRejected, elem('error', String(err)))
-      else if (!_isError(err))
-        return struct(jsRejected, err)
-      else
-        return err
-    },
+    docs:`\`jsRejected Reason\`: throws an exception.`,
+    call(err) { throw err },
+  },
+
+  _errorRepr(err) {
+    // Convert a caught error to its displayable representation.
+    if (err instanceof Error)
+      return err.stack ? struct(jsRejected, elem('error', String(err)), _resolveStack(err.stack)) : struct(jsRejected, elem('error', String(err)))
+    else if (!_isError(err))
+      return struct(jsRejected, err)
+    else
+      return err
   },
 
   _schedule:{
@@ -3455,17 +3426,20 @@ If any promises the job depends on have a method .cancel, calls those.`,
     call.env = env, call.depth = 0
     _checkInterrupt.step = 0 // So that a step always happens even if we immediately interrupt to step through execution.
     interrupt.started = microstart // So that we can interrupt on timeout.
-    _jobs.reEnter = true // So that code can specify custom _schedule overrides.
+    _jobs.reEnter = true // So that code can specify custom `_schedule` overrides.
     let v, interrupted = false
 
     if (typeof document != ''+void 0 && env[_id(_checkInterrupt)] !== undefined)
       _highlightOriginal(env[_id(_checkInterrupt)], false)
     if (typeof document != ''+void 0 && _isArray(env[_id(log)]))
       env[_id(log)] = env[_id(log)][0].nextSibling, env[_id(log)].previousSibling.remove()
-    try { v = call(expr) }
+    try {
+      v = call(expr)
+      _saveReplay(expr, env)
+    }
     catch (err) {
       if (err === interrupt) interrupted = true
-      else v = jsRejected(err)
+      else v = _errorRepr(err)
     }
     if (typeof document != ''+void 0 && interrupted && env[_id(_checkInterrupt)] !== undefined) {
       // Highlight the last-executed expr.
@@ -3574,6 +3548,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
     e[_id(step)] = 0
     e[_id(_pausedToStepper)] = undefined // Max func call depth at which we'll interrupt.
 
+    e[_id(impureLoad)] = undefined // Index≥0 into impure tape to recall; count<0 of saves to skip, undefined to check non-recording, null to save.
+    e[_id(impureSave)] = undefined // Replay tape for impure results.
+
     e[_id(userTime)] = 0 // CPU time spent on this job.
     e[_id(realTime)] = undefined // The timestamp of when we last started executing this job.
     Object.seal(e)
@@ -3594,21 +3571,7 @@ In Scheme, this is called \`begin\`.`,
   },
 
   rest:{
-    docs:`\`(rest Array)\` or \`…Array\`: when statically used in an array, spreads the Array into the user. Is a UI convenience.`,
-    examples:[
-      [
-        `(sum (rest (1 2)))`,
-        `3`,
-      ],
-      [
-        `(sum …(2 3))`,
-        `5`,
-      ],
-      [
-        `(sum …(…(2) 3))`,
-        `5`,
-      ],
-    ],
+    docs:`\`(rest Array)\` or \`…Array\`: when statically used in an array, spreads the \`Array\` into the user. Is a UI convenience.`,
     call(a) { return struct(rest, a) },
   },
 
@@ -3617,8 +3580,10 @@ In Scheme, this is called \`begin\`.`,
   true:true,
 
   quote:{
-    docs:`\`(quote Expr)\` or \`^Expr\`: A special form that returns Expr unevaluated, quoting the exact array structure.
-If there are no labels inside, has mostly the same effect as adding \`array\` at the beginning of every array seen inside, copying.`,
+    docs:`\`(quote Expr)\` or \`^Expr\`: A special form that returns \`Expr\` unevaluated, quoting the exact object.
+
+Makes it easy to insert a reference to any object when generating a program, don't you think so, you cute rascal?
+But I know what you're really thinking: "arrays with heads that define \`construct\` will still be constructed by \`makeGraph\`, which is called by \`parse\`, so not all objects can be preserved as-is". That is a lot of specific knowledge; how did you come across that? Anyway, good thing that generation doesn't go through \`parse\`, then.`,
     examples:[
       [
         `(quote x)`,
@@ -3776,7 +3741,7 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
 
       if (n !== (n>>>0))
         throw 'Expected uint32 as limit of randomness'
-      if (n === 0) return _randomBits()
+      if (n === 0) return _randomBits(0)
       if (n === 1) return 0
       if (!(n & (n-1))) return _randomBits(_countBits(n))
 
@@ -3827,12 +3792,12 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
         const n = Math.floor(p *= 16);
         if (p === n) { // No more precision left; decide now. Special cases of the `r < n` resulting check below.
           if (!n) return false; // 0000
-          if (n === n >> 3 << 3) return !_randomBits(1); // 8 — X000
-          if (n === n >> 2 << 2) return _randomBits(2) < (n >> 2); // 4, 12 — XX00
-          if (n === n >> 1 << 1) return _randomBits(3) < (n >> 1); // 2, 6, 14 — XXX0
+          if (n === n >> 3 << 3) return !_randomBits(1); // 8 — ?000
+          if (n === n >> 2 << 2) return _randomBits(2) < (n >> 2); // 4, 12 — ??00
+          if (n === n >> 1 << 1) return _randomBits(3) < (n >> 1); // 2, 6, 10, 14 — ???0
         }
         const r = _randomBits(4);
-        if (r !== n) return r < n; // XXXX
+        if (r !== n) return r < n; // ????
         else p -= n; // 1/16 chance of continuing computation.
       }
       // Generating (up to) 4 bits at a time is not based on past performance measures, or anything.
@@ -3843,23 +3808,22 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
   _countBits(n) { let x=0; while (n >>>= 1) ++x;  return x },
 
   _randomBits(n) { // Returns n || 32 random bits.
-    impure()
+    let L;  if ((L = impureLoad()) !== undefined) return L
+    if (n !== (n & 31)) throw impureSave(new Error('Expected 0…31 bits to generate (where 0 is 32), got '+n))
     if (!n) {
       if (!_randomBits.a)
         Object.assign(_randomBits, { a:new Uint32Array(1024), pos:1024 })
       if (_randomBits.pos >= _randomBits.a.length) _randomBits.pos = 0, _randomFill(_randomBits.a);
-      return _randomBits.a[_randomBits.pos++];
+      return impureSave(_randomBits.a[_randomBits.pos++])
     }
-    if (n !== (n & 31)) throw new Error('Expected 0…31 bits to generate (where 0 is 32), got '+n);
     if (_randomBits.n === void 0) _randomBits.r = _randomBits.n = 0;
     let r = 0;
-    if (n > _randomBits.n) r = _randomBits.r, n -= _randomBits.n, _randomBits.r = _randomBits(), _randomBits.n = 32;
+    if (n > _randomBits.n) r = _randomBits.r, n -= _randomBits.n, _randomBits.r = _randomBits(0), _randomBits.n = 32;
     r = (r << n) | (_randomBits.r & ((1 << n) - 1)), _randomBits.n -= n, _randomBits.r >>>= n;
-    return r;
+    return impureSave(r)
   },
 
   _randomFill(buf) { // Fills a u/int-array or array-buffer with random data.
-    impure()
     buf = new Uint8Array(buf.buffer || buf);
     let bytes = buf.byteLength
     if (typeof crypto!==''+void 0 && crypto.getRandomValues) {
@@ -3876,7 +3840,6 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
   },
 
   call:{
-    future:`Test that the tutorial works.`,
     tutorial:[
       `Do you know how easy it is to make an interpreter of the DAG IR we use? Let's see.
 
@@ -3979,6 +3942,7 @@ I've known humans that rely on being like that for their daily life.
 They're often unable to quickly internalize novel viewpoints, and at best repeat my words when I introduce something new (at worst, if I'm not hitting the meaningless style and terminology just right, then I'm ignored entirely). Learning foundations instead of their consequences is an alien lifeform to them, and they're amazed by how little mistakes I make once I know stuff and how much I know. Sometimes, I see that they have original viewpoints, but when they share their inspirations, their views turn out to be a banal mix of interesting things they've seen. Maybe I just prefer a world where everyone is right in a different way, to a world where everyone is wrong if you dig deep enough.
 It's much more efficient to learn to repeat rather than understand, so the whole human society is like this.`,
     lookup:{
+      quote:__is(`quote`),
       apply:__is(`apply`),
       func:__is(`func`),
       select:__is(`select`),
@@ -4034,6 +3998,8 @@ It's much more efficient to learn to repeat rather than understand, so the whole
       makeGraph:__is(`makeGraph`),
       construct:__is(`construct`),
       deconstruct:__is(`deconstruct`),
+      concept:__is(`concept`),
+      map:__is(`map`),
     },
   },
 
@@ -4096,15 +4062,102 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
     },
   },
 
+  deconstruct:{
+    docs:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
+    call(v, allowPath = false) {
+      if (defines(v, deconstruct)) return defines(v, deconstruct)
+      else if (_isArray(v)) return v.slice()
+
+      if (v instanceof Int8Array)
+        return [i8, Array.from(v)]
+      if (v instanceof Int16Array)
+        return [i16, Array.from(v)]
+      if (v instanceof Int32Array)
+        return [i32, Array.from(v)]
+      if (v instanceof Uint8Array)
+        return [u8, Array.from(v)]
+      if (v instanceof Uint16Array)
+        return [u16, Array.from(v)]
+      if (v instanceof Uint32Array)
+        return [u32, Array.from(v)]
+      if (v instanceof Float32Array)
+        return [f32, Array.from(v)]
+      if (v instanceof Float64Array)
+        return [f64, Array.from(v)]
+
+      if (allowPath && lookup.parents.has(v)) {
+        const p = lookup.parents.get(v)
+        if (defines(p, lookup))
+          for (let k of lookup(p))
+            if (lookup(p, k) === v) return struct(lookup, p, k)
+        if (_view(p))
+          for (let k of Object.keys(_view(p)))
+            if (k !== _id(deconstruct) && _view(p)[k] === v)
+              return struct(defines, p, concept.idToKey[+k])
+      }
+
+      if (typeof document != ''+void 0) {
+        // Not precise at all.
+        if (v instanceof Node && 'to' in v) return v.to
+        if (v instanceof Element) return struct(elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch, allowPath)))
+        if (v instanceof Node) return v.textContent
+      }
+
+      if (_isArray(v) && !_isVar(v)) return _cameFrom(v.slice(), v)
+      if (v instanceof Map) {
+        // Sort keys by _id for consistency.
+        const keys = [...v.keys()].sort((a,b) => _id(a) - _id(b))
+        const arr = [map]
+        keys.forEach(k => arr.push(quote(k), quote(v.get(k))))
+        return arr
+      }
+      if (v && v[defines.key]) {
+        // Deconstruct the definition Map, treating self-references specially.
+        const arr = [map], d = v[defines.key]
+        Object.keys(d).forEach(k => {
+          const val = d[k]
+          val === v ? arr.push(quote(concept.idToKey[+k]), _unevalFunction(v)) : arr.push(quote(concept.idToKey[+k]), quote(val))
+        })
+        if (typeof v == 'function' && !(_id(call) in d)) arr.push(call, _unevalFunction(v))
+        return struct(concept, arr)
+      }
+      if (typeof v == 'function')
+        return _unevalFunction(v)
+      if (v === undefined)
+        return [concept, new Map([[docs, `A marker that represents the lack of a conceptual definition or a value.`]])]
+      if (!v || typeof v != 'object')
+        return v
+      const arr = [map]
+      Object.keys(v).forEach(k => arr.push(k, quote(v[k])))
+      return arr
+    },
+  },
+
+  _unevalFunction(f) {
+    let ctx = jsEval.ctx in f ? f[jsEval.ctx] : undefined
+    if (ctx === Self.ctx) ctx = undefined
+
+    // Remove unnecessary whitespace.
+    let src = (''+f).split('\n')
+    const ws = /^\s*/.exec(src[src.length-1])[0]
+    src = src.map(line => line.replace(ws, '')).join('\n')
+    src = src.replace(/^[_a-zA-Z]+/, '')
+    try { Function('('+src+')') }
+    catch (err) { src = 'function'+src }
+
+    return ctx !== undefined ? struct(jsEval, src, ctx) : struct(jsEval, src)
+  },
+
   input:{
     docs:`\`input\`: Represents input of the innermost function.
 For example, \`(func input+3) 5\` returns \`8\`.`,
   },
 
   func:{
-    docs:`\`func Body\`: A construct that can be called to evaluate \`Body\`.
-This has one \`input\`; see \`multifunc\` for multi-input functions.`,
-    future:`\`observe\` all the nodes, and (un-observe and) re-compile the function when any of them change, meaning that \`compile\` should take the function, or be merged with \`func\` outright. (And be private.)`,
+    docs:`\`\\Body\` or \`func Body\`: A construct that can be called to evaluate \`Body\`.
+This has one \`input\`; see \`multifunc\` for multi-input functions.
+
+What a function does, does not change when a node in its body changes. That would need a lot of memory to wire up. Instead, re-compile the function object itself with \`writeAt\` if a change is needed.`,
     lookup:{
       input:__is(`input`),
       multifunc:__is(`multifunc`),
@@ -4351,8 +4404,10 @@ Many updates at the same time are merged into one call, scheduled in a separate 
   },
 
   select:{
-    docs:`\`select If Then Else Arg\`: calls \`Then Arg\` if \`If\` is true, else \`Else Arg\`.
-Inconvenient compared to being able to refer to enclosing variables directly, but simple and Turing-complete.`,
+    docs:`\`select If Then Else Arg\`: calls \`Then Arg\` if \`If\` is \`true\`, else \`Else Arg\`.
+Inconvenient compared to being able to refer to enclosing variables directly, but simple and Turing-complete.
+
+This is much like the φ function in SSA forms, but explicitly passing arguments to code blocks.`,
     call(If, Then, Else, Arg) {
       return If === true ? Then(Arg) : Else(Arg)
     },
@@ -4360,7 +4415,7 @@ Inconvenient compared to being able to refer to enclosing variables directly, bu
 
   multifunc:{
     docs:`\`multifunc Func\`: A construct that, when called, turns multiple args into one array to call \`Func\` with.
-In JS: "(...args) => f(args)".`,
+In JS: \`(...args) => f(args)\`.`,
     argCount:1,
     construct(x, obj) {
       if (obj === undefined) {
@@ -4464,29 +4519,157 @@ zing built-in primitives like peval or `replay` with our ML?
   },
 
   impure:{
-    docs:``,
+    docs:`\`impure Func\`: A \`construct\` to wrap a (single-arg) function that can have varying results, which should not be computed again on \`replay\`.
+
+For example, killing an animal can only be done once, but learning internal estimates from that experience can be done many times.
+
+
+If using the primitives \`impureLoad\` and \`impureSave\` directly, there is a rigid structure to be maintained: execution must be repeated exactly, otherwise there will be errors that are hard to trace back to their sources. \`impure\` maintains that structure.`,
     lookup:{
       load:__is(`impureLoad`),
       save:__is(`impureSave`),
     },
+    argCount:1,
     construct(x, obj) {
-    },
-    call() {
-      // Signifies that {the current operation} must be {recorded in a pure context} and {not cached in a non-pure one}.
-      //   Is temporary. TODO: remove it, and calls to it; replace with calls to impureLoad/impureSave.
-      if (call.pure) throw impure
+      error('Not implemented')
+      if (obj === undefined) {
+        // Create the function.
+        obj = arg => {
+          // Do not skim the proper usage, dear friend: load once, then save once.
+          if (!interrupt(impure)[0]) {
+            // Between interrupts, ensure that only one check happens in one call.
+            const L = impureLoad()
+            if (L !== undefined) return L
+          }
+          try { return impureSave(obj.f(arg)) }
+          catch (err) {
+            if (err === interrupt) interrupt(impure, _tmp().length=0, _tmp().push(true))
+            else impureSave(_errorRepr(err))
+            throw err
+          }
+        }
+
+        const d = obj[defines.key] = Object.create(null)
+        d[_id(deconstruct)] = x
+        d[_id(argCount)] = 1
+        Object.freeze(d)
+        return obj
+      } else {
+        // Set the function that we call.
+        obj.f = x[1]
+      }
     },
   },
 
   impureLoad:{
-    docs:``,
+    docs:`Checks if we are replaying a past experience.
+If replaying, this returns the past result; if not, returns \`undefined\`, and the caller must always call \`impureSave\` with its result.`,
     call() {
+      // For potential partial evaluation.
+      if (call.pure) throw impure
+      if (!call.env) return
+
+      const index = call.env[_id(impureLoad)]
+      if (index != null) {
+        if (index < 0)
+          return void --call.env[_id(impureLoad)]
+        const tape = call.env[_id(impureSave)]
+        if (!tape || tape.length <= index)
+          error("Wrong handling of impurities: on replay, attempted to load more than was saved")
+        const result = tape[call.env[_id(impureLoad)]++]
+        if (_isError(result)) throw result
+        return result
+      }
+      // If we are the outermost load, await a save; if we are loading after the outermost load, remember to skip 1 save.
+      call.env[_id(impureLoad)] = index !== null ? null : -1
     },
   },
 
   impureSave:{
-    docs:``,
+    docs:`Saves (and returns) the result to replay the experience later.`,
     call(x) {
+      if (x === undefined) error('Cannot save `undefined`')
+      if (!call.env) return x
+      const index = call.env[_id(impureLoad)]
+      if (index != null && !(index < 0))
+        error("Wrong handling of impurities: attempted to save while replaying")
+      if (index != null) {
+        // Skip saving inner impurities (because they'll already be saved by the outer impurity).
+        if (index === -1)
+          call.env[_id(impureLoad)] = null
+        else
+          ++call.env[_id(impureLoad)]
+        return x
+      }
+      if (index === undefined)
+        error("Wrong handling of impurities: trying to save without a prior load")
+      call.env[_id(impureLoad)] = undefined
+      let tape = call.env[_id(impureSave)]
+      if (!tape) call.env[_id(impureSave)] = tape = _allocArray()
+      tape.push(x)
+      return x
+    },
+  },
+
+  Replays:[
+  ],
+
+  _maxReplaysLength:[
+    __is(`settings`),
+    0,
+    `The approximate maximum length of the global replay buffer \`^Replays\`.`,
+  ],
+
+  _saveReplay:{
+    docs:`Potentially saves a replay in the global replay buffer.`,
+    call(expr, env) {
+      if (!_maxReplaysLength[1]) return
+      const index = env[_id(impureLoad)], tape = env[_id(impureSave)]
+      if (index === null)
+        error("Expected an `impureSave`, but execution terminated")
+      if (index != null && index < 0)
+        error("Expected", -index+1, "more `impureSave`s, but evaluation concluded")
+      if (index !== undefined)
+        error("What is this:", index)
+      if (!tape) return
+      Replays.push(expr, tape)
+      const max = _maxReplaysLength[1]
+      if (Replays.length > max*2)
+        // Intermittent, for linear runtime.
+        Replays.splice(0, Replays.length - max)
+    },
+  },
+
+  replay:{
+    docs:`Replays the executions stored in the replay buffer, one time each.`,
+    lookup:{
+      Replays:__is(`Replays`),
+      _maxReplaysLength:__is(`_maxReplaysLength`),
+      impure:__is(`impure`),
+    },
+    call(what = Replays) {
+      if (!_isArray(what))
+        what = defines(what, replay)
+      if (!_isArray(what) || (what.length&1))
+        error("Expected an array of (…? Expr Tape …?) but got", what)
+
+      // The below is just a loop that does `call(expr)`, setting up then checking the impurity tape.
+      let [i, expr, tape, index] = interrupt(replay)
+      if (i === undefined)
+        i = 0, expr = what[0], tape = what[1], index = 0
+      const load = _id(impureLoad), save = _id(impureSave)
+      const prevLoad = call.env[load], prevSave = call.env[save]
+      try {
+        for (; i < what.length; ++i, expr = what[i*2], tape = what[i*2+1], index) {
+          call.env[load] = index, call.env[save] = tape
+          call(expr)
+          index = call.env[load]
+          if (typeof index != 'number') error("How did things come to this:", index)
+          if (index !== tape.length)
+            error("Wrong handling of impurities: on replay, attempted to load less than was saved")
+        }
+      } catch (err) { if (err === interrupt) interrupt(replay, _tmp().length=0, _tmp().push(i, expr, tape, call.env[load]));  throw err }
+      finally { call.env[load] = prevLoad, call.env[save] = prevSave }
     },
   },
 
@@ -4567,7 +4750,7 @@ Rather than co-opting strings and files (duck typing, docstrings, documentation,
   },
 
   map:{
-    docs:`\`{Key Value Key Value …?}\` or \`(map Key Value Key Value …?)\`: a key-value store.
+    docs:`\`{Key1 Value1 Key2 Value2 …?}\` or \`(map Key1 Value1 Key2 Value2 …?)\`: a key-value store.
 The array-representation of a JS Map.
 Read/write keys with \`mapRead\`/\`mapWrite\`, or read keys with \`lookup\`.`,
     lookup:{
@@ -4596,92 +4779,6 @@ Read/write keys with \`mapRead\`/\`mapWrite\`, or read keys with \`lookup\`.`,
 
   mapWrite(m, k, v) { v !== _notFound ? m.set(k, v) : m.delete(k);  return v },
 
-  deconstruct:{
-    docs:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
-    call(v, allowPath = false) {
-      if (defines(v, deconstruct)) return defines(v, deconstruct)
-      else if (_isArray(v)) return v.slice()
-
-      if (v instanceof Int8Array)
-        return [i8, Array.from(v)]
-      if (v instanceof Int16Array)
-        return [i16, Array.from(v)]
-      if (v instanceof Int32Array)
-        return [i32, Array.from(v)]
-      if (v instanceof Uint8Array)
-        return [u8, Array.from(v)]
-      if (v instanceof Uint16Array)
-        return [u16, Array.from(v)]
-      if (v instanceof Uint32Array)
-        return [u32, Array.from(v)]
-      if (v instanceof Float32Array)
-        return [f32, Array.from(v)]
-      if (v instanceof Float64Array)
-        return [f64, Array.from(v)]
-
-      if (allowPath && lookup.parents.has(v)) {
-        const p = lookup.parents.get(v)
-        if (defines(p, lookup))
-          for (let k of lookup(p))
-            if (lookup(p, k) === v) return struct(lookup, p, k)
-        if (_view(p))
-          for (let k of Object.keys(_view(p)))
-            if (k !== _id(deconstruct) && _view(p)[k] === v)
-              return struct(defines, p, concept.idToKey[+k])
-      }
-
-      if (typeof document != ''+void 0) {
-        // Not precise at all.
-        if (v instanceof Node && 'to' in v) return v.to
-        if (v instanceof Element) return struct(elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch, allowPath)))
-        if (v instanceof Node) return v.textContent
-      }
-
-      if (_isArray(v) && !_isVar(v)) return _cameFrom(v.slice(), v)
-      if (v instanceof Map) {
-        // Sort keys by _id for consistency.
-        const keys = [...v.keys()].sort((a,b) => _id(a) - _id(b))
-        const arr = [map]
-        keys.forEach(k => arr.push(quote(k), quote(v.get(k))))
-        return arr
-      }
-      if (v && v[defines.key]) {
-        // Deconstruct the definition Map, treating self-references specially.
-        const arr = [map], d = v[defines.key]
-        Object.keys(d).forEach(k => {
-          const val = d[k]
-          val === v ? arr.push(quote(concept.idToKey[+k]), _unevalFunction(v)) : arr.push(quote(concept.idToKey[+k]), quote(val))
-        })
-        if (typeof v == 'function' && !(_id(call) in d)) arr.push(call, _unevalFunction(v))
-        return struct(concept, arr)
-      }
-      if (typeof v == 'function')
-        return _unevalFunction(v)
-      if (v === undefined)
-        return [concept, new Map([[docs, `A marker that represents the lack of a conceptual definition or a value.`]])]
-      if (!v || typeof v != 'object')
-        return v
-      const arr = [map]
-      Object.keys(v).forEach(k => arr.push(k, quote(v[k])))
-      return arr
-    },
-  },
-
-  _unevalFunction(f) {
-    let ctx = jsEval.ctx in f ? f[jsEval.ctx] : undefined
-    if (ctx === Self.ctx) ctx = undefined
-
-    // Remove unnecessary whitespace.
-    let src = (''+f).split('\n')
-    const ws = /^\s*/.exec(src[src.length-1])[0]
-    src = src.map(line => line.replace(ws, '')).join('\n')
-    src = src.replace(/^[_a-zA-Z]+/, '')
-    try { Function('('+src+')') }
-    catch (err) { src = 'function'+src }
-
-    return ctx !== undefined ? struct(jsEval, src, ctx) : struct(jsEval, src)
-  },
-
   _isValidJS(s) {
     // A terrible abuse of the Function constructor, but it *is* the only easy and most correct option.
     try { Function(s); return true } catch (err) { return false }
@@ -4693,7 +4790,6 @@ Read/write keys with \`mapRead\`/\`mapWrite\`, or read keys with \`lookup\`.`,
 
   jsEval:{
     docs:`\`(jsEval Source Bindings)\`: evaluates (strict-mode) JS source code that can statically reference default JS globals or values of \`Bindings\` (a map) with JS-identifier keys.`,
-    future:`Test this.`,
     examples:[
       [
         `(jsEval '(x) { return x+5 }') 5`,
@@ -4839,80 +4935,6 @@ Read/write keys with \`mapRead\`/\`mapWrite\`, or read keys with \`lookup\`.`,
     docs:`This exists only to highlight a thing in js.`,
   },
 
-  js:{
-    docs:`A namespace of everything pertaining to the host language, JavaScript.
-Somewhat usable in a REPL.`,
-    lookup:{
-      instanceof:__is(`instanceof`),
-      continue:__is(`continue`),
-      break:__is(`break`),
-      finally:__is(`finally`),
-      typeof:__is(`typeof`),
-      return:__is(`return`),
-      throw:__is(`throw`),
-      catch:__is(`catch`),
-      while:__is(`while`),
-      void:__is(`void`),
-      else:__is(`else`),
-      for:__is(`for`),
-      let:__is(`let`),
-      new:__is(`new`),
-      switch:__is(`switch`),
-      case:__is(`case`),
-      function:__is(`function`),
-      if:__is(`if`),
-      const:__is(`const`),
-      try:__is(`try`),
-    },
-    REPL:__is(`false`),
-    parse(match) {
-      const struct = [jsEval, '']
-      let n = 0, ctx, expr = ''
-      while (true) {
-        const str = match(/[^]*/y)
-        if (str && str.indexOf('ⴲ')>=0) throw "ⴲ is used internally; use another char eternally"
-        if (str) expr += str
-        const r = match(_specialParsedValue)
-        if (r !== undefined) {
-          const name = 'ⴲ'+(n++).toString(36)
-          expr += ' '+name+' ', (ctx || (ctx = new Map)).set(name, r.to)
-        }
-        if (str === undefined && r === undefined) break
-      }
-      struct[1] = expr
-      if (ctx) struct[2] = ctx
-      return struct
-    },
-    serialize(match, u) {
-      if (u[0] !== jsEval || typeof u[1] != 'string' || u[2] && (!_isArray(u[2]) || u[2][0] !== map) || u.length > 3) {
-        if (typeof document != ''+void 0 && _isArray(u) && u[0] instanceof Element)
-          return match(_fancyTopLevel, u)
-        if (typeof document != ''+void 0 && _isArray(u) && u[0] === jsRejected && typeof u[1] == 'string' && u.length == 2)
-          return match(elem('error', u[1]))
-        u = bound(_invertBindingContext(Self.ctx), u)
-        if (typeof uneval != ''+void 0) u = [jsEval, uneval(u)]
-        else u = [jsEval, JSON.stringify(u)]
-      }
-      if (typeof document == ''+void 0) {
-        if (u.length != 2) throw "Wrong count of args for JS code"
-        match(u[1])
-        return
-      }
-      const special = / ⴲ[0-9a-zA-Z]+ /g, str = u[1], ctx = u[2][0].call(...u[2])
-      let r, i = 0
-      while (r = special.exec(str)) {
-        match(str.slice(i, special.lastIndex - r[0].length))
-        match(defines(js, serialize), ctx.get(r[0].slice(1,-1)))
-        i = special.lastIndex
-      }
-      match(str.slice(i))
-    },
-    style(struct) {
-      if (!_isArray(struct)) return struct
-      return elem('span', struct.map(s => typeof s != 'string' ? s : elem('span', _highlightGlobalsInString(s))))
-    },
-    philosophy:`JS (and the web ecosystem) is a seemingly-unimpressive language that aims to take over all aspects of computing, in a manner similar to the ones before but completely safe and universal and ultimately as little loss in performance as is possible. Like attracts like, and Conceptual is written in JS.`,
-  },
 
   _test(env) {
     let failed = 0, finished = 0, total = 0
@@ -4952,11 +4974,11 @@ Somewhat usable in a REPL.`,
             } else {
               ++failed, log(ss('Got an error'), ...result.slice(1)), log(ss('a'), a), log(ss('b'), b)
             }
-          } catch (err) { ++failed, log(jsRejected(err)) }
+          } catch (err) { ++failed, log(_errorRepr(err)) }
           if (finished === total && failed)
             log(ss('Failed {' + failed+'/'+total + '} tests.'))
         })
-      } catch (err) { ++failed, log(jsRejected(err)) }
+      } catch (err) { ++failed, log(_errorRepr(err)) }
     }
   },
 
@@ -5318,6 +5340,9 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
       `HTML`,
     ],
     lookup:{
+      button:__is(`button`),
+      files:__is(`files`),
+      url:__is(`url`),
       clone:__is(`elemClone`),
       insert:__is(`elemInsert`),
       remove:__is(`elemRemove`),
@@ -5577,8 +5602,14 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       ],
     ],
     lookup:{
+      label:__is(`label`),
+      bound:__is(`bound`),
+      unbound:__is(`unbound`),
+      style:__is(`style`),
+      parse:__is(`parse`),
       nameResult:__is(`nameResult`),
       _whetherToColorVariables:__is(`_whetherToColorVariables`),
+      rest:__is(`rest`),
     },
     Initialize() {
       // Store styling options in JS objects.
@@ -5688,7 +5719,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
           return ++len, (struct || (struct = [])).push(f), f
         else if (f === undefined)
           return len
-        else return console.log("Unknown type to emit:", f, _id(f)), emit(_colored(elemValue(elem('number', '<< id:'+_id(f)+' >>'), _id(f)), 4, 24))
+        else return console.warn("Unknown type to emit:", f, _id(f)), emit(_colored(elemValue(elem('number', '<< id:'+_id(f)+' >>'), _id(f)), 4, 24))
       }
       function recCollapse(el, depth = 0) {
         if (!collapseDepth) return el
@@ -5925,6 +5956,81 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
     // .enabled
   },
 
+  js:{
+    docs:`A namespace of everything pertaining to the host language, JavaScript.
+Somewhat usable in a REPL.`,
+    lookup:{
+      instanceof:__is(`instanceof`),
+      continue:__is(`continue`),
+      break:__is(`break`),
+      finally:__is(`finally`),
+      typeof:__is(`typeof`),
+      return:__is(`return`),
+      throw:__is(`throw`),
+      catch:__is(`catch`),
+      while:__is(`while`),
+      void:__is(`void`),
+      else:__is(`else`),
+      for:__is(`for`),
+      let:__is(`let`),
+      new:__is(`new`),
+      switch:__is(`switch`),
+      case:__is(`case`),
+      function:__is(`function`),
+      if:__is(`if`),
+      const:__is(`const`),
+      try:__is(`try`),
+    },
+    REPL:__is(`false`),
+    parse(match) {
+      const struct = [jsEval, '']
+      let n = 0, ctx, expr = ''
+      while (true) {
+        const str = match(/[^]*/y)
+        if (str && str.indexOf('ⴲ')>=0) throw "ⴲ is used internally; use another char eternally"
+        if (str) expr += str
+        const r = match(_specialParsedValue)
+        if (r !== undefined) {
+          const name = 'ⴲ'+(n++).toString(36)
+          expr += ' '+name+' ', (ctx || (ctx = new Map)).set(name, r.to)
+        }
+        if (str === undefined && r === undefined) break
+      }
+      struct[1] = expr
+      if (ctx) struct[2] = ctx
+      return struct
+    },
+    serialize(match, u) {
+      if (u[0] !== jsEval || typeof u[1] != 'string' || u[2] && (!_isArray(u[2]) || u[2][0] !== map) || u.length > 3) {
+        if (typeof document != ''+void 0 && _isArray(u) && u[0] instanceof Element)
+          return match(_fancyTopLevel, u)
+        if (typeof document != ''+void 0 && _isArray(u) && u[0] === jsRejected && typeof u[1] == 'string' && u.length == 2)
+          return match(elem('error', u[1]))
+        u = bound(_invertBindingContext(Self.ctx), u)
+        if (typeof uneval != ''+void 0) u = [jsEval, uneval(u)]
+        else u = [jsEval, JSON.stringify(u)]
+      }
+      if (typeof document == ''+void 0) {
+        if (u.length != 2) throw "Wrong count of args for JS code"
+        match(u[1])
+        return
+      }
+      const special = / ⴲ[0-9a-zA-Z]+ /g, str = u[1], ctx = u[2][0].call(...u[2])
+      let r, i = 0
+      while (r = special.exec(str)) {
+        match(str.slice(i, special.lastIndex - r[0].length))
+        match(defines(js, serialize), ctx.get(r[0].slice(1,-1)))
+        i = special.lastIndex
+      }
+      match(str.slice(i))
+    },
+    style(struct) {
+      if (!_isArray(struct)) return struct
+      return elem('span', struct.map(s => typeof s != 'string' ? s : elem('span', _highlightGlobalsInString(s))))
+    },
+    philosophy:`JS (and the web ecosystem) is a seemingly-unimpressive language that aims to take over all aspects of computing, in a manner similar to the ones before but completely safe and universal and ultimately as little loss in performance as is possible. Like attracts like, and Conceptual is written in JS.`,
+  },
+
   _extracted:{
     docs:`ONLY for parsing \`c=x\`.`,
     call(c,x) { return struct(_extracted, c, x) },
@@ -6047,7 +6153,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       // Do binding with the original⇒copy map preserved so that we can style structure bottom-up properly.
       const env = (styles || sourceURL) && new Map
       let b = styles || sourceURL ? bound(ctx, u, true, env) : bound(ctx, u, true)
-      try { b = makeGraph(b) } catch (err) { console.error(err) } // This swallowing is not user-friendly.
+      try { b = makeGraph(b) } catch (err) { console.error('When parsing', ...str, ':\n', err) } // This swallowing is not user-friendly.
 
       function styleNode(struct) {
         if (typeof document != ''+void 0 && struct instanceof Node) return struct
@@ -6422,7 +6528,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
 
   fancy:{
     docs:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
-\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`; \`1+2\`, \`x→x*2\`, \`2*[1+2]\`.`,
+\`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`; \`1+2\`, \`\\?*2 5\`, \`2*[1+2]\`.`,
     style:__is(`_basicStyle`),
     parse:__is(`_fancyTopLevel`),
     serialize:__is(`_fancyTopLevel`),
@@ -6899,6 +7005,7 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
           tmp[i - start] = stack[i]
         stack.length -= length+1
 
+        /*
         // Check the cause.
         const got = stack.pop()
         if (got !== cause) {
@@ -6907,6 +7014,7 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
           tmp.length = 0
           errorStack("Interrupt stack corruption sometime before this — invalid cause: expected", cause, "but got", got, "in", stack, "with interrupt state", tmpSlice)
         }
+        */
 
         return tmp
       }
@@ -6915,7 +7023,7 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
 
       if (!call.env[_id(interrupt)]) call.env[_id(interrupt)] = []
       const stack = call.env[_id(interrupt)]
-      stack.push(cause) // Allow checking the cause, so that debugging is easier.
+      // stack.push(cause) // Allow checking the cause, so that debugging is easier.
       stack.push(...interrupt.tmp, interrupt.tmp.length), interrupt.tmp.length = 0
 
       // .tmp, .noInterrupt
@@ -6935,6 +7043,7 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
     docs:`It's a nice thought, but it doesn't play well with others.`,
     lookup:{
       philosophy:__is(`philosophy`),
+      askUser:__is(`askUser`),
     },
   },
 
@@ -6946,7 +7055,7 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
   },
 
   Rewrite:{
-    docs:`\`(Rewrite)\`: view the next rewrite in an <iframe>.
+    docs:`\`(Rewrite)\`: view the next rewrite in an \`<iframe>\`.
 Also is a namespace for rewriting Self's code to a different form.`,
     lookup:{
       extension:__is(`ToExtension`),
@@ -7405,13 +7514,15 @@ The correctness of quining of functions can be tested by checking that the rewri
     lookup:{
       interrupt:__is(`interrupt`),
       jsEval:__is(`jsEval`),
-      Rewrite:__is(`Rewrite`),
-      impure:__is(`impure`),
+      argCount:__is(`argCount`),
+      userTime:__is(`userTime`),
+      realTime:__is(`realTime`),
+      memorySince:__is(`memorySince`),
       ClearCaches:{
         docs:`When called, clears the oldest half of entries in every cache.`,
         argCount:0,
         call() {
-          impure()
+          let L;  if ((L = impureLoad()) !== undefined) return; else impureSave(null)
           halve(_id.xToIndex)
           halve(elemValue.obj)
           halve(elemValue.val)
@@ -7479,7 +7590,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         for (; i < ins.length; ++i) {
           let r
           try { r = ins[i](value) }
-          catch (err) { if (err === interrupt) throw err;  log(jsRejected(err)) }
+          catch (err) { if (err === interrupt) throw err;  log(_errorRepr(err)) }
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
         }
       } catch (err) { if (err === interrupt) interrupt(_logAll, _tmp().length=0, _tmp().push(ins, i));  throw err }
@@ -7496,14 +7607,9 @@ The correctness of quining of functions can be tested by checking that the rewri
 
 
 
-  Choices:new Map,
-
   askUser:{
     docs:`A \`With\` for \`picker\` that pauses execution and asks the user.
 Preserved for now, because giving the user choices is a valuable idea for explaining (but should be reworked).`,
-    lookup:{
-      Choices:__is(`Choices`),
-    },
     call(next, from, cause, extra) {
       if (!askUser.got) askUser.got = new Map
       const a = struct('askUser', next, from, cause, extra)
@@ -7511,21 +7617,6 @@ Preserved for now, because giving the user choices is a valuable idea for explai
         try {
           return askUser.got.get(a) !== _notFound ? askUser.got.get(a) : next(from, cause, extra)
         } finally { askUser.got.delete(a) }
-
-      // Remember from `Choices`.
-      if (Choices.has(cause)) {
-        let p = Choices.get(cause)
-        if (typeof p == 'function') // A decision procedure; defer to it.
-          return p(next, from, cause, extra)
-        if (_isArray(p) && p[0] === _disabled && p.length == 2)
-          p = p[1] // For escaping functions.
-        if (typeof from == 'number')
-          return p
-        // Find `p` in `from`.
-        const i = from.indexOf(p)
-        if (i <= 0) Choices.delete(cause)
-        else return i-1
-      }
 
       if (typeof document == ''+void 0) {
         // NodeJS.
@@ -7553,18 +7644,6 @@ Preserved for now, because giving the user choices is a valuable idea for explai
       el.append(elem('unimportant', 'Pick one:\n'))
       el.append(elemValue(elem('button', 'Auto'), _notFound))
 
-      // A "remember" checkbox.
-      let remember = false
-      // const det = elem('details')
-      // const sum = elem('summary')
-      // const checkbox = elem('input')
-      // checkbox.type = 'checkbox'
-      // checkbox.oninput = checkbox.onchange = () => remember = checkbox.checked
-      // checkbox.title = 'Remember the choice'
-      // sum.append(checkbox)
-      // det.append(sum)
-      // el.append(det)
-
       // A table of choices.
       if (_isArray(from)) {
         const table = elem('table')
@@ -7585,10 +7664,6 @@ Preserved for now, because giving the user choices is a valuable idea for explai
       el.onclick = evt => {
         const t = evt.target || evt.explicitOriginalTarget
         if (t.tagName !== 'BUTTON' || !('to' in t) || t.to !== _notFound && typeof t.to != 'number') return
-        if (remember) {
-          const picked = typeof from == 'number' ? t.to : from[t.to-1]
-          Choices.set(cause, typeof picked != 'function' ? picked : struct(_disabled, picked))
-        }
         env[_id(log)] && env[_id(log)].style.removeProperty('display')
         askUser.got.set(a, t.to), _schedule(...job)
         elemRemove(el), el.onclick = null
@@ -7603,23 +7678,6 @@ Preserved for now, because giving the user choices is a valuable idea for explai
 
 
 
-
-
-
-
-  Eval:{
-    docs:`\`(Eval String)\`: parses (cached) and evaluates String.`,
-    call(s) {
-      impure()
-      if (typeof s != 'string') throw 'Expected a string'
-      if (!Eval.cache) Eval.cache = Object.create(null)
-      let [x = s in Eval.cache ? Eval.cache[s] : (Eval.cache[s] = parse(s))] = interrupt(Eval)
-      if (x === _onlyUndefined) x = undefined
-      try { return call(x) }
-      catch (err) { if (err === interrupt) interrupt(Eval, _tmp().length=0, _tmp().push(x !== undefined ? x : _onlyUndefined));  throw err }
-      // .cache
-    },
-  },
 
 
 
