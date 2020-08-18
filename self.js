@@ -1216,7 +1216,7 @@ For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:confi
   },
 
   _collapsedSerialization(v, lang = basic) {
-    const el = serialize(v, lang, undefined, {...serialize.displayed, collapseDepth:1, collapseBreadth:0, deconstructElems:true})
+    const el = serialize(v, lang, undefined, {...serialize.displayed, collapseDepth:2, collapseBreadth:0, deconstructElems:true, dontBindTopLevel:true})
     let e = el.tagName === 'SERIALIZATION' ? el.firstChild : el
     if (_isArray(v) || _isArray(defines(v, deconstruct)))
       if (e.firstChild.tagName != 'BRACKET' || e.lastChild.tagName != 'BRACKET') {
@@ -1654,16 +1654,7 @@ For anything else, display the globals the expression binds to, and an expandabl
               }, .1)
             }
             return elemValue(area, v)
-          } else if (_isArray(v) || !v || typeof v != 'object' && typeof v != 'function')
-            // If not a deconstructable thing, display the globals the expression binds to, and an expandable basic definition.
-            return elem('div', [
-              permissionsElem(v),
-              elem('div', [
-                elemValue(elem('unimportant', 'Basically: '), basic),
-                elemValue(elemCollapse(() => _collapsedSerialization(v)), v),
-              ]),
-            ])
-          else return permissionsElem(v) // Display the globals the deconstruction binds to.
+          } else return permissionsElem(v) // Display the globals the deconstruction binds to.
         },
       },
       {
@@ -1733,10 +1724,10 @@ For anything else, display the globals the expression binds to, and an expandabl
         docs:`The full deconstruction if a non-array.`,
         call([el, v]) {
           const backctx = _invertBindingContext(Self.ctx)
-          if (backctx.has(v) || !_isArray(v) && v && (typeof v == 'object' || typeof v == 'function'))
+          if (backctx.has(v) || v && (typeof v == 'object' || typeof v == 'function'))
             return elem('div', [
-              elemValue(elem('unimportant', 'Deconstruction: '), deconstruct),
-              elemCollapse(() => serialize(deconstruct(v), fancy, undefined, serialize.displayed))
+              elemValue(elem('unimportant', 'Basically: '), basic),
+              elemValue(elemCollapse(() => _collapsedSerialization(v)), v),
             ])
         },
       },
@@ -2626,7 +2617,9 @@ Now, type \`(tutorial)\` and claim what's yours.`,
           return srl
         }), item)
       }
-      const initial = serialize(flatten(deconstruct(x)), lang, Self.ctx, serialize.displayed).firstChild
+      let dec = deconstruct(x)
+      if (_isArray(dec) && defines(dec, construct)) dec = make(...dec)
+      const initial = serialize(flatten(dec), lang, Self.ctx, serialize.displayed).firstChild
       const indicator = elem('span')
       let expr = x
       const ed = editor(initial, lang, Self.ctx, next => next !== undefined && updateIndicator(expr = next), next => {
@@ -2681,7 +2674,9 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
         value !== undefined && (Rewrite.ctx.set(key, value), Rewrite.ctx.set(x, value))
         updateIndicator()
       })
-      const valueEditor = editor(serialize(deconstruct(value), lang), lang, Rewrite.ctx, v => {
+      let dec = deconstruct(value)
+      if (_isArray(dec) && defines(dec, construct)) dec = make(...dec)
+      const valueEditor = editor(serialize(dec, lang), lang, Rewrite.ctx, v => {
         if (v !== undefined) value=v, updateIndicator()
       }, v => {
         value = v
@@ -3504,7 +3499,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     e[_id(_checkInterrupt)] = undefined // The cause of interrupt (an executable node).
     e[_id(step)] = 0
     e[_id(_pausedToStepper)] = undefined // Max func call depth at which we'll interrupt.
-    e[_id(_await)] = undefined // The promise that we are waiting on.
+    e[_id(await)] = undefined // The promise that we are waiting on.
 
     e[_id(impureLoad)] = undefined // Index≥0 into impure tape to recall; count<0 of saves to skip, undefined to check non-recording, null to save.
     e[_id(impureSave)] = undefined // Replay tape for impure results.
@@ -3620,7 +3615,8 @@ Check _isUnknown to materialize the inner structure but only on demand.`,
 
 
   struct:{
-    docs:`\`(struct …Items)\`: an array of items with semantically constant content.`,
+    docs:`\`(struct …Items)\`: an array of items with semantically constant content.
+(No actual difference from \`array\`, so it may get removed soon.)`,
     interrupt:false,
     call(...x) { return x },
   },
@@ -4023,7 +4019,7 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
     docs:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
     call(v, allowPath = false) {
       if (defines(v, deconstruct)) return defines(v, deconstruct)
-      else if (_isArray(v)) return v.slice()
+      else if (_isArray(v)) return _isArray(v[0]) || defines(v[0], construct) === undefined ? v.slice() : [arrayObject, ...v]
 
       if (v instanceof Int8Array)
         return [i8, Array.from(v)]
@@ -4065,18 +4061,17 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
         // Sort keys by _id for consistency.
         const keys = [...v.keys()].sort((a,b) => _id(a) - _id(b))
         const arr = [map]
-        keys.forEach(k => arr.push(quote(k), quote(v.get(k))))
+        keys.forEach(k => arr.push(k, v.get(k)))
         return arr
       }
       if (v && v[defines.key]) {
         // Deconstruct the definition Map, treating self-references specially.
-        const arr = [map], d = v[defines.key]
+        const m = new Map, d = v[defines.key]
         Object.keys(d).forEach(k => {
           const val = d[k]
-          val === v ? arr.push(quote(concept.idToKey[+k]), _unevalFunction(v)) : arr.push(quote(concept.idToKey[+k]), quote(val))
+          val === v ? m.set(concept.idToKey[+k], _unevalFunction(v)) : m.set(concept.idToKey[+k], val)
         })
-        if (typeof v == 'function' && !(_id(call) in d)) arr.push(call, _unevalFunction(v))
-        return struct(concept, arr)
+        return [concept, m]
       }
       if (typeof v == 'function')
         return _unevalFunction(v)
@@ -4284,7 +4279,7 @@ What a function does, does not change when a node in its body changes. That woul
       }
     },
   },
-
+  
 
   array:{
     docs:`\`(array …Items)\`: creates a new array.`,
@@ -4292,6 +4287,7 @@ What a function does, does not change when a node in its body changes. That woul
       read:__is(`readAt`),
       write:__is(`writeAt`),
       observe:__is(`observe`),
+      arrayObject:__is(`arrayObject`),
     },
     interrupt:false,
     call(...x) { return x },
@@ -4362,6 +4358,17 @@ Many updates at the same time are merged into one call, scheduled in a separate 
       } catch (err) { if (err === interrupt) interrupt(_callChangeObservers, _tmp().length=0, _tmp().push(i));  throw err }
     },
   },
+  arrayObject:{
+    docs:`\`arrayObject …Items\`: \`construct\`s an actual array.
+When the array head is a \`construct\`-defining \`concept\`, this allows still correctly parsing the serialization.`,
+    construct(x, obj) {
+      if (obj === undefined)
+        return _allocArray()
+      else
+        obj.push(...x.slice(1))
+    },
+  },
+
 
   select:{
     docs:`\`select If Then Else Arg\`: calls \`Then Arg\` if \`If\` is \`true\`, else \`Else Arg\`.
@@ -5649,8 +5656,7 @@ Also wraps C-style strings in <string>.`,
   serialize:{
     docs:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes Expr into a string or a DOM tree (that can be parsed to retrieve the original structure).
 
-Options must be undefined or a JS object like { style=false, observe=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false }.`,
-    future:`Have the \`ActualArray\` construct, and serialize arrays (here and in \`fast\`) that have \`construct\`-defining heads as that.`,
+Options must be undefined or a JS object like { style=false, observe=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith='  ', space=()=>' ', nameResult=false, deconstructPaths=false, deconstructElems=false, dontBindTopLevel=false }.`,
     philosophy:`In theory, having symmetric parse+serialize allows updating the language of written code via "read in with the old, write out with the new", but we don't curently do that here. Maaaybe mention that in a tutorial, once we have human-friendly rewriting?`,
     examples:[
       [
@@ -5695,6 +5701,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       const deconstructPaths = opt && opt.deconstructPaths || false
       const deconstructElems = opt && opt.deconstructElems || false
       const doObserve = opt && opt.observe || false
+      const dontBindTopLevel = opt && opt.dontBindTopLevel || false
 
       if (!lang) lang = fancy
       const styles = opt && opt.style && defines(lang, style) || undefined
@@ -5723,7 +5730,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       let n = 0
       const freeNames = []
       const nodeNames = styles && typeof document != ''+void 0 && new Map
-      backctx.forEach((v,k) => boundToUnbound.set(k,k))
+      backctx.forEach((v,k) => (!dontBindTopLevel || k !== arr) && boundToUnbound.set(k,k))
       const u = unbound(postDeconstructed, nameAllocator, boundToUnbound, maxDepth)
       boundToUnbound.forEach((u,b) => {
         if (b === u) return
@@ -5858,11 +5865,14 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
           return x
         }
         if (_isLabel(x)) return unboundToBound.set(x,x), named.add(x[1]), x
-        if (backctx && backctx.has(x)) return unboundToBound.set(x,x), named.add(backctx.get(x)), x
+        if (backctx && backctx.has(x))
+          if (!dontBindTopLevel || x !== arr)
+            return unboundToBound.set(x,x), named.add(backctx.get(x)), x
         const original = x
         if (deconstructElems || !_isDOM(x))
-          if (!_isArray(x) && typeof x != 'string' && typeof x != 'number' && (!backctx || !backctx.has(x)))
-            x = deconstruct(x, deconstructPaths)
+          if (typeof x != 'string' && typeof x != 'number')
+            if (!_isArray(x) || defines(x, construct) !== undefined)
+              x = deconstruct(x, deconstructPaths)
         unboundToBound.set(x, original)
         deconstruction.set(original, x)
         if (_isArray(x)) {
@@ -5916,6 +5926,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       }
       function unenv(u,v) {
         if (backctx && backctx.has(v)) {
+          if (dontBindTopLevel && v === arr) return u
           named.add(backctx.get(v))
           const name = backctx.get(v)
           return styleLabel(name, label(name), v)
@@ -6683,7 +6694,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       el.title = 'extracted', el.classList.add('hasOperators')
       return el
     }
-    if (typeof document != ''+void 0 && (_isArray(v) && v[0] === map && v.length > 3 || v instanceof Map && v.size > 1 && s.length > 1)) {
+    if (typeof document != ''+void 0 && v instanceof Map && v.size > 1 && s.length > 1) {
       // Construct a <table>, with brackets and `map` outside of it, and each key-value pair having its own <tr>.
       let i, start = (s[0].textContent || s[0]) === '{' ? 0 : (s[0].textContent || s[0]) === '(' ? 2 : 1
       if (!start) s.splice(1, 0, ''), start = 1
