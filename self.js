@@ -374,7 +374,7 @@ Label-binding environment is not preserved.`,
       try {
         while (true) {
           v = call(expr)
-          if (_isUnknown(v)) return _stage(struct(repeat, v[1], iterations), v)
+          if (_isUnknown(v)) return _unknown(struct(repeat, v[1], iterations), v)
           _checkInterrupt(expr)
           newLabel.clear()
           done = true
@@ -459,55 +459,10 @@ Label-binding environment is not preserved.`,
   },
 
   Self:{
-    docs:`Decentralized programming environments with machine learning, to treat humans and programs equally.
+    docs:`Open programming environments with machine learning, to treat humans and programs equally.
 A namespace for every function here. Project's GitHub page: https://github.com/Antipurity/conceptual`,
     philosophy:`What happens when you force a person to change.`,
     lookup:__is(`undefined`),
-  },
-
-  purify:{
-    docs:`\`(purify Expr)\`⇒Expr: partially-evaluates Expr, not executing impure subexpressions.
-Evaluates as much as is possible, so manual pre-calculations of any kind are never required.`,
-    examples:[
-      [
-        `x→(sum 1 2)`,
-        `x→3`,
-      ],
-      [
-        `(purify 1)`,
-        `1`,
-      ],
-      [
-        `(purify (quote x) x:(sum 1 2))`,
-        `3`,
-      ],
-      [
-        `(purify (quote x) x:(randomNat 5))`,
-        `(_unknown (randomNat 5))`,
-      ],
-    ],
-    lookup:{
-      purifyInWorker:__is(`purifyInWorker`),
-    },
-    nameResult:[
-      `purified`,
-    ],
-    argCount:1,
-    philosophy:`Though everything here is evaluated eagerly, inlining and partially-evaluating functions will drop unused args. This gives benefits of both eager and lazy evaluation.
-
-Staging (code generating code when not everything is known) is done in some native functions here (those that mention _isUnknown and do non-trivial things with it), but with proper partial evaluation, it seems worse than useless for non-native code (since every function inlining acts as its own staging, though not forced through any particular staging order).`,
-    call(x) {
-      // Set call.pure to true and just evaluate.
-      const prev = call.pure
-      call.pure = true
-      try {
-        const r = call(x)
-        if (!_isDeferred(r)) return r
-        else return _stage(struct(purify, r[1]), r)
-      }
-      catch (err) { if (err !== interrupt) return _unknown(_errorRepr(err)); else throw err }
-      finally { call.pure = prev }
-    },
   },
 
   argCount:{
@@ -672,7 +627,11 @@ Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.s
   _useDarkTheme:[
     __is(`settings`),
     false,
-    `Whether to embrace the dark as opposed to the light.`,
+    `Whether to use dark theme (or light).
+
+Gaze upon the ever-shifting radiance of creation.
+Or let go of all you know, to embrace vacuous might.
+Just don't short-sightedly lock yourself into one consequence.`,
   ],
 
   _disableSmoothTransitions:[
@@ -1807,7 +1766,6 @@ For anything else, display the globals the expression binds to, and an expandabl
       atCursor:__is(`atCursor`),
       addSearchElem:__is(`addSearchElem`),
       editObject:__is(`editObject`),
-      editRewrite:__is(`editRewrite`),
     },
     _logAll:[
       {
@@ -3314,20 +3272,20 @@ There isn't even one grand model for search of search, and instead, it should be
 
   _promiseReEnter(expr, env, then) {
     // Re-schedule interpretation when the promise returns.
+    _jobs.limbo.push(expr, env, then)
     const p = _promiseReEnter.promise
-    if (_isPromise(p)) {
-      p.then(
-        r => (p.result = r, _schedule(expr, env, then)),
-        r => (p.result = _errorRepr(r), _schedule(expr, env, then)))
-    } else if (_isArray(p)) { // For arrays of promises, act like Promise.allSettled.
-      let n = p.length
-      for (let i = 0; i < n; ++i) {
-        const d = p[i]
-        d.then(
-          r => (d.result = r, !--n && _schedule(expr, env, then)),
-          r => (d.result = _errorRepr(r), !--n && _schedule(expr, env, then)))
-      }
-    } else throw "???"
+    p.then(
+      r => (p.result = r, _jobResume(expr, env, then)),
+      r => (p.result = _errorRepr(r), _jobResume(expr, env, then)))
+    call.env[_id(_await)] = p
+  },
+
+  _jobResume(expr, env, then) {
+    env[_id(_await)] = undefined
+    const a = _jobs.limbo
+    for (let i = 0; i < a.length; i += 3)
+      if (a[i+1] === env)
+        return a.splice(i,3), _schedule(expr, env, then)
   },
 
   _await:__is(`await`),
@@ -3357,7 +3315,7 @@ There isn't even one grand model for search of search, and instead, it should be
   _errorRepr(err) {
     // Convert a caught error to its displayable representation.
     if (err instanceof Error)
-      return err.stack ? struct(jsRejected, elem('error', String(err)), _resolveStack(err.stack)) : struct(jsRejected, elem('error', String(err)))
+      return err.stack ? struct(jsRejected, elem('error', String(err)), _resolveStack(err.stack, 0)) : struct(jsRejected, elem('error', String(err)))
     else if (!_isError(err))
       return struct(jsRejected, err)
     else
@@ -3387,20 +3345,19 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
     docs:`\`(_cancel JobEnv)\`: if the job is scheduled to run, cancels it. Returns true (or the job if the second arg is true) if cancelled, false if not.
 If any promises the job depends on have a method .cancel, calls those.`,
     call(env, returnJob = false) {
-      for (let i = 0; i < _jobs.expr.length; i += 3)
-        if (_jobs.expr[i+1] === env) {
-          const v = _jobs.expr[i]
-          if (_isUnknown(v))
-            for (let j = 2; j < v.length; ++j)
-              if (_isPromise(v[j]) && typeof v[j].cancel == 'function')
-                v[j].cancel()
-          if (returnJob) return _jobs.expr.splice(i, 3)
-          return _jobs.expr.splice(i, 3), true
+      if (env[_id(_await)] && typeof env[_id(_await)].cancel == 'function')
+        env[_id(_await)].cancel(), env[_id(_await)] = undefined
+      let a = _jobs.expr
+      for (let i = 0; i < a.length; i += 3)
+        if (a[i+1] === env) {
+          if (returnJob) return a.splice(i, 3)
+          return a.splice(i, 3), true
         }
-      for (let i = 0; i < _jobs.limbo.length; i += 3)
-        if (_jobs.limbo[i+1] === env) {
-          if (returnJob) return _jobs.limbo.splice(i, 3)
-          return _jobs.limbo.splice(i, 3), true
+      a = _jobs.limbo
+      for (let i = 0; i < a.length; i += 3)
+        if (a[i+1] === env) {
+          if (returnJob) return a.splice(i, 3)
+          return a.splice(i, 3), true
         }
       return false
     },
@@ -3547,6 +3504,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     e[_id(_checkInterrupt)] = undefined // The cause of interrupt (an executable node).
     e[_id(step)] = 0
     e[_id(_pausedToStepper)] = undefined // Max func call depth at which we'll interrupt.
+    e[_id(_await)] = undefined // The promise that we are waiting on.
 
     e[_id(impureLoad)] = undefined // Index≥0 into impure tape to recall; count<0 of saves to skip, undefined to check non-recording, null to save.
     e[_id(impureSave)] = undefined // Replay tape for impure results.
@@ -3649,24 +3607,14 @@ Unbound variables are unknown.
 The internal mechanism for \`purify\` and recording and using the continuation of JS promises.
 Check _isUnknown to materialize the inner structure but only on demand.`,
     argCount:1,
-    call(x) {
+    call(x, reason) {
+      if (_isArray(x) && x[0] === _unknown) return x
       const a = _allocArray()
-      if (!_isUnknown(x)) return a.push(_unknown, x), a
-      return a.push(...x), a
+      return a.push(_unknown, x), a
     },
   },
 
   _isUnknown(v) { return _isArray(v) && v[0] === _unknown },
-
-  _stage(expr, reason) {
-    // When we get an _isUnknown value and want to immediately stage some code for later, pass that as `reason` to here.
-    const a = _allocArray()
-    a.push(_unknown, expr)
-    if (_isUnknown(reason)) for (let i = reason.length-1; i >= 2; --i) a[i] = reason[i]
-    return a
-  },
-
-  _isDeferred(v) { return _isUnknown(v) && v.length > 2 },
 
   _isPromise(v) { return v instanceof Promise },
 
@@ -3843,7 +3791,9 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
     tutorial:[
       `Do you know how easy it is to make an interpreter of the DAG IR we use? Let's see.
 
-First, a very simple interpreter of trees, where no nodes (arrays) are shared. To evaluate an array, we want to \`apply\` the \`transform\`ed-with-evaluation array; non-arrays (\`select\` where \`_isArray ?\` returns false) should be returned as-is.`,
+To be clear, the intermediate representation (IR) in question is "doing a thing may depend on having done other things; function applications are arrays, functions are first elements in them, and dependencies are references in those arrays".
+
+First, a very simple interpreter of trees, where no nodes (arrays) are shared. To evaluate an array, we want to \`apply\` the \`transform\`ed-with-evaluation array; non-arrays (\`select\` where \`_isArray ?\` returns \`false\`) should be returned as-is. Would you kindly compose composition out of these, please?`,
       [
         __is(`fancy`),
         '',
@@ -3953,32 +3903,39 @@ It's much more efficient to learn to repeat rather than understand, so the whole
       `result`,
     ],
     call(x) {
-      // This is the interpreter. First, we handle "func input" and "I'm not a computation" and "I don't want to be a computation".
+      // This is an interpreter of DAGs, the most powerful IR.
+      // First, we handle purification and "I'm not a computation" and "I don't want to be a computation".
+      if (call.pure) return purify(x)
       if (!_isArray(x)) return x
       if (x[0] === quote) return x[1]
 
-      // Handle cycles and shared nodes. One node is only computed once!
-      const env = call.env[_id(label)]
-      if (env.get(x) === _notFound) error('Cycle in computation at', x)
-      if (env.has(x)) return env.get(x)
+      // Don't forget to be interrupt-friendly!
+      let [i = 0, outputs = _allocArray(), po, inds] = interrupt(call)
 
-      // Compute sub-items. Don't forget to be interrupt-friendly!
-      let [y = new Array(x.length), i = 0] = interrupt(call)
-      env.set(x, _notFound)
+      // Evaluating inputs with recursion leaves ugly stack traces in errors, so we iterate over the post-order traversal instead.
+      if (!po) [po, inds] = _postorderAndIndexesAndRefs(x)
+      outputs.length = po.length
+      const collected = _allocArray()
       try {
-        // This loop is the actual computation.
-        for (; i < y.length; ++i)
-          y[i] = call(x[i])
-
-        // Call the function with args.
-        env.set(x, y = apply(y))
-        return y
+        for (; i < po.length; ++i) {
+          // Go through all nodes in the DAG, collect args, and apply functions.
+          collected.length = inds[i].length
+          for (let j=0; j < collected.length; ++j) {
+            const ind = inds[i][j], dep = po[i][j]
+            if (dep === input) error("`input` only has meaning in `func`, but found it in", po[i])
+            collected[j] = ind !== null ? outputs[ind] : _isArray(dep) ? dep[1] : dep
+            if (j === 0 && typeof collected[0] != 'function')
+              error("Expected a function, got", collected[0])
+          }
+          outputs[i] = collected[0].call(...collected)
+        }
+        _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
+        return outputs[outputs.length-1]
       } catch (err) {
-        env.delete(x)
-        if (err === interrupt) interrupt(call, _tmp().length=0, _tmp().push(y, i))
+        if (err === interrupt) interrupt(call, _tmp().length=0, _tmp().push(i, outputs, po, inds))
         throw err
-      }
-      // .env (current execution environment), .depth (current call depth).
+      } finally { _allocArray(collected) }
+      // .env (current execution environment), .depth (current call depth), .pure.
     },
   },
 
@@ -4158,6 +4115,7 @@ For example, \`(func input+3) 5\` returns \`8\`.`,
 This has one \`input\`; see \`multifunc\` for multi-input functions.
 
 What a function does, does not change when a node in its body changes. That would need a lot of memory to wire up. Instead, re-compile the function object itself with \`writeAt\` if a change is needed.`,
+    future:`Created functions could choose to be inlinable, and use \`purify\` for partial evaluation.`,
     lookup:{
       input:__is(`input`),
       multifunc:__is(`multifunc`),
@@ -4191,7 +4149,7 @@ What a function does, does not change when a node in its body changes. That woul
          *     Complications:
          * - `interrupt` handling, to stop and resume execution.
          *   The variables may be restored on post-interrupt entry,
-         *   and we need an "instruction pointer" to not re-do done work,
+         *   and we may need an "instruction pointer" to not re-do done work,
          *   and the work may be wrapped in try/catch that saves all variables on interrupt.
          */
         const consts = _allocMap()
@@ -4225,7 +4183,7 @@ What a function does, does not change when a node in its body changes. That woul
 
             const [po, ind, rc] = _postorderAndIndexesAndRefs(body)
             for (let i=0; i < po.length; ++i) {
-              // Walk the DAG in post-order, emits assignment of vars to application results.
+              // Walk the DAG in post-order, emit assignment of vars to application results.
               //   We don't re-use variable slots that won't be used in computation, because adjustment could want them.
               //     (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
               const x = po[i], ins = ind[i]
@@ -4315,6 +4273,8 @@ What a function does, does not change when a node in its body changes. That woul
           return ++rc[i]
         }
         toIndex.set(x, null)
+        if (!x.length)
+          error('Expected a function with args to apply, got', x)
         x.forEach(walk)
         toIndex.set(x, po.length)
 
@@ -4363,7 +4323,7 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
     },
   },
   observe:{
-    docs:`\`observe Array OnChange\`: calls the function (passing \`Array\`) when the array changes from a \`writeAt\` call.
+    docs:`\`observe Array OnChange\`: remembers to call the function (passing \`Array\`) sometime after the array changes from a \`writeAt\` call.
 If \`OnChange\` is not given, returns the current array of \`Array\`'s observers.
 Call this again with the same array and function to no longer call it.
 Many updates at the same time are merged into one call, scheduled in a separate task.`,
@@ -4457,16 +4417,112 @@ zing built-in primitives like peval or `replay` with our ML?
 
 
 
-  // TODO: Make `purify` a partial evaluator, just constant-propagation for now: use the postorder and have a "do we know this" array of bools, along with the results/computations array; always return a computation (even if it's just `quote(x)`). We don't know a thing when it's `input` when we haven't had the input specified, or when it tries `impureLoad` (throwing an exception).
-  //   TODO: Change uses of `purify` (mostly in REPL) to use this.
-  //   TODO: Harden all `parse`s against interrupts, by moving them into `_schedule`/`_doJob` in `editor`.
-  //   TODO: Make `func` use `purify`.
+  // TODO: Harden all `parse`s against interrupts, by moving them into `_schedule`/`_doJob` in `editor`.
+  // TODO: Make `func` use `purify`.
+
+  // TODO: The object creators must have a mark of the ability to inline them.
+  // TODO: `created` maps and arrays must be deconstructed into their creation method, and quoting _unknown things must return the computation itself (to make the partially-unknown-values deconstruction work).
+  // TODO: Make `readAt` in `call.pure` mode only read objects that were through `created(x)`, meaning that we own them. Make `struct`, `array`, `map` call that on their results.
+  purify:{
+    docs:`\`purify ^Expr\`: Constant-propagates the expression, without inlining or knowledge.
+The process is simple: if any of a node's inputs are unknown (or if it does an impure thing, or its result \`_isUnknown\`), then the node is unknown, else it's known and can be computed.
+(This is almost a partial evaluator and almost a function-optimizer, and can be easily made into those.)`,
+    examples:[
+      [
+        `purify ^[1+2]`,
+        `3`,
+      ],
+      [
+        `purify ^(randomNat 5)`,
+        `_unknown (randomNat 5)`,
+      ],
+    ],
+    lookup:{
+      purifyInWorker:__is(`purifyInWorker`),
+    },
+    nameResult:[
+      `purified`,
+      `computation`,
+    ],
+    philosophy:`Though everything here is evaluated eagerly, inlining and partially-evaluating functions will drop unused args. This gives benefits of both eager and lazy evaluation.
+
+Staging (code generating code when not everything is known) is done in some native functions here (those that mention _isUnknown and do non-trivial things with it), but with proper partial evaluation, it seems worse than useless for non-native code (since every function inlining acts as its own staging, though not forced through any particular staging order).`,
+    call(x, inputKnown = false, inputValue = input) {
+      if (!_isArray(x)) return x
+      if (x[0] === quote) return x[1]
+      let [i = 0, outputs = _allocArray(), unknown, po, inds] = interrupt(purify)
+      if (!po) [po, inds] = _postorderAndIndexesAndRefs(x)
+      outputs.length = po.length
+      // `unknown` is an array of booleans of length `po.length`, but we only create it on-demand, to optimize for nothing-unknown cases.
+      const collected = _allocArray()
+      const prevPure = call.pure;  call.pure = true
+      try {
+        for (; i < po.length; ++i) {
+          // Go through all nodes, collect dependencies, execute nodes, and record those that we can't know.
+          collected.length = inds[i].length
+          for (let j=0; j < collected.length; ++j) {
+            const ind = inds[i][j]
+            let depUnknown = ind !== null && unknown && unknown[ind]
+            let depValue = ind !== null ? outputs[ind] : _isArray(po[i][j]) ? po[i][j][1] : po[i][j]
+            if (po[i][j] === input)
+              depUnknown = !inputKnown, depValue = inputValue
+            if (depUnknown) {
+              if (!unknown || !unknown[i])
+                for (let k=0; k<j; ++k)
+                  collected[k] = quote(collected[k])
+              !unknown && (unknown = _allocArray(), unknown.length = po.length), unknown[i] = true
+            }
+            collected[j] = depValue
+            if (ind !== null && !depUnknown && unknown && unknown[i])
+              collected[j] = quote(collected[j])
+            if (j === 0 && typeof collected[0] != 'function')
+              error("Expected a function, got", collected[0])
+          }
+
+          try {
+            if (unknown && unknown[i])
+              // Note: here, we can check if the function defines that it can inline itself, and/or
+              //   make a choice, and call it despite having unknown inputs. This would make a partial evaluator.
+              //     We don't do that here, because grappling with potentially-exponential code size from naive inlining is bad UX.
+              throw impure
+            outputs[i] = collected[0].call(...collected)
+            if (_isUnknown(outputs[i]))
+              outputs[i] = outputs[i][1], !unknown && (unknown = _allocArray(), unknown.length = po.length), unknown[i] = true
+          } catch (err) {
+            if (err === impure) {
+              if (unknown && unknown[i])
+                // We've already quoted every known value in `collected` when we were collecting it.
+                outputs[i] = collected.slice()
+              else
+                outputs[i] = collected.map(quote)
+              !unknown && (unknown = _allocArray(), unknown.length = po.length), unknown[i] = true
+              // Note: here, we can check if the function defines how to stage itself, and
+              //   transform the recorded node with that. This would allow utilizing domain knowledge like `a+1+1 = a+2`.
+              //     We don't do that here, because we don't know anything.
+            }
+            else throw err
+          }
+        }
+        const lastOut = outputs[po.length-1], lastUnk = unknown && unknown[po.length-1]
+        _allocArray(outputs), unknown && _allocArray(unknown)
+        _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
+        return !lastUnk ? lastOut : _unknown(lastOut)
+      } catch (err) {
+        if (err === interrupt) interrupt(purify, _tmp().length=0, _tmp().push(i, outputs, unknown, po, inds))
+        if (err === interrupt) throw err
+        return _unknown(_errorRepr(err)) // Don't throw exceptions, return them. Might be a pain point sometimes.
+      } finally { call.pure = prevPure;  _allocArray(collected) }
+    },
+  },
+
 
 
 
 
 // (The interpreter loop should handle three distinct execution traces: impure-replay tape, gradient tape, and the interrupt stack.)
   // (And, they all should have definitions in execution env.)
+
+  // …Can't we have expert distillation, where choices in different execution branches synchronize their predictions? Yeah, it should be a basic thing, because it can't be properly imitated otherwise.
 
   add:{
     argCount:2,
@@ -5266,7 +5322,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   errorStack:{
     docs:`Adds the execution stack to the raised error.`,
-    call(...msg) { throw struct(error, ...msg, 'at', _resolveStack()) },
+    call(...msg) { throw struct(error, ...msg, 'at', _resolveStack(undefined, 2)) },
   },
 
   parseURL:{
@@ -5285,8 +5341,9 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
       _resolveStack.functions = Object.create(null)
       _resolveStack.location = new WeakMap
     },
-    call(stack = new Error().stack || '') {
-      return stack.trim().split('\n').map(L => {
+    call(stack = new Error().stack || '', skipFrames = 1) {
+      return stack.trim().split('\n').map((L,i) => {
+        if (i < skipFrames) return
         const loc = /(?: \(|@)(.+):(\d+):(\d+)\)?$/.exec(L)
         if (!loc) return L
         let sourceURL = loc[1]
@@ -7056,8 +7113,11 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
 
   Rewrite:{
     docs:`\`(Rewrite)\`: view the next rewrite in an \`<iframe>\`.
-Also is a namespace for rewriting Self's code to a different form.`,
+Also is a namespace for rewriting \`Self\`'s code to a different form.
+
+This makes \`Self\` open in the sense of "you can easily change any part of it to whatever you want, without anyone telling you to".`,
     lookup:{
+      editRewrite:__is(`editRewrite`),
       extension:__is(`ToExtension`),
       readableJS:__is(`ToReadableJS`),
       scopedJS:__is(`ToScopedJS`),
