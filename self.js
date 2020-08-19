@@ -322,7 +322,6 @@ __base({
     docs:`A namespace for some data-representation-related functions.`,
     lookup:{
       array:__is(`array`),
-      struct:__is(`struct`),
       lookup:__is(`lookup`),
     },
   },
@@ -330,7 +329,7 @@ __base({
   UI:{
     docs:`A namespace for user interface functionality.`,
     philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).
-Keep names short and rely on the IDE.`,
+Keep names short and rely on the IDE. Route gradient not through the text representation, but through actual dependencies.`,
     lookup:{
       Languages:__is(`Languages`),
       Commands:__is(`Commands`),
@@ -374,7 +373,7 @@ Label-binding environment is not preserved.`,
       try {
         while (true) {
           v = call(expr)
-          if (_isUnknown(v)) return _unknown(struct(repeat, v[1], iterations), v)
+          if (_isUnknown(v)) return _unknown([repeat, v[1], iterations], v)
           _checkInterrupt(expr)
           newLabel.clear()
           done = true
@@ -524,15 +523,11 @@ Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.s
 
   transform:{
     docs:`\`(transform Function Array)\`: transforms each element of Array by applying Function.
-\`(transform G (transform F A))\` is the same as \`(transform x -> (F (G x)) A).\``,
+\`(transform G (transform F A))\` is the same as \`(transform \\(F (G ?)) A).\``,
     examples:[
       [
-        `(transform x→(add x 2) 1)`,
-        `3`,
-      ],
-      [
-        `(transform x→…(0 (mul x 2) 0) (1 …(2 3) 4))`,
-        `(0 2 0 0 4 0 0 6 0 0 8 0)`,
+        `(transform \?+2 (array 1 2 3 4 5 6))`,
+        `3 4 5 6 7 8`,
       ],
     ],
     nameResult:[
@@ -542,18 +537,12 @@ Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.s
     argCount:2,
     call(f,a) {
       if (typeof f != 'function') error("Expected a function but got", f)
-      if (!_isArray(a)) return f.call(f, a)
-      let [result = [], i = 0] = interrupt(transform)
+      if (!_isArray(a)) error("Expected an array but got", a)
+      let [result = _allocArray(), i = 0] = interrupt(transform)
+      result.length = a.length
       try {
-        for (; i < a.length; ++i) {
-          let r = f.call(f, a[i])
-
-          // Add r to result.
-          if (_isArray(r) && r[0] === rest && _isArray(r[1]) && r.length == 2)
-            result.push(...r[1])
-          else
-            result.push(r)
-        }
+        for (; i < a.length; ++i)
+          result[i] = f.call(f, a[i])
         return result
       } catch (err) { if (err === interrupt) interrupt(transform, _tmp().length=0, _tmp().push(result, i));  throw err }
     },
@@ -846,15 +835,6 @@ text>span { font-family:sans-serif }
       observe(_disableSmoothTransitions, st => Self.into.classList.toggle('noTransitions', st[1], true))(_disableSmoothTransitions)
       observe(_noBoxStylingForPrograms, st => Self.into.classList.toggle('noComplexity', st[1], true))(_noBoxStylingForPrograms)
 
-      // Insert scripts.
-      defines(Browser, js).forEach(src => {
-        if (!document.querySelector(`script[src=${CSS.escape(src)}]`)) {
-          const s = elem('script')
-          s.src = src
-          document.head.append(s)
-        }
-      })
-
       // Insert the style defined by code.
       const StyleElem = document.createElement('style')
       StyleElem.style.display = 'none'
@@ -888,7 +868,7 @@ text>span { font-family:sans-serif }
         if (Commands.has(key)) {
           const range = getSelection().rangeCount && getSelection().getRangeAt(0)
           const env = _newExecutionEnv()
-          _doJob(struct(Commands.get(key), _closestNodeParent(evt.target || evt.explicitOriginalTarget), range, evt), env),
+          _doJob([Commands.get(key), _closestNodeParent(evt.target || evt.explicitOriginalTarget), range, evt], env),
           evt.preventDefault()
         }
       })
@@ -1111,6 +1091,17 @@ text>span { font-family:sans-serif }
         _schedule([_revisitElemValue, Self.into], _newExecutionEnv(), () => domgc = false)
           // It is possible to observe not-fully-restored states, but that is fine for interface GC.
       })
+
+      // Insert scripts.
+      //   TensorFlowJS: though not all of it fits our needs, this is the best numeric-operations library I know of.
+      //     Much easier than manually going through WebGL and/or WebGPU (which isn't supported on my machine), at least.
+      defines(Browser, js).forEach(src => {
+        if (!document.querySelector(`script[src=${CSS.escape(src)}]`)) {
+          const s = elem('script')
+          s.src = src
+          document.head.append(s)
+        }
+      })
     },
   },
 
@@ -1319,6 +1310,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
           const chs = [...el.firstChild.childNodes]
           while (el.firstChild.firstChild) el.firstChild.removeChild(el.firstChild.firstChild)
           const ch = elem('div', chs)
+          elemValue(ch, el.to)
           return el.replaceWith(ch), ch
         }
         for (let ch = el.firstChild.nextSibling; ch; ch = ch.nextSibling) {
@@ -1477,7 +1469,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
             'to' in el && a.push(el.to)
             if (next && next.tagName === 'BRACKET' && !next.nextSibling) end = next, nextCol = next
           }
-          elemValue(col, struct(rest, a))
+          elemValue(col, rest(a))
         }
         col.append(d)
         col.onclick = (evt, instant = false) => {
@@ -1745,6 +1737,7 @@ For anything else, display the globals the expression binds to, and an expandabl
 
   contextMenu:{
     docs:`Creates and displays a \`<context-menu>\` element near the specified element.`,
+    future:`Remove most buttons, and add tutorials on how to add them. Hide complexity if the user doesn't care about it.`,
     philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     lookup:{
       describe:__is(`describe`),
@@ -2017,7 +2010,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
           }
         }
       }
-      elemValue(el, struct(elem, evaluator, expr, then))
+      elemValue(el, [evaluator, expr, then])
 
       // Evaluate the requested expression.
       const start = _timeSince()
@@ -2029,14 +2022,14 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
         if (binds && binds.has(evaluator.history)) { // Add result to bindings.
           if (_isLabel(bindAs) && binds.get(evaluator.history).has(bindAs))
-            r = struct(error, "Label", bindAs, "is already bound to", binds.get(bindAs))
+            r = [error, "Label", bindAs, "is already bound to", binds.get(bindAs)]
           else if (_isLabel(bindAs)) {
             const L = bindAs
             const q = quote(r)
             binds.get(evaluator.history).set(L, binds.has(L) ? binds.get(L) : evaluator.none)
             binds.set(L, q)
             _invertBindingContext(binds, true)
-            r = struct(_extracted, q, r)
+            r = [_extracted, q, r]
           }
         }
 
@@ -2108,7 +2101,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
   ],
 
   editor:{
-    docs:`\`(editor InitialString Lang Binds OnInput OnEnter) OnInput:(function Expr InvalidFlag ?) OnEnter:Expr->ClearInputFlag\`: creates a user-editable expression input.
+    docs:`\`(editor InitialString Lang Binds OnInput OnEnter)\`: creates a user-editable expression input.
+\`OnInput\` is passed the parsed expression and whether the currently entered text fails to parse. \`OnEnter\` is passed the expression (always successfully-parsed), and it returns \`true\` to clear editor contents.
 Don't do expensive synchronous tasks in \`OnInput\`.`,
     lookup:{
       _autocompleteBrackets:__is(`_autocompleteBrackets`),
@@ -2227,7 +2221,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         if (evt.key === 'Z' && evt.shiftKey && evt.ctrlKey && redo.length)
           undo.push(children(ed)), children(ed, redo.pop()), evt.preventDefault()
       }
-      elemValue(query, struct(editor, initialString, lang, binds, onInput, onEnter))
+      elemValue(query, [editor, initialString, lang, binds, onInput, onEnter])
       return query
 
       function evaluate(evt) {
@@ -2370,7 +2364,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
             const bindAs = _isArray(expr) && expr[0] === _extracted && expr.length == 3 && _isLabel(expr[1]) ? expr[1] : null
             if (bindAs) expr = expr[2]
             pureOutput.append(waiting)
-            _doJob([purify, struct(quote, expr)], penv, result => {
+            _doJob([purify, quote(expr)], penv, result => {
               if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
                 result = result[1] // Display errors too.
               if (bindAs) result = [_extracted, bindAs, result]
@@ -2468,7 +2462,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       if (typeof href != 'string') throw "Must be a string"
       if (tag !== url || typeof document == ''+void 0) return href
       const el = elem('a', href)
-      elemValue(el, struct(elem, url, href))
+      elemValue(el, [elem, url, href])
       el.href = href
       el.title = decodeURI(href)
       if (el.title.slice(0,8) === 'https://') el.title = el.title.slice(8)
@@ -3242,12 +3236,20 @@ All these are automatically tested to be correct at launch.`,
   philosophy:{
     docs:`Unlike regular philosophy, this one stems only from computation.`,
     lookup:[
-      `\`map ...(transform x->...(array x (elem 'div' (stringToDoc (defines x philosophy)))) (refd philosophy))\``,
+      `The only real way to understand something is to code it. Or do you think that humans are not intelligent creatures, and their words do not have unseen connections to the whole mind? No, a word is more than a thing, too foggy. The only way to understand learning is to be unable to learn and learn anyway.`,
+      `There are things that do all other things (Turing machines, particular logic systems like rewriting rules or category theory, functionalities of programming languages and their IRs; particular cellular automata, randomness-based program searches like evolution, general intelligences).
+Everything else about all of existence is a consequence. (Take a moment to think about everything that you have ever known and can know. No matter what it is, it was found.)
+
+Widespread use of universal computers demonstrate this view's practicality. Attempts like the Wolfram Physics Project prove this view's viability as a complete theory of fundamental physics. However, to prove it more intuitively and without question, we must understand what constitutes a good user of a thing like a programming language.
+Clearly, randomness is far far far far far too slow for practical applications. But we can do better. There's even a word for it: "arbitrary", to replace "random". We can do things like route differentiable computations through arbitrary programs to their predictions, and predict all numbers seen in user-space, to get more eyes in our brains, to let honesty and self-awareness guide us and become us. We don't even need large neural networks, just the prediction of everything, and then we can really begin to do interesting things.
+Come on. Let's do it, inside this project. I'm excited.`,
+      `Everything, nothing, and something. If "everything" is a thing that does everything, and the world is "everything", then "nothing" is exactly subversion of "something".
+
+If we were to look at human minds as things, then most people are "something" (often traditional and predictable), smart and artsy people worship "nothing" (often revolutionary and anti-culture), and very few people are "everything" (no often-true description is possible, they do and are what they want). But why would we do that? To explain is to create and impose a thing, another barrier to "nothing" and "everything". Just believe in people, while being a god and knowing everything that there is and can be. Be nice! It's the only way to replace their world with a better one, your own.`,
       `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. But without infinite self-improvement, which no software system currently has (only its effects), the minds of those who intertwine with software rot. Self-improvement is included in perfect generality, and a flavor of deep reinforcement learning would allow that. Let's see what we can do to make it easier to use.`,
       `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. But it also has general intelligence in there. Find it, and reroute as much of the primary data loop (consciousness/identity/personality) as is possible through that infinite willpower. Most things that humans are and do are far from general intelligence, so, break them down then build them up.`,
       `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computational base and trust that spawns from that, or perfect internal honesty and self-awareness of each part, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
-      `Things small enough to master, understand how they could be used/modified, and make others.
-There isn't even one grand model for search of search, and instead, it should be searched for. Only perfectly general choice-making methods can do that, and differentiable scaffolding can do that more intelligently than even Bayesian optimization.`,
+      `\`m:(map) (last (transform \(mapWrite m ? (elem 'div' (stringToDoc (defines ? philosophy)))) (refd philosophy)) (hierarchy m))\``,
     ],
   },
 
@@ -3310,9 +3312,9 @@ There isn't even one grand model for search of search, and instead, it should be
   _errorRepr(err) {
     // Convert a caught error to its displayable representation.
     if (err instanceof Error)
-      return err.stack ? struct(jsRejected, elem('error', String(err)), _resolveStack(err.stack, 0)) : struct(jsRejected, elem('error', String(err)))
+      return err.stack ? [jsRejected, elem('error', String(err)), _resolveStack(err.stack, 0)] : [jsRejected, elem('error', String(err))]
     else if (!_isError(err))
-      return struct(jsRejected, err)
+      return [jsRejected, err]
     else
       return err
   },
@@ -3524,8 +3526,8 @@ In Scheme, this is called \`begin\`.`,
   },
 
   rest:{
-    docs:`\`(rest Array)\` or \`…Array\`: when statically used in an array, spreads the \`Array\` into the user. Is a UI convenience.`,
-    call(a) { return struct(rest, a) },
+    docs:`\`(rest Array)\` or \`…Array\`: when statically used in an array, spreads the \`Array\` into the referencing array. Is a UI convenience.`,
+    call(a) { return [rest, a] },
   },
 
   false:false,
@@ -3550,7 +3552,7 @@ But I know what you're really thinking: "arrays with heads that define \`constru
     argCount:1,
     call(x) { // Value ⇒ Expr
       // Create the `(quote Expr)` representation if needed.
-      return _isArray(x) || x === input ? struct(quote, x) : x
+      return _isArray(x) || x === input ? [quote, x] : x
     },
   },
 
@@ -3596,11 +3598,7 @@ Evaluating a bound label results in its value, in the current function call. Eva
   _isLabel(v) { return _isArray(v) && v[0] === label && typeof v[1] == 'string' && v.length == 2 },
 
   _unknown:{
-    docs:`\`(_unknown Expr)\`: denotes that Expr is dependent on unknown factors and cannot be evaluated now, so it has to be deferred.
-Unlike all other arrays, arrays with this as the head are mutable.
-Unbound variables are unknown.
-The internal mechanism for \`purify\` and recording and using the continuation of JS promises.
-Check _isUnknown to materialize the inner structure but only on demand.`,
+    docs:`\`(_unknown Expr)\`: denotes that \`Expr\` is dependent on unknown factors and cannot be evaluated now, so it has to be deferred.`,
     argCount:1,
     call(x, reason) {
       if (_isArray(x) && x[0] === _unknown) return x
@@ -3612,14 +3610,6 @@ Check _isUnknown to materialize the inner structure but only on demand.`,
   _isUnknown(v) { return _isArray(v) && v[0] === _unknown },
 
   _isPromise(v) { return v instanceof Promise },
-
-
-  struct:{
-    docs:`\`(struct …Items)\`: an array of items with semantically constant content.
-(No actual difference from \`array\`, so it may get removed soon.)`,
-    interrupt:false,
-    call(...x) { return x },
-  },
 
   _notFound:{
     docs:`A marker for signifying the not-found state.`,
@@ -4042,17 +4032,17 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
         const p = lookup.parents.get(v)
         if (defines(p, lookup))
           for (let k of lookup(p))
-            if (lookup(p, k) === v) return struct(lookup, p, k)
+            if (lookup(p, k) === v) return [lookup, p, k]
         if (_view(p))
           for (let k of Object.keys(_view(p)))
             if (k !== _id(deconstruct) && _view(p)[k] === v)
-              return struct(defines, p, concept.idToKey[+k])
+              return [defines, p, concept.idToKey[+k]]
       }
 
       if (typeof document != ''+void 0) {
         // Not precise at all.
         if (v instanceof Node && 'to' in v) return v.to
-        if (v instanceof Element) return struct(elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch, allowPath)))
+        if (v instanceof Element) return [elem, v.tagName.toLowerCase(), [...v.childNodes].map(ch => deconstruct(ch, allowPath))]
         if (v instanceof Node) return v.textContent
       }
 
@@ -4067,11 +4057,15 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
       if (v && v[defines.key]) {
         // Deconstruct the definition Map, treating self-references specially.
         const m = new Map, d = v[defines.key]
+        const result = [concept, m]
+        const selfRef = typeof v == 'function' ? {[defines.key]:{[_id(deconstruct)]:_unevalFunction(v)}} : result
         Object.keys(d).forEach(k => {
           const val = d[k]
-          val === v ? m.set(concept.idToKey[+k], _unevalFunction(v)) : m.set(concept.idToKey[+k], val)
+          val === v ? m.set(concept.idToKey[+k], selfRef) : m.set(concept.idToKey[+k], val)
         })
-        return [concept, m]
+        if (typeof v == 'function')
+          m.set(call, selfRef)
+        return result
       }
       if (typeof v == 'function')
         return _unevalFunction(v)
@@ -4079,8 +4073,9 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
         return [concept, new Map([[docs, `A marker that represents the lack of a conceptual definition or a value.`]])]
       if (!v || typeof v != 'object')
         return v
+      // And, objects (likely in `lookup`) just get deconstructed as maps.
       const arr = [map]
-      Object.keys(v).forEach(k => arr.push(k, quote(v[k])))
+      Object.keys(v).forEach(k => arr.push(k, v[k]))
       return arr
     },
   },
@@ -4097,7 +4092,7 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
     try { Function('('+src+')') }
     catch (err) { src = 'function'+src }
 
-    return ctx !== undefined ? struct(jsEval, src, ctx) : struct(jsEval, src)
+    return ctx !== undefined ? [jsEval, src, ctx] : [jsEval, src]
   },
 
   input:{
@@ -4160,7 +4155,7 @@ What a function does, does not change when a node in its body changes. That woul
         function toSource(body) {
           // Compiles a DAG into an SSA form in JS that handles `interrupt`s.
           const code = _allocArray()
-          let nextStage = 0
+          let nextStage = 1
 
           const sourceURL = new Array(32).fill().map(() => randomNat(16).toString(16)).join('')
           const lines = []
@@ -4174,7 +4169,7 @@ What a function does, does not change when a node in its body changes. That woul
             const backpatchVars = code.push(` VARIABLES`)-1
             code.push(` ++${env(call)}.depth`)
             code.push(` try {`)
-            const backpatchGotoInterrupt = code.push(`  switch (stage) {`)-1
+            const backpatchGotoInterrupt = code.push(`  switch (stage) { case 0:`)-1
 
             const [po, ind, rc] = _postorderAndIndexesAndRefs(body)
             for (let i=0; i < po.length; ++i) {
@@ -4185,7 +4180,7 @@ What a function does, does not change when a node in its body changes. That woul
               _checkArgCount(x)
               if (_isArray(x[0]) || defines(x, interrupt) !== false) {
                 // Advance the interrupt stage if we cannot guarantee the function is non-interrupting.
-                code.push(nextStage ? `   stage = ${nextStage}; case ${nextStage}:` : `   case 0:`)
+                code.push(`   stage = ${nextStage}; case ${nextStage}:`)
                 ++nextStage
               }
               lines.push(code.length+3, x)
@@ -4198,16 +4193,14 @@ What a function does, does not change when a node in its body changes. That woul
             }
             code.push(`   return v${po.length - 1}`)
 
-            if (!nextStage)
+            if (nextStage <= 1)
               code[backpatchGotoInterrupt] = ``
-            else if (nextStage <= 1)
-              code[backpatchGotoInterrupt] = `  switch (0) {`, code.push(`  }`)
             else code.push(`  }`)
 
             const listOfVars = po.map((_,i) => 'v'+i)
-            if (nextStage) {
-              code[backpatchVars] = ` let [${nextStage>1 ? 'stage=0,' : ''}${listOfVars}] = ${env(interrupt)}(F)`
-              code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(${nextStage > 1 ? 'stage,' : ''}${listOfVars}));  throw err }`)
+            if (nextStage > 1) {
+              code[backpatchVars] = ` let [stage=0,${listOfVars}] = ${env(interrupt)}(F)`
+              code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(stage,${listOfVars}));  throw err }`)
             } else {
               code[backpatchVars] = ` let ${listOfVars}`
               code.push(` }`)
@@ -4427,9 +4420,14 @@ zing built-in primitives like peval or `replay` with our ML?
   // TODO: Harden all `parse`s against interrupts, by moving them into `_schedule`/`_doJob` in `editor`.
   // TODO: Make `func` use `purify`.
 
-  // TODO: The object creators must have a mark of the ability to inline them.
-  // TODO: `created` maps and arrays must be deconstructed into their creation method, and quoting _unknown things must return the computation itself (to make the partially-unknown-values deconstruction work).
-  // TODO: Make `readAt` in `call.pure` mode only read objects that were through `created(x)`, meaning that we own them. Make `struct`, `array`, `map` call that on their results.
+  // TODO: The overridable function `inline(^(Func, …ArgPrograms))` that takes programs (to not need to wrap unknowns in _unknown) and returns a value, probably with `purify`.
+  // TODO: Make `purify` `inline` things that want to be.
+  // TODO: The object creators must define `inline` as create-object.
+  // TODO: `created(obj)—>obj` to mark objects in the current `call.pure`.
+  // TODO: Preserve `call.pure` across interrupts, in `purify`.
+  // TODO: In `purify`, `created` objects must be deconstructed when putting them as an output.
+  // TODO: Make `readAt` in `call.pure` mode only read objects that were through `created(x)`, meaning that we own them. Make `array`, `map` call that on their results.
+  // TODO: Make `writeAt` impure if the object was not `created`, and inline for `created` objects to store computations.
   purify:{
     docs:`\`purify ^Expr\`: Constant-propagates the expression, without inlining or knowledge.
 The process is simple: if any of a node's inputs are unknown (or if it does an impure thing, or its result \`_isUnknown\`), then the node is unknown, else it's known and can be computed.
@@ -4451,9 +4449,6 @@ The process is simple: if any of a node's inputs are unknown (or if it does an i
       `purified`,
       `computation`,
     ],
-    philosophy:`Though everything here is evaluated eagerly, inlining and partially-evaluating functions will drop unused args. This gives benefits of both eager and lazy evaluation.
-
-Staging (code generating code when not everything is known) is done in some native functions here (those that mention _isUnknown and do non-trivial things with it), but with proper partial evaluation, it seems worse than useless for non-native code (since every function inlining acts as its own staging, though not forced through any particular staging order).`,
     call(x, inputKnown = false, inputValue = input) {
       if (!_isArray(x)) return x
       if (x[0] === quote) return x[1]
@@ -4492,7 +4487,8 @@ Staging (code generating code when not everything is known) is done in some nati
               //   make a choice, and call it despite having unknown inputs. This would make a partial evaluator.
               //     We don't do that here, because grappling with potentially-exponential code size from naive inlining is bad UX.
               throw impure
-            outputs[i] = collected[0].call(...collected)
+            else
+              outputs[i] = collected[0].call(...collected)
             if (_isUnknown(outputs[i]))
               outputs[i] = outputs[i][1], !unknown && (unknown = _allocArray(), unknown.length = po.length), unknown[i] = true
           } catch (err) {
@@ -4553,6 +4549,8 @@ Staging (code generating code when not everything is known) is done in some nati
 
   // TODO: Successfully backprop through `a+b`. Make a backprop compiler, without any optimizations for now ('compiling' into our DAG IR).
   //   …How would we merge backprop signals? In lesca, we could afford to have a global merger, but what about here? Should each adjustable function define its merger (and same-merger functions can be used together)?
+
+  // TODO: the "Composing a learner out of smaller learners, such as in gradient descent, is efficient. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)." `assign` function.
 
   adjust:{
     docs:``,
@@ -5319,7 +5317,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
       fast:__is(`errorFast`),
       stack:__is(`errorStack`),
     },
-    call(...msg) { throw struct(error, ...msg) },
+    call(...msg) { throw [error, ...msg] },
   },
 
   errorFast:{
@@ -5329,7 +5327,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   errorStack:{
     docs:`Adds the execution stack to the raised error.`,
-    call(...msg) { throw struct(error, ...msg, 'at', _resolveStack(undefined, 2)) },
+    call(...msg) { throw [error, ...msg, 'at', _resolveStack(undefined, 2)] },
   },
 
   parseURL:{
@@ -5449,7 +5447,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
   },
 
   structured:{
-    docs:`\`(structured Arrays)\`: shows deep structure of Arrays (consisting of acyclic arrays and strings and DOM elements): wraps each sub-array in \`<node>\`.`,
+    docs:`\`(structured Arrays)\`: shows deep structure of \`Arrays\` (consisting of acyclic or tree arrays and strings and DOM elements): wraps each sub-array in \`<node>\`.`,
     call(x) {
       // structured (('Hello there.') ' ' ('General Kenobi!'))
       if (typeof Node != ''+void 0) {
@@ -6100,8 +6098,8 @@ Somewhat usable in a REPL.`,
   },
 
   _extracted:{
-    docs:`ONLY for parsing \`c=x\`.`,
-    call(c,x) { return struct(_extracted, c, x) },
+    docs:`ONLY for parsing \`c:x\`. …I guess returning this to a \`REPL\` binds a label to a value, too.`,
+    call(c,x) { return [_extracted, c, x] },
   },
 
   _unrollRest(a) {
@@ -6253,12 +6251,12 @@ And parsing is more than just extracting meaning from a string of characters (it
     docs:`When matched in \`parse\` rules, represents a value that should be preserved as-is (as it likely comes from a special DOM element/reference).`,
   },
 
-  _basicEscapeLabel(s) { return s && !/[=!:\s\(\)\[\]\{\}→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]/.test(s) ? s : '`' + s.replace(/`/g, '``') + '`' },
+  _basicEscapeLabel(s) { return s && !/[=!:\s\(\)\[\]\{\}>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]/.test(s) ? s : '`' + s.replace(/`/g, '``') + '`' },
 
   _basicUnescapeLabel(s) { return s[0] === '`' ? s.slice(1,-1).replace(/``/g, '`') : s },
 
   _basicLabel(match, u) { // a, qwer, `a`; 12, 1e6
-    const legal = /-?(?:[0-9]e-|[0-9]E-|[^=!:\s\(\)\[\]\{\}→>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]|\.[0-9])+/y
+    const legal = /-?(?:[0-9]e-|[0-9]E-|[^=!:\s\(\)\[\]\{\}>\+\-\*\/\&\|\.'"`\,\\\ue000-\uf8ff]|\.[0-9])+/y
     if (u === _specialParsedValue) {
       const r = match(/`(?:[^`]|``)*`/y)
       if (r !== undefined) return label(r.slice(1,-1).replace(/``/g, '`'))
@@ -6316,7 +6314,7 @@ And parsing is more than just extracting meaning from a string of characters (it
           (ctx || (ctx = new Map)).set(v[1], v[2])
         else arr.push(v)
       }
-      if (ctx) return struct(bound, ctx, arr)
+      if (ctx) return [bound, ctx, arr]
       return arr
     }
     if (!_isArray(u)) throw "Must be an array"
@@ -6335,14 +6333,14 @@ And parsing is more than just extracting meaning from a string of characters (it
   },
 
   _basicCall(match, u, _, base) { // (a b c c:x)
-    return _matchBrackets(match, u, _basicMany, null, '(', ')', base)
+    return _matchBracketed(match, u, _basicMany, null, '(', ')', base)
   },
 
   _fancyMap(match, u, _, base) { // {a b c c:x}
-    return _matchBrackets(match, u, _basicMany, 'map', '{', '}', base)
+    return _matchBracketed(match, u, _basicMany, 'map', '{', '}', base)
   },
 
-  _matchBrackets(match, u, base, head, open, close, arg1, arg2) { // (base)
+  _matchBracketed(match, u, base, head, open, close, arg1, arg2) { // (base)
     if (u === _specialParsedValue) {
       if (!match(open)) return
       const arr = base(match, u, head && [label(head)], arg1, arg2)
@@ -6402,7 +6400,7 @@ And parsing is more than just extracting meaning from a string of characters (it
           if (op = match(reprs[i+2])) {
             const b = match(base)
             b === undefined && match.notEnoughInfo('Expected the second arg of '+op.trim())
-            a = struct(label(reprs[i]), a, b)
+            a = [label(reprs[i]), a, b]
             continue outer
           }
         break
@@ -6429,7 +6427,7 @@ And parsing is more than just extracting meaning from a string of characters (it
         if (op = match(reprs[i+2])) {
           const b = match(baseRight)
           b === undefined && match.notEnoughInfo('Expected the second arg of '+op.trim())
-          a = struct(label(reprs[i]), a, b)
+          a = [label(reprs[i]), a, b]
         }
       return a
     }
@@ -6452,7 +6450,7 @@ And parsing is more than just extracting meaning from a string of characters (it
         if (op = match(reprs[i+2])) {
           const b = match(base)
           b === undefined && match.notEnoughInfo('Expected the arg of '+op.trim())
-          return struct(label(reprs[i]), b)
+          return [label(reprs[i]), b]
         }
       }
       return match(base)
@@ -6664,7 +6662,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     }
     function space() { return document.createTextNode(' ') }
     function ensureSpacesAround(el, before1, before2) {
-      const legal = /[=!:\s\(\)→>\+\-\*\/\&\|]/
+      const legal = /[=!:\s\(\)>\+\-\*\/\&\|]/
       let spaceBefore = true, spaceAfter = false
       _visitText(el, (str, ch) => {
         if (spaceAfter)
@@ -6708,7 +6706,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
         if (s[i+1].nodeName === 'EXTRACTED') break
         if (s[i+3].nodeName === 'EXTRACTED') break
         const row = elem('tr', [elem('td', [s[i], s[i+1]]), elem('td', [s[i+2], s[i+3]])])
-        if (_isArray(v)) elemValue(row, struct(rest, struct(v[++a], v[++a])))
+        if (_isArray(v)) elemValue(row, rest([v[++a], v[++a]]))
         else elemValue(row, [label])
         rows.push(row)
         i += 4
@@ -7683,7 +7681,7 @@ The correctness of quining of functions can be tested by checking that the rewri
 Preserved for now, because giving the user choices is a valuable idea for explaining (but should be reworked).`,
     call(next, from, cause, extra) {
       if (!askUser.got) askUser.got = new Map
-      const a = struct('askUser', next, from, cause, extra)
+      const a = ['askUser', next, from, cause, extra]
       if (askUser.got.has(a))
         try {
           return askUser.got.get(a) !== _notFound ? askUser.got.get(a) : next(from, cause, extra)
