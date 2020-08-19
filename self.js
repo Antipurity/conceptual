@@ -806,6 +806,9 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 
 separated-text { margin:1em; display:block }
 text>span { font-family:sans-serif }
+
+separated-text>serialization, text>serialization { background-color:rgba(50%, 50%, 50%, 20%); border-radius:.2em }
+.nonArray>bracket { font-weight:bold }
 `,
 
     call(into = document.body) {
@@ -928,8 +931,8 @@ text>span { font-family:sans-serif }
         atCursor.opened = atCursor.opened.filter(el => el.contains(t))
         bad.forEach(elemRemove)
       }
-      _listen('pointerdown', closeMenus)
-      _listen('focusin', closeMenus)
+      _listen('pointerdown', closeMenus, passive)
+      _listen('focusin', closeMenus, passive)
 
       // Ensure that we still re-enter the interpreter loop after manually interrupting a script.
       _listen(2000, () => _jobs.running && _jobs())
@@ -942,6 +945,7 @@ text>span { font-family:sans-serif }
       // On transition end, remove .style.height (for _smoothHeightPost/elemInsert).
       let atEnd = false
       _listen('transitionstart', evt => {
+        if (_disableSmoothTransitions[1]) return
         if (evt.propertyName !== 'height' || (evt.target || evt.explicitOriginalTarget).tagName === 'SCROLL-HIGHLIGHT') return
         const el = repl.lastChild.previousSibling, top = el.getBoundingClientRect().top
         if (evt.propertyName !== 'height' || Self.into !== document.body) return
@@ -950,6 +954,7 @@ text>span { font-family:sans-serif }
         atEnd = atEnd || scrollY && top <= innerHeight - 10
       }, passive)
       _listen('transitionend', evt => {
+        if (_disableSmoothTransitions[1]) return
         const t = evt.target || evt.explicitOriginalTarget
         if (t.tagName === 'SCROLL-HIGHLIGHT') return
         if (evt.propertyName !== 'height' || Self.into !== document.body) return
@@ -961,6 +966,7 @@ text>span { font-family:sans-serif }
 
       // On .ctrlKey pointerdown on a value, insert a <collapsed> reference to it into selection if editable.
         // This is also accessible via contextMenu.
+        // TODO: Put it in `Commands`, under `CtrlClick`.
       _listen('pointerdown', evt => {
         if (!evt.ctrlKey || evt.shiftKey || evt.altKey) return
         if (!getSelection().rangeCount) return
@@ -978,9 +984,11 @@ text>span { font-family:sans-serif }
         if (el) el = el.parentNode
         if (el && el.tagName === 'COLLAPSED' || el && el.tagName === 'SERIALIZATION')
           el.nextSibling ? r.setEndBefore(el.nextSibling) : r.setEndAfter(el)
+        // TODO: Also ensure that it cannot select past the end (probably the last div), as in `1 2` CtrlA (.
       }, passiveCapture)
 
       // Highlight equal-id <node>s over selection or under cursor.
+      // TODO: A setting to not highlight them.
       function changeHoverTo(el) {
         const prev = changeHoverTo.prev
         const def = el && !_isArray(el.to) && defines(el.to, _closestNodeParent)
@@ -1014,14 +1022,19 @@ text>span { font-family:sans-serif }
       _listen('pointerout', highlight, passiveCapture)
       _listen('selectionchange', highlight, passiveCapture)
 
-      // Create JobIndicator and CPU.
+      // Create the toolbar.
       const bottombar = elem('div')
       bottombar.setAttribute('style', "position:sticky; left:0; bottom:0; z-index:10")
-        const JobIndicator = _jobs.indicator = elem('JobIndicator')
-        JobIndicator.title = "Currently running 0 jobs."
-        const Darkness = settings(_useDarkTheme)
-        const CPU = settings(_maxUsageOfCPU)
-      bottombar.append(JobIndicator, Darkness, CPU)
+      const JobIndicator = _jobs.indicator = elem('JobIndicator')
+      JobIndicator.title = "Currently running 0 jobs."
+      const toolbar = [_useDarkTheme, _maxUsageOfCPU]
+      observe(toolbar, function onChange(toolbar) {
+        while (toolbarElem.firstChild)
+          toolbarElem.removeChild(toolbarElem.firstChild)
+        toolbarElem.append(' ', ...toolbar.map(settings))
+      }, true)
+      const toolbarElem = elemValue(elem('span', [' '].concat(toolbar.map(settings))), toolbar)
+      bottombar.append(JobIndicator, toolbarElem)
       into.append(bottombar)
 
       // Highlight all current jobs' logging areas when hovering over the job indicator.
@@ -1353,7 +1366,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
       let arr = s.split('`')
       for (let i = 0; i < arr.length; ++i)
         if (i & 1)
-          try { arr[i] = parse(arr[i], fancy, undefined, parse.dom)[1] } catch (err) {}
+          try { arr[i] = elem('serialization', parse(arr[i], fancy, undefined, parse.dom)[1]) } catch (err) {}
         else
           arr[i] = arr[i].split('\n').map(structuredSentence), typeof document != ''+void 0 && arr[i].forEach(el => el.classList.add('text')), interleave(arr[i], '\n')
       return arr
@@ -1653,7 +1666,7 @@ For anything else, display the globals the expression binds to, and an expandabl
         docs:`Docstring.`,
         call([el, v]) {
           if (!_isArray(v) && typeof defines(v, docs) == 'string')
-            return elem('div', stringToDoc(defines(v, docs)))
+            return elem('text', stringToDoc(defines(v, docs)))
         },
       },
       {
@@ -3140,14 +3153,14 @@ Quite expensive.`,
     },
     call(f = undefined) {
       if (f !== undefined)
-        return elem('div', stringToDoc(defines(f, docs)))
+        return elem('text', stringToDoc(defines(f, docs)))
       if (docs.result) return docs.result
       const net = defines(Self, lookup)
       const m = new Map
       Object.keys(net).forEach(k => {
         if (net[k] == null || typeof net[k] == 'boolean' || _isArray(net[k])) return
         const t = defines(net[k], docs)
-        return k[0] !== '_' && m.set(net[k], t && elem('div', stringToDoc(t)))
+        return k[0] !== '_' && m.set(net[k], t && elem('text', stringToDoc(t)))
       })
       const el = elem('div', hierarchy(m, Self))
       return docs.result = el
@@ -3274,18 +3287,16 @@ If we were to look at human minds as things, then most people are "something" (o
     p.then(
       r => (p.result = r, _jobResume(expr, env, then)),
       r => (p.result = _errorRepr(r), _jobResume(expr, env, then)))
-    call.env[_id(_await)] = p
+    call.env[_id(await)] = p
   },
 
   _jobResume(expr, env, then) {
-    env[_id(_await)] = undefined
+    env[_id(await)] = undefined
     const a = _jobs.limbo
     for (let i = 0; i < a.length; i += 3)
       if (a[i+1] === env)
         return a.splice(i,3), _schedule(expr, env, then)
   },
-
-  _await:__is(`await`),
 
   delay:{
     docs:`\`(delay)\` or \`(delay Value)\`: Just a function for testing promises. It should have no effect on evaluation.`,
@@ -3342,8 +3353,8 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
     docs:`\`(_cancel JobEnv)\`: if the job is scheduled to run, cancels it. Returns true (or the job if the second arg is true) if cancelled, false if not.
 If any promises the job depends on have a method .cancel, calls those.`,
     call(env, returnJob = false) {
-      if (env[_id(_await)] && typeof env[_id(_await)].cancel == 'function')
-        env[_id(_await)].cancel(), env[_id(_await)] = undefined
+      if (env[_id(await)] && typeof env[_id(await)].cancel == 'function')
+        env[_id(await)].cancel(), env[_id(await)] = undefined
       let a = _jobs.expr
       for (let i = 0; i < a.length; i += 3)
         if (a[i+1] === env) {
@@ -4391,26 +4402,24 @@ In JS: \`(...args) => f(args)\`.`,
     },
   },
 
-/* ML integration.
-  - Figure out how `call.pure` fits into everything.
-  - Impure functions that will recall their result on replay.
+/* TODO: ML integration.
   - `autograd(fn)—>func` so that we don't *always* have to write adjust defini
-tions. `adjust(fn, ins, out, dout)` for actual first-order adjustment.
+tions. `adjust(fn, ins, out, dout)` for actual first-order adjustment. `_adjus
+tMaxMagnitude = (…, 1, …)` and `_adjustMultiplier = (…, .1, …)`, to control th
+e adjustment.
   - `loss2(result, assigned)` that can return undefined in 33% rolls (for dive
 rsifying training data), the default for op loss assignment.
   - `_defaultNN(inputSz, outputSz)` for densely-connected NN autofunc creator.
   - `rnnEnv(nn, featureSize)` and its ops: `choice(env)(...options)` and `choi
 ce(env) = actual` (`assign(choice(env), actual)`).
+    - …Though, with total control of IR, do we really want RNN envs? Maybe it 
+would be better to try to generate programs that predict every numeric result,
+and maybe even bools and strings too?… To route in every way, not just an RNN…
     - More NN ops: `num(...sizes)(env)`.
     - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc,
 ins = undefined)`.
     - Function decorators (for recursivity of RNNs): `_envEnter(env, initialSt
 ate)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
-  - Replay buffers: every impure op in user-code leaves a trace in the replay 
-buffer, and `replay(updateMultiplier=.1, updateMaxMagnitude=1)` replays once, 
-returning avg loss.
-  - The interpreter loop integration: add to replay buffer and adjust a replay
- (every action leaves an entry in a task-local array).
   - …Do stuff, in tutorials, like instruction-generation or Metamath or optimi
 zing built-in primitives like peval or `replay` with our ML?
 */
@@ -4420,18 +4429,45 @@ zing built-in primitives like peval or `replay` with our ML?
   // TODO: Harden all `parse`s against interrupts, by moving them into `_schedule`/`_doJob` in `editor`.
   // TODO: Make `func` use `purify`.
 
-  // TODO: The overridable function `inline(^(Func, …ArgPrograms))` that takes programs (to not need to wrap unknowns in _unknown) and returns a value, probably with `purify`.
-  // TODO: Make `purify` `inline` things that want to be.
-  // TODO: The object creators must define `inline` as create-object.
-  // TODO: `created(obj)—>obj` to mark objects in the current `call.pure`.
-  // TODO: Preserve `call.pure` across interrupts, in `purify`.
+  // TODO: `writeMap` should invalidate caches of `_invertBindingContext`, probably.
+  // TODO: Have `unmakeGraph(x, onlyInThisSet = null)` as `deconstruct` for graphs (for turning half-created objects into their creation code).
+
+  created:{
+    docs:`Marks an object as created and owned locally.
+Reading from and writing to such objects during \`purify\` is allowed, even unknown values. They will be created at runtime, but only if needed.`,
+    call(obj) {
+      if (call.pure)
+        call.pure.add(obj)
+      return obj
+    },
+  },
+
+  // TODO: The object creators (`array` and `make`) must define `inline` as create-object.
   // TODO: In `purify`, `created` objects must be deconstructed when putting them as an output.
   // TODO: Make `readAt` in `call.pure` mode only read objects that were through `created(x)`, meaning that we own them. Make `array`, `map` call that on their results.
   // TODO: Make `writeAt` impure if the object was not `created`, and inline for `created` objects to store computations.
   purify:{
-    docs:`\`purify ^Expr\`: Constant-propagates the expression, without inlining or knowledge.
-The process is simple: if any of a node's inputs are unknown (or if it does an impure thing, or its result \`_isUnknown\`), then the node is unknown, else it's known and can be computed.
-(This is almost a partial evaluator and almost a function-optimizer, and can be easily made into those.)`,
+    docs:`\`purify ^Expr\`: Partially-evaluates the expression, without inlining or knowledge.
+The process is simple: if any of a node's inputs are unknown (or if it does an impure thing like calling \`randomNat\`, or its result \`_isUnknown\`), then the node is unknown (and might be inlined), else it's known (and can be computed with \`call\`).
+
+Every \`define\` of \`purify\` is a function that accepts programs that produce every arg, and returns a value (or \`(_unknown DAG)\` to return a program).
+We do not automatically allow inlining \`func\`s (only explicitly \`purify\`ing function bodies), because inlining everything causes exponential explosions of code size (and infinite loops for recursion unless handled), which is very bad user UX. If we could have machine-learned the best inlining, we would have, but as it is, no. So, \`purify\` is almost just a constant-propagator.
+
+
+Take a moment to think of what low-level features are close to this.
+Compiling the partial evaluation, to make it faster? Probably overkill, since it's faster to interpret what's only needed once.
+Function optimizer? Picking the best equivalency, in a definition of \`purify\`. Likely best with machine learning, likely useless without.
+Lazy evaluation? If an argument is statically seen to be unused, then partial evaluation will automatically drop it. Creating thunks is not always efficient, particularly for numerically-heavy workloads, so unless the machinery can learn the best for each case, we won't create thunks.
+Asynchronous workflows? \`await\` can wait for a result, but to truly ensure that no time is wasted, delayed results should be treated as unknown and partially-evaluated. Good if a task takes a day, but for common use-cases, far too slow. Likely best with machine learning, likely useless without.
+Type systems, including dependent types, good for logic? They're about computing something about every value at compile-time. This can be done by replacing all values with \`(Value Type)\` and adding a type-computing always-inlined layer on top of all functions. Or by having another type-level interpreter for IR. But if types are annotated by humans case-by-case, then do they really say anything fundamental about computation? If we were to generate arbitrary programs, wouldn't it be better to allow them to be generated as a consequence of other operations like array-checking, not their own separate thing? No, we won't have types except as hints.
+Choices.
+Choices.
+Choices.
+Static is not good enough. Need dynamic.
+And who's to say that these are the only choices to ever make, anyway?
+Maybe, rather than trying to create a complete world by ourselves, we should allow a simple core to create whatever it wants.
+Believe in simplicity.`,
+    future:`Make \`func\` use \`purify\`, to be more efficient at run-time. (Maybe delay until we can make intelligent choices, though.)`,
     examples:[
       [
         `purify ^[1+2]`,
@@ -4444,6 +4480,7 @@ The process is simple: if any of a node's inputs are unknown (or if it does an i
     ],
     lookup:{
       purifyInWorker:__is(`purifyInWorker`),
+      created:__is(`created`),
     },
     nameResult:[
       `purified`,
@@ -4452,12 +4489,12 @@ The process is simple: if any of a node's inputs are unknown (or if it does an i
     call(x, inputKnown = false, inputValue = input) {
       if (!_isArray(x)) return x
       if (x[0] === quote) return x[1]
-      let [i = 0, outputs = _allocArray(), unknown, po, inds] = interrupt(purify)
+      let [i = 0, outputs = _allocArray(), unknown, po, inds, pure = new Set] = interrupt(purify)
       if (!po) [po, inds] = _postorderAndIndexesAndRefs(x)
       outputs.length = po.length
       // `unknown` is an array of booleans of length `po.length`, but we only create it on-demand, to optimize for nothing-unknown cases.
       const collected = _allocArray()
-      const prevPure = call.pure;  call.pure = true
+      const prevPure = call.pure;  call.pure = pure
       try {
         for (; i < po.length; ++i) {
           // Go through all nodes, collect dependencies, execute nodes, and record those that we can't know.
@@ -4482,12 +4519,12 @@ The process is simple: if any of a node's inputs are unknown (or if it does an i
           }
 
           try {
-            if (unknown && unknown[i])
-              // Note: here, we can check if the function defines that it can inline itself, and/or
-              //   make a choice, and call it despite having unknown inputs. This would make a partial evaluator.
-              //     We don't do that here, because grappling with potentially-exponential code size from naive inlining is bad UX.
-              throw impure
-            else
+            if (unknown && unknown[i]) {
+              if (typeof collected[0] == 'function' && defines(collected[0], purify))
+                outputs[i] = defines(collected[0], purify).call(...collected)
+              else
+                throw impure
+            } else
               outputs[i] = collected[0].call(...collected)
             if (_isUnknown(outputs[i]))
               outputs[i] = outputs[i][1], !unknown && (unknown = _allocArray(), unknown.length = po.length), unknown[i] = true
@@ -4499,9 +4536,6 @@ The process is simple: if any of a node's inputs are unknown (or if it does an i
               else
                 outputs[i] = collected.map(quote)
               !unknown && (unknown = _allocArray(), unknown.length = po.length), unknown[i] = true
-              // Note: here, we can check if the function defines how to stage itself, and
-              //   transform the recorded node with that. This would allow utilizing domain knowledge like `a+1+1 = a+2`.
-              //     We don't do that here, because we don't know anything.
             }
             else throw err
           }
@@ -4511,7 +4545,7 @@ The process is simple: if any of a node's inputs are unknown (or if it does an i
         _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
         return !lastUnk ? lastOut : _unknown(lastOut)
       } catch (err) {
-        if (err === interrupt) interrupt(purify, _tmp().length=0, _tmp().push(i, outputs, unknown, po, inds))
+        if (err === interrupt) interrupt(purify, _tmp().length=0, _tmp().push(i, outputs, unknown, po, inds, pure))
         if (err === interrupt) throw err
         return _unknown(_errorRepr(err)) // Don't throw exceptions, return them. Might be a pain point sometimes.
       } finally { call.pure = prevPure;  _allocArray(collected) }
@@ -4592,7 +4626,6 @@ If using the primitives \`impureLoad\` and \`impureSave\` directly, there is a r
     },
     argCount:1,
     construct(x, obj) {
-      error('Not implemented')
       if (obj === undefined) {
         // Create the function.
         obj = arg => {
@@ -4729,6 +4762,7 @@ If replaying, this returns the past result; if not, returns \`undefined\`, and t
           if (index !== tape.length)
             error("Wrong handling of impurities: on replay, attempted to load less than was saved")
         }
+        // Note: can return avg loss and/or avg update magnitude, to know more numbers.
       } catch (err) { if (err === interrupt) interrupt(replay, _tmp().length=0, _tmp().push(i, expr, tape, call.env[load]));  throw err }
       finally { call.env[load] = prevLoad, call.env[save] = prevSave }
     },
@@ -6598,7 +6632,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     style:__is(`_basicStyle`),
     parse:__is(`_fancyTopLevel`),
     serialize:__is(`_fancyTopLevel`),
-    REPL:`also type \`(tutorial tutorial)\` or \`(docs)\`.`,
+    REPL:`also type \`tutorial tutorial\` or \`(docs)\`.`,
     insertLinkTo:__is(`_basicLinkTo`),
     _escapeLabel:__is(`_basicEscapeLabel`),
     _unescapeLabel:__is(`_basicUnescapeLabel`),
@@ -6728,14 +6762,18 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     if (_isLabel(u) && backctx.has(v) && u[1] === backctx.get(v))
       return _colored(elem('known', s), 1, 0) // bold
     let el = elem('node', s)
-    if (hasOperators && typeof document != ''+void 0)
-      el.classList.add('hasOperators')
-    if (_isLabel(u) && typeof document != ''+void 0)
-      el.style.color = _valuedColor(v), el.classList.add('label')
-    else if (_isLabel(u))
-      el = _colored(el, [34, 36, 35][randomNat(3)]) // Cycle through blue, cyan, magenta.
-    if (typeof document != ''+void 0)
-      el.title = _isArray(v) && v.length && backctx.has(v[0]) ? backctx.get(v[0]) : ''
+    if (typeof document != ''+void 0) {
+      if (hasOperators)
+        el.classList.add('hasOperators')
+      if (!_isArray(v))
+        el.classList.add('nonArray')
+      if (_isLabel(u))
+        el.style.color = _valuedColor(v), el.classList.add('label')
+      el.title = _isArray(u) && u.length && backctx.has(u[0]) ? backctx.get(u[0]) : ''
+    } else {
+      if (_isLabel(u))
+        el = _colored(el, [34, 36, 35][randomNat(3)]) // Cycle through blue, cyan, magenta.
+    }
     return el
   },
 
