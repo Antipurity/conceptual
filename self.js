@@ -422,7 +422,7 @@ Label-binding environment is not preserved.`,
         if (p !== undefined) lookup.parents.set(x, p)
         if (!x || typeof x != 'object' && typeof x != 'function') return
         if (p === undefined && backctx.has(x) && backctx.get(x)[0] === '_') lookup.parents.set(x, System)
-        if (x instanceof Map) {
+        if (x instanceof Map || _isArray(x)) {
           x.forEach(v => markParents(v, p))
         } else if (x && !x[defines.key] && typeof x == 'object') {
           Object.keys(x).forEach(k => markParents(x[k], p, prioritize || +k === _id(lookup)))
@@ -471,7 +471,7 @@ A namespace for every function here. Project's GitHub page: https://github.com/A
   userTime:{
     docs:`\`(userTime)\`⇒\`TimeMark\` or \`(userTime TimeMark)\`: returns the time spent on this job as f64 milliseconds, or the non-negative in-job time elapsed since the mark.`,
     call(mark = 0) {
-      const L = impureLoad();  if (L !== undefined) return L
+      if (impureHave()) return impureLoad()
       return impureSave(call.env[_id(userTime)] + _timeSince(call.env[_id(realTime)]) - mark)
     },
   },
@@ -479,7 +479,7 @@ A namespace for every function here. Project's GitHub page: https://github.com/A
   realTime:{
     docs:`\`(realTime)\`⇒\`TimeMark\` or \`(realTime TimeMark)\`: returns the time since start as f64 milliseconds, or the non-negative time elapsed since the mark.`,
     call(mark = 0) {
-      const L = impureLoad();  if (L !== undefined) return L
+      if (impureHave()) return impureLoad()
       return impureSave(_timeSince(mark))
     },
   },
@@ -513,7 +513,7 @@ Browsers reduce the precision of this to prevent timing attacks. Putting that pr
 Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.since))\`.`,
     call(mark = 0) {
       if (typeof process == ''+void 0 || !process.memoryUsage) return 0
-      const L = impureLoad();  if (L !== undefined) return L
+      if (impureHave()) return impureLoad()
       const m = process.memoryUsage()
       return impureSave(Math.max(0, m.rss + m.heapUsed - m.heapTotal - mark))
     },
@@ -654,6 +654,7 @@ Supported browsers: modern Chrome/Chromium and Firefox.`,
       _useDarkTheme:__is(`_useDarkTheme`),
       _disableSmoothTransitions:__is(`_disableSmoothTransitions`),
       _noBoxStylingForPrograms:__is(`_noBoxStylingForPrograms`),
+      _hoverHighlightsDOMValues:__is(`_hoverHighlightsDOMValues`),
     },
     js:[
       `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js`,
@@ -967,6 +968,7 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
       // On .ctrlKey pointerdown on a value, insert a <collapsed> reference to it into selection if editable.
         // This is also accessible via contextMenu.
         // TODO: Put it in `Commands`, under `CtrlClick`.
+        //   TODO: Have `_runFunc(f, ...args)` that just calls if a define-less func, else does _doJob with a new env. Use that for AuxClick.
       _listen('pointerdown', evt => {
         if (!evt.ctrlKey || evt.shiftKey || evt.altKey) return
         if (!getSelection().rangeCount) return
@@ -979,16 +981,22 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
         if (!getSelection().rangeCount) return
         const r = getSelection().getRangeAt(0)
         let el = r.commonAncestorContainer
-        if (el && el.tagName === 'COLLAPSED' || el && el.tagName === 'SERIALIZATION')
+        if (!el) return
+        if (el === _isEditable(el) && r.startContainer === r.endContainer) {
+          if (r.startOffset === 0 && r.endOffset === el.childNodes.length && el.lastChild) {
+            while (el.lastChild) el = el.lastChild
+            r.setEndAfter(el)
+          }
+        }
+        if (el.tagName === 'COLLAPSED' || el.tagName === 'SERIALIZATION')
           el.nextSibling ? r.setEndBefore(el.nextSibling) : r.setEndAfter(el)
-        if (el) el = el.parentNode
-        if (el && el.tagName === 'COLLAPSED' || el && el.tagName === 'SERIALIZATION')
+        el = el.parentNode
+        if (!el) return
+        if (el.tagName === 'COLLAPSED' || el.tagName === 'SERIALIZATION')
           el.nextSibling ? r.setEndBefore(el.nextSibling) : r.setEndAfter(el)
-        // TODO: Also ensure that it cannot select past the end (probably the last div), as in `1 2` CtrlA (.
       }, passiveCapture)
 
       // Highlight equal-id <node>s over selection or under cursor.
-      // TODO: A setting to not highlight them.
       function changeHoverTo(el) {
         const prev = changeHoverTo.prev
         const def = el && !_isArray(el.to) && defines(el.to, _closestNodeParent)
@@ -1007,6 +1015,7 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
         changeHoverTo.prev = needed
       }
       function highlightParent(evt) {
+        if (!_hoverHighlightsDOMValues[1]) return
         if (evt.type === 'selectionchange' && getSelection().isCollapsed) return
         changeHoverTo(getParent(evt))
       }
@@ -1027,13 +1036,13 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
       bottombar.setAttribute('style', "position:sticky; left:0; bottom:0; z-index:10")
       const JobIndicator = _jobs.indicator = elem('JobIndicator')
       JobIndicator.title = "Currently running 0 jobs."
-      const toolbar = [_useDarkTheme, _maxUsageOfCPU]
-      observe(toolbar, function onChange(toolbar) {
+      const toolbarElem = elem('span')
+      observe(settingsToolbar, function onChange(toolbar) {
         while (toolbarElem.firstChild)
           toolbarElem.removeChild(toolbarElem.firstChild)
         toolbarElem.append(' ', ...toolbar.map(settings))
-      }, true)
-      const toolbarElem = elemValue(elem('span', [' '].concat(toolbar.map(settings))), toolbar)
+        elemValue(toolbarElem, toolbar)
+      }, true)(settingsToolbar)
       bottombar.append(JobIndicator, toolbarElem)
       into.append(bottombar)
 
@@ -1043,7 +1052,7 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
           [_id(_closestNodeParent)]:() => {
             const r = []
             if (_jobs.expr)
-              for (let i = 0; i < _jobs.expr.length; i += 4) {
+              for (let i = 0; i < _jobs.expr.length; i += 3) {
                 const env = _jobs.expr[i+1]
                 if (env[_id(log)]) r.push(env[_id(log)])
               }
@@ -1169,6 +1178,18 @@ For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:confi
       }
     },
   },
+
+  settingsToolbar:[
+    __is(`_useDarkTheme`),
+    __is(`_maxUsageOfCPU`),
+  ],
+
+  _hoverHighlightsDOMValues:[
+    __is(`settings`),
+    true,
+    `Whether to highlight the same values associated with DOM nodes on hover.
+The \`_closestNodeParent\` is shown by this.`,
+  ],
 
   purifyInWorker:{
     docs:`\`(purifyInWorker Expr)\`: calls \`purify\` on (a copy of) \`Expr\` in parallel; returns a promise.`,
@@ -1888,15 +1909,14 @@ Allow editing run-time and rewrite-time values.`,
       const env = _newExecutionEnv(call.env)
       const result = _evaluationElem(env)
       const el = elem('div', result)
-      let L;  if ((L = impureLoad()) !== undefined) return L || undefined
+      if (impureHave()) return impureLoad()
       el.classList.add('code')
       env[_id(log)] = el.lastChild
       let ended = false
       const prev = call.env
       _doJob(expr, env, () => (!result.previousSibling ? (ended = true, el.remove()) : result.remove()))
       call.env = prev
-      L = impureSave(!ended ? el : null)
-      return L || undefined
+      return impureSave(!ended ? el : undefined)
     },
   },
 
@@ -1983,6 +2003,8 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       evaluator.history = Symbol('history')
     },
     call(expr, then) {
+      if (impureHave()) return impureLoad()
+
       if (typeof document == ''+void 0) return
       const before = call.env[_id(log)]
 
@@ -1993,16 +2015,13 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
       const el = elem('div')
 
-      let env
-      if ((env = impureLoad()) !== undefined) return env
-
       el.classList.add('code')
       const prompt = elem('prompt')
       const query = elem('span')
       query.classList.add('editorContainer')
       query.append(prompt)
       query.append(serialize(expr, lang, binds, serialize.displayed))
-      env = _newExecutionEnv(call.env)
+      let env = _newExecutionEnv(call.env)
       const waiting = _evaluationElem(env)
       env[_id(log)] = waiting
       el.append(query)
@@ -2089,13 +2108,15 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
 
   _invertBindingContext(ctx, clear = false) {
     if (!(ctx instanceof Map)) throw console.error(ctx), "Invalid binding context"
-    if (!_invertBindingContext.cache) _invertBindingContext.cache = new WeakMap
+    if (!_invertBindingContext.cache)
+      _invertBindingContext.cache = new WeakMap, Object.freeze(_invertBindingContext)
     if (clear) return _invertBindingContext.cache.delete(ctx)
     if (_invertBindingContext.cache.has(ctx)) return _invertBindingContext.cache.get(ctx)
     const backctx = new Map
     ctx.forEach((to, name) => _isLabel(name) && (name = name[1], (name[0] !== '_' || !backctx.has(to)) && backctx.set(to, name)))
     _invertBindingContext.cache.set(ctx, backctx)
     return backctx
+    // .cache
   },
 
   _removeChildren(el) {
@@ -2117,6 +2138,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     docs:`\`(editor InitialString Lang Binds OnInput OnEnter)\`: creates a user-editable expression input.
 \`OnInput\` is passed the parsed expression and whether the currently entered text fails to parse. \`OnEnter\` is passed the expression (always successfully-parsed), and it returns \`true\` to clear editor contents.
 Don't do expensive synchronous tasks in \`OnInput\`.`,
+    future:`Harden all/important \`parse\`s against interrupts, by moving them into \`_schedule\`/\`_doJob\` in \`editor\`.`,
     lookup:{
       _autocompleteBrackets:__is(`_autocompleteBrackets`),
     },
@@ -2344,7 +2366,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       }
       // Else Browser
 
-      let L;  if ((L = impureLoad()) !== undefined) return L
+      if (impureHave()) return impureLoad()
 
       const repl = elem('node')
       repl.isREPL = true, repl.classList.add('REPL')
@@ -2723,6 +2745,7 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
 \`settings Opt\`: presents the interface to change one option.`,
     lookup:{
       rangeSetting:__is(`rangeSetting`),
+      settingsToolbar:__is(`settingsToolbar`),
     },
     call(opt) {
       if (opt === undefined) {
@@ -3753,7 +3776,7 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
   _countBits(n) { let x=0; while (n >>>= 1) ++x;  return x },
 
   _randomBits(n) { // Returns n || 32 random bits.
-    let L;  if ((L = impureLoad()) !== undefined) return L
+    if (impureHave()) return impureLoad()
     if (n !== (n & 31)) throw impureSave(new Error('Expected 0…31 bits to generate (where 0 is 32), got '+n))
     if (!n) {
       if (!_randomBits.a)
@@ -4007,8 +4030,11 @@ Globals and user-defined concepts that statically define this are constructed.
 This embodies a simple principle: a graph cannot be constructed without backpatching.
 (While this can be used to implement Lisp-like macros, please call quoted code or apply functions instead. \`construct\` is for non-array objects.)`,
     call(x, obj = undefined) {
-      if (_isArray(x))
-        return typeof defines(x, construct) == 'function' ? defines(x, construct)(x, obj) : x
+      if (_isArray(x)) {
+        if (typeof defines(x, construct) == 'function')
+          x = defines(x, construct)(x, obj)
+        return x
+      }
       if (x instanceof Map)
         !(obj instanceof Map) && error('Expected a map, got', obj),
         x.clear(), obj.forEach((v,k) => x.set(k,v))
@@ -4286,7 +4312,8 @@ What a function does, does not change when a node in its body changes. That woul
   
 
   array:{
-    docs:`\`(array …Items)\`: creates a new array.`,
+    docs:`\`(array …Items)\`: creates a new array.
+The same as \`(make arrayObject …Items)\`.`,
     lookup:{
       read:__is(`readAt`),
       write:__is(`writeAt`),
@@ -4294,13 +4321,22 @@ What a function does, does not change when a node in its body changes. That woul
       arrayObject:__is(`arrayObject`),
     },
     interrupt:false,
-    call(...x) { return x },
+    call(...x) { return created(x) },
+    purify(...y) { return created(y) },
   },
   readAt:{
     docs:`\`read Array Index\`: reads the current value at a position in an array.`,
     argCount:2,
     interrupt:false,
-    call(arr, i) { return arr[i] },
+    call(arr, i) {
+      if (call.pure && call.pure.has(arr)) {
+        const v = arr[i]
+        // `v` is a program (that quotes values), so we convert it to a value (with _unknown(…) for programs).
+        return !_isArray(v) ? v : v[0] === quote ? v[1] : _unknown(v)
+      }
+      if (impureHave()) return impureLoad()
+      return impureSave(arr[i])
+    },
   },
   writeAt:{
     docs:`\`write Array Index Value\`: changes the current value at a position in an array.
@@ -4308,6 +4344,13 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
     argCount:3,
     interrupt:false,
     call(arr, i, v) {
+      if (call.pure) {
+        if (!call.pure.has(arr)) throw impure
+        if (call.pure.has(v)) throw impure // This prevents cycles, which can't be constructed with `array` calls.
+        //   (Though it prevents many other things too.)
+        v = i !== undefined ? quote(v) : v.map(quote)
+      }
+      if (call.env && call.env[_id(impureLoad)] > 0) return
       if (i !== undefined) {
         if (arr[i] === v) return
         arr[i] = v
@@ -4426,32 +4469,39 @@ zing built-in primitives like peval or `replay` with our ML?
 
 
 
-  // TODO: Harden all `parse`s against interrupts, by moving them into `_schedule`/`_doJob` in `editor`.
-  // TODO: Make `func` use `purify`.
-
-  // TODO: `writeMap` should invalidate caches of `_invertBindingContext`, probably.
-  // TODO: Have `unmakeGraph(x, onlyInThisSet = null)` as `deconstruct` for graphs (for turning half-created objects into their creation code).
 
   created:{
-    docs:`Marks an object as created and owned locally.
-Reading from and writing to such objects during \`purify\` is allowed, even unknown values. They will be created at runtime, but only if needed.`,
+    docs:`Marks an array as created and owned locally.
+Reading from and writing to such arrays during \`purify\` is allowed, even unknown values, though only at known indices. They will be created at runtime, but only if needed.
+(Non-arrays are harder to support, because they couldn't be changed in-place into arrays that compute them, so why bother.)`,
+    examples:[
+      [
+        `purify ^(readAt (array 1 2 3) 0)`,
+        `1`,
+      ],
+      [
+        `purify ^(readAt (array ?+1) 0)`,
+        `_unknown ?+1`,
+      ],
+      [
+        `purify ^(array 1+1+?)`,
+        `array 2+input`,
+      ],
+    ],
     call(obj) {
+      if (!_isArray(obj)) error("Only arrays are supported, but got", obj)
       if (call.pure)
         call.pure.add(obj)
       return obj
     },
   },
 
-  // TODO: The object creators (`array` and `make`) must define `inline` as create-object.
-  // TODO: In `purify`, `created` objects must be deconstructed when putting them as an output.
-  // TODO: Make `readAt` in `call.pure` mode only read objects that were through `created(x)`, meaning that we own them. Make `array`, `map` call that on their results.
-  // TODO: Make `writeAt` impure if the object was not `created`, and inline for `created` objects to store computations.
   purify:{
     docs:`\`purify ^Expr\`: Partially-evaluates the expression, without inlining or knowledge.
 The process is simple: if any of a node's inputs are unknown (or if it does an impure thing like calling \`randomNat\`, or its result \`_isUnknown\`), then the node is unknown (and might be inlined), else it's known (and can be computed with \`call\`).
 
 Every \`define\` of \`purify\` is a function that accepts programs that produce every arg, and returns a value (or \`(_unknown DAG)\` to return a program).
-We do not automatically allow inlining \`func\`s (only explicitly \`purify\`ing function bodies), because inlining everything causes exponential explosions of code size (and infinite loops for recursion unless handled), which is very bad user UX. If we could have machine-learned the best inlining, we would have, but as it is, no. So, \`purify\` is almost just a constant-propagator.
+We do not automatically allow inlining \`func\`s (only explicitly \`purify\`ing function bodies), because inlining everything causes exponential explosions of code size (and infinite loops for recursion unless handled), which is very bad user UX. If we could have machine-learned the best inlining, we would have, but as it is, no. So, \`purify\` usually acts as just a constant-propagator.
 
 
 Take a moment to think of what low-level features are close to this.
@@ -4463,11 +4513,14 @@ Type systems, including dependent types, good for logic? They're about computing
 Choices.
 Choices.
 Choices.
+Choices.
 Static is not good enough. Need dynamic.
 And who's to say that these are the only choices to ever make, anyway?
 Maybe, rather than trying to create a complete world by ourselves, we should allow a simple core to create whatever it wants.
 Believe in simplicity.`,
     future:`Make \`func\` use \`purify\`, to be more efficient at run-time. (Maybe delay until we can make intelligent choices, though.)`,
+    philosophy:`The vanity and psychosis of those who hold absolute power are of no use to everyone else. Swat them aside, to make room for coming up with better versions of yourself.
+I realized my mistake, and though I lost my vision, I can see everything now.`,
     examples:[
       [
         `purify ^[1+2]`,
@@ -4521,7 +4574,8 @@ Believe in simplicity.`,
           try {
             if (unknown && unknown[i]) {
               if (typeof collected[0] == 'function' && defines(collected[0], purify))
-                outputs[i] = defines(collected[0], purify).call(...collected)
+                outputs[i] = defines(collected[0], purify).call(...collected),
+                unknown && (unknown[i] = undefined)
               else
                 throw impure
             } else
@@ -4540,7 +4594,8 @@ Believe in simplicity.`,
             else throw err
           }
         }
-        const lastOut = outputs[po.length-1], lastUnk = unknown && unknown[po.length-1]
+        const lastOut = outputs[po.length-1], lastUnk = unknown && unknown[po.length-1] || call.pure.has(lastOut)
+        call.pure.forEach(x => _isArray(x) ? x.unshift(array) : error("Non-array `created` values are not supported, but got", x))
         _allocArray(outputs), unknown && _allocArray(unknown)
         _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
         return !lastUnk ? lastOut : _unknown(lastOut)
@@ -4619,8 +4674,9 @@ Believe in simplicity.`,
 For example, killing an animal can only be done once, but learning internal estimates from that experience can be done many times.
 
 
-If using the primitives \`impureLoad\` and \`impureSave\` directly, there is a rigid structure to be maintained: execution must be repeated exactly, otherwise there will be errors that are hard to trace back to their sources. \`impure\` maintains that structure.`,
+If using the primitives \`impureHave\`/\`impureLoad\`/\`impureSave\` directly, there is a rigid structure to be maintained: execution must be repeated exactly, otherwise there will be errors that are hard to trace back to their sources. \`impure\` maintains that structure.`,
     lookup:{
+      have:__is(`impureHave`),
       load:__is(`impureLoad`),
       save:__is(`impureSave`),
     },
@@ -4629,12 +4685,9 @@ If using the primitives \`impureLoad\` and \`impureSave\` directly, there is a r
       if (obj === undefined) {
         // Create the function.
         obj = arg => {
-          // Do not skim the proper usage, dear friend: load once, then save once.
-          if (!interrupt(impure)[0]) {
-            // Between interrupts, ensure that only one check happens in one call.
-            const L = impureLoad()
-            if (L !== undefined) return L
-          }
+          // Do not skim the proper usage, dear friend: check once, then load/save once. Especially between interrupts.
+          if (!interrupt(impure)[0])
+            if (impureHave()) return impureLoad()
           try { return impureSave(obj.f(arg)) }
           catch (err) {
             if (err === interrupt) interrupt(impure, _tmp().length=0, _tmp().push(true))
@@ -4655,18 +4708,35 @@ If using the primitives \`impureLoad\` and \`impureSave\` directly, there is a r
     },
   },
 
-  impureLoad:{
+  impureHave:{
     docs:`Checks if we are replaying a past experience.
-If replaying, this returns the past result; if not, returns \`undefined\`, and the caller must always call \`impureSave\` with its result.`,
+If yes, the caller must return \`(impureLoad)\`; if no, the caller must always call \`impureSave\` with the computed result (possibly \`(_errorRepr Error)\`).`,
+    interrupt:false,
     call() {
       // For potential partial evaluation.
       if (call.pure) throw impure
-      if (!call.env) return
-
+      if (!call.env) return false
       const index = call.env[_id(impureLoad)]
       if (index != null) {
         if (index < 0)
-          return void --call.env[_id(impureLoad)]
+          return --call.env[_id(impureLoad)], false
+        return true
+      }
+      // If we are the outermost check, await a save; if we are loading after the outermost check, remember to skip 1 save.
+      call.env[_id(impureLoad)] = index !== null ? null : -1
+      return false
+    },
+  },
+
+  impureLoad:{
+    docs:`Checks if we are replaying a past experience.
+If replaying, this returns the past result; if not, returns \`undefined\`, and the caller must always call \`impureSave\` with its result.`,
+    interrupt:false,
+    call() {
+      const index = call.env[_id(impureLoad)]
+      if (index != null) {
+        if (index < 0)
+          error("Raw `impureLoad`; use `impureHave`")
         const tape = call.env[_id(impureSave)]
         if (!tape || tape.length <= index)
           error("Wrong handling of impurities: on replay, attempted to load more than was saved")
@@ -4674,15 +4744,14 @@ If replaying, this returns the past result; if not, returns \`undefined\`, and t
         if (_isError(result)) throw result
         return result
       }
-      // If we are the outermost load, await a save; if we are loading after the outermost load, remember to skip 1 save.
-      call.env[_id(impureLoad)] = index !== null ? null : -1
+      error("Raw `impureLoad`; use `impureHave`")
     },
   },
 
   impureSave:{
     docs:`Saves (and returns) the result to replay the experience later.`,
+    interrupt:false,
     call(x) {
-      if (x === undefined) error('Cannot save `undefined`')
       if (!call.env) return x
       const index = call.env[_id(impureLoad)]
       if (index != null && !(index < 0))
@@ -4870,9 +4939,18 @@ Read/write keys with \`mapRead\`/\`mapWrite\`, or read keys with \`lookup\`.`,
     },
   },
 
-  mapRead(m, k) { return m.has(k) ? m.get(k) : _notFound },
+  mapRead(m, k) {
+    if (impureHave()) return impureLoad()
+    return impureSave(m.has(k) ? m.get(k) : _notFound)
+  },
 
-  mapWrite(m, k, v) { v !== _notFound ? m.set(k, v) : m.delete(k);  return v },
+  mapWrite(m, k, v) {
+    if (call.pure) throw impure
+    if (impureHave()) return impureLoad()
+    _invertBindingContext(m, true)
+    v !== _notFound ? m.set(k, v) : m.delete(k)
+    return impureSave(v)
+  },
 
   _isValidJS(s) {
     // A terrible abuse of the Function constructor, but it *is* the only easy and most correct option.
@@ -7629,7 +7707,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         docs:`When called, clears the oldest half of entries in every cache.`,
         argCount:0,
         call() {
-          let L;  if ((L = impureLoad()) !== undefined) return; else impureSave(null)
+          if (impureHave()) return impureLoad(); else impureSave(null)
           halve(_id.xToIndex)
           halve(elemValue.obj)
           halve(elemValue.val)
