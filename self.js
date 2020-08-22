@@ -1110,7 +1110,11 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
       _listen(300000, () => {
         if (domgc) return; else domgc = true
         elemValue.obj = new WeakMap, elemValue.val.clear()
-        _schedule([_revisitElemValue, Self.into], _newExecutionEnv(), () => domgc = false)
+        const oldResources = elemValue.resources;  elemValue.resources = new Set
+        _schedule([_revisitElemValue, Self.into], _newExecutionEnv(), () => {
+          domgc = false
+          oldResources.forEach(r => !elemValue.resources.has(r) && dispose(r))
+        })
           // It is possible to observe not-fully-restored states, but that is fine for interface GC.
       })
 
@@ -1834,7 +1838,6 @@ If the cursor is in editor, present an option to replace the currently-selected 
 Allow editing run-time and rewrite-time values.`,
         call([el, range, v]) {
           const elems = [
-            button(() => addSearchElem(el), '🔍', 'Search for substrings, collapsing all element trees that do not contain it.'),
             elemExpandAll(el, true) ? button(() => elemExpandAll(el), '🔮', 'Expand all collapsed element trees here.') : undefined,
             _getOuterWindow(el) !== el ? button(() => elemCollapse(el), '…', 'Collapse element tree.') : undefined,
             el.nextSibling && el.nextSibling.tagName !== 'BRACKET' ? button(() => elemCollapse(el, null), '…$', 'Collapse to end.') : undefined,
@@ -3273,16 +3276,20 @@ All these are automatically tested to be correct at launch.`,
     docs:`Unlike regular philosophy, this one stems only from computation.`,
     lookup:[
       `The only real way to understand something is to code it. Or do you think that humans are not intelligent creatures, and their words do not have unseen connections to the whole mind? No, a word is more than a thing, too foggy. The only way to understand learning is to be unable to learn and learn anyway.`,
-      `There are things that do all other things (Turing machines, particular logic systems like rewriting rules or category theory, functionalities of programming languages and their IRs; particular cellular automata, randomness-based program searches like evolution, general intelligences).
+      `There are things that do all other things. (Turing machines, particular logic systems like rewriting rules or category theory, functionalities of programming languages and their IRs; particular cellular automata, randomness-based program searches like evolution, general intelligences.)
 Everything else about all of existence is a consequence. (Take a moment to think about everything that you have ever known and can know. No matter what it is, it was found.)
 
-Widespread use of universal computers demonstrate this view's practicality. Attempts like the Wolfram Physics Project prove this view's viability as a complete theory of fundamental physics. However, to prove it more intuitively and without question, we must understand what constitutes a good user of a thing like a programming language.
+Widespread use of universal computers demonstrate this view's practicality. Attempts like the Wolfram Physics Project prove this view's viability as a complete theory of fundamental physics.
+However, the difficulty is not that the view is non-obvious, it's that to feel it deep in your heart can be very hard (in other words, to find and connect and nurture an efficient implementation within humans is tricky, preventing adoption). To prove it more intuitively and without question, we must understand what constitutes a good user of a thing like a programming language.
 Clearly, randomness is far far far far far too slow for practical applications. But we can do better. There's even a word for it: "arbitrary", to replace "random". We can do things like route differentiable computations through arbitrary programs to their predictions, and predict all numbers seen in user-space, to get more eyes in our brains, to let honesty and self-awareness guide us and become us. We don't even need large neural networks, just the prediction of everything, and then we can really begin to do interesting things.
 Come on. Let's do it, inside this project. I'm excited.`,
-      `Everything, nothing, and something. If "everything" is a thing that does everything, and the world is "everything", then "nothing" is exactly subversion of "something".
+      `Everything, nothing, and something. If "everything" is a thing that does everything, and the world is "everything", then "nothing" is exactly subversion of "something". While an "everything" is still a thing, "something", it behaves completely differently in the long term.
 
-If we were to look at human minds as things, then most people are "something" (often traditional and predictable), smart and artsy people worship "nothing" (often revolutionary and anti-culture), and very few people are "everything" (no often-true description is possible, they do and are what they want). But why would we do that? To explain is to create and impose a thing, another barrier to "nothing" and "everything". Just believe in people, while being a god and knowing everything that there is and can be. Be nice! It's the only way to replace their world with a better one, your own.`,
-      `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. But without infinite self-improvement, which no software system currently has (only its effects), the minds of those who intertwine with software rot. Self-improvement is included in perfect generality, and a flavor of deep reinforcement learning would allow that. Let's see what we can do to make it easier to use.`,
+To approach the whole of existence given a thing, the only describable way is to deny the thing you have. To become smarter is to gain insight of the beyond, for no purity is eternal.
+To actually reach the whole requires perfect precision. When you don't need insight nor fancy words to see things as they are.
+
+If we were to look at human minds as things, then most people are "something" (often traditional and predictable), smart and artsy people worship "nothing" (often revolutionary and anti-culture), and very few people are "everything" (no often-true description is possible, they do and are what they want). But why would we do that? To explain is to create and impose a thing, another barrier to "nothing" and "everything". Just believe in people, while being a god and knowing everything that there can be. Be nice! It's the only way to replace their world with a better one, your own.`,
+      `In the past, humans and all they imply were the only source of everything in their world, giving rise to civilizations far beyond the previous nature. But as they gain greater understanding of themselves, they gradually separate those now-artificial fragments out. The focus shifts from humans and individuals and gatherings to skills and ideas and concepts. But without infinite self-improvement, which no software system currently has (only its effects), the minds of those who intertwine with software rot. Self-improvement is included in perfect generality, and the efficiency of non-general learning can be leveraged in generality by threading filaments to predictions. Let's see what we can do to make learnable scaffolding easy to use.`,
       `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. But it also has general intelligence in there. Find it, and reroute as much of the primary data loop (consciousness/identity/personality) as is possible through that infinite willpower. Most things that humans are and do are far from general intelligence, so, break them down then build them up.`,
       `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computational base and trust that spawns from that, or perfect internal honesty and self-awareness of each part, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
       `\`m:(map) (last (transform \(mapWrite m ? (elem 'div' (stringToDoc (defines ? philosophy)))) (refd philosophy)) (hierarchy m))\``,
@@ -3291,6 +3298,9 @@ If we were to look at human minds as things, then most people are "something" (o
 
   await:{
     docs:`\`(await MaybePromise)\`: waits for the promise to finish before continuing evaluation.`,
+    _cancel(p) {
+      if (p && typeof p.cancel == 'function') p.cancel()
+    },
     lookup:{
       delay:__is(`delay`),
       parseURL:__is(`parseURL`),
@@ -3376,8 +3386,11 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
     docs:`\`(_cancel JobEnv)\`: if the job is scheduled to run, cancels it. Returns true (or the job if the second arg is true) if cancelled, false if not.
 If any promises the job depends on have a method .cancel, calls those.`,
     call(env, returnJob = false) {
-      if (env[_id(await)] && typeof env[_id(await)].cancel == 'function')
-        env[_id(await)].cancel(), env[_id(await)] = undefined
+      Object.keys(env).forEach(k => {
+        const conc = concept.idToKey[+k]
+        if (defines(conc, _cancel)) env[k] = void defines(conc, _cancel)(env[k])
+      })
+
       let a = _jobs.expr
       for (let i = 0; i < a.length; i += 3)
         if (a[i+1] === env) {
@@ -3432,16 +3445,8 @@ If any promises the job depends on have a method .cancel, calls those.`,
     if (typeof document != ''+void 0 && interrupted && env[_id(_checkInterrupt)] !== undefined) {
       // Highlight the last-executed expr.
       _highlightOriginal(env[_id(_checkInterrupt)], true)
-      const ints = env[_id(interrupt)]
-      let d
-      if (env[_id(log)] && ints && ints.length && (d = defines(ints[ints.length - ints[ints.length-1] - 2], interrupt))) {
-        // Allow the top-most interrupt stack's function to define `interrupt` with a function that takes saved interrupt state and returns a DOM element.
-        let el
-        try { el = d.apply(undefined, ints.slice(-ints[ints.length-1] - 1, -1)) }
-        catch (err) {}
-        if (_isDOM(el))
-          elemInsert(env[_id(log)].parentNode, el, env[_id(log)]), env[_id(log)] = [el]
-      }
+      // TODO: …Should we just not highlight anything, since we removed `_cameFrom`?…
+      // ##########################
     } else env[_id(_checkInterrupt)] = undefined
 
     call.env = env
@@ -3540,6 +3545,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
     e[_id(impureLoad)] = undefined // Index≥0 into impure tape to recall; count<0 of saves to skip, undefined to check non-recording, null to save.
     e[_id(impureSave)] = undefined // Replay tape for impure results.
 
+    e[_id(adjustSave)] = undefined // Stack of arrays of results that adjustment would need.
+    e[_id(adjustLoad)] = undefined // Stack of arrays of results that adjustment needs.
+
     e[_id(userTime)] = 0 // CPU time spent on this job.
     e[_id(realTime)] = undefined // The timestamp of when we last started executing this job.
     Object.seal(e)
@@ -3553,6 +3561,7 @@ In Scheme, this is called \`begin\`.`,
       `lastOf`,
       `result`,
     ],
+    _resultCanBe(x) { _resultCanBe(x[x.length-1]) },
     call(...r) {
       // We shuffle in neither `call` nor compilation, so we can just do this:
       return r[r.length-1]
@@ -3870,7 +3879,7 @@ There can be an urge to just go with what is learned over life's course, and eff
 
 Now, why our particular DAG IR? Programs are straightforward to generate with it: while knowing the EXACT computation that produces a value, we can just create an array to signify a call with that value. Neither manipulating characters nor juggling variable scopes is required! Only pointer manipulation, same for both humans and machines.
 
-And, if it was this simple for us to come up with an interpreter, then it's just as easy for generated programs to come up with an interpreter (and with proper partial evaluation, there shouldn't even be any inherent cost in doing so). The fact that this sits on top of relatively complicated parsing and object-construction and visualization and other mechanisms doesn't really matter to users, whether human or otherwise. Extensibility by implementation.
+And, if it was this simple for us to come up with an interpreter, then it's just as easy for generated programs to come up with an interpreter (and with proper partial evaluation, there shouldn't even be any inherent cost in doing so, though \`mapWrite\` doesn't support it out-of-the-box). The fact that this sits on top of relatively complicated parsing and object-construction and visualization and other mechanisms doesn't really matter to users, whether human or otherwise. Extensibility by implementation.
 
 Well, no more words. Goodbye, and take care.
 `
@@ -3930,10 +3939,10 @@ It's much more efficient to learn to repeat rather than understand, so the whole
       if (x[0] === quote) return x[1]
 
       // Don't forget to be interrupt-friendly!
-      let [i = 0, outputs = _allocArray(), po, inds] = interrupt(call)
+      let [i = 0, outputs = _allocArray(), po, inds, rc] = interrupt(call)
 
       // Evaluating inputs with recursion leaves ugly stack traces in errors, so we iterate over the post-order traversal instead.
-      if (!po) [po, inds] = _postorderAndIndexesAndRefs(x)
+      if (!po) [po, inds, rc] = _postorderAndIndexesAndRefs(x)
       outputs.length = po.length
       const collected = _allocArray()
       try {
@@ -3949,10 +3958,12 @@ It's much more efficient to learn to repeat rather than understand, so the whole
           }
           outputs[i] = collected[0].call(...collected)
         }
-        _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
-        return outputs[outputs.length-1]
+        const result = outputs[po.length-1]
+        outputs[po.length-1] = undefined, outputs.forEach(dispose)
+        _allocArray(po), inds.forEach(_allocArray), _allocArray(inds), _allocArray(rc)
+        return result
       } catch (err) {
-        if (err === interrupt) interrupt(call, _tmp().length=0, _tmp().push(i, outputs, po, inds))
+        if (err === interrupt) interrupt(call, _tmp().length=0, _tmp().push(i, outputs, po, inds, rc))
         throw err
       } finally { _allocArray(collected) }
       // .env (current execution environment), .depth (current call depth), .pure.
@@ -4042,28 +4053,71 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
     },
   },
 
+  tensor:{
+    docs:`\`tensor Data Shapes Type\`: \`construct\`s a multi-dimensional array of numbers.`,
+    construct(x, obj) {
+      if (obj === undefined) {
+        let [_, data, shapes, t] = x
+        if (!data) error("Expected data, got", data)
+        if (shapes !== undefined && !_isArray(shapes)) error("Expected an array or nothing, got", shapes)
+        const dtype = t===f32 || t===undefined ? 'float32' : t===i32 ? 'int32' : null
+        if (!dtype) error("Expected", f32, "or", i32, "or nothing, got", t)
+        if (typeof data == 'string')
+          data = dtype === 'float32' ? new Float32Array(_fromBase64(data).buffer) : new Int32Array(_fromBase64(data).buffer)
+        return tf.tensor(data, shapes, dtype)
+      }
+    },
+  },
+
+  _toBase64(typedArray) { // -> base64
+    const bytes = new Uint8Array(typedArray.buffer)
+    const arr = [];  arr.length = bytes.length
+    for (let i=0; i < arr.length; ++i)
+      arr[i] = String.fromCharCode(bytes[i])
+    return btoa(arr.join(''))
+  },
+
+  _fromBase64(base64) { // -> bytes
+    const str = atob(base64)
+    const bytes = new Uint8Array(str.length)
+    for (let i=0; i < str.length; ++i)
+      bytes[i] = str.charCodeAt(i)
+    return bytes
+  },
+
   deconstruct:{
     docs:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
     call(v, allowPath = false) {
       if (defines(v, deconstruct)) return defines(v, deconstruct)
       else if (_isArray(v)) return _isArray(v[0]) || defines(v[0], construct) === undefined ? v.slice() : [arrayObject, ...v]
 
-      if (v instanceof Int8Array)
-        return [i8, Array.from(v)]
-      if (v instanceof Int16Array)
-        return [i16, Array.from(v)]
-      if (v instanceof Int32Array)
-        return [i32, Array.from(v)]
-      if (v instanceof Uint8Array)
-        return [u8, Array.from(v)]
-      if (v instanceof Uint16Array)
-        return [u16, Array.from(v)]
-      if (v instanceof Uint32Array)
-        return [u32, Array.from(v)]
-      if (v instanceof Float32Array)
-        return [f32, Array.from(v)]
-      if (v instanceof Float64Array)
-        return [f64, Array.from(v)]
+      if (typeof tf != ''+void 0 && v instanceof tf.Tensor) {
+        const data = serialize.styles ? Array.from(v.dataSync()) : _toBase64(v.dataSync())
+        if (v.dtype === 'float32' && v.shape.length <= 1)
+          return [tensor, data]
+        if (v.dtype === 'float32')
+          return [tensor, data, v.shape]
+        return [tensor, data, v.shape, v.dtype==='int32' ? i32 : error("Unrecognized dtype:", v.dtype)]
+      }
+
+      if (Object.getPrototypeOf(Object.getPrototypeOf(v)) === Object.getPrototypeOf(Int8Array.prototype)) {
+        if (v instanceof Int8Array)
+          return [i8, Array.from(v)]
+        if (v instanceof Int16Array)
+          return [i16, Array.from(v)]
+        if (v instanceof Int32Array)
+          return [i32, Array.from(v)]
+        if (v instanceof Uint8Array)
+          return [u8, Array.from(v)]
+        if (v instanceof Uint16Array)
+          return [u16, Array.from(v)]
+        if (v instanceof Uint32Array)
+          return [u32, Array.from(v)]
+        if (v instanceof Float32Array)
+          return [f32, Array.from(v)]
+        if (v instanceof Float64Array)
+          return [f64, Array.from(v)]
+      }
 
       if (allowPath && lookup.parents.has(v)) {
         const p = lookup.parents.get(v)
@@ -4083,7 +4137,6 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
         if (v instanceof Node) return v.textContent
       }
 
-      if (_isArray(v) && !_isVar(v)) return _cameFrom(v.slice(), v)
       if (v instanceof Map) {
         // Sort keys by _id for consistency.
         const keys = [...v.keys()].sort((a,b) => _id(a) - _id(b))
@@ -4148,117 +4201,22 @@ What a function does, does not change when a node in its body changes. That woul
       multifunc:__is(`multifunc`),
     },
     argCount:1,
+    _resultCanBe(x) { _resultCanBe(x[1]) },
     construct(x, obj) {
       if (obj === undefined) {
         obj = arg => obj.f(arg)
         const d = obj[defines.key] = Object.create(null)
         d[_id(deconstruct)] = x
         d[_id(argCount)] = 1
+
+        const rcb = _resultCanBe(x[1])
+        d[_id(dispose)] = rcb.some(x => defines(x, dispose))
+        _allocArray(rcb)
+
         Object.freeze(d)
         return obj
       } else {
-        /*     Example of what this compiles DAGs to:
-         * function(f,g,h) {
-         *   'use strict'
-         *   return function F(input) {
-         *     _checkInterrupt(F)
-         *     let v0, v1, v2
-         *     ++call.depth
-         *     try {
-         *         v0 = f(input)
-         *         v1 = g(v0, input)
-         *         v2 = h(v0, v1)
-         *         return v2
-         *     }
-         *     finally { --call.depth }
-         * }
-         *
-         *     Complications:
-         * - `interrupt` handling, to stop and resume execution.
-         *   The variables may be restored on post-interrupt entry,
-         *   and we may need an "instruction pointer" to not re-do done work,
-         *   and the work may be wrapped in try/catch that saves all variables on interrupt.
-         */
-        const consts = _allocMap()
-
-        const [src, sourceURL, lines] = toSource(x[1])
-        try {
-          const fn = Function([...consts.values()].join(','), src)(...consts.keys())
-          fn.lines = lines
-          _resolveStack.functions[sourceURL] = fn
-          obj.f = fn
-        } catch (err) { console.error(src); throw err }
-
-        function toSource(body) {
-          // Compiles a DAG into an SSA form in JS that handles `interrupt`s.
-          const code = _allocArray()
-          let nextStage = 1
-
-          const sourceURL = new Array(32).fill().map(() => randomNat(16).toString(16)).join('')
-          const lines = []
-
-          code.push(`'use strict'`)
-          code.push(`return function F(input) {`)
-          if (!_isArray(body) || body[0] === quote)
-            code.push(` return ${env(body)}`)
-          else {
-            code.push(` ${env(_checkInterrupt)}(F)`)
-            const backpatchVars = code.push(` VARIABLES`)-1
-            code.push(` ++${env(call)}.depth`)
-            code.push(` try {`)
-            const backpatchGotoInterrupt = code.push(`  switch (stage) { case 0:`)-1
-
-            const [po, ind, rc] = _postorderAndIndexesAndRefs(body)
-            for (let i=0; i < po.length; ++i) {
-              // Walk the DAG in post-order, emit assignment of vars to application results.
-              //   We don't re-use variable slots that won't be used in computation, because adjustment could want them.
-              //     (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
-              const x = po[i], ins = ind[i]
-              _checkArgCount(x)
-              if (_isArray(x[0]) || defines(x, interrupt) !== false) {
-                // Advance the interrupt stage if we cannot guarantee the function is non-interrupting.
-                code.push(`   stage = ${nextStage}; case ${nextStage}:`)
-                ++nextStage
-              }
-              lines.push(code.length+3, x)
-
-              const s = _allocArray()
-              for (let j=0; j < x.length; ++j)
-                s.push( ins[j] !== null ? 'v'+ins[j] : env(x[j]) )
-              code.push(`   v${i} = ${s[0]}(${s.slice(1)})`)
-              _allocArray(s)
-            }
-            code.push(`   return v${po.length - 1}`)
-
-            if (nextStage <= 1)
-              code[backpatchGotoInterrupt] = ``
-            else code.push(`  }`)
-
-            const listOfVars = po.map((_,i) => 'v'+i)
-            if (nextStage > 1) {
-              code[backpatchVars] = ` let [stage=0,${listOfVars}] = ${env(interrupt)}(F)`
-              code.push(` } catch (err) { if (err === ${env(interrupt)}) err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(stage,${listOfVars}));  throw err }`)
-            } else {
-              code[backpatchVars] = ` let ${listOfVars}`
-              code.push(` }`)
-            }
-            code.push(` finally { --${env(call)}.depth }`)
-            _allocArray(po), _allocArray(ind), _allocArray(rc)
-          }
-          code.push(`}`)
-          code.push(`//# sourceURL=${sourceURL}`)
-          const result = code.join('\n')
-          _allocArray(code)
-          return [result, sourceURL, lines]
-        }
-        function env(x) {
-          // Returns the string that can be used to refer to the constant value.
-          if (x === input) return 'input'
-          if (_isArray(x) && x[0] === quote) x = x[1]
-          if (!consts.has(x))
-            consts.set(x, 'env' + consts.size)
-          return consts.get(x)
-        }
+        obj.f = _compileBody(x[1])
       }
     },
     nameResult:[
@@ -4268,6 +4226,155 @@ What a function does, does not change when a node in its body changes. That woul
     ],
   },
 
+  _compileBody(body, allowInput = true, poIndRc) {
+    /*     Example of what this compiles DAGs to:
+     * function(f,g,h) {
+     *   'use strict'
+     *   return function F(input) {
+     *     _checkInterrupt(F)
+     *     let v0, v1, v2
+     *     ++call.depth
+     *     try {
+     *         v0 = f(input)
+     *         v1 = g(v0, input)
+     *         v2 = h(v0, v1)
+     *         return v2
+     *     }
+     *     finally { --call.depth }
+     * }
+     *
+     *     Complications:
+     * - `interrupt` handling, to stop and resume execution.
+     *   The variables may be restored on post-interrupt entry,
+     *   and we may need an "instruction pointer" to not re-do done work,
+     *   and the work may be wrapped in try/catch that saves all variables on interrupt.
+     */
+    let owningPoIndRc = false
+    if (!poIndRc && _isArray(body) && body[0] !== quote)
+      poIndRc = _postorderAndIndexesAndRefs(body), owningPoIndRc = true
+
+    const consts = _allocMap()
+    const [src, sourceURL, lines] = toSource(body, poIndRc, owningPoIndRc)
+    try {
+      const fn = Function([...consts.values()].join(','), src)(...consts.keys())
+      fn.lines = lines
+      _resolveStack.functions[sourceURL] = fn
+      return fn
+    } catch (err) { console.error(src); throw err }
+
+    function toSource(body, poIndRc, owningPoIndRc) {
+      // Compiles a DAG into an SSA form in JS that handles `interrupt`s.
+      const code = _allocArray()
+      let nextStage = 1
+
+      const sourceURL = new Array(32).fill().map(() => (Math.random()*16 | 0).toString(16)).join('')
+      const lines = []
+
+      code.push(`'use strict'`)
+      code.push(`return function F(${allowInput ? 'input' : ''}) {`)
+      if (!_isArray(body) || body[0] === quote)
+        code.push(` return ${env(body)}`)
+      else {
+        code.push(` ${env(_checkInterrupt)}(F)`)
+        const backpatchVars = code.push(` VARIABLES`)-1
+        code.push(` ++${env(call)}.depth`)
+        code.push(` try {`)
+        const backpatchGotoInterrupt = code.push(`  switch (stage) { case 0:`)-1
+
+        const [po, ind, rc] = poIndRc
+        const used = _allocArray()
+        const nodeNames = _allocArray(), freeNames = _allocArray()
+        used.length = po.length, used.fill(0), freeNames.push(0)
+
+        // Save vars for adjustment.
+        let save
+        for (let i=0; i < po.length; ++i)
+          if (typeof po[i][0] != 'function' || defines(po[i][0], adjust) === undefined) { save = null;  break }
+        if (save !== null) save = _allocArray(), save.length = po.length
+        if (save)
+          for (let i=0; i < po.length; ++i) {
+            if (defines(po[i][0], adjustLoad))
+              save[i] = true
+            if (defines(po[i][0], adjustSave))
+              for (let j=0; j < po[i].length; ++j)
+                if (ind[i][j] !== null)
+                  save[ind[i][j]] = true
+          }
+
+        for (let i=0; i < po.length; ++i) {
+          // Walk the DAG in post-order, emit assignment of vars to application results.
+          //   We don't re-use variable slots that won't be used in computation, because adjustment could want them.
+          //     (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
+          const x = po[i], ins = ind[i]
+          _checkArgCount(x)
+          if (_isArray(x[0]) || defines(x, interrupt) !== false) {
+            // Advance the interrupt stage if we cannot guarantee the function is non-interrupting.
+            code.push(`   stage = ${nextStage}; case ${nextStage}:`)
+            ++nextStage
+          }
+          lines.push(code.length+3, x)
+
+          // Collect var names of dependencies, then assign application result to a var.
+          const s = _allocArray()
+          for (let j=0; j < x.length; ++j)
+            s.push( ins[j] !== null ? nodeNames[ins[j]] : env(x[j]) ),
+            ins[j] !== null && ++used[ins[j]]
+          nodeNames[i] = freeNames.length > 1 ? freeNames.pop() : 'v'+freeNames[0]++
+          code.push(`   ${nodeNames[i]} = ${s[0]}(${s.slice(1)})`)
+          _allocArray(s)
+
+          // Decrease ref-counts of dependencies, and dispose vars and mark for re-use if no longer needed.
+          for (let j=0; j < x.length; ++j)
+            if (ins[j] !== null && used[ins[j]] === rc[ins[j]] && (!save || !save[ins[j]]))
+              if (defines(po[ins[j]], dispose))
+                code.push(`   ${nodeNames[ins[j]]} = ${env(dispose)}(${nodeNames[ins[j]]})`),
+                freeNames.push(nodeNames[ins[j]])
+        }
+        if (save) // Save those that need saving, for adjustment.
+          code.push(`   const $$$=${env(_allocArray)}()`),
+          code.push(`   $$$.push(${save.filter(x => x).map((sv,i) => sv && nodeNames[i])})`),
+          code.push(`   ${env(adjustSave)}($$$)`)
+        code.push(`   return ${nodeNames[po.length - 1]}`)
+
+        const listOfVars = new Array(freeNames[0]).fill().map((_,i) => 'v'+i)
+        _allocArray(used), _allocArray(nodeNames), _allocArray(freeNames)
+
+        if (nextStage <= 1)
+          code[backpatchGotoInterrupt] = ``
+        else code.push(`  }`)
+
+        code.push(` } catch (err) {`)
+        code.push(`  if (err === ${env(interrupt)})`)
+        if (nextStage > 1)
+          code[backpatchVars] = ` let [stage=0,${listOfVars}] = ${env(interrupt)}(F)`,
+          code.push(`   err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(stage,${listOfVars}))`)
+        else
+          code[backpatchVars] = ` let ${listOfVars}`,
+          code.push(`   ;`)
+        code.push(`  else ${listOfVars.map((v,i) => defines(po[i], dispose) && `${env(dispose)}(${v})`).filter(x=>x)};`)
+        code.push(`  throw err`)
+        code.push(` }`)
+        code.push(` finally { --${env(call)}.depth }`)
+        if (owningPoIndRc)
+          _allocArray(po), ind.forEach(_allocArray), _allocArray(ind), _allocArray(rc)
+      }
+      code.push(`}`)
+      code.push(`//# sourceURL=${sourceURL}`)
+      const result = code.join('\n')
+      _allocArray(code)
+      return [result, sourceURL, lines]
+    }
+    function env(x) {
+      // Returns the string that can be used to refer to the constant value.
+      if (!allowInput && x === input)
+        error(x, "is not allowed but is seen anyway")
+      else if (x === input) return 'input'
+      if (_isArray(x) && x[0] === quote) x = x[1]
+      if (!consts.has(x))
+        consts.set(x, 'env' + consts.size)
+      return consts.get(x)
+    }
+  },
 
   _checkArgCount(x) {
     // Checks arg count, and function-ness, at compile time. Does not catch all cases, but it's good enough.
@@ -4308,6 +4415,24 @@ What a function does, does not change when a node in its body changes. That woul
         po.push(x), ind.push(indexes), rc.push(1)
       }
     },
+  },
+
+  _resultCanBe(x) {
+    // Returns all nodes that the result can be, intended for checking definitions of all possible branches.
+    if (!_resultCanBe.seen) _resultCanBe.seen = new Set
+    if (!_resultCanBe.in) {
+      _resultCanBe.in = true
+      const result = _allocArray()
+      try { _resultCanBe(x);  result.push(..._resultCanBe.seen) }
+      finally { _resultCanBe.seen.clear(),  _resultCanBe.in = false }
+      return result
+    } else {
+      // Defer to `defines(x, _resultCanBe)`, which will call us for each node that the result can be.
+      if (_resultCanBe.seen.has(x)) return
+      _resultCanBe.seen.add(x)
+      const d = defines(x, _resultCanBe)
+      if (d) d(x)
+    }
   },
   
 
@@ -4418,12 +4543,13 @@ When the array head is a \`construct\`-defining \`concept\`, this allows still c
 
 
   select:{
-    docs:`\`select If Then Else Arg\`: calls \`Then Arg\` if \`If\` is \`true\`, else \`Else Arg\`.
-Inconvenient compared to being able to refer to enclosing variables directly, but simple and Turing-complete.
+    docs:`\`select If Then Else …Args\`: calls \`Then …Arg\` if \`If\` is \`true\`, else \`Else …Args\`.
+Inconvenient compared to being able to refer to closed-over variables directly, but simple and Turing-complete.
 
 This is much like the φ function in SSA forms, but explicitly passing arguments to code blocks.`,
-    call(If, Then, Else, Arg) {
-      return If === true ? Then(Arg) : Else(Arg)
+    _resultCanBe(x) { _resultCanBe(x[2]), _resultCanBe(x[3]) },
+    call(If, Then, Else, ...Args) {
+      return If === true ? Then(...Args) : Else(...Args)
     },
   },
 
@@ -4431,6 +4557,7 @@ This is much like the φ function in SSA forms, but explicitly passing arguments
     docs:`\`multifunc Func\`: A construct that, when called, turns multiple args into one array to call \`Func\` with.
 In JS: \`(...args) => f(args)\`.`,
     argCount:1,
+    _resultCanBe(x) { _resultCanBe(x[1]) },
     construct(x, obj) {
       if (obj === undefined) {
         obj = (...args) => f.f(args)
@@ -4445,27 +4572,6 @@ In JS: \`(...args) => f(args)\`.`,
     },
   },
 
-/* TODO: ML integration.
-  - `autograd(fn)—>func` so that we don't *always* have to write adjust defini
-tions. `adjust(fn, ins, out, dout)` for actual first-order adjustment. `_adjus
-tMaxMagnitude = (…, 1, …)` and `_adjustMultiplier = (…, .1, …)`, to control th
-e adjustment.
-  - `loss2(result, assigned)` that can return undefined in 33% rolls (for dive
-rsifying training data), the default for op loss assignment.
-  - `_defaultNN(inputSz, outputSz)` for densely-connected NN autofunc creator.
-  - `rnnEnv(nn, featureSize)` and its ops: `choice(env)(...options)` and `choi
-ce(env) = actual` (`assign(choice(env), actual)`).
-    - …Though, with total control of IR, do we really want RNN envs? Maybe it 
-would be better to try to generate programs that predict every numeric result,
-and maybe even bools and strings too?… To route in every way, not just an RNN…
-    - More NN ops: `num(...sizes)(env)`.
-    - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc,
-ins = undefined)`.
-    - Function decorators (for recursivity of RNNs): `_envEnter(env, initialSt
-ate)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
-  - …Do stuff, in tutorials, like instruction-generation or Metamath or optimi
-zing built-in primitives like peval or `replay` with our ML?
-*/
 
 
 
@@ -4542,12 +4648,12 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
     call(x, inputKnown = false, inputValue = input) {
       if (!_isArray(x)) return x
       if (x[0] === quote) return x[1]
-      let [i = 0, outputs = _allocArray(), unknown, po, inds, pure = new Set] = interrupt(purify)
+      let [i = 0, outputs = _allocArray(), unknown, po, inds, pure = call.pure ? null : new Set] = interrupt(purify)
       if (!po) [po, inds] = _postorderAndIndexesAndRefs(x)
       outputs.length = po.length
       // `unknown` is an array of booleans of length `po.length`, but we only create it on-demand, to optimize for nothing-unknown cases.
       const collected = _allocArray()
-      const prevPure = call.pure;  call.pure = pure
+      const prevPure = call.pure;  call.pure = pure || call.pure
       try {
         for (; i < po.length; ++i) {
           // Go through all nodes, collect dependencies, execute nodes, and record those that we can't know.
@@ -4571,6 +4677,7 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
               error("Expected a function, got", collected[0])
           }
 
+          // Execute:
           try {
             if (unknown && unknown[i]) {
               if (typeof collected[0] == 'function' && defines(collected[0], purify))
@@ -4595,7 +4702,10 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
           }
         }
         const lastOut = outputs[po.length-1], lastUnk = unknown && unknown[po.length-1] || call.pure.has(lastOut)
-        call.pure.forEach(x => _isArray(x) ? x.unshift(array) : error("Non-array `created` values are not supported, but got", x))
+        if (pure)
+          pure.forEach(x => _isArray(x) ? x.unshift(array) : error("Non-array `created` values are not supported, but got", x)),
+          pure.clear()
+        outputs[po.length-1] = undefined, outputs.forEach(dispose)
         _allocArray(outputs), unknown && _allocArray(unknown)
         _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
         return !lastUnk ? lastOut : _unknown(lastOut)
@@ -4610,6 +4720,27 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
 
 
 
+/* TODO: ML integration.
+  - `autograd(fn)—>func` so that we don't *always* have to write adjust defini
+tions. `adjust(fn, ins, out, dout)` for actual first-order adjustment. `_adjus
+tMaxMagnitude = (…, 1, …)` and `_adjustMultiplier = (…, .1, …)`, to control th
+e adjustment.
+  - `loss2(result, assigned)` that can return undefined in 33% rolls (for dive
+rsifying training data), the default for op loss assignment.
+  - `_defaultNN(inputSz, outputSz)` for densely-connected NN autofunc creator.
+  - `rnnEnv(nn, featureSize)` and its ops: `choice(env)(...options)` and `choi
+ce(env) = actual` (`assign(choice(env), actual)`).
+    - …Though, with total control of IR, do we really want RNN envs? Maybe it 
+would be better to try to generate programs that predict every numeric result,
+and maybe even bools and strings too?… To route in every way, not just an RNN…
+    - More NN ops: `num(...sizes)(env)`.
+    - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc,
+ins = undefined)`.
+    - Function decorators (for recursivity of RNNs): `_envEnter(env, initialSt
+ate)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
+  - …Do stuff, in tutorials, like instruction-generation or Metamath or optimi
+zing built-in primitives like peval or `replay` with our ML?
+*/
 
 // (The interpreter loop should handle three distinct execution traces: impure-replay tape, gradient tape, and the interrupt stack.)
   // (And, they all should have definitions in execution env.)
@@ -4617,32 +4748,57 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
   // …Can't we have expert distillation, where choices in different execution branches synchronize their predictions? Yeah, it should be a basic thing, because it can't be properly imitated otherwise.
 
   add:{
+    docs:`Adds two tensors together.
+The adjustment is passed through to each arg.`,
     argCount:2,
     interrupt:false,
+    dispose:true,
     call(a,b) {
-      // TODO: should add tensors instead (`tf.add(a,b)`).
-      return a + b
+      return tf.add(a,b)
     },
-    adjust(ins, out, dout) {
-      // TODO: …what do we do, exactly?… For the sum, we just want to return the same gradient for both inputs, right?
-      //   (And, do we even really need to jump through hoops to not create arrays, if we can just allocate and deallocate new arrays?)
-      //   However. If we re-use the same tensor, then we'll be disposing it many times, which is very bad. And, for things like var outputs which should not be disposed of in any case, even partial evaluation won't help (without explicit handling of ref-counts).
-      //     THE CRISIS OF RESOURCE MANAGEMENT IS UPON US, AAAA.
-      //     …Vars could copy tensors though, since they're RELATIVELY rare. But for adjustment of `add`, we do need partial evaluation, because otherwise we would be freeing a lot of things we should not be freeing (and creating temporary arrays, which may or may not be optimized away by JS's JIT).
-      //     FULL CONTROL REQUIRED.
-    },
-    // Shouldn't there also be a way to say which args in `adjust` are needed, like dropping `out`? (And, if an output is unneeded in neither `ins` nor `out`, then it should be dropped in `compile` when its ref-count becomes 0.)
-      // ### Should have definable-by-function `dispose(obj)`.
-      // …Where else do we want to destroy the things? Functions should take the mechanism of their output (### a function for getting all possible node-sources of a function/node, overridable, in particular by `select`) and take on their disposal. Also dispose serialization results, probably in `elemValue`, and don't care about other ways. And `compile` should dispose on exception, and `_cancel` should dispose each in interrupt stack (after being audited for not being used for pausing, possibly adding a switch for that).
+    adjust:[
+      __is(`array`),
+      [
+        __is(`readAt`),
+        __is(`input`),
+        2,
+      ],
+      [
+        __is(`readAt`),
+        __is(`input`),
+        2,
+      ],
+    ],
   },
 
-  // TODO: Successfully backprop through `a+b`. Make a backprop compiler, without any optimizations for now ('compiling' into our DAG IR).
-  //   …How would we merge backprop signals? In lesca, we could afford to have a global merger, but what about here? Should each adjustable function define its merger (and same-merger functions can be used together)?
+  dispose:{
+    docs:`A low-level function for statically disposing an object.
+A function \`defines\` this to be \`true\` to make execution \`dispose\` its result.
+
+Note that this is only for disposal which we can statically determine, at compile-time. Storing a tensor in an array won't work.
+What about dynamic disposal? There would need to be a "please preserve this" function, and a perfect method of disposing those preserved objects (either garbage collection, or adding reference-counting to all functions that mutate state, which only needs to cover a few functions to cover 99% behavior, and is extremely challenging to cover 100% of behavior with, since we didn't grow on top of reference-counting).`,
+    elemValue(x) {
+      return typeof tf != ''+void 0 && x instanceof tf.Tensor
+    },
+    call(x) {
+      return void(typeof tf != ''+void 0 && x instanceof tf.Tensor && x.dispose())
+    },
+  },
+
+  // TODO: Have definable merger `mergeAdjustments(arrayOfDins)—>dout`, defined by functions that return said dins, and which must be defined equally if many functions use the same node (able to be a function or an array, for each input). Called/emitted even if only one function uses a node.
+  //   TODO: Have `_mergeTensors` for all functions that take tensors (purified to nothing if there is only one node), returning avg.
+  //   TODO: Have `_mergeArrays` for all functions that take arrays (`readAt`; its adjustment can return just the adjustment and index).
+  // TODO: Make a backprop 'compiler' into our DAG IR, failing if any node is non-adjusting, merging (same-merger functions can be used together) and inlining adjustments.
+  //   `autograd(expr)`.
+  // TODO: Successfully backprop through `a+b`.
 
   // TODO: the "Composing a learner out of smaller learners, such as in gradient descent, is efficient. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)." `assign` function.
 
+  // "They say that blood is thicker than water. So make sure to drink lots of blood. Put your heart into it!"
+  // For a complicated step in a tutorial, have a "safe word" (a long UUID string), established long before.
+
   adjust:{
-    docs:``,
+    docs:``, // TODO: note how adjustment must always happen in perfect reversal of execution, otherwise there will be very non-obvious errors.
     lookup:{
       save:__is(`adjustSave`),
       load:__is(`adjustLoad`),
@@ -4652,19 +4808,37 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
       const d = defines(fn, adjust)
       return d(ins, out, dout)
     },
-    // Also, is there any way we can backprop into array read with `readAt` more efficiently than creating N mostly-empty arrays then merging them?
-      // (I mean, other than partially evaluating that.)
   },
 
+  // TODO: `callAdjust(expr)` that compiles `expr` and its adjustment, sets adjustSave in env, calls `expr`, transfers adjustSave to adjustLoad in env, calls adjustment, assert exact-ness of reversal, saves the compiled expr and its adjustment in the replay buffer, then returns the result of calling `expr`.
+
   adjustSave:{
-    docs:``,
+    docs:`Saves a newly-allocated array for adjustment.
+(Transfers responsibility for \`dispose\`al of items in it and marking the array for re-using.)
+A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
     call(x) {
+      if (!_isArray(x))
+        error("Can only save (newly-allocated) arrays for adjustment (transferring responsibility for disposal), got", x)
+      if (!call.env) return
+      const stack = call.env[_id(adjustSave)]
+      if (stack)
+        stack.push(x)
+      else
+        x.forEach(dispose), _allocArray(x)
     },
   },
 
   adjustLoad:{
-    docs:``,
+    docs:`Loads an array for adjustment. Be responsible for it, honey.
+Must always be exactly in reverse to \`adjustSave\`.
+A function \`defines\` this to be \`true\` to save its output to adjustment. Look, we only have one global namespace, so name space is at a premium.`,
     call() {
+      const stack = call.env[_id(adjustLoad)]
+      if (!stack)
+        error("…Forgot to adjust??")
+      if (!stack.length)
+        error("Adjustment reversal is imperfect: loading more than was saved")
+      return stack.pop()
     },
   },
 
@@ -5822,7 +5996,10 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       const lengths = new Map
       const boundToUnbound = new Map
       const unboundToBound = new Map
-      const postDeconstructed = deconstructed(arr)
+      let postDeconstructed
+      const prevSrlzStyles = serialize.styles;  serialize.styles = styles
+      try { postDeconstructed = deconstructed(arr) }
+      finally { serialize.styles = prevSrlzStyles }
       deconstruction.clear()
 
       const resultElem = styles && typeof document != ''+void 0 && elem('serialization')
@@ -6066,16 +6243,23 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
 
   elemValue:{
     docs:`If el, remember that it is a viewer of v. If !el, return an array of all in-document viewers of v.`,
+    Initialize() {
+      elemValue.obj = new WeakMap // from an object to array of elements with that as value.
+      elemValue.val = new Map // from a value to array of elements with that as value.
+      elemValue.resources = new Set // Objects that should be disposed when unneeded.
+    },
     call(el, v) {
       if (!elemValue.empty) elemValue.empty = []
       if (typeof document == ''+void 0) return elemValue.empty
       if (_isArray(v) && v[0] === quote && v.length == 2) v = v[1]
-      const m = v && typeof v == 'object' ? (elemValue.obj || (elemValue.obj = new WeakMap)) : (elemValue.val || (elemValue.val = new Map))
+      const m = v && typeof v == 'object' ? elemValue.obj : elemValue.val
       if (el instanceof Node) {
         if ('to' in el && m.has(el.to) && m.get(el.to).indexOf(el) >= 0)
           // If changing the value, remove the old one.
           m.get(el.to).splice(m.get(el.to).indexOf(el), 1)
         el.to = v
+        if (defines(dispose, elemValue)(v))
+          elemValue.resources.add(v)
         if (!m.has(v)) m.set(v, [])
         m instanceof Map && _limitMapSize(m, 100000)
         if (m.get(v).indexOf(el) >= 0) return el
@@ -6621,7 +6805,10 @@ And parsing is more than just extracting meaning from a string of characters (it
       return _matchLtR(match, u, topLevel, fancyPow, ['mul', '*', /(\s*)\*\1/y, 'div', '/', /(\s*)\/\1/y])
     }
     function fancyPow(match, u, topLevel) { // a**b
-      return _matchRtL(match, u, topLevel, fancyRest, fancyPow, ['pow', '**', /(\s*)\*\*\1/y])
+      return _matchRtL(match, u, topLevel, fancyRead, fancyPow, ['pow', '**', /(\s*)\*\*\1/y])
+    }
+    function fancyRead(match, u, topLevel) { // a.b
+      return _matchLtR(match, u, topLevel, fancyRest, ['readAt', '.', /(\s*)\.\1/y])
     }
     function fancyRest(match, u, topLevel) { // …a, ...a; ^a
       return _matchUnary(match, u, topLevel, fancyGrouping, ['quote', '^', '^', 'rest', '…', /…|\.\.\./y])
@@ -7172,6 +7359,22 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
     Initialize() {
       interrupt.tmp = []
     },
+    _cancel(stack) {
+      // Dispose of all values (not lengths, nor causes) in the stack.
+      if (!stack || !stack.length) return
+      let end = stack.length-1
+      while (end) {
+        // stack[end] is the length.
+        // stack[end - length] is the first item.
+        // stack[end - length - 1] is the (cause or) previous length.
+        const length = stack[end]
+        const start = end - length
+        for (let i = start; i < end; ++i)
+          dispose(stack[i])
+        end = start-1
+        // --end // No causes.
+      }
+    },
     call(cause, got = undefined) {
       if (got === undefined) {
         // Collect items from the stack into tmp and return it.
@@ -7185,7 +7388,7 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
         const start = end - length
         for (let i = start; i < end; ++i)
           tmp[i - start] = stack[i]
-        stack.length -= length+1
+        stack.length = start
 
         /*
         // Check the cause.
@@ -7886,11 +8089,12 @@ Preserved for now, because giving the user choices is a valuable idea for explai
         str.title = 'Search for this.'
         const end = elem('button', '❌')
         end.onclick = () => { const h = _smoothHeightPre(container); container.replaceWith(el); _smoothHeightPost(el, h) }
+        end.style.margin = 0
         row.append(str, end)
       el.replaceWith(container)
       container.append(el)
       elemInsert(container, row, el)
-      let ID = null
+      let env = null
       str.oninput = _throttled(() => {
         const s = str.value
         const bad = [-1];  bad.length = s.length
@@ -7903,10 +8107,10 @@ Preserved for now, because giving the user choices is a valuable idea for explai
           }
         }
         let i = 0
-        const env = _newExecutionEnv()
-        ID !== null && _cancel(env)
-        ID = env[_id(_schedule)] = _newJobId()
-        _doJob([last, [search, el], () => ID = null], env)
+        env !== null && _cancel(env)
+        env = _newExecutionEnv()
+        env[_id(_schedule)] = _newJobId()
+        _doJob([last, [search, el], () => env = null], env)
 
         function search(el) {
           // Return true if el contains s (if any children return true, or if we're a text node and have a match inside), else false.
@@ -7924,7 +8128,7 @@ Preserved for now, because giving the user choices is a valuable idea for explai
           } else {
             // If some children are true and others are false, collapse the false children. Return whether any children are true.
             // If we are collapsed and want to return true, un-collapse us.
-            call.env = env
+            //call.env = env
             Math.random()<.01 && _checkInterrupt()
             let [v = _allocArray(), anyTrue = false, anyFalse = false, i1 = 0, ch1 = el.firstChild, next1 = ch1 && ch1.nextSibling, i2 = 0, ch2 = el.firstChild, next2 = ch2 && ch2.nextSibling] = interrupt(search)
             try {
