@@ -164,6 +164,7 @@ __base({
     docs:`Execution-related functionality.`,
     lookup:{
       call:__is(`call`),
+      purify:__is(`purify`),
       error:__is(`error`),
       await:__is(`await`),
       repeat:__is(`repeat`),
@@ -182,6 +183,7 @@ __base({
       sizeof:__is(`sizeof`),
       examples:__is(`examples`),
       future:__is(`future`),
+      philosophy:__is(`philosophy`),
     },
   },
 
@@ -685,7 +687,7 @@ text { font-family:sans-serif !important }
 .into.noComplexity.dark :not(collapsed).hover { box-shadow:none; background-color:#333 }
 .into.noComplexity string, .into.noComplexity node, into.noComplexity.extracted { display:inline }
 
-:focus {outline:none; box-shadow:var(--highlight) 0 0 .1em .1em}
+:focus:not(summary) {outline:none; box-shadow:var(--highlight) 0 0 .1em .1em}
 input[type=range]::-moz-focus-outer { border:0 }
 .hover {box-shadow:var(--highlight) 0 0 .1em .1em}
 .working {box-shadow:var(--highlight) 0 0 .1em .1em inset}
@@ -879,10 +881,11 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
 
       // Select the <node> under cursor on triple-click.
       // Also make <details> open smoothly, and allow them to be closed by clicking.
+      function getSummaryParent(el) { return el && (el.tagName === 'SUMMARY' ? el : getSummaryParent(el.parentNode)) }
       _listen('click', evt => {
         let t = evt.target || evt.explicitOriginalTarget
-        if (t.parentNode && t.parentNode.tagName === 'SUMMARY')
-          t = t.parentNode
+        const par = getSummaryParent(t)
+        if (par) t = par
         if (t.tagName === 'DETAILS')
           return t.firstChild.click()
         if (t.tagName === 'SUMMARY' && evt.detail !== 3 && !_disableSmoothTransitions[1]) {
@@ -1391,7 +1394,8 @@ Remember to quote the link unless you want to evaluate the insides.`,
       let arr = s.split('`')
       for (let i = 0; i < arr.length; ++i)
         if (i & 1)
-          try { arr[i] = elem('serialization', parse(arr[i], fancy, undefined, parse.dom)[1]) } catch (err) {}
+          try { arr[i] = elem('serialization', parse(arr[i], fancy, undefined, parse.dom)[1]) }
+          catch (err) { arr[i] = elem('serialization', arr[i]) }
         else
           arr[i] = arr[i].split('\n').map(structuredSentence), typeof document != ''+void 0 && arr[i].forEach(el => el.classList.add('text')), interleave(arr[i], '\n')
       return arr
@@ -3988,6 +3992,7 @@ It's much more efficient to learn to repeat rather than understand, so the whole
       deconstruct:__is(`deconstruct`),
       concept:__is(`concept`),
       map:__is(`map`),
+      tensor:__is(`tensor`),
     },
   },
 
@@ -4446,8 +4451,8 @@ The same as \`(make arrayObject …Items)\`.`,
       arrayObject:__is(`arrayObject`),
     },
     interrupt:false,
-    call(...x) { return created(x) },
-    purify(...y) { return created(y) },
+    call(...x) { return x.forEach(keep), created(x) },
+    purify(...y) { return x.forEach(keep), created(y) },
   },
   readAt:{
     docs:`\`read Array Index\`: reads the current value at a position in an array.`,
@@ -4464,16 +4469,26 @@ The same as \`(make arrayObject …Items)\`.`,
     },
   },
   writeAt:{
-    docs:`\`write Array Index Value\`: changes the current value at a position in an array.
+    docs:`\`writeAt Array Index Value\`: changes the current value at a position in an array.
 If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
     argCount:3,
     interrupt:false,
-    call(arr, i, v) {
+    purify(arrP, iP, vP) {
+      // Allow writing impure computations into created arrays.
+      if (_isArray(arrP) && arrP[0] !== quote) throw impure
+      if (_isArray(iP) && iP[0] !== quote) throw impure
+      const arr = !_isArray(arrP) ? arrP : arrP[1]
+      const i = !_isArray(iP) ? iP : iP[1]
+      return writeAt(arr, i, vP, true) // vP is definitely unknown here, since `arr` and `i` are known.
+    },
+    call(arr, i, v, vIsProgramSpace) {
       if (call.pure) {
         if (!call.pure.has(arr)) throw impure
-        if (call.pure.has(v)) throw impure // This prevents cycles, which can't be constructed with `array` calls.
-        //   (Though it prevents many other things too.)
-        v = i !== undefined ? quote(v) : v.map(quote)
+        if (!vIsProgramSpace) {
+          if (call.pure.has(v)) throw impure // This prevents cycles, which can't be constructed with `array` calls.
+          //   (Though it prevents many other things too.)
+          v = i !== undefined ? quote(v) : v.map(quote)
+        }
       }
       if (call.env && call.env[_id(impureLoad)] > 0) return
       if (i !== undefined) {
@@ -4772,24 +4787,148 @@ The adjustment is passed through to each arg.`,
   },
 
   dispose:{
-    docs:`A low-level function for statically disposing an object.
+    docs:`A low-level function for statically disposing a resource (with no references to other resources; currently only tensors).
 A function \`defines\` this to be \`true\` to make execution \`dispose\` its result.
 
-Note that this is only for disposal which we can statically determine, at compile-time. Storing a tensor in an array won't work.
-What about dynamic disposal? There would need to be a "please preserve this" function, and a perfect method of disposing those preserved objects (either garbage collection, or adding reference-counting to all functions that mutate state, which only needs to cover a few functions to cover 99% behavior, and is extremely challenging to cover 100% of behavior with, since we didn't grow on top of reference-counting).`,
+Note that this is only for disposal which we can statically determine, at compile-time. Storing a resource in an array needs \`keep\`.`,
+    lookup:{
+      keep:__is(`keep`),
+      takeAt:__is(`takeAt`),
+    },
+    Initialize() { dispose.keep = new WeakSet },
     elemValue(x) {
       return typeof tf != ''+void 0 && x instanceof tf.Tensor
     },
     call(x) {
-      return void(typeof tf != ''+void 0 && x instanceof tf.Tensor && x.dispose())
+      if (typeof tf != ''+void 0 && x instanceof tf.Tensor)
+        !dispose.keep.has(x) ? x.dispose() : dispose.keep.delete(x)
     },
   },
 
-  // TODO: Have definable merger `mergeAdjustments(arrayOfDins)—>dout`, defined by functions that return said dins, and which must be defined equally if many functions use the same node (able to be a function or an array, for each input). Called/emitted even if only one function uses a node.
-  //   TODO: Have `_mergeTensors` for all functions that take tensors (purified to nothing if there is only one node), returning avg.
-  //   TODO: Have `_mergeArrays` for all functions that take arrays (`readAt`; its adjustment can return just the adjustment and index).
-  // TODO: Make a backprop 'compiler' into our DAG IR, failing if any node is non-adjusting, merging (same-merger functions can be used together) and inlining adjustments.
-  //   `autograd(expr)`.
+  keep:{
+    docs:`\`keep Object\`: prevents the disposal of \`Object\`, once. The caller takes complete responsibility for disposal.
+
+Proper dynamic disposal requires a perfect method of disposing those preserved objects (either garbage collection, or adding reference-counting to all functions that mutate state, which only needs to cover a few functions to cover 99% behavior, and is extremely challenging to cover 100% of behavior with, since we didn't grow on top of reference-counting). We currently do garbage-collection, but only if the result is output to browser UI.`,
+    interrupt:false,
+    argCount:1,
+    call(x) {
+      if (typeof tf != ''+void 0 && x instanceof Tensor)
+        !dispose.keep.has(x) ? dispose.keep.add(x) : error("Can currently only prevent disposal once, but tried to keep", x, "twice")
+      return x
+    },
+  },
+
+  takeAt:{
+    docs:`Exactly like \`readAt\`, but takes responsibility for \`dispose\`ing the read resource`,
+    interrupt:false,
+    dispose:true,
+    argCount:2,
+    call(a, i) { return readAt(a, i) },
+  },
+
+  mergeAdjustment:{
+    // TODO: Have definable merger `mergeAdjustments(arrayOfDins)—>dout`. …But what does the non-defined version do?
+  },
+
+  _mergeTensors:{
+    // TODO: Have `_mergeTensors` for all functions that take tensors (purified to nothing if there is only one node), returning avg.
+    call(arr) {
+      // TODO: Sum all and divide by their count.
+      //   (If any are arrays and call.pure, then return _unknown(…that…).)
+    },
+  },
+  _mergeArrays:{
+    // TODO: Have `_mergeArrays` for all functions that take arrays (`readAt`; its adjustment can return just the adjustment and index).
+    call(arr) {
+      // TODO: `arr` is an array of, uh, temporary arrays of adjustment and index (?); gather those maybe? And if anything is unknown, purify?…
+      // …Wait a second, will we even be able to put adjustment into arrays if we'll be partially-evaluating them anyway? …Well, we'll need to *partially-evaluate*, at least.
+      //   I'm confused.
+      // …How to merge changes of `readAt` into one array…
+    },
+  },
+
+  autograd:{
+    docs:`The result reverses execution, computing changes of inputs given change of output.
+With basic functions that define \`adjust\` correctly, this can be used to implement gradient descent (hence the name \`autograd\`).
+
+More precisely.
+A function that, given linearization of a function's DAG, purifies and returns the expression that computes input change (\`dins\`) given an array of inputs, output, and output change (\`(arrayObject ins out dout)\`).`,
+    argCount:1,
+    call(poIndRc) {
+      const [po, inds, rc] = poIndRc
+      let [save, douts = _allocArray(), inputAdj] = interrupt(autograd)
+      douts.length = po.length
+      try {
+        if (!save) {
+          save = _allocArray(), save.length = po.length
+          for (let i=0; i < po.length; ++i) {
+            const x = po[i], ins = inds[i]
+            if (typeof x[0] != 'function' || !defines(x[0], adjust) || !defines(x[0], mergeAdjustment))
+              error("Cannot autograd because of the non-adjustable", x)
+
+            // Pre-create arrays, so that dependents can fill merging.
+            dout[i] = i === po.length-1 ? [readAt, input, 2] : [undefined, [array]]
+
+            // Save vars for adjustment.
+            if (defines(x[0], adjustLoad))
+              save[i] = true
+            if (defines(x[0], adjustSave))
+              for (let j=0; j < ins.length; ++j)
+                if (ins[j] !== null)
+                  save[ins[j]] = true
+          }
+          // Fill out the nodes to read from the `adjustLoad()` array that owns outputs of some nodes, not just `true` in `save`.
+          for (let i=0, n=0, loaded = [adjustLoad]; i < po.length; ++i)
+            if (save[i])
+              save[i] = [takeAt, loaded, n++]
+        }
+
+        // Go through the post-order in reverse (to reverse computation perfectly), and purify adjustment for each node.
+        if (!inputAdj) {
+          inputAdj = [undefined, [array]]
+          for (let i = po.length-1; i>=0; --i) {
+            // Fill in programs for `ins`, `out`, `dout`.
+            const out = save[i]
+            let ins
+            for (let j=0; j < ins.length; ++j)
+              if (save[inds[i][j]] !== undefined)
+                (ins || (ins = _allocArray(), ins.length = inds[i].length, ins))[j] = save[inds[i][j]]
+
+            const x = po[i]
+            const adj = defines(x[0], adjust)
+            if (!_isArray(adj) || adj[0] !== array) error("Adjustment must create an array, but it is", adj)
+            if (adj.length !== x.length) error("Adjusting", adj.length-1, "args but got", x.length-1, "args")
+            if (defines(x[0], argCount) === undefined) error("Define", argCount, "of", x[0], "to be", x.length-1)
+
+            _bindInput.in = [array, ins, out, dout]
+            const dins = bound(_bindInput, adj)
+            // `dins` is definitely `[array, ...]` since `adj` is, so we can distribute adjustments to its inputs.
+
+            if (x.length !== inds[i].length) error("A DAG and its linearization have drifted apart")
+            for (let j=0; j < inds[i].length; ++j) {
+              const mrg = ind !== null ? douts[ind] : x[j] === input ? inputAdj : null
+              if (mrg) {
+                // Fill out merger and add a source to its input.
+                const m = defines(x[0], mergeAdjustment)
+                if (mrg[0] === undefined)
+                  mrg[0] = m
+                else if (mrg[0] !== m)
+                  error("Mergers of the same value should be the same, but got", mrg[0], "and", m)
+                mrg[1].push(dins[j+1])
+              }
+            }
+          }
+          _bindInput.in = undefined
+        }
+        return purify(inputAdj)
+      } catch (err) { if (err === interrupt) interrupt(autograd, _tmp().length=0, _tmp().push(save, douts));  throw err }
+    },
+  },
+
+  _bindInput(x) {
+    return _isArray(x) && x[0] === quote ? x : x === input ? _bindInput.in : undefined
+  },
+
   // TODO: Successfully backprop through `a+b`.
 
   // TODO: the "Composing a learner out of smaller learners, such as in gradient descent, is efficient. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)." `assign` function.
@@ -4799,7 +4938,10 @@ What about dynamic disposal? There would need to be a "please preserve this" fun
 
   adjust:{
     docs:``, // TODO: note how adjustment must always happen in perfect reversal of execution, otherwise there will be very non-obvious errors.
+      // …But do we really want `adjust` to be a measly intermediate step, and not a whole mode of execution (which is called `callAdjust` for now)?
+      //   `autograd` sees definitions anyway, and it's not like we'll be doing adjustment manually any time soon.
     lookup:{
+      autograd:__is(`autograd`),
       save:__is(`adjustSave`),
       load:__is(`adjustLoad`),
     },
@@ -5049,7 +5191,7 @@ Array data gets its head consulted (once, not recursively). A function acts like
 Concepts are used to give functions a free and easy extensibility point.
 Rather than co-opting strings and files (duck typing, docstrings, documentation, READMEs) to convey parts of a concept, refer to defined functionality directly.`,
     philosophy:`Concepts have no defined boundaries and affect other things, so obviously, making \`concept\` be able to define one level of things in special circumstances fully encapsulates the concept of a concept.
-(Poking fun at the naming of this.)`,
+(Poking fun at the naming of this, a rigid approximation of a learned representation.)`,
     argCount:1,
     lookup:{
       defines:__is(`defines`),
@@ -7034,7 +7176,10 @@ This is a {more space-efficient than binary} representation for graphs of arrays
         el.classList.add('nonArray')
       if (_isLabel(u))
         el.style.color = _valuedColor(v), el.classList.add('label')
-      el.title = _isArray(u) && u.length && backctx.has(u[0]) ? backctx.get(u[0]) : ''
+      let title = ''
+      if (!title && _isArray(u) && u.length && backctx.has(u[0])) title = backctx.get(u[0])
+      if (!title && _isArray(v) && v.length && backctx.has(v[0])) title = backctx.get(v[0])
+      el.title = title
     } else {
       if (_isLabel(u))
         el = _colored(el, [34, 36, 35][randomNat(3)]) // Cycle through blue, cyan, magenta.
@@ -7427,7 +7572,6 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
   Garbage:{
     docs:`It's a nice thought, but it doesn't play well with others.`,
     lookup:{
-      philosophy:__is(`philosophy`),
       askUser:__is(`askUser`),
     },
   },
