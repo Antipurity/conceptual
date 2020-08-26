@@ -4764,8 +4764,8 @@ The adjustment is passed through to each arg.`,
     },
     adjust:[
       __is(`array`),
-      __is(`dout`),
-      __is(`dout`),
+      __is(`_dout`),
+      __is(`_dout`),
     ],
     mergeAdjustment:__is(`_mergeTensors`),
   },
@@ -4782,7 +4782,7 @@ The adjustment is passed through to each arg.`,
       [
         __is(`mul`),
         __is(`_dout`),
-        __id(`_inB`),
+        __is(`_inB`),
       ],
       [
         __is(`mul`),
@@ -4864,12 +4864,12 @@ The adjustment is passed through to each arg.`,
     adjust:[
       __is(`array`),
       [
-        __is(`matMulTransposeB`),
+        __is(`_matMulTransposeB`),
         __is(`_dout`),
         __is(`_inB`),
       ],
       [
-        __is(`matMulTransposeA`),
+        __is(`_matMulTransposeA`),
         __is(`_inA`),
         __is(`_dout`),
       ],
@@ -4956,7 +4956,9 @@ Any function that \`defines\` \`adjust\` must also define this, with a function 
   }, // Can't adjust input-is-an-array programs if we don't make this work.
   // What were thinking about? Create arrays, and partially-evaluate those creations away?…
   //   What does each part do: `readAt # adjust`, `array # adjust`, `readAt # mergeAdjustment == _mergeArrays`?
-  //     readAt: …but we cannot just create an array, because we don't know the index, and would have to purify a thing later to get it.
+  //     readAt: (ins out dout) -> (_createOneValueAt dout ins.1), which purifies into, say, `[value, index]` (and fails if it cannot).
+  //     _mergeArrays (which takes an array of those `[value, index]`): ???
+  //     array: ???
 
   autograd:{
     docs:`The result reverses execution, computing changes of inputs given change of output.
@@ -5000,13 +5002,16 @@ A function that, given linearization of a function's DAG, purifies and returns t
           for (let i = po.length-1; i>=0; --i) {
             // Fill in programs for `ins`, `out`, `dout`.
             //   (This loop cannot interrupt.)
+            const x = po[i]
+            if (x.length !== inds[i].length) error("A DAG and its linearization have drifted apart")
             const out = save[i]
             let ins
-            for (let j=0; j < ins.length; ++j)
+            for (let j=0; j < x.length; ++j)
               if (save[inds[i][j]] !== undefined)
-                (ins || (ins = _allocArray(), ins.length = inds[i].length, ins))[j] = save[inds[i][j]]
+                (ins || (ins = _allocArray(), ins.length = x.length, ins))[j] = save[inds[i][j]]
+              else if (!_isArray(x[j]))
+                (ins || (ins = _allocArray(), ins.length = x.length, ins))[j] = x[j]
 
-            const x = po[i]
             const adj = defines(x[0], adjust)
             if (!_isArray(adj) || adj[0] !== array) error("Adjustment must create an array, but it is", adj)
             if (adj.length !== x.length) error("Adjusting", adj.length-1, "args but got", x.length-1, "args")
@@ -5016,8 +5021,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
             const dins = bound(_bindInput, adj)
             // `dins` is definitely `[array, ...]` since `adj` is, so we can distribute adjustments to its inputs.
 
-            if (x.length !== inds[i].length) error("A DAG and its linearization have drifted apart")
-            for (let j=0; j < inds[i].length; ++j) {
+            for (let j=0; j < x.length; ++j) {
               const mrg = ind !== null ? douts[ind] : x[j] === input ? inputAdj : null
               if (mrg) {
                 // Fill out merger and add a source to its input.
@@ -5062,6 +5066,7 @@ Another way is learnable scaffolding, the generalization: compute and use many n
 If using the basic primitives, adjustment must always happen in perfect reversal of execution, otherwise there will be very non-obvious errors.`,
     lookup:{
       autograd:__is(`autograd`),
+      mergeAdjustment:__is(`mergeAdjustment`),
       save:__is(`adjustSave`),
       load:__is(`adjustLoad`),
     },
