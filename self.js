@@ -4432,6 +4432,8 @@ The same as \`(make arrayObject …Items)\`.`,
       if (impureHave()) return impureLoad()
       return impureSave(arr[i])
     },
+    adjust:__is(`_oneValueAdjustment`),
+    mergeAdjustment:__is(`_mergeArrays`),
   },
   writeAt:{
     docs:`\`writeAt Array Index Value\`: changes the current value at a position in an array.
@@ -4927,6 +4929,8 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     dispose:true,
     argCount:2,
     call(a, i) { return readAt(a, i) },
+    adjust:__is(`_oneValueAdjustment`),
+    mergeAdjustment:__is(`_mergeArrays`),
   },
 
   mergeAdjustment:{
@@ -4945,20 +4949,38 @@ Any function that \`defines\` \`adjust\` must also define this, with a function 
     },
   },
 
+  _createOneValueAt:{
+    purify(program, i) { return array(program, i) },
+    call(value, i) { return array(quote(value), i) },
+  },
+
+  _oneValueAdjustment:[
+    __is(`_createOneValueAt`),
+    __is(`_dout`),
+    [
+      __is(`readAt`),
+      [
+        __is(`readAt`),
+        __is(`input`),
+        0,
+      ],
+      1,
+    ],
+  ],
+
   _mergeArrays:{
-    // TODO: Have `_mergeArrays` for all functions that take arrays (`readAt`; its adjustment can return just the adjustment and index).
+    docs:`Gather array item computations that are produced by \`_createOneValueAt\`.`,
     call(arr) {
-      // TODO: `arr` is an array of, uh, temporary arrays of adjustment and index (?); gather those maybe? And if anything is unknown, purify?…
-      // …Wait a second, will we even be able to put adjustment into arrays if we'll be partially-evaluating them anyway? …Well, we'll need to *partially-evaluate*, at least.
-      //   I'm confused.
-      // …How to merge changes of `readAt` into one array…
+      if (!call.pure) error("Cannot be called directly, is a part of", autograd)
+      const result = [array]
+      for (let i=0; i < arr.length; ++i) {
+        if (!_isArray(arr[i]) || arr[i].length != 2 || typeof arr[i][1] != 'number')
+          error("Wrong format of", arr[i], "so we cannot adjust it")
+        result[arr[i][1]] = arr[i][0]
+      }
+      return _unknown(result)
     },
-  }, // Can't adjust input-is-an-array programs if we don't make this work.
-  // What were thinking about? Create arrays, and partially-evaluate those creations away?…
-  //   What does each part do: `readAt # adjust`, `array # adjust`, `readAt # mergeAdjustment == _mergeArrays`?
-  //     readAt: (ins out dout) -> (_createOneValueAt dout ins.1), which purifies into, say, `[value, index]` (and fails if it cannot).
-  //     _mergeArrays (which takes an array of those `[value, index]`): ???
-  //     array: ???
+  },
 
   autograd:{
     docs:`The result reverses execution, computing changes of inputs given change of output.
