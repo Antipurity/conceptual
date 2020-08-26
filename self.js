@@ -208,6 +208,7 @@ __base({
     mul:__is(`mul`),
     div:__is(`div`),
     pow:__is(`pow`),
+    matMul:__is(`matMul`),
   },
 
   equals:{
@@ -548,42 +549,6 @@ Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.s
         return result
       } catch (err) { if (err === interrupt) interrupt(transform, _tmp().length=0, _tmp().push(result, i));  throw err }
     },
-  },
-
-  mul:{
-    argCount:2,
-    interrupt:false,
-    examples:[
-      () => {
-        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[mul, a, b], a*b]
-      },
-    ],
-    call(a,b) { return a * b },
-  },
-
-  sub:{
-    argCount:2,
-    interrupt:false,
-    examples:[
-      () => {
-        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[sub, a, b], a-b]
-      },
-    ],
-    call(a,b) { return a - b },
-  },
-
-  div:{
-    argCount:2,
-    interrupt:false,
-    examples:[
-      () => {
-        const a = Math.random()*10000-5000, b = Math.random()*10000-5000
-        return [[div, a, b], a/b]
-      },
-    ],
-    call(a,b) { return a / b },
   },
 
   _listen:{
@@ -4762,28 +4727,166 @@ zing built-in primitives like peval or `replay` with our ML?
 
   // …Can't we have expert distillation, where choices in different execution branches synchronize their predictions? Yeah, it should be a basic thing, because it can't be properly imitated otherwise.
 
+  _dout:[
+    __is(`readAt`),
+    __is(`input`),
+    2,
+  ],
+
+  _inA:[
+    __is(`readAt`),
+    [
+      __is(`readAt`),
+      __is(`input`),
+      0,
+    ],
+    0,
+  ],
+
+  _inB:[
+    __is(`readAt`),
+    [
+      __is(`readAt`),
+      __is(`input`),
+      0,
+    ],
+    1,
+  ],
+
   add:{
-    docs:`Adds two tensors together.
+    docs:`Addition of two tensors, as in \`5+6\`=\`11\`.
 The adjustment is passed through to each arg.`,
     argCount:2,
-    interrupt:false,
     dispose:true,
+    interrupt:false,
     call(a,b) {
       return tf.add(a,b)
     },
     adjust:[
       __is(`array`),
+      __is(`dout`),
+      __is(`dout`),
+    ],
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
+
+  mul:{
+    docs:`Multiplication, as in \`5*6\`=\`30\`.`,
+    argCount:2,
+    dispose:true,
+    interrupt:false,
+    call(a,b) { return tf.mul(a,b) },
+    adjustSave:true,
+    adjust:[
+      __is(`array`),
       [
-        __is(`readAt`),
-        __is(`input`),
-        2,
+        __is(`mul`),
+        __is(`_dout`),
+        __id(`_inB`),
       ],
       [
-        __is(`readAt`),
-        __is(`input`),
-        2,
+        __is(`mul`),
+        __is(`_inA`),
+        __is(`_dout`),
       ],
     ],
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
+
+  sub:{
+    docs:`Subtraction, as in \`5-6\`=\`-1\`.`,
+    argCount:2,
+    dispose:true,
+    interrupt:false,
+    call(a,b) { return tf.sub(a,b) },
+    adjust:[
+      __is(`array`),
+      __is(`_dout`),
+      [
+        __is(`sub`),
+        0,
+        __is(`_dout`),
+      ],
+    ],
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
+
+  div:{
+    docs:`Division, as in \`6/3\`=\`2\``,
+    argCount:2,
+    dispose:true,
+    interrupt:false,
+    call(a,b) { return tf.div(a,b) },
+    adjustSave:true,
+    adjust:[
+      __is(`array`),
+      [
+        __is(`div`),
+        __is(`_dout`),
+        __is(`_inB`),
+      ],
+      [
+        __is(`mul`),
+        __is(`_dout`),
+        [
+          __is(`div`),
+          [
+            __is(`div`),
+            [
+              __is(`sub`),
+              0,
+              __is(`_inA`),
+            ],
+            __is(`_inB`),
+          ],
+          __is(`_inB`),
+        ],
+      ],
+    ],
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
+
+  pow:{
+    docs:`Raises the first arg to the power of the second arg. Non-tensor, non-differentiable, just there to demonstrate right-to-left operator precedence of \`5**6\`.`,
+    argCount:2,
+    interrupt:false,
+    call(a,b) { return Math.pow(a,b) },
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
+
+  matMul:{
+    docs:`Matrix multiplication.`,
+    argCount:2,
+    dispose:true,
+    interrupt:false,
+    call(a,b) { return tf.matMul(a,b) },
+    adjustSave:true,
+    adjust:[
+      __is(`array`),
+      [
+        __is(`matMulTransposeB`),
+        __is(`_dout`),
+        __is(`_inB`),
+      ],
+      [
+        __is(`matMulTransposeA`),
+        __is(`_inA`),
+        __is(`_dout`),
+      ],
+    ],
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
+
+  _matMulTransposeA:{
+    dispose:true,
+    interrupt:false,
+    call(a,b) { return tf.matMul(a,b, true, false) },
+  },
+
+  _matMulTransposeB:{
+    dispose:true,
+    interrupt:false,
+    call(a,b) { return tf.matMul(a,b, false, true) },
   },
 
   dispose:{
@@ -4827,16 +4930,21 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
   },
 
   mergeAdjustment:{
-    // TODO: Have definable merger `mergeAdjustments(arrayOfDins)—>dout`. …But what does the non-defined version do?
+    docs:`Defines how to merge adjustments returned from \`adjust\`ing many dependents, to produce local output change in \`autograd\`.
+Any function that \`defines\` \`adjust\` must also define this, with a function that takes an array of input changes and returns output change (called at compile-time, with programs as array items), or with an array of such functions (if they need to be input-specific).`,
   },
 
   _mergeTensors:{
-    // TODO: Have `_mergeTensors` for all functions that take tensors (purified to nothing if there is only one node), returning avg.
+    docs:`Average tensors. While not the math-approved gradient computation (which is to sum them), this may perform more uniformly in convoluted generated programs.`,
     call(arr) {
-      // TODO: Sum all and divide by their count.
-      //   (If any are arrays and call.pure, then return _unknown(…that…).)
+      // Create a sub-program to add up and divide by length.
+      if (!call.pure) error("Cannot be called directly, is a part of", autograd)
+      if (arr.length == 1) return _isArray(arr[0]) ? _unknown(arr[0]) : arr[0]
+      const sum = arr.reduce((a,b) => [add, a, b])
+      return _unknown([div, sum, arr.length])
     },
   },
+
   _mergeArrays:{
     // TODO: Have `_mergeArrays` for all functions that take arrays (`readAt`; its adjustment can return just the adjustment and index).
     call(arr) {
@@ -4845,7 +4953,10 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
       //   I'm confused.
       // …How to merge changes of `readAt` into one array…
     },
-  },
+  }, // Can't adjust input-is-an-array programs if we don't make this work.
+  // What were thinking about? Create arrays, and partially-evaluate those creations away?…
+  //   What does each part do: `readAt # adjust`, `array # adjust`, `readAt # mergeAdjustment == _mergeArrays`?
+  //     readAt: …but we cannot just create an array, because we don't know the index, and would have to purify a thing later to get it.
 
   autograd:{
     docs:`The result reverses execution, computing changes of inputs given change of output.
@@ -4856,7 +4967,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
     argCount:1,
     call(poIndRc) {
       const [po, inds, rc] = poIndRc
-      let [save, douts = _allocArray(), inputAdj] = interrupt(autograd)
+      let [save, loaded, douts = _allocArray(), inputAdj] = interrupt(autograd)
       douts.length = po.length
       try {
         if (!save) {
@@ -4888,6 +4999,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
           inputAdj = [undefined, [array]]
           for (let i = po.length-1; i>=0; --i) {
             // Fill in programs for `ins`, `out`, `dout`.
+            //   (This loop cannot interrupt.)
             const out = save[i]
             let ins
             for (let j=0; j < ins.length; ++j)
@@ -4909,7 +5021,9 @@ A function that, given linearization of a function's DAG, purifies and returns t
               const mrg = ind !== null ? douts[ind] : x[j] === input ? inputAdj : null
               if (mrg) {
                 // Fill out merger and add a source to its input.
-                const m = defines(x[0], mergeAdjustment)
+                //   Array mergers are input-specific; non-array mergers apply to all inputs.
+                let m = defines(x[0], mergeAdjustment)
+                if (_isArray(m)) m = m[j]
                 if (mrg[0] === undefined)
                   mrg[0] = m
                 else if (mrg[0] !== m)
@@ -4920,8 +5034,9 @@ A function that, given linearization of a function's DAG, purifies and returns t
           }
           _bindInput.in = undefined
         }
-        return purify(inputAdj)
-      } catch (err) { if (err === interrupt) interrupt(autograd, _tmp().length=0, _tmp().push(save, douts));  throw err }
+        // `last` makes sure that exceptions won't cause partial disposal of saved state.
+        return purify([last, ...save.filter(x => x), [_allocArray, loaded], inputAdj])
+      } catch (err) { if (err === interrupt) interrupt(autograd, _tmp().length=0, _tmp().push(save, loaded, douts, inputAdj));  throw err }
     },
   },
 
@@ -4929,17 +5044,22 @@ A function that, given linearization of a function's DAG, purifies and returns t
     return _isArray(x) && x[0] === quote ? x : x === input ? _bindInput.in : undefined
   },
 
-  // TODO: Successfully backprop through `a+b`.
+  // TODO: …This won't cut it. We need a high-level plan, going all the way up to creating learning-in all programs, through creating/showcasing simple neural networks as tests, and through Metamath proofs.
+  //   Explaining. Open our eyes with our words, to bind us together, strong enough to withstand learning otherwise.
 
   // TODO: the "Composing a learner out of smaller learners, such as in gradient descent, is efficient. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)." `assign` function.
 
   // "They say that blood is thicker than water. So make sure to drink lots of blood. Put your heart into it!"
+  // "Take this knowledge. The world is food for you, and you're a part of it."
   // For a complicated step in a tutorial, have a "safe word" (a long UUID string), established long before.
 
   adjust:{
-    docs:``, // TODO: note how adjustment must always happen in perfect reversal of execution, otherwise there will be very non-obvious errors.
-      // …But do we really want `adjust` to be a measly intermediate step, and not a whole mode of execution (which is called `callAdjust` for now)?
-      //   `autograd` sees definitions anyway, and it's not like we'll be doing adjustment manually any time soon.
+    docs:`Given inputs, output, and output change, reverses the just-done execution to compute input changes.
+
+One way to use this is like paperclip maximization: compute a prediction of a numeric value, compute the loss, and back-propagate the gradient to minimize the loss. This is the standard paradigm of modern machine learning; you've probably heard of its recent amazing successes.
+Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses. This is relatively unknown, which is why I'm here.
+
+If using the basic primitives, adjustment must always happen in perfect reversal of execution, otherwise there will be very non-obvious errors.`,
     lookup:{
       autograd:__is(`autograd`),
       save:__is(`adjustSave`),
@@ -4953,6 +5073,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
   },
 
   // TODO: `callAdjust(expr)` that compiles `expr` and its adjustment, sets adjustSave in env, calls `expr`, transfers adjustSave to adjustLoad in env, calls adjustment, assert exact-ness of reversal, saves the compiled expr and its adjustment in the replay buffer, then returns the result of calling `expr`.
+  //   The paperclip maximizer. We'll need a separate learnable scaffolding.
 
   adjustSave:{
     docs:`Saves a newly-allocated array for adjustment.
@@ -6819,10 +6940,6 @@ And parsing is more than just extracting meaning from a string of characters (it
     if (need === undefined)
       return _needsGrouping(match) ? (match('['), true) : false
     if (need) match(']')
-  },
-
-  pow(a,b) {
-    return Math.pow(a,b)
   },
 
   _unctx(s) { return serialize.ctx.get(label(s)) },
