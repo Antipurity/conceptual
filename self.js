@@ -1744,7 +1744,6 @@ For anything else, display the globals the expression binds to, and an expandabl
 
   contextMenu:{
     docs:`Creates and displays a \`<context-menu>\` element near the specified element.`,
-    future:`Remove most buttons, and add tutorials on how to add them. Hide complexity if the user doesn't care about it.`,
     philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     lookup:{
       describe:__is(`describe`),
@@ -2110,7 +2109,6 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     docs:`\`(editor InitialString Lang Binds OnInput OnEnter)\`: creates a user-editable expression input.
 \`OnInput\` is passed the parsed expression and whether the currently entered text fails to parse. \`OnEnter\` is passed the expression (always successfully-parsed), and it returns \`true\` to clear editor contents.
 Don't do expensive synchronous tasks in \`OnInput\`.`,
-    future:`Harden all/important \`parse\`s against interrupts, by moving them into \`_schedule\`/\`_doJob\` in \`editor\`.`,
     lookup:{
       _autocompleteBrackets:__is(`_autocompleteBrackets`),
     },
@@ -2122,19 +2120,25 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       if (onEnter && typeof onEnter != 'function') error('Function or nothing expected, got', onEnter)
 
       // On any mutations inside, re-parse its contents, and show purified output.
+      let parseEnv = null
       const obs = new MutationObserver(_throttled(record => {
         const s = getSelection()
         const i = _saveCaret(ed, s)
-        try {
-          const [expr, styled] = parse(ed, lang, binds, parse.dom)
-          while (ed.firstChild) ed.removeChild(ed.firstChild)
-          ed.append(elem('div', styled))
-          if (i !== undefined && (document.activeElement === Self.into.parentNode.host || ed.contains(document.activeElement))) _loadCaret(ed, i, s)
-          onInput && Promise.resolve().then(() => onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false))
-        } catch (err) {
-          if (err instanceof Error) throw err
-          onInput && onInput(undefined, true)
-        }
+        parseEnv && _cancel(parseEnv), parseEnv = _newExecutionEnv()
+        _doJob([parse, ed, lang, binds, parse.dom], parseEnv, r => {
+          parseEnv = null
+          if (!_isError(r)) {
+            const [expr, styled] = r
+            while (ed.firstChild) ed.removeChild(ed.firstChild)
+            ed.append(elem('div', styled))
+            if (i !== undefined && (document.activeElement === Self.into.parentNode.host || ed.contains(document.activeElement))) _loadCaret(ed, i, s)
+            onInput && Promise.resolve().then(() => onInput(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false))
+          } else {
+            onInput && onInput(undefined, true)
+            if (_isArray(r) && r[0] === jsRejected && r[1] instanceof Element)
+              throw r
+          }
+        })
         obs.takeRecords()
       }, .2))
 
@@ -2142,11 +2146,11 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       const ed = elem('node')
       ed.contentEditable = true
       ed.spellcheck = false
+      obs.observe(ed, { childList:true, subtree:true, characterData:true })
       if (initialString && typeof initialString == 'string')
-        ed.append(parse(initialString, lang, binds, parse.dom)[1])
+        ed.append(initialString)
       else if (initialString instanceof Node)
         ed.append(initialString)
-      obs.observe(ed, { childList:true, subtree:true, characterData:true })
 
       const query = elem('span')
       elemValue(query, lang)
@@ -2234,22 +2238,24 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       function evaluate(evt) {
         let clear = false
         if (onEnter)
-          try {
-            const expr = parse(ed, lang, binds)
-            evt.preventDefault()
-            clear = onEnter(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false)
-          } catch (err) {
-            if (_isArray(err) && err[0] === 'give more') err = err[1]
-            else evt.preventDefault()
-            try {
-              const el = elem('error', err instanceof Error ? [String(err), '\n', err.stack] : String(err))
-              el.style.left = '1em'
-              el.style.position = 'absolute'
-              return elemInsert(query, el), setTimeout(elemRemove, 1000, el)
-            } catch (e) { console.error(err) }
-          }
-        if (clear) ed.textContent = ''
-        onInput && onInput(undefined, true)
+          _doJob([parse, ed, lang, binds], _newExecutionEnv(), expr => {
+            let clear = false
+            if (!_isError(expr)) {
+              evt.preventDefault()
+              clear = onEnter(bound(n => n instanceof Element && n.special ? quote(n.to) : undefined, expr, false), false)
+            } else {
+              let err = _isArray(expr) && expr[0] === jsRejected && expr.length == 2 ? expr[1] : expr
+              if (_isArray(err) && err[0] === 'give more') err = err[1]
+              else evt.preventDefault()
+              try {
+                const el = elem('error', err instanceof Element ? err : String(err))
+                el.style.left = '1em'
+                el.style.position = 'absolute'
+                return elemInsert(query, el), setTimeout(elemRemove, 1000, el)
+              } catch (e) { return console.error(err) }
+            }
+            if (clear) ed.textContent = '', onInput && onInput(undefined, true)
+          })
       }
       function children(el, to) { // Set children of `el` to `to`.
         const pre = _smoothHeightPre(el)
@@ -3414,8 +3420,6 @@ If any promises the job depends on have a method .cancel, calls those.`,
     if (typeof document != ''+void 0 && interrupted && env[_id(_checkInterrupt)] !== undefined) {
       // Highlight the last-executed expr.
       _highlightOriginal(env[_id(_checkInterrupt)], true)
-      // TODO: …Should we just not highlight anything, since we removed `_cameFrom`?…
-      // ##########################
     } else env[_id(_checkInterrupt)] = undefined
 
     call.env = env
@@ -3601,9 +3605,25 @@ Evaluating a bound label results in its value, in the current function call. Eva
       `d`,
       `variable`,
     ],
+    argCount:1,
     call(name) {
-      if (!label.s) label.s = Object.create(null), Object.freeze(label)
-      return label.s[name] || (label.s[name] = [label, name]) // Never collects garbage.
+      // Returns the label object, from cache if possible.
+      if (!label.s)
+        label.s = Object.create(null),
+        typeof FinalizationRegistry != ''+void 0 && typeof WeakRef != ''+void 0 && (label.fin = new FinalizationRegistry(name => delete label.s[name])),
+        Object.freeze(label)
+      if (typeof name != 'string') error("Expected a string but got", name)
+      if (!label.fin) {
+        return label.s[name] || (label.s[name] = [label, name]) // Never collects garbage.
+      } else {
+        // A cache that holds values (the label objects) weakly.
+        if (!label.s[name]) {
+          const L = [label, name]
+          label.s[name] = new WeakRef(L)
+          label.fin.register(L, name)
+        }
+        return label.s[name].deref()
+      }
     },
   },
 
@@ -3973,33 +3993,38 @@ Cycles are impossible to create using only this.`,
 
   makeGraph:{
     docs:`\`makeGraph Expr\`: Turns an array graph into an array/object graph, in place.`,
-    future:`Make this, \`parse\`, and all their uses interrupt-proof.`,
     call(x) {
-      const env = _allocMap() // original —> constructed|original
-      const unfinished = new Set // Whether we have not constructed a node yet.
-      x = walk(x)
-      _allocMap(env)
-      return x
+      let [env = _allocMap(), unfinished = new Set] = interrupt(makeGraph)
+      // env: original —> constructed|original
+      // unfinished: Whether we have not constructed a node yet.
+      try { x = walk(x);  _allocMap(env);  return x }
+      catch (err) { if (err === interrupt) interrupt(makeGraph, _tmp().length=0, _tmp().push(env, unfinished)); else _allocMap(env);  throw err }
 
       function walk(x) {
         if (!_isArray(x)) return x
-        if (env.has(x)) return env.get(x)
-        if (!_isArray(x[0]) && defines(x[0], construct))
-          env.set(x, construct(x)), unfinished.add(x)
-        else
-          env.set(x, x)
-        for (let i = 0; i < x.length; ++i)
-          x[i] = walk(x[i])
-        if (env.get(x) !== x) {
-          // To allow user-defined constructs, construct all (acyclic) potential dependencies then construct us.
-          for (let i=0; i < x.length; ++i)
-            if (unfinished.has(x[i]))
-              error('User-defined constructs must not depend on their instances, as happened in', x[i])
-          construct(x, env.get(x))
-          unfinished.delete(x)
-          return env.get(x)
-        }
-        return x
+        let [i] = interrupt(makeGraph)
+        try {
+          if (i === undefined) {
+            if (env.has(x)) return env.get(x)
+            if (!_isArray(x[0]) && defines(x[0], construct))
+              env.set(x, construct(x)), unfinished.add(x)
+            else
+              env.set(x, x)
+            i = 0
+          }
+          for (; i < x.length; ++i)
+            x[i] = walk(x[i])
+          if (env.get(x) !== x) {
+            // To allow user-defined constructs, construct all (acyclic) potential dependencies then construct us.
+            for (let i=0; i < x.length; ++i)
+              if (unfinished.has(x[i]))
+                error('User-defined constructs must not depend on their instances, as happened in', x[i])
+            construct(x, env.get(x))
+            unfinished.delete(x)
+            return env.get(x)
+          }
+          return x
+        } catch (err) { if (err === interrupt) interrupt(makeGraph, _tmp().length=0, _tmp().push(i));  throw err }
       }
     },
   },
@@ -4702,32 +4727,7 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
 
 
 
-/* TODO: ML integration.
-  - `autograd(fn)—>func` so that we don't *always* have to write adjust defini
-tions. `adjust(fn, ins, out, dout)` for actual first-order adjustment. `_adjus
-tMaxMagnitude = (…, 1, …)` and `_adjustMultiplier = (…, .1, …)`, to control th
-e adjustment.
-  - `loss2(result, assigned)` that can return undefined in 33% rolls (for dive
-rsifying training data), the default for op loss assignment.
-  - `_defaultNN(inputSz, outputSz)` for densely-connected NN autofunc creator.
-  - `rnnEnv(nn, featureSize)` and its ops: `choice(env)(...options)` and `choi
-ce(env) = actual` (`assign(choice(env), actual)`).
-    - …Though, with total control of IR, do we really want RNN envs? Maybe it 
-would be better to try to generate programs that predict every numeric result,
-and maybe even bools and strings too?… To route in every way, not just an RNN…
-    - More NN ops: `num(...sizes)(env)`.
-    - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc,
-ins = undefined)`.
-    - Function decorators (for recursivity of RNNs): `_envEnter(env, initialSt
-ate)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
-  - …Do stuff, in tutorials, like instruction-generation or Metamath or optimi
-zing built-in primitives like peval or `replay` with our ML?
-*/
 
-// (The interpreter loop should handle three distinct execution traces: impure-replay tape, gradient tape, and the interrupt stack.)
-  // (And, they all should have definitions in execution env.)
-
-  // …Can't we have expert distillation, where choices in different execution branches synchronize their predictions? Yeah, it should be a basic thing, because it can't be properly imitated otherwise.
 
   _dout:[
     __is(`readAt`),
@@ -5070,11 +5070,40 @@ A function that, given linearization of a function's DAG, purifies and returns t
     return _isArray(x) && x[0] === quote ? x : x === input ? _bindInput.in : undefined
   },
 
+  callAdjust:{
+    future:`Make the tutorial and make it work.`,
+    tutorial:[
+      // …We'll need variables, won't we?
+      ``,
+      // And here, do we fetch a small dataset like MNIST, create a simple NN regressor, and optimize it?
+    ],
+  },
+
+  // TODO: `callAdjust(expr)` that compiles `expr` and its adjustment, sets adjustSave in env, calls `expr`, transfers adjustSave to adjustLoad in env, calls adjustment, assert exact-ness of reversal, saves the compiled expr and its adjustment in the replay buffer, then returns the result of calling `expr`.
+  //   The paperclip maximizer. We'll need a separate learnable scaffolding.
+
+
+
+/* TODO: ML integration.
+ * Variables that accept adjustment (Nesterov momentum seems nice enough to not need anything else).
+ * Adjustable loss function/s between predicted and actual, to minimize. (…How to diversify training data, maybe even shuffle? One way is to make this not adjust in some cases, but that seems too inefficient… Should we create some sort of dependency DAG for the replay, and backprop only on its parts, updating frozen-input-state sometimes or at the start of each epoch? Will this disrupt gradient flow?)
+ * …Some choices, of some kind, and have functions with them be able to be rewritten into one of options or the choice? It sounds amazingly useful for generation of things like NNs, but how to formalize this?…
+ *   (There are many lower-level choices, such as what exactly should each choice optimize, and when to rewrite, and what to rewrite each node to… But what else?)
+ *   (And also, what exactly would we actually use it for? Keeping your feet on the ground is important.)
+ *   Lower-level things first, maybe? `_defaultNN(inSz, outSz)`, `recursiveRNN(nn, sz)`, `choice(argmax)(env)(...options)` to maximize explicitly, `num(...sizes)(env)`, `assign(node, actual)`… The "recursive RNN" (is it a stack? Is it an RNN; a stack of RNNs? Can it be used separately from functions?) and "env" concepts are unclear. And how would we combine all these into that very high level, to route in every way rather than just this one? (And why are bools and strings missing?)
+    - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc, ins = undefined)`.
+    - Function decorators (for recursivity of RNNs): `_envEnter(env, initialState)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
+  - …Do stuff, in tutorials, like instruction-generation or Metamath or optimizing built-in primitives like peval or `replay` with our ML?
+  - Experiments: …Predicting numbers by regressing their bit-pattern? Stochastically-dense layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution and stochastic-gathering, to go from quadratic parameters to linear? …Instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high; maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs?
+*/
+
+
+
   // TODO: …This won't cut it. We need a high-level plan, going all the way up to creating learning-in all programs, through creating/showcasing simple neural networks as tests, and through Metamath proofs.
   //   Explaining. Open our eyes with our words, to bind us together, strong enough to withstand learning otherwise.
+  //   Fear. Fear of breaking something close to you. That is the thing that prevents exploration. And I am full of it. How to…?
 
-  // TODO: the "Composing a learner out of smaller learners, such as in gradient descent, is efficient. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)." `assign` function.
-
+  // "Composing a learner out of smaller learners, such as in gradient descent, is efficient. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)."
   // "They say that blood is thicker than water. So make sure to drink lots of blood. Put your heart into it!"
   // "Take this knowledge. The world is food for you, and you're a part of it."
   // For a complicated step in a tutorial, have a "safe word" (a long UUID string), established long before.
@@ -5098,9 +5127,6 @@ If using the basic primitives, adjustment must always happen in perfect reversal
       return d(ins, out, dout)
     },
   },
-
-  // TODO: `callAdjust(expr)` that compiles `expr` and its adjustment, sets adjustSave in env, calls `expr`, transfers adjustSave to adjustLoad in env, calls adjustment, assert exact-ness of reversal, saves the compiled expr and its adjustment in the replay buffer, then returns the result of calling `expr`.
-  //   The paperclip maximizer. We'll need a separate learnable scaffolding.
 
   adjustSave:{
     docs:`Saves a newly-allocated array for adjustment.
@@ -6717,119 +6743,119 @@ And parsing is more than just extracting meaning from a string of characters (it
       const styles = opt && opt.style ? defines(lang, style) || style : undefined
       const sourceURL = opt && opt.sourceURL || ''
 
-      let i = 0, lastI = 0
-      const struct = styles && [], Unbound = styles && new Map
-
-      let line = 1, column = 1, lineLengths = sourceURL && []
-      let prevI = 0, localS = str[0], localI = 0, curBegin = 0
-      function localUpdate(newI) {
-        // Update localS/localI/curBegin to match the index.
-        let prev = prevI;  prevI = newI
-        while (newI < curBegin && localI > 0) {
-          moveLines(prev, prev = curBegin)
-          localS = str[--localI]
-          curBegin -= typeof localS == 'string' ? localS.length : 1
+      let [i = 0, lastI = 0, prevI = 0, localS = str[0], localI = 0, curBegin = 0, line = 1, column = 1, lineLengths = sourceURL && [], lines = sourceURL && new Map, columns = sourceURL && new Map, struct = styles && [], Unbound = styles && new Map] = interrupt(parse)
+      try {
+        function localUpdate(newI) {
+          // Update localS/localI/curBegin to match the index.
+          let prev = prevI;  prevI = newI
+          while (newI < curBegin && localI > 0) {
+            moveLines(prev, prev = curBegin)
+            localS = str[--localI]
+            curBegin -= typeof localS == 'string' ? localS.length : 1
+          }
+          while (newI >= curBegin + (typeof localS == 'string' ? localS.length : 1) && localI < str.length) {
+            const next = curBegin + (typeof localS == 'string' ? localS.length : 1)
+            moveLines(prev, prev = next)
+            curBegin = next
+            localS = str[++localI]
+          }
+          moveLines(prev, newI)
         }
-        while (newI >= curBegin + (typeof localS == 'string' ? localS.length : 1) && localI < str.length) {
-          const next = curBegin + (typeof localS == 'string' ? localS.length : 1)
-          moveLines(prev, prev = next)
-          curBegin = next
-          localS = str[++localI]
+        function moveLines(prevI, newI) {
+          if (!sourceURL) return
+          if (typeof localS != 'string') return column += newI - prevI
+          for (let i = prevI; i < newI; ++i)
+            if (localS[i - curBegin] === '\n') lineLengths[line++] = column, column = 1
+            else ++column
+          for (let i = prevI; i-- > newI; )
+            if (localS[i - curBegin] === '\n') column = lineLengths[--line]
+            else --column
         }
-        moveLines(prev, newI)
-      }
-      function moveLines(prevI, newI) {
-        if (!sourceURL) return
-        if (typeof localS != 'string') return column += newI - prevI
-        for (let i = prevI; i < newI; ++i)
-          if (localS[i - curBegin] === '\n') lineLengths[line++] = column, column = 1
-          else ++column
-        for (let i = prevI; i-- > newI; )
-          if (localS[i - curBegin] === '\n') column = lineLengths[--line]
-          else --column
-      }
 
-      function match(f, arg1, arg2, arg3, arg4) {
-        // If a function, call it;
-          // if _specialParsedValue or string or regex, match and return one if possible;
-          // if a number, set global index; if undefined, get global index.
-        if (typeof f == 'function') {
-          const start = i, startLen = struct && struct.length
-          const startLine = line, startColumn = column
-          const r = f(match, _specialParsedValue, arg1, arg2, arg3, arg4)
-          _unrollRest(r)
-          if (start < i) {
-            if (struct) {
-              localUpdate(lastI)
-              lastI < i && typeof localS == 'string' && struct.push(localS.slice(lastI - curBegin, i - curBegin))
-              if (startLen < struct.length-1 || typeof struct[startLen] == 'string') {
-                const a = struct.splice(startLen)
-                Unbound.set(a, r), struct.push(a)
+        function match(f, arg1, arg2, arg3, arg4) {
+          // If a function, call it;
+            // if _specialParsedValue or string or regex, match and return one if possible;
+            // if a number, set global index; if undefined, get global index.
+          if (typeof f == 'function') {
+            const start = i, startLen = struct && struct.length
+            const startLine = line, startColumn = column
+            const r = f(match, _specialParsedValue, arg1, arg2, arg3, arg4)
+            _unrollRest(r)
+            if (start < i) {
+              if (struct) {
+                localUpdate(lastI)
+                lastI < i && typeof localS == 'string' && struct.push(localS.slice(lastI - curBegin, i - curBegin))
+                if (startLen < struct.length-1 || typeof struct[startLen] == 'string') {
+                  const a = struct.splice(startLen)
+                  Unbound.set(a, r), struct.push(a)
+                }
               }
+              localUpdate(i)
             }
-            localUpdate(i)
-          }
-          if (sourceURL && _isArray(r)) lines.set(r, startLine), columns.set(r, startColumn)
-          lastI = i
-          return r
-        } else if (f === _specialParsedValue) {
-          const s = localS
-          if (localS != null && typeof localS != 'string') {
-            return ++i, struct && lastI < i && struct.push(s), lastI = i, localUpdate(i), s
-          }
-        } else if (typeof f == 'string') {
-          if (typeof localS == 'string' && localS.slice(i - curBegin, i+f.length - curBegin) === f)
-            return i += f.length, struct && lastI < i && struct.push(localS.slice(lastI - curBegin, i - curBegin)), lastI = i, localUpdate(i), f || true
-          return false
-        } else if (f instanceof RegExp) {
-          if (typeof localS != 'string') return
-          if (!f.sticky) throw "Matched regexp must be sticky"
-          f.lastIndex = i - curBegin
-          const r = f.exec(localS)
-          if (r)
-            return i+=r[0].length, struct && lastI < i && struct.push(localS.slice(lastI - curBegin, i - curBegin)), lastI = i, localUpdate(i), r[0]
-        } else if (typeof f == 'number') {
-          if (f !== f>>>0) throw "A number must be an index"
-          i = f, localUpdate(i)
-        } else if (f === undefined)
-          return i
-        else throw "Invalid argument to match"
-      }
-      match.notEnoughInfo = msg => { throw localI === str.length ? ['give more', msg] : msg }
-
-      let lines = sourceURL && new Map, columns = sourceURL && new Map
-
-      const u = !lang ? match(parser.topLevel) : match(defines(lang, parse))
-      if (localI < str.length) throw 'Superfluous characters at the end: ' + (typeof localS == 'string' ? localS.slice(i - curBegin) : '···')
-
-      // Do binding with the original⇒copy map preserved so that we can style structure bottom-up properly.
-      const env = (styles || sourceURL) && new Map
-      let b = styles || sourceURL ? bound(ctx, u, true, env) : bound(ctx, u, true)
-      try { b = makeGraph(b) } catch (err) { console.error('When parsing', ...str, ':\n', err) } // This swallowing is not user-friendly.
-
-      function styleNode(struct) {
-        if (typeof document != ''+void 0 && struct instanceof Node) return struct
-        let unb, v
-        if (!Unbound.has(struct) && typeof struct == 'string' && ctx.has(label(struct)))
-          unb = label(struct), v = ctx.get(label(struct))
-        else
-          unb = Unbound.get(struct), v = ctx.has(unb) ? ctx.get(unb) : env.has(unb) ? env.get(unb) : unb
-        if (typeof struct == 'string' && (struct === ' ' || !struct.trim()) && unb === undefined && v === undefined)
-          return elem('space', struct)
-        if (_isArray(struct)) {
-          struct = struct.map(styleNode)
-          if (struct.length == 1 && (_isArray(struct[0]) || typeof document != ''+void 0 && struct[0] instanceof Node))
-            return struct[0]
+            if (sourceURL && _isArray(r)) lines.set(r, startLine), columns.set(r, startColumn)
+            lastI = i
+            return r
+          } else if (f === _specialParsedValue) {
+            const s = localS
+            if (localS != null && typeof localS != 'string') {
+              return ++i, struct && lastI < i && struct.push(s), lastI = i, localUpdate(i), s
+            }
+          } else if (typeof f == 'string') {
+            if (typeof localS == 'string' && localS.slice(i - curBegin, i+f.length - curBegin) === f)
+              return i += f.length, struct && lastI < i && struct.push(localS.slice(lastI - curBegin, i - curBegin)), lastI = i, localUpdate(i), f || true
+            return false
+          } else if (f instanceof RegExp) {
+            if (typeof localS != 'string') return
+            if (!f.sticky) throw "Matched regexp must be sticky"
+            f.lastIndex = i - curBegin
+            const r = f.exec(localS)
+            if (r)
+              return i+=r[0].length, struct && lastI < i && struct.push(localS.slice(lastI - curBegin, i - curBegin)), lastI = i, localUpdate(i), r[0]
+          } else if (typeof f == 'number') {
+            if (f !== f>>>0) throw "A number must be an index"
+            i = f, localUpdate(i)
+          } else if (f === undefined)
+            return i
+          else throw "Invalid argument to match"
         }
-        if (sourceURL && lines.has(unb))
-          (_resolveStack.location || (_resolveStack.location = new WeakMap)).set(v, [sourceURL, lines.get(unb), columns.get(unb)])
-        const s = styles(struct, v, unb, ctx)
-        if (typeof Element != ''+void 0 && s instanceof Element) elemValue(s, v)
-        return s
+        match.notEnoughInfo = msg => { throw localI === str.length ? ['give more', msg] : msg }
+
+        let u
+        try { u = !lang ? match(parser.topLevel) : match(defines(lang, parse)) }
+        catch (err) { throw err !== interrupt ? err : error("Interrupts during syntax parsing is not allowed (`makeGraph` can have those, though)") }
+        if (localI < str.length) throw 'Superfluous characters at the end: ' + (typeof localS == 'string' ? localS.slice(i - curBegin) : '···')
+
+        // Do binding with the original⇒copy map preserved so that we can style structure bottom-up properly.
+        const env = (styles || sourceURL) && new Map
+        let b = styles || sourceURL ? bound(ctx, u, true, env) : bound(ctx, u, true)
+        try { b = makeGraph(b) } catch (err) { if (err === interrupt) throw err;  b = _errorRepr(err) }
+
+        function styleNode(struct) {
+          if (typeof document != ''+void 0 && struct instanceof Node) return struct
+          let unb, v
+          if (!Unbound.has(struct) && typeof struct == 'string' && ctx.has(label(struct)))
+            unb = label(struct), v = ctx.get(label(struct))
+          else
+            unb = Unbound.get(struct), v = ctx.has(unb) ? ctx.get(unb) : env.has(unb) ? env.get(unb) : unb
+          if (typeof struct == 'string' && (struct === ' ' || !struct.trim()) && unb === undefined && v === undefined)
+            return elem('space', struct)
+          if (_isArray(struct)) {
+            struct = struct.map(styleNode)
+            if (struct.length == 1 && (_isArray(struct[0]) || typeof document != ''+void 0 && struct[0] instanceof Node))
+              return struct[0]
+          }
+          if (sourceURL && lines.has(unb))
+            (_resolveStack.location || (_resolveStack.location = new WeakMap)).set(v, [sourceURL, lines.get(unb), columns.get(unb)])
+          const s = styles(struct, v, unb, ctx)
+          if (typeof Element != ''+void 0 && s instanceof Element) elemValue(s, v)
+          return s
+        }
+        styles && Unbound.set(struct, u)
+        return styles ? [b, styleNode(struct)] : b
+      } catch (err) {
+        if (err === interrupt) interrupt(parse, _tmp().length=0, _tmp().push(i, lastI, prevI, localS, localI, curBegin, line, column, lineLengths, lines, columns, struct, Unbound))
+        throw err
       }
-      styles && Unbound.set(struct, u)
-      let styled = styles && styleNode(struct)
-      return styles ? [b, styled] : b
     },
   },
 
