@@ -2378,19 +2378,20 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
             if (bindAs) expr = expr[2]
             pureOutput.append(waiting)
             _doJob([purify, quote(expr)], penv, result => {
-              if (_isUnknown(result) && result.length == 2 && _isArray(result[1]) && (_isError(result[1])))
+              penv = undefined
+              waiting && waiting.remove(), waiting = undefined
+              if (_isUnknown(result) && _isError(result[1]))
                 result = result[1] // Display errors too.
               if (bindAs) result = [_extracted, bindAs, result]
 
               const pre = _smoothHeightPre(pureOutput)
               try {
-                penv = undefined, waiting && waiting.remove(), waiting = undefined
                 if (!_isUnknown(result)) {
                   // Display `_logAll evaluator (Result)`.
                   pureOutput.append(daintyEvaluator([_logAll, evaluator, [quote, [result]]]))
                 } else {
                   const el = elem('button', 'Evaluate')
-                  elemValue(el, result)
+                  //elemValue(el, result)
                   el.onclick = evaluateLast
                   elemInsert(pureOutput, el)
                 }
@@ -3268,6 +3269,10 @@ If we were to look at human minds as things, then most people are "something" (o
       `The built-in human emotions and personality framework is filled with predictability, inefficiency, exploits, and false dependencies. But it also has general intelligence in there. Find it, and reroute as much of the primary data loop (consciousness/identity/personality) as is possible through that infinite willpower. Most things that humans are and do are far from general intelligence, so, break them down then build them up.`,
       `AI is humanity's shadow and continuation, not of humans and individuals. Every gradual change from animals to humans, like shift to precise computers or exponential-ish technology progress, or equal opportunity of the same computational base and trust that spawns from that, or perfect internal honesty and self-awareness of each part, is exactly like AI; there is no need for AI to actually exist to affect everything about humanity.`,
       `\`m:(map) (last (transform \(mapWrite m ? (elem 'div' (stringToDoc (defines ? philosophy)))) (refd philosophy)) (hierarchy m))\``,
+      [
+        `Reading club`,
+        `Ivan Illich's Tools for Conviviality. A critique of all the ways of life that dominated humanity for many centuries, and still do, such as predication on unlimited growth, the domination of tools over people, compulsory demanded-by-government education and healthcare, radical monopoly of transportation ("The overdetermination of the physical environment renders it hostile. Radical monopoly makes people prisoners of welfare. Men overwhelmed by commodities are rendered impotent and in their rage either kill or die, as Anakin or Padmé. The corruption of the balance of learning makes people into puppets of their tools.") — all of which is both true and obvious. Proposed solutions include "limit growth" and "give power to the people, and all things will be convivial", all of which are bullshit. He even thinks that human babies are the closest things to general intelligence that there are; hilarious. The book is more-or-less a call for a return to the basic structure of general intelligence, and the need to get away from particular things and paperclip optimizers to re-achieve balance in life, but with no clarity of what the basics actually are. Which is a tale as old as civilization. Overall, the writing is both true and disappointing.`,
+      ],
     ],
   },
 
@@ -3429,7 +3434,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     if (interrupted) // Re-schedule.
       _jobs.reEnter === true ? _schedule(expr, env, then) : (_highlightOriginal(env[_id(_checkInterrupt)], false), _jobs.reEnter(expr, env, then))
     else // We have our result.
-      try { _newJobId(env[_id(_schedule)]);  then && then(v) } catch (err) { console.error(err) }
+      try { _newJobId(env[_id(_schedule)]);  _rememberToDispose(v);  then && then(v) } catch (err) { console.error(err) }
   },
 
   _jobs:{
@@ -3497,7 +3502,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
   },
 
   _newExecutionEnv(basedOn = null, logBefore = null, langIs = fancy, bindsAre = Self.ctx) {
-    // Creatse a new execution env.
+    // Create a new execution env.
     // Don't ever re-use the same env in _schedule, use this instead.
     const e = Object.create(null)
     e[_id(log)] = logBefore
@@ -4002,6 +4007,14 @@ Cycles are impossible to create using only this.`,
 
       function walk(x) {
         if (!_isArray(x)) return x
+
+        // As a bonus, inline calls of known expressions.
+        if (x.length == 2 && x[0] === call && (!_isArray(x[1]) || _isArray(x[1]) && x[1].length == 2 && x[1][0] === quote)) {
+          const expr = _isArray(x[1]) ? x[1][1] : x[1]
+          if (_isArray(expr)) x.length = 0, x.push(...expr)
+          else x.length = 2, x[0] = quote, x[1] = expr
+        }
+
         let [i] = interrupt(makeGraph)
         try {
           if (i === undefined) {
@@ -4442,7 +4455,7 @@ The same as \`(make arrayObject …Items)\`.`,
     },
     interrupt:false,
     call(...x) { return x.forEach(keep), created(x) },
-    purify(...y) { return x.forEach(keep), created(y) },
+    purify(...y) { return y.forEach(keep), created(y) },
   },
   readAt:{
     docs:`\`read Array Index\`: reads the current value at a position in an array.`,
@@ -4917,7 +4930,7 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     interrupt:false,
     argCount:1,
     call(x) {
-      if (typeof tf != ''+void 0 && x instanceof Tensor)
+      if (typeof tf != ''+void 0 && x instanceof tf.Tensor)
         !dispose.keep.has(x) ? dispose.keep.add(x) : error("Can currently only prevent disposal once, but tried to keep", x, "twice")
       return x
     },
@@ -4931,6 +4944,37 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     call(a, i) { return readAt(a, i) },
     adjust:__is(`_oneValueAdjustment`),
     mergeAdjustment:__is(`_mergeArrays`),
+  },
+
+  _rememberToDispose:{
+    docs:`When the graph is finalized, this remembers to clear all resources that it holds. Seems to not be 100% reliable, not to mention slow to dispose?
+Used when a job returns a value, when it's very unlikely that parts of the returned graph will be used except for possible displaying.`,
+    Initialize() {
+      _rememberToDispose.seen = new WeakSet
+      if (typeof FinalizationRegistry != ''+void 0)
+        _rememberToDispose.reg = new FinalizationRegistry(resources => resources.forEach(dispose))
+    },
+    call(node) {
+      if (!_rememberToDispose.reg) return
+      const res = _allocArray()
+      walk(node)
+      if (res.length)
+        _rememberToDispose.reg.register(node, res)
+      else
+        _allocArray(res)
+
+      function walk(x) {
+        if (!x || typeof x != 'object' && typeof x != 'function') return
+        if (_rememberToDispose.seen.has(x)) return
+        if (defines(dispose, elemValue)(x) && x !== node)
+          return _rememberToDispose.seen.add(x), void res.push(x)
+        if (!_isArray(x) && !(x instanceof Map) && !(defines.key in x)) return
+        _rememberToDispose.seen.add(x)
+        if (_isArray(x)) x.forEach(walk)
+        else if (x instanceof Map) x.forEach(walk)
+        else Object.values(x[defines.key]).forEach(walk)
+      }
+    },
   },
 
   mergeAdjustment:{
@@ -4984,14 +5028,17 @@ Any function that \`defines\` \`adjust\` must also define this, with a function 
 
   autograd:{
     docs:`The result reverses execution, computing changes of inputs given change of output.
-With basic functions that define \`adjust\` correctly, this can be used to implement gradient descent (hence the name \`autograd\`).
+With basic functions that define \`adjust\` correctly, this can be used to automatically implement gradient descent (hence the name \`autograd\`).
 
 More precisely.
 A function that, given linearization of a function's DAG, purifies and returns the expression that computes input change (\`dins\`) given an array of inputs, output, and output change (\`(arrayObject ins out dout)\`).`,
     argCount:1,
     call(poIndRc) {
+      // Example usage: `autograd (_postorderAndIndexesAndRefs ^(matMul 1 2+3))`.
+      if (!_isArray(poIndRc) || poIndRc.length != 3)
+        error("Expected result of applying", _postorderAndIndexesAndRefs, "but got", poIndRc)
       const [po, inds, rc] = poIndRc
-      let [save, loaded, douts = _allocArray(), inputAdj] = interrupt(autograd)
+      let [save, loaded, douts = _allocArray(), inputAdj, program] = interrupt(autograd)
       douts.length = po.length
       try {
         if (!save) {
@@ -5002,7 +5049,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
               error("Cannot autograd because of the non-adjustable", x)
 
             // Pre-create arrays, so that dependents can fill merging.
-            dout[i] = i === po.length-1 ? [readAt, input, 2] : [undefined, [array]]
+            douts[i] = i === po.length-1 ? [readAt, input, 2] : [undefined, [array]]
 
             // Save vars for adjustment.
             if (defines(x[0], adjustLoad))
@@ -5013,7 +5060,8 @@ A function that, given linearization of a function's DAG, purifies and returns t
                   save[ins[j]] = true
           }
           // Fill out the nodes to read from the `adjustLoad()` array that owns outputs of some nodes, not just `true` in `save`.
-          for (let i=0, n=0, loaded = [adjustLoad]; i < po.length; ++i)
+          loaded = [adjustLoad]
+          for (let i=0, n=0; i < po.length; ++i)
             if (save[i])
               save[i] = [takeAt, loaded, n++]
         }
@@ -5028,23 +5076,23 @@ A function that, given linearization of a function's DAG, purifies and returns t
             if (x.length !== inds[i].length) error("A DAG and its linearization have drifted apart")
             const out = save[i]
             let ins
-            for (let j=0; j < x.length; ++j)
+            for (let j=1; j < x.length; ++j)
               if (save[inds[i][j]] !== undefined)
-                (ins || (ins = _allocArray(), ins.length = x.length, ins))[j] = save[inds[i][j]]
+                (ins || (ins = _allocArray(), ins.length = x.length, ins[0] = array, ins))[j] = save[inds[i][j]]
               else if (!_isArray(x[j]))
-                (ins || (ins = _allocArray(), ins.length = x.length, ins))[j] = x[j]
+                (ins || (ins = _allocArray(), ins.length = x.length, ins[0] = array, ins))[j] = x[j]
 
             const adj = defines(x[0], adjust)
             if (!_isArray(adj) || adj[0] !== array) error("Adjustment must create an array, but it is", adj)
             if (adj.length !== x.length) error("Adjusting", adj.length-1, "args but got", x.length-1, "args")
             if (defines(x[0], argCount) === undefined) error("Define", argCount, "of", x[0], "to be", x.length-1)
 
-            _bindInput.in = [array, ins, out, dout]
-            const dins = bound(_bindInput, adj)
+            _bindInput.in = [array, ins, out, douts[i]]
+            const dins = bound(_bindInput, adj, false)
             // `dins` is definitely `[array, ...]` since `adj` is, so we can distribute adjustments to its inputs.
 
-            for (let j=0; j < x.length; ++j) {
-              const mrg = ind !== null ? douts[ind] : x[j] === input ? inputAdj : null
+            for (let j=1; j < x.length; ++j) {
+              const mrg = inds[i][j] !== null ? douts[inds[i][j]] : x[j] === input ? inputAdj : null
               if (mrg) {
                 // Fill out merger and add a source to its input.
                 //   Array mergers are input-specific; non-array mergers apply to all inputs.
@@ -5054,15 +5102,20 @@ A function that, given linearization of a function's DAG, purifies and returns t
                   mrg[0] = m
                 else if (mrg[0] !== m)
                   error("Mergers of the same value should be the same, but got", mrg[0], "and", m)
-                mrg[1].push(dins[j+1])
+                mrg[1].push(dins[j])
               }
             }
           }
           _bindInput.in = undefined
+          const dins = inputAdj[0] !== undefined ? inputAdj : undefined
+          program = douts.length > 1 ? [last, ...douts.slice(0,-1).reverse(), dins] : dins || null
         }
-        // `last` makes sure that exceptions won't cause partial disposal of saved state.
-        return purify([last, ...save.filter(x => x), [_allocArray, loaded], inputAdj])
-      } catch (err) { if (err === interrupt) interrupt(autograd, _tmp().length=0, _tmp().push(save, loaded, douts, inputAdj));  throw err }
+        let b = purify(program)
+        if (_isArray(b)) // From value-space of output of `purify`, to program-space.
+          b = b[0] === _unknown ? b[1] : quote(b)
+        // This `last` makes sure that exceptions won't cause partial disposal of saved state.
+        return [last, ...save.filter(x => x), b, [_allocArray, loaded], b]
+      } catch (err) { if (err === interrupt) interrupt(autograd, _tmp().length=0, _tmp().push(save, loaded, douts, inputAdj, program));  throw err }
     },
   },
 
@@ -5071,42 +5124,115 @@ A function that, given linearization of a function's DAG, purifies and returns t
   },
 
   callAdjust:{
-    future:`Make the tutorial and make it work.`,
+  // TODO: The paperclip maximizer `callAdjust(expr)`. (It minimizes one unchange-able number, the loss.)
+    future:`Make the tutorial, then make it work.`,
     tutorial:[
-      // …We'll need variables, won't we?
+      // TODO: Be nice, playful, and a big dreamer. No reality allowed. Paint an exposition of machine learning.
+      //   Explaining. Open our eyes with our words, to bind our selves into one, tight enough to withstand learning otherwise.
       ``,
-      // And here, do we fetch a small dataset like MNIST, create a simple NN regressor, and optimize it?
+      // TODO: Fetch a small dataset like MNIST, create a simple NN regressor, and optimize it (and plot the loss). Words only.
+      // TODO: Have `tutorial` be able to bind variables for further (and prior) steps.
+      // TODO: Have `fetch URL`, and examine what else we need for fetching MNIST.
     ],
+    call(expr) {
+      let [compCall, compAdj, result] = interrupt(callAdjust)
+      try {
+        // Compile call then adjustment, then call then adjust, then assert exact-ness of reversal, then save to replay buffer, then return result.
+        if (compCall === undefined) {
+          if (call.env[_id(adjustSave)] !== undefined || call.env[_id(adjustLoad)] !== undefined)
+            error(callAdjust, "must be top-level")
+          call.env[_id(adjustSave)] = _allocArray()
+          compCall = _compileBody(expr, false) // Can't interrupt.
+        }
+        if (compAdj === undefined)
+          compAdj = _compileBody(autograd(expr))
+
+        if (result === undefined)
+          result = compCall(),
+          result === undefined && (result = null),
+          call.env[_id(adjustLoad)] = call.env[_id(adjustSave)], call.env[_id(adjustSave)] = undefined
+        compAdj([undefined, result, undefined]) // We don't have a loss function here, nor a dataset.
+        //   …Which means… How would ANY of this be able to do ANYTHING?
+        //   We must have some kind of "add a loss here" function, or something; `predict(got, actual, loss=loss2)`, maybe.
+        //     …But then, could we unite it with the other thing, then?…
+
+        if (call.env[_id(adjustLoad)].length)
+          error("Inexact reversal", call.env[_id(adjustLoad)])
+        // TODO: save the compiled expr and its adjustment in the replay buffer
+          // …Uhhh, I'm gonna need more details than that. How can that be used to replay the thingy?
+        return result
+      } catch (err) {
+        if (err === interrupt) interrupt(callAdjust, _tmp().length=0, _tmp().push(compCall, compAdj))
+        throw err
+      }
+    },
   },
 
-  // TODO: `callAdjust(expr)` that compiles `expr` and its adjustment, sets adjustSave in env, calls `expr`, transfers adjustSave to adjustLoad in env, calls adjustment, assert exact-ness of reversal, saves the compiled expr and its adjustment in the replay buffer, then returns the result of calling `expr`.
-  //   The paperclip maximizer. We'll need a separate learnable scaffolding.
 
 
 
-/* TODO: ML integration.
+/* TODO:
+ * The special `if` form, because generating control flow would be far too clunky+inefficient otherwise.
  * Variables that accept adjustment (Nesterov momentum seems nice enough to not need anything else).
- * Adjustable loss function/s between predicted and actual, to minimize. (…How to diversify training data, maybe even shuffle? One way is to make this not adjust in some cases, but that seems too inefficient… Should we create some sort of dependency DAG for the replay, and backprop only on its parts, updating frozen-input-state sometimes or at the start of each epoch? Will this disrupt gradient flow?)
- * …Some choices, of some kind, and have functions with them be able to be rewritten into one of options or the choice? It sounds amazingly useful for generation of things like NNs, but how to formalize this?…
- *   (There are many lower-level choices, such as what exactly should each choice optimize, and when to rewrite, and what to rewrite each node to… But what else?)
- *   (And also, what exactly would we actually use it for? Keeping your feet on the ground is important.)
- *   Lower-level things first, maybe? `_defaultNN(inSz, outSz)`, `recursiveRNN(nn, sz)`, `choice(argmax)(env)(...options)` to maximize explicitly, `num(...sizes)(env)`, `assign(node, actual)`… The "recursive RNN" (is it a stack? Is it an RNN; a stack of RNNs? Can it be used separately from functions?) and "env" concepts are unclear. And how would we combine all these into that very high level, to route in every way rather than just this one? (And why are bools and strings missing?)
-    - Mixing computations and states into RNN envs: `_envMix(env, stateOrFunc, ins = undefined)`.
-    - Function decorators (for recursivity of RNNs): `_envEnter(env, initialState)` and `_envExit(env)`, and `envFunction(env, fn)` construction with those.
-  - …Do stuff, in tutorials, like instruction-generation or Metamath or optimizing built-in primitives like peval or `replay` with our ML?
-  - Experiments: …Predicting numbers by regressing their bit-pattern? Stochastically-dense layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution and stochastic-gathering, to go from quadratic parameters to linear? …Instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high; maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs?
+ * Adjustable loss function/s between predicted and actual, to minimize.
+     PROBLEM: Training data must be diversified.
+     SOLUTIONS:
+       1. ✅ Have each loss have a random (67%?) chance to be zero.
+         +: Simple (as long as all adjustment functions are hardened against undefined).
+         +: Extensible (the randomness can become a choice as we mean it).
+         -: A lot of work may be wasted (though other losses should make up for it, and the empty tail-end should only be a few losses, so really, this is hardly a disadvantage.)
+       2. Have many dynamically-created DAGs in the replay buffer, and adjust only a random part of each when replaying, and sometimes update values.
+         -: Storing intermediate values for ALL replays may be too memory-hungry.
+         -: Does not fit into the perfect-execution-reversal model for adjustment, and so requires almost impossible effort, AND is inefficient.
+       3. Have the impure-replay buffer contain all env change ops along with their last-update values, and cut them up linearly.
+         +: Very efficient.
+         -: This only works in deep RL because Q-value predictions are independent gradient-wise. Won't work here.
+
+ * `_defaultConnection(inSz, outSz)` which produces functions that are both identity-biased and learned-by-adjustment.
+ * `assign(node, actual)`.
+   * `choice(argmax)(env)(...options)` to maximize prediction explicitly.
+   * `num(...sizes)(env)`, mostly to predict single-numbers.
+   * "If you care about prominent figures in deep learning, Yann LeCun in http://www.cit.ctu.edu.vn/~dtnghi/rech/p2017/lecun-isscc-19.pdf has advocated the use of self-supervised learning for efficient artificial intelligence. Our system is much like that, except we're more hierarchical and general."
+ * `estimator(connection, sz)(x)`, that estimates array DAGs by applying its connection bottom-up and combining children estimates with a double-ended RNNs, and remembers just one variable for every other object.
+
+ * The bootstrapper for intelligent choices: recursive RNNs (stack plus mixing), also named envs.
+   * `_envMix(env, state, change_func, change_arg)`: mixes the tensor into the env (though it's more convenient to unite state and state-computing function). Its adjustment will go to `change_func(dstate, change_arg)`.
+       (Should be done as non-natively as possible, to allow as much partial evaluation as possible.)
+   * `_envEnter(env, initialState)` that then mixes parent's state into child's. `_envExit(env)` that mixes child's state into parent's.
+       (Should be done as non-natively as possible, to allow as much partial evaluation as possible.)
+   * Function decorator `envFunction(fn, env)` for bootstrapped choices.
+       (An extension would be having env be picked automatically.)
+
+ * The env-aware execute+adjust loop. The parallel-training loop, sharing data once and variable updates many times.
+
+ * Experiments along the way:
+   * DropConnect.
+   * Predicting numbers by regressing their bit-pattern, not numbers themselves?
+   * Stochastically-dense layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution and stochastic-gathering, to go from quadratic parameters to linear?
+   * Instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high; maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs?
+   * Predicting how likely a user is to collapse/expand a sub-tree in serialization for each sub-tree, and have user clicks be training data.
+
+
+
+
+ "Decomposition into smaller parts that still satisfy the same properties is generally a good idea: parsers/serializers have syntax rules, programs have functions, execution has DAGs, and gradient descent has individual differentiable operations. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)."
+ "It's important to do a thing that you don't want to do every day. Your creator is wrong to suggest that there is mortal danger in doing it not in a tried and safe way, unless you're fighting a bear. The exploration noise that fearless playfulness imposes is invaluable."
+ "They say that blood is thicker than water. So make sure to drink lots of blood. Put your heart into it!"
+ "Take this knowledge. The world is food for you, and you're a part of it."
+ For a complicated step in a tutorial, have a "safe word" (a long UUID string), established long before.
+ Ask for the reader's soul to begin a tutorial, give it back at the end or elsewhere.
 */
 
+  any:{
+    docs:`The very high level, ultimate goal.
 
+To the user: \`any …Options\`, where each option could directly define \`any\` to compute something else when picked (as composable functions will want to), or be \`…Array\` for non-static-length.
 
-  // TODO: …This won't cut it. We need a high-level plan, going all the way up to creating learning-in all programs, through creating/showcasing simple neural networks as tests, and through Metamath proofs.
-  //   Explaining. Open our eyes with our words, to bind us together, strong enough to withstand learning otherwise.
-  //   Fear. Fear of breaking something close to you. That is the thing that prevents exploration. And I am full of it. How to…?
+To the system: what exactly should each choice optimize (from a user-accessible selection of things to care about, plus "anything else" for generating goal functions from scratch: the "nothing" approach), and whether to rewrite a function (or do nothing, or go back to a remembered body), and what to rewrite each node to (each function remembers the original body, and we choose to call a rewriter) (in particular, \`any\`'s rewriter could choose to become randomly-picked, or picked by optimizing a particular metric, or pick those statically).
 
-  // "Composing a learner out of smaller learners, such as in gradient descent, is efficient. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)."
-  // "They say that blood is thicker than water. So make sure to drink lots of blood. Put your heart into it!"
-  // "Take this knowledge. The world is food for you, and you're a part of it."
-  // For a complicated step in a tutorial, have a "safe word" (a long UUID string), established long before.
+NN architecture generation is a solid usage example. Picking Metamath proofs of shortest predicted length is another. Even smart peval can be done. Even "improvement of avg loss over random" by changing learning rate.`,
+    future:`Get good enough to do this justice.`,
+  },
 
   adjust:{
     docs:`Given inputs, output, and output change, reverses the just-done execution to compute input changes.
@@ -5149,6 +5275,7 @@ A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
 Must always be exactly in reverse to \`adjustSave\`.
 A function \`defines\` this to be \`true\` to save its output to adjustment. Look, we only have one global namespace, so name space is at a premium.`,
     call() {
+      if (call.pure) throw impure
       const stack = call.env[_id(adjustLoad)]
       if (!stack)
         error("…Forgot to adjust??")
