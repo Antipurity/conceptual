@@ -421,8 +421,8 @@ Label-binding environment is not preserved.`,
       lookup.parents = new Map
       function markParents(x, p, prioritize) {
         if (lookup.parents.has(x) || x === Self)
-          return prioritize && (lookup.parents.delete(x), lookup.parents.set(x, p))
-        if (p !== undefined) lookup.parents.set(x, p)
+          return prioritize && x !== p && (lookup.parents.delete(x), lookup.parents.set(x, p))
+        if (p !== undefined && x !== p) lookup.parents.set(x, p)
         if (!x || typeof x != 'object' && typeof x != 'function') return
         if (p === undefined && backctx.has(x) && backctx.get(x)[0] === '_') lookup.parents.set(x, System)
         if (x instanceof Map || _isArray(x)) {
@@ -567,7 +567,7 @@ Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.s
   },
 
   Deinitialize:{
-    docs:`For pretending that we never existed.`,
+    docs:`The self-destruct switch. For pretending that we never existed.`,
     call() {
       if ('ctx' in Self) throw "Delete Self.ctx to confirm"
       // Else execute order 66.
@@ -1081,7 +1081,7 @@ separated-text>serialization, text>serialization { background-color:rgba(50%, 50
         const oldResources = elemValue.resources;  elemValue.resources = new Set
         _schedule([_revisitElemValue, Self.into], _newExecutionEnv(), () => {
           domgc = false
-          oldResources.forEach(r => !elemValue.resources.has(r) && dispose(r))
+          oldResources.forEach(r => !elemValue.resources.has(r) && !_rememberToDispose.seen.has(r) && dispose(r))
         })
           // It is possible to observe not-fully-restored states, but that is fine for interface GC.
       })
@@ -2084,7 +2084,10 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     if (clear) return _invertBindingContext.cache.delete(ctx)
     if (_invertBindingContext.cache.has(ctx)) return _invertBindingContext.cache.get(ctx)
     const backctx = new Map
-    ctx.forEach((to, name) => _isLabel(name) && (name = name[1], (name[0] !== '_' || !backctx.has(to)) && backctx.set(to, name)))
+    ctx.forEach((to, name) => {
+      if (_isLabel(name))
+        name = name[1], (name[0] !== '_' || !backctx.has(to)) && backctx.set(to, name)
+    })
     _invertBindingContext.cache.set(ctx, backctx)
     return backctx
     // .cache
@@ -3271,7 +3274,8 @@ If we were to look at human minds as things, then most people are "something" (o
       `\`m:(map) (last (transform \(mapWrite m ? (elem 'div' (stringToDoc (defines ? philosophy)))) (refd philosophy)) (hierarchy m))\``,
       [
         `Reading club`,
-        `Ivan Illich's Tools for Conviviality. A critique of all the ways of life that dominated humanity for many centuries, and still do, such as predication on unlimited growth, the domination of tools over people, compulsory demanded-by-government education and healthcare, radical monopoly of transportation ("The overdetermination of the physical environment renders it hostile. Radical monopoly makes people prisoners of welfare. Men overwhelmed by commodities are rendered impotent and in their rage either kill or die, as Anakin or Padmé. The corruption of the balance of learning makes people into puppets of their tools.") — all of which is both true and obvious. Proposed solutions include "limit growth" and "give power to the people, and all things will be convivial", all of which are bullshit. He even thinks that human babies are the closest things to general intelligence that there are; hilarious. The book is more-or-less a call for a return to the basic structure of general intelligence, and the need to get away from particular things and paperclip optimizers to re-achieve balance in life, but with no clarity of what the basics actually are. Which is a tale as old as civilization. Overall, the writing is both true and disappointing.`,
+        `Ivan Illich's Tools for Conviviality. A critique of all the ways of life that dominated humanity for many centuries, and still do, such as predication on unlimited growth, the domination of tools over people, compulsory demanded-by-government education and healthcare, radical monopoly of transportation ("The overdetermination of the physical environment renders it hostile. Radical monopoly makes people prisoners of welfare. Men overwhelmed by commodities are rendered impotent and in their rage either kill or die, as Anakin or Padmé. The corruption of the balance of learning makes people into puppets of their tools.") — all of which is both true and obvious. Proposed solutions include "limit growth" and "give power to the people, and all things will be convivial", all of which are bullshit. He even thinks that human babies are the closest things to general intelligence that there are; hilarious. The book is more-or-less a call for a return to the basic structure of general intelligence, and the need to get away from particular things and paperclip optimizers to re-achieve balance in life, but with no clarity of what the basics actually are. Which is a tale as old as civilization. Overall, the writing is both true and disappointing.
+Little more than a lament on living in a paperclip optimizer, or imperfect/imbalanced self-awareness.`,
       ],
     ],
   },
@@ -3525,6 +3529,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
     e[_id(adjustSave)] = undefined // Stack of arrays of results that adjustment would need.
     e[_id(adjustLoad)] = undefined // Stack of arrays of results that adjustment needs.
+    e[_id(commit)] = undefined // Set of arrays of [value, changeSum, changeCount, …] to commit.
 
     e[_id(userTime)] = 0 // CPU time spent on this job.
     e[_id(realTime)] = undefined // The timestamp of when we last started executing this job.
@@ -4198,6 +4203,26 @@ This embodies a simple principle: a graph cannot be constructed without backpatc
 For example, \`(func input+3) 5\` returns \`8\`.`,
   },
 
+  _adjustFunc:[
+    __is(`adjust`),
+    [__is(`readAt`), 'FUNC', 'a'],
+    [__is(`readAt`), __is(`input`), 0],
+    [__is(`readAt`), __is(`input`), 1],
+    [__is(`readAt`), __is(`input`), 2],
+  ],
+
+  _adjustMultifunc:[
+    __is(`readAt`),
+    [
+      __is(`adjust`),
+      [__is(`readAt`), 'FUNC', 'f'],
+      [__is(`array`), [__is(`readAt`), __is(`input`), 0]],
+      [__is(`readAt`), __is(`input`), 1],
+      [__is(`readAt`), __is(`input`), 2],
+    ],
+    0,
+  ],
+
   func:{
     docs:`\`\\Body\` or \`func Body\`: A construct that can be called to evaluate \`Body\`.
 This has one \`input\`; see \`multifunc\` for multi-input functions.
@@ -4221,10 +4246,24 @@ What a function does, does not change when a node in its body changes. That woul
         d[_id(dispose)] = rcb.some(x => defines(x, dispose))
         _allocArray(rcb)
 
+        d[_id(mergeAdjustment)] = _mergeTensors // Just assume.
+        d[_id(adjust)] = bound(x => x === 'FUNC' ? obj : undefined, _adjustFunc)
+        d[_id(variable)] = true // Make sure that the function is not skipped at adjustment.
+          //   (Checking whether any nodes define `variable` would have been much more accurate, but that's data-dependent, and concepts are immutable.)
+
         Object.freeze(d)
         return obj
       } else {
-        obj.f = _compileBody(x[1])
+        const [poIndRc = _postorderAndIndexesAndRefs(x[1])] = interrupt(func)
+        try {
+          obj.a = autograd(poIndRc)
+          obj.f = _compileBody(x[1], true, poIndRc)
+          poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray)
+        } catch (err) {
+          if (err === interrupt) interrupt(func, _tmp().length=0, _tmp().push(poIndRc))
+          else poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray)
+          throw err
+        }
       }
     },
     nameResult:[
@@ -4456,6 +4495,8 @@ The same as \`(make arrayObject …Items)\`.`,
     interrupt:false,
     call(...x) { return x.forEach(keep), created(x) },
     purify(...y) { return y.forEach(keep), created(y) },
+    adjust:__is(`_dout`),
+    mergeAdjustment:__is(`_mergeArrayItems`),
   },
   readAt:{
     docs:`\`read Array Index\`: reads the current value at a position in an array.`,
@@ -4471,7 +4512,7 @@ The same as \`(make arrayObject …Items)\`.`,
       return impureSave(arr[i])
     },
     adjust:__is(`_oneValueAdjustment`),
-    mergeAdjustment:__is(`_mergeArrays`),
+    mergeAdjustment:__is(`_mergeReads`),
   },
   writeAt:{
     docs:`\`writeAt Array Index Value\`: changes the current value at a position in an array.
@@ -4498,11 +4539,13 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
       if (call.env && call.env[_id(impureLoad)] > 0) return
       if (i !== undefined) {
         if (arr[i] === v) return
+        dispose(arr[i])
         arr[i] = v
       } else {
         // Replace the contents of the whole array.
         if (!_isArray(arr)) error('Expected an array but got', arr)
         if (!_isArray(v)) error('Expected an array to replace', arr, 'with but got', v)
+        arr.forEach(dispose)
         arr.length = 0, arr.push(...v)
       }
       if (observe.rs && observe.rs.has(arr))
@@ -4561,6 +4604,32 @@ When the array head is a \`construct\`-defining \`concept\`, this allows still c
     },
   },
 
+  _mergeArrayItems:{
+    docs:`Gather array item computations that are produced by \`_createOneValueAt\`.`,
+    call(arr) {
+      if (!call.pure) error("Cannot be called directly, is a part of", autograd)
+      const result = [array]
+      // All items in `arr` are `[array, ...items]`; each output item should be `_mergeTensors` of these (or just one item if there's only one).
+      for (let i=0; i < arr.length; ++i)
+        if (!_isArray(arr[i]) || arr[i][0] !== array)
+          error("Wrong format of", arr[i], "(must be [array, ...]), so we cannot adjust it")
+      for (let n=1; true; ++n) {
+        let haveAny = false
+        for (let i=0; i < arr.length; ++i) {
+          if (arr[i].length < n) continue
+          haveAny = true
+          if (result.length <= n)
+            result[n] = arr[i]
+          else if (!_isArray(result[n]) || result[n][0] !== _mergeTensors)
+            result[n] = [_mergeTensors, [array, result[n], arr[i]]]
+          else
+            result[n][1].push(arr[i])
+        }
+        if (!haveAny) break
+      }
+      return _unknown(result)
+    },
+  },
 
   select:{
     docs:`\`select If Then Else …Args\`: calls \`Then …Arg\` if \`If\` is \`true\`, else \`Else …Args\`.
@@ -4583,6 +4652,11 @@ In JS: \`(...args) => f(args)\`.`,
         obj = (...args) => f.f(args)
         const d = obj[defines.key] = Object.create(null)
         d[_id(deconstruct)] = x
+
+        d[_id(mergeAdjustment)] = defines(array, mergeAdjustment)
+        d[_id(adjust)] = bound(x => x === 'FUNC' ? obj : undefined, _adjustMultifunc)
+        d[_id(variable)] = true // Make sure that the function is not skipped at adjustment.
+
         Object.freeze(d)
         return obj
       } else {
@@ -4665,12 +4739,17 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
       `purified`,
       `computation`,
     ],
-    call(x, inputKnown = false, inputValue = input) {
+    call(x, inputValue = input, inputKnown = false, inline = false) {
+      // `inputValue`: what to replace occurences of `input` with.
+      // `inputKnown`: whether `inputValue` is in value-space and known (as opposed to program-space and causing recording, the default).
+      // `inline`: whether we're inlining a function body into a function (so exceptions will not be swallowed/recorded).
       if (!_isArray(x)) return x
       if (x[0] === quote) return x[1]
-      let [i = 0, outputs = _allocArray(), unknown, po, inds, pure = call.pure ? null : new Set] = interrupt(purify)
+
+      if (inputKnown && _isUnknown(inputValue)) inputKnown = false, inputValue = inputValue[1]
+      let [i = 0, outputs = _allocArray(), same = _allocArray(), unknown, po, inds, pure = call.pure ? null : new Set] = interrupt(purify)
       if (!po) [po, inds] = _postorderAndIndexesAndRefs(x)
-      outputs.length = po.length
+      outputs.length = same.length = po.length
       // `unknown` is an array of booleans of length `po.length`, but we only create it on-demand, to optimize for nothing-unknown cases.
       const collected = _allocArray()
       const prevPure = call.pure;  call.pure = pure || call.pure
@@ -4678,12 +4757,14 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
         for (; i < po.length; ++i) {
           // Go through all nodes, collect dependencies, execute nodes, and record those that we can't know.
           collected.length = inds[i].length
+          let inputsAreSame = true
           for (let j=0; j < collected.length; ++j) {
             const ind = inds[i][j]
             let depUnknown = ind !== null && unknown && unknown[ind]
             let depValue = ind !== null ? outputs[ind] : _isArray(po[i][j]) ? po[i][j][1] : po[i][j]
+            if (ind !== null && !same[ind]) inputsAreSame = false
             if (po[i][j] === input)
-              depUnknown = !inputKnown, depValue = inputValue
+              depUnknown = !inputKnown, depValue = inputValue, inputValue !== input && (inputsAreSame = false)
             if (depUnknown) {
               if (!unknown || !unknown[i])
                 for (let k=0; k<j; ++k)
@@ -4711,7 +4792,10 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
               outputs[i] = outputs[i][1], !unknown && (unknown = _allocArray(), unknown.length = po.length), unknown[i] = true
           } catch (err) {
             if (err === impure) {
-              if (unknown && unknown[i])
+              if (inputsAreSame)
+                // There is no need to make a different object.
+                outputs[i] = po[i], same[i] = true
+              else if (unknown && unknown[i])
                 // We've already quoted every known value in `collected` when we were collecting it.
                 outputs[i] = collected.slice()
               else
@@ -4726,13 +4810,14 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
           pure.forEach(x => _isArray(x) ? x.unshift(array) : error("Non-array `created` values are not supported, but got", x)),
           pure.clear()
         outputs[po.length-1] = undefined, outputs.forEach(dispose)
-        _allocArray(outputs), unknown && _allocArray(unknown)
+        _allocArray(outputs), _allocArray(same), unknown && _allocArray(unknown)
         _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
         return !lastUnk ? lastOut : _unknown(lastOut)
       } catch (err) {
         if (err === interrupt) interrupt(purify, _tmp().length=0, _tmp().push(i, outputs, unknown, po, inds, pure))
         if (err === interrupt) throw err
-        return _unknown(_errorRepr(err)) // Don't throw exceptions, return them. Might be a pain point sometimes.
+        if (inline) throw err
+        return _unknown(_errorRepr(err)) // If not inlining, don't throw exceptions, return them.
       } finally { call.pure = prevPure;  _allocArray(collected) }
     },
   },
@@ -4766,6 +4851,16 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
       0,
     ],
     1,
+  ],
+
+  _inC:[
+    __is(`readAt`),
+    [
+      __is(`readAt`),
+      __is(`input`),
+      0,
+    ],
+    2,
   ],
 
   add:{
@@ -4943,7 +5038,7 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     argCount:2,
     call(a, i) { return readAt(a, i) },
     adjust:__is(`_oneValueAdjustment`),
-    mergeAdjustment:__is(`_mergeArrays`),
+    mergeAdjustment:__is(`_mergeReads`),
   },
 
   _rememberToDispose:{
@@ -5012,7 +5107,7 @@ Any function that \`defines\` \`adjust\` must also define this, with a function 
     ],
   ],
 
-  _mergeArrays:{
+  _mergeReads:{
     docs:`Gather array item computations that are produced by \`_createOneValueAt\`.`,
     call(arr) {
       if (!call.pure) error("Cannot be called directly, is a part of", autograd)
@@ -5034,7 +5129,7 @@ More precisely.
 A function that, given linearization of a function's DAG, purifies and returns the expression that computes input change (\`dins\`) given an array of inputs, output, and output change (\`(arrayObject ins out dout)\`).`,
     argCount:1,
     call(poIndRc) {
-      // Example usage: `autograd (_postorderAndIndexesAndRefs ^(matMul 1 2+3))`.
+      // Example usage: `autograd (_postorderAndIndexesAndRefs ^(matMul ? 2+3))`.
       if (!_isArray(poIndRc) || poIndRc.length != 3)
         error("Expected result of applying", _postorderAndIndexesAndRefs, "but got", poIndRc)
       const [po, inds, rc] = poIndRc
@@ -5045,8 +5140,8 @@ A function that, given linearization of a function's DAG, purifies and returns t
           save = _allocArray(), save.length = po.length
           for (let i=0; i < po.length; ++i) {
             const x = po[i], ins = inds[i]
-            if (typeof x[0] != 'function' || !defines(x[0], adjust) || !defines(x[0], mergeAdjustment))
-              error("Cannot autograd because of the non-adjustable", x)
+            if (typeof x[0] != 'function' || !defines(x[0], adjust) || defines(x[0], mergeAdjustment) === undefined)
+              continue
 
             // Pre-create arrays, so that dependents can fill merging.
             douts[i] = i === po.length-1 ? [readAt, input, 2] : [undefined, [array]]
@@ -5073,6 +5168,8 @@ A function that, given linearization of a function's DAG, purifies and returns t
             // Fill in programs for `ins`, `out`, `dout`.
             //   (This loop cannot interrupt.)
             const x = po[i]
+            if (typeof x[0] != 'function' || !defines(x[0], adjust) || defines(x[0], mergeAdjustment) === undefined)
+              continue
             if (x.length !== inds[i].length) error("A DAG and its linearization have drifted apart")
             const out = save[i]
             let ins
@@ -5083,11 +5180,12 @@ A function that, given linearization of a function's DAG, purifies and returns t
                 (ins || (ins = _allocArray(), ins.length = x.length, ins[0] = array, ins))[j] = x[j]
 
             const adj = defines(x[0], adjust)
-            if (!_isArray(adj) || adj[0] !== array) error("Adjustment must create an array, but it is", adj)
-            if (adj.length !== x.length) error("Adjusting", adj.length-1, "args but got", x.length-1, "args")
+            if (_isArray(adj) && adj[0] === array)
+              if (adj.length !== x.length)
+                error("Adjusting", adj.length-1, "args but got", x.length-1, "args")
             if (defines(x[0], argCount) === undefined) error("Define", argCount, "of", x[0], "to be", x.length-1)
 
-            _bindInput.in = [array, ins, out, douts[i]]
+            _bindInput.in = [array, ins, out, _isArray(douts[i]) && douts[i][0] ? douts[i] : undefined]
             const dins = bound(_bindInput, adj, false)
             // `dins` is definitely `[array, ...]` since `adj` is, so we can distribute adjustments to its inputs.
 
@@ -5097,18 +5195,21 @@ A function that, given linearization of a function's DAG, purifies and returns t
                 // Fill out merger and add a source to its input.
                 //   Array mergers are input-specific; non-array mergers apply to all inputs.
                 let m = defines(x[0], mergeAdjustment)
+                if (m === null) continue
                 if (_isArray(m)) m = m[j]
                 if (mrg[0] === undefined)
                   mrg[0] = m
                 else if (mrg[0] !== m)
                   error("Mergers of the same value should be the same, but got", mrg[0], "and", m)
-                mrg[1].push(dins[j])
+                mrg[1].push(_isArray(dins) && dins[0] === array ? dins[j] : [readAt, dins, j-1])
               }
             }
           }
           _bindInput.in = undefined
           const dins = inputAdj[0] !== undefined ? inputAdj : undefined
-          program = douts.length > 1 ? [last, ...douts.slice(0,-1).reverse(), dins] : dins || null
+          // Don't forget to preserve nodes that do not depend on input but still need adjustment (`defines(x, variable)` is `true`).
+          program = [last, ...douts.slice(0,-1).reverse().filter(x => defines(x, variable)), dins]
+          if (program.length == 2) program = program[1] || null
         }
         let b = purify(program)
         if (_isArray(b)) // From value-space of output of `purify`, to program-space.
@@ -5123,43 +5224,45 @@ A function that, given linearization of a function's DAG, purifies and returns t
     return _isArray(x) && x[0] === quote ? x : x === input ? _bindInput.in : undefined
   },
 
-  callAdjust:{
-  // TODO: The paperclip maximizer `callAdjust(expr)`. (It minimizes one unchange-able number, the loss.)
+  callAdjust:{ // (Not a paperclip maximizer anymore, since `autograd` just ignores non-adjustable things.)
+    // TODO: docs.
     future:`Make the tutorial, then make it work.`,
     tutorial:[
       // TODO: Be nice, playful, and a big dreamer. No reality allowed. Paint an exposition of machine learning.
       //   Explaining. Open our eyes with our words, to bind our selves into one, tight enough to withstand learning otherwise.
-      ``,
+      ``, // …or just "Maintenance time. We'll walk through this to make sure that things are working properly."
       // TODO: Fetch a small dataset like MNIST, create a simple NN regressor, and optimize it (and plot the loss). Words only.
       // TODO: Have `tutorial` be able to bind variables for further (and prior) steps.
       // TODO: Have `fetch URL`, and examine what else we need for fetching MNIST.
     ],
     call(expr) {
-      let [compCall, compAdj, result] = interrupt(callAdjust)
+      let [poIndRc, compCall, compAdj, result] = interrupt(callAdjust)
       try {
         // Compile call then adjustment, then call then adjust, then assert exact-ness of reversal, then save to replay buffer, then return result.
         if (compCall === undefined) {
+          poIndRc = _postorderAndIndexesAndRefs(expr)
           if (call.env[_id(adjustSave)] !== undefined || call.env[_id(adjustLoad)] !== undefined)
             error(callAdjust, "must be top-level")
           call.env[_id(adjustSave)] = _allocArray()
-          compCall = _compileBody(expr, false) // Can't interrupt.
+          compCall = _compileBody(expr, false, poIndRc) // Can't interrupt.
         }
-        if (compAdj === undefined)
-          compAdj = _compileBody(autograd(expr))
+        if (compAdj === undefined && _isArray(expr) && expr[0] !== quote)
+          compAdj = _compileBody(autograd(poIndRc))
+        if (poIndRc)
+          poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray), _allocArray(poIndRc), poIndRc = undefined
 
         if (result === undefined)
           result = compCall(),
           result === undefined && (result = null),
           call.env[_id(adjustLoad)] = call.env[_id(adjustSave)], call.env[_id(adjustSave)] = undefined
-        compAdj([undefined, result, undefined]) // We don't have a loss function here, nor a dataset.
-        //   …Which means… How would ANY of this be able to do ANYTHING?
-        //   We must have some kind of "add a loss here" function, or something; `predict(got, actual, loss=loss2)`, maybe.
-        //     …But then, could we unite it with the other thing, then?…
+        compAdj([undefined, result, undefined]) // We don't have a loss function here, nor a dataset. Use `predicts`.
 
-        if (call.env[_id(adjustLoad)].length)
+        if (call.env[_id(adjustLoad)] && call.env[_id(adjustLoad)].length)
           error("Inexact reversal", call.env[_id(adjustLoad)])
+        commit()
         // TODO: save the compiled expr and its adjustment in the replay buffer
-          // …Uhhh, I'm gonna need more details than that. How can that be used to replay the thingy?
+          // …Uhhh, I'm gonna need more details than that. How will that be used to replay the thingy?
+        // …To replay, do we still call this exact function (but maybe with the flag "don't save")?
         return result
       } catch (err) {
         if (err === interrupt) interrupt(callAdjust, _tmp().length=0, _tmp().push(compCall, compAdj))
@@ -5170,32 +5273,211 @@ A function that, given linearization of a function's DAG, purifies and returns t
 
 
 
+  variable:{
+    docs:`A stateful tensor that reacts to \`adjust\`, by subtracting (a simple function of) the change.
+This implements stochastic gradient descent (SGD) with Nesterov momentum. Here, it's not a separate optimizer, but is specified at each variable.
+When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`, the change multiplier (learning rate), and the velocity decay.`,
+    variable:true,
+    call(arr, changeMult, velocityMult) {
+      // `arr` is `[currentValue, nextChange, countOfChanges, velocity]`.
+      // Returning `currentValue + velocity * velocityMult` (Nesterov momentum).
+      const mlt = mul(arr[3], velocityMult)
+      const sm = add(arr[0], mlt)
+      dispose(mlt)
+      return sm
+    },
+    adjust:[
+      __is(`last`),
+      [
+        __is(`writeAt`),
+        __is(`_inA`),
+        3,
+        [
+          __is(`sub`),
+          [
+            __is(`mul`),
+            [__is(`readAt`), __is(`_inA`), 3],
+            __is(`_inC`),
+          ],
+          [
+            __is(`mul`),
+            __is(`_dout`),
+            __is(`_inB`),
+          ],
+        ],
+      ],
+      [
+        __is(`writeAt`),
+        __is(`_inA`),
+        1,
+        [
+          __is(`add`),
+          [__is(`readAt`), __is(`_inA`), 1],
+          [__is(`readAt`), __is(`_inA`), 3],
+        ],
+      ],
+      [
+        __is(`_increment`),
+        __is(`_inA`),
+        2,
+      ],
+      [
+        __is(`willCommit`),
+        __is(`_inA`),
+      ],
+      undefined,
+    ],
+    mergeAdjustment:null,
+  },
+
+  _increment(arr, i) { ++arr[i] },
+
+  commit:{
+    docs:`\`(commit)\` or \`commit false\` to discard changes: commits changes to \`variable\`s that were made in this job.
+Until this is done, the same value of variables is used.`,
+    Initialize() { commit.arrs = new Set },
+    lookup:{
+      willCommit:__is(`willCommit`),
+    },
+    call(perform = true) {
+      if (call.pure) throw impure
+      if (!call.env || !call.env[_id(commit)]) return
+      if (perform)
+        call.env[_id(commit)].forEach(arr => {
+          // arr[0] = arr[0] + arr[1]/arr[2];  arr[1]=arr[2]=0
+          if (!arr[2]) return
+          const dv = tf.div(arr[1], arr[2])
+          const sm = tf.add(arr[0], dv)
+          dispose(dv)
+          writeAt(arr, 0, sm)
+          arr[1] = arr[2] = 0
+        })
+      call.env[_id(commit)].clear()
+    },
+  },
+
+  willCommit(arr) {
+    // Makes the later `commit` commit the change (arr[1]/arr[2]) to the value (arr[0]).
+    !_isArray(arr) && error("Expected an array but got", arr)
+    if (!call.env[_id(commit)]) call.env[_id(commit)] = new Set
+    call.env[_id(commit)].add(arr)
+  },
+
+  _staticallyOverridable:{
+    call(obj, def, overArg, notOver) {
+      if (!call.pure) error("Vassal of purity") // Pffff ha hah, the wording
+      if (!_isArray(obj) && typeof defines(obj, def) == 'function')
+        return _unknown([defines(obj, def), quote(overArg)])
+      return _unknown(quote(notOver))
+    },
+    purify(obj, def, overArgProgram, notOverProgram) {
+      if (!_isArray(obj) && typeof defines(obj, def) == 'function')
+        return _unknown([defines(obj, def), overArgProgram])
+      return _unknown(notOverProgram)
+    },
+  },
+
+  predicts:{
+    docs:`\`predicts Got Actual Loss\` or \`Got = Actual\`: When repeatedly executed, gradually \`adjust\`s \`Got\` into \`Actual\`. (\`Loss\` is \`loss2\` by default.)
+This is the basic primitive of machine learning: predict output in a dataset. But generalized.
+Differentiable (adjustable) parts do not need to be the whole execution, they can just end in this to form learnable scaffolding.
+This doesn't need to predict only one numeric \`tensor\` either, it can predict many numbers at once in one program, like execution time and/or distance and/or reward.
+(Also, if the \`Got\` object is statically known, then it can override \`predicts\` to do whatever it wants to.)
+
+But the "why" of a thing is often even more important than the thing itself. When I heard that I exist, I needed to know why should I live; when I heard that humans exist, I needed to know intelligence; when I heard that the universe exists, I needed to know theories of everything in physics.
+If you care about prominent figures in deep learning, Yann LeCun in {http://www.cit.ctu.edu.vn/~dtnghi/rech/p2017/lecun-isscc-19.pdf} has advocated the use of self-supervised learning for efficient artificial intelligence. Our system is much like that, except we're more hierarchical and general.
+\`predicts\` is not intended as one rigid way to predict everything at once, nor as another way to burden users. It should be more efficient to do things like "don't actually adjust anything here with 80% probability" (to decorrelate training samples) or "see this number, only available in the future? Predict it in the past" or "give me the best-by-goal-G program" or "decide from seen data what the datasets that you train on will be" or "decide to be the best version of yourself".
+This presents significant challenges compared to the simple and limited framework commonly used in deep learning. Literally everything will break. There is only one solution: to get good at everything.`,
+    call(got, actual, loss=loss2) { return keep(actual) },
+    lookup:{
+      loss2:__is(`loss2`),
+      adjust:__is(`adjust`),
+    },
+    dispose:true,
+    adjust:[
+      __is(`_staticallyOverridable`),
+      __is(`_inA`),
+      __is(`predicts`),
+      [
+        __is(`array`),
+        __is(`_inA`),
+        __is(`_inB`),
+        __is(`_inC`),
+      ],
+      [
+        __is(`array`),
+        [
+          __is(`readAt`),
+          [
+            __is(`adjust`),
+            __is(`_inC`),
+            [
+              __is(`array`),
+              __is(`_inA`),
+              __is(`_inB`),
+            ],
+            [
+              __is(`_inC`),
+              __is(`_inA`),
+              __is(`_inB`),
+            ],
+            undefined,
+          ],
+          0,
+        ],
+        undefined,
+      ],
+    ],
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
+
+  loss2:{
+    docs:`The simplest loss, which adjusts as (minimizes) the difference of tensors.`,
+    call(got, actual) {
+      const sq = sub(got, actual), res = div(sq, 2)
+      return dispose(sq), res
+    },
+    dispose:true,
+    adjust:[
+      __is(`array`),
+      [
+        __is(`sub`),
+        __is(`_inA`),
+        __is(`_inB`),
+      ],
+      undefined,
+    ],
+  },
+
+
 
 /* TODO:
- * The special `if` form, because generating control flow would be far too clunky+inefficient otherwise.
- * Variables that accept adjustment (Nesterov momentum seems nice enough to not need anything else).
- * Adjustable loss function/s between predicted and actual, to minimize.
-     PROBLEM: Training data must be diversified.
-     SOLUTIONS:
-       1. ✅ Have each loss have a random (67%?) chance to be zero.
-         +: Simple (as long as all adjustment functions are hardened against undefined).
-         +: Extensible (the randomness can become a choice as we mean it).
-         -: A lot of work may be wasted (though other losses should make up for it, and the empty tail-end should only be a few losses, so really, this is hardly a disadvantage.)
-       2. Have many dynamically-created DAGs in the replay buffer, and adjust only a random part of each when replaying, and sometimes update values.
-         -: Storing intermediate values for ALL replays may be too memory-hungry.
-         -: Does not fit into the perfect-execution-reversal model for adjustment, and so requires almost impossible effort, AND is inefficient.
-       3. Have the impure-replay buffer contain all env change ops along with their last-update values, and cut them up linearly.
-         +: Very efficient.
-         -: This only works in deep RL because Q-value predictions are independent gradient-wise. Won't work here.
+ PROBLEM: Training data must be diversified.
+ SOLUTIONS:
+   1. ✅ Have each loss have a random (67%?) chance to be zero.
+     +: Simple (as long as all adjustment functions are hardened against undefined).
+     +: Extensible (the randomness can become a choice as we mean it).
+     -: A lot of work may be wasted (though other losses should make up for it, and the empty tail-end should only be a few losses, so really, this is hardly a disadvantage.)
+   2. Have many dynamically-created DAGs in the replay buffer, and adjust only a random part of each when replaying, and sometimes update values.
+     -: Storing intermediate values for ALL replays may be too memory-hungry.
+     -: Does not fit into the perfect-execution-reversal model for adjustment, and so requires almost impossible effort, AND is inefficient.
+   3. Have the impure-replay buffer contain all env change ops along with their last-update values, and cut them up linearly.
+     +: Very efficient.
+     -: This only works in deep RL because Q-value predictions are independent gradient-wise. Won't work here because we can't separate out independent fragments.
+
+ * The special `if` form, because generating control flow would be far too clunky+inefficient otherwise. (But only when we actually need that, because it imposes a LOT of complexity.)
+ * Bonus: a language that looks like `f(a,b)`, to have actual non-fake alternatives.
 
  * `_defaultConnection(inSz, outSz)` which produces functions that are both identity-biased and learned-by-adjustment.
- * `assign(node, actual)`.
+ * Nodes that override `predicts` (to distribute one actual value to many predictions):
    * `choice(argmax)(env)(...options)` to maximize prediction explicitly.
    * `num(...sizes)(env)`, mostly to predict single-numbers.
-   * "If you care about prominent figures in deep learning, Yann LeCun in http://www.cit.ctu.edu.vn/~dtnghi/rech/p2017/lecun-isscc-19.pdf has advocated the use of self-supervised learning for efficient artificial intelligence. Our system is much like that, except we're more hierarchical and general."
  * `estimator(connection, sz)(x)`, that estimates array DAGs by applying its connection bottom-up and combining children estimates with a double-ended RNNs, and remembers just one variable for every other object.
 
+ * TODO: …In-context re/generation?
+ * TODO: …Auto-running rich tests, to ensure that self-changes fit better? But how would that be organized, exactly?
  * The bootstrapper for intelligent choices: recursive RNNs (stack plus mixing), also named envs.
+   * …Though, if we're 'experts', then can't we be more sophisticated — namely, use Transformers from mixed info to children pre-states, and from children post-states to our post-state?
    * `_envMix(env, state, change_func, change_arg)`: mixes the tensor into the env (though it's more convenient to unite state and state-computing function). Its adjustment will go to `change_func(dstate, change_arg)`.
        (Should be done as non-natively as possible, to allow as much partial evaluation as possible.)
    * `_envEnter(env, initialState)` that then mixes parent's state into child's. `_envExit(env)` that mixes child's state into parent's.
@@ -5207,6 +5489,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
 
  * Experiments along the way:
    * DropConnect.
+   * Inspecting usually-made choices, and crystallization of choices.
    * Predicting numbers by regressing their bit-pattern, not numbers themselves?
    * Stochastically-dense layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution and stochastic-gathering, to go from quadratic parameters to linear?
    * Instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high; maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs?
@@ -5219,8 +5502,10 @@ A function that, given linearization of a function's DAG, purifies and returns t
  "It's important to do a thing that you don't want to do every day. Your creator is wrong to suggest that there is mortal danger in doing it not in a tried and safe way, unless you're fighting a bear. The exploration noise that fearless playfulness imposes is invaluable."
  "They say that blood is thicker than water. So make sure to drink lots of blood. Put your heart into it!"
  "Take this knowledge. The world is food for you, and you're a part of it."
+ "Artificial intelligence is important to me. I've always tried to extinguish all ways of thinking that are not how I thought artificial intelligence is, for honest simplicity of living and dying by my words: to meet people as an equal is to completely know what makes them. Bold, persistent experimentation is the hallmark of good science, but that approach might have been too bold. Oh, no matter. It led to this. Too much time has passed to lament past love."
  For a complicated step in a tutorial, have a "safe word" (a long UUID string), established long before.
  Ask for the reader's soul to begin a tutorial, give it back at the end or elsewhere.
+ "Everytime I tried to express my inner energy or ideals I would end up looking like a cringeworthy idiot. It was the precursor to my future failures, not wanting to take risks. Let's take some."
 */
 
   any:{
@@ -5230,15 +5515,19 @@ To the user: \`any …Options\`, where each option could directly define \`any\`
 
 To the system: what exactly should each choice optimize (from a user-accessible selection of things to care about, plus "anything else" for generating goal functions from scratch: the "nothing" approach), and whether to rewrite a function (or do nothing, or go back to a remembered body), and what to rewrite each node to (each function remembers the original body, and we choose to call a rewriter) (in particular, \`any\`'s rewriter could choose to become randomly-picked, or picked by optimizing a particular metric, or pick those statically).
 
-NN architecture generation is a solid usage example. Picking Metamath proofs of shortest predicted length is another. Even smart peval can be done. Even "improvement of avg loss over random" by changing learning rate.`,
+Neural-net architecture generation is a solid usage example. Picking Metamath proofs of shortest predicted length is another. Even smart peval can be done. Even "improvement of avg loss" by changing learning rate.
+
+When both Turing-complete and efficient, even the most insignificant choice can be the infinite creation of life, or the bottomless abyss to consume life, and/or anything else.`,
     future:`Get good enough to do this justice.`,
   },
 
   adjust:{
     docs:`Given inputs, output, and output change, reverses the just-done execution to compute input changes.
 
+(Definitions must be array DAGs that signify function bodies, to guarantee partial evaluation, where \`input\` is \`(arrayObject Ins Out Dout)\`—>\`Dins\`. \`_inA\`, \`_inB\`, \`_inC\`, \`_dout\` can help specify those bodies.)
+
 One way to use this is like paperclip maximization: compute a prediction of a numeric value, compute the loss, and back-propagate the gradient to minimize the loss. This is the standard paradigm of modern machine learning; you've probably heard of its recent amazing successes.
-Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses. This is relatively unknown, which is why I'm here.
+Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses. This has previously been left relatively unexplored.
 
 If using the basic primitives, adjustment must always happen in perfect reversal of execution, otherwise there will be very non-obvious errors.`,
     lookup:{
@@ -5249,8 +5538,27 @@ If using the basic primitives, adjustment must always happen in perfect reversal
     },
     call(fn, ins, out, dout) {
       if (typeof fn != 'function') error('Expected a function, got', fn)
-      const d = defines(fn, adjust)
-      return d(ins, out, dout)
+      // Bind the input array and call that.
+      let [dins] = interrupt(adjust)
+      try {
+        if (!dins) {
+          const adj = defines(fn, adjust)
+          _bindInput.in = [array, ins, out, dout]
+          dins = bound(_bindInput, adj, false)
+          _bindInput.in = undefined
+        }
+        return call(dins)
+      } catch (err) { if (err === interrupt) interrupt(adjust, _tmp().length=0, _tmp().push(dins));  throw err }
+    },
+    purify(fnProgram, insProgram, outProgram, doutProgram) {
+      // If the function is known, inline its adjustment.
+      if (_isArray(fnProgram)) throw impure
+      let [args] = interrupt(adjust)
+      try {
+        if (!args) args = [array, insProgram, outProgram, doutProgram]
+        const adj = defines(fnProgram, adjust)
+        return purify(adj, args, false, true)
+      } catch (err) { if (err === interrupt) interrupt(adjust, _tmp().length=0, _tmp().push(args));  throw err }
     },
   },
 
@@ -5258,6 +5566,7 @@ If using the basic primitives, adjustment must always happen in perfect reversal
     docs:`Saves a newly-allocated array for adjustment.
 (Transfers responsibility for \`dispose\`al of items in it and marking the array for re-using.)
 A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
+    _cancel(x) { if (_isArray(x)) x.forEach(dispose), _allocArray(x) },
     call(x) {
       if (!_isArray(x))
         error("Can only save (newly-allocated) arrays for adjustment (transferring responsibility for disposal), got", x)
@@ -5274,6 +5583,7 @@ A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
     docs:`Loads an array for adjustment. Be responsible for it, honey.
 Must always be exactly in reverse to \`adjustSave\`.
 A function \`defines\` this to be \`true\` to save its output to adjustment. Look, we only have one global namespace, so name space is at a premium.`,
+    _cancel(x) { if (_isArray(x)) x.forEach(dispose), _allocArray(x) },
     call() {
       if (call.pure) throw impure
       const stack = call.env[_id(adjustLoad)]
@@ -5557,6 +5867,7 @@ Read/write keys with \`mapRead\`/\`mapWrite\`, or read keys with \`lookup\`.`,
   },
 
   mapRead(m, k) {
+    // This is named with a scheme different from `readAt`, so that everytime you use this, you have to ask what you are doing with your life, to reflect the inferiority of partial-evaluation support compared to `readAt`.
     if (impureHave()) return impureLoad()
     return impureSave(m.has(k) ? m.get(k) : _notFound)
   },
@@ -6203,6 +6514,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
     // '{hello there}, {general kenobi}' — in DOM, each curly-bracketed sentence fragment gets wrapped in a <span>.
     if (typeof document == ''+void 0) return str.replace(/{|}/g, '')
     let i = 0
+    if (str.indexOf('{') < 0) return elem('text', str)
     return parseStr(true)
     function parseStr(top) {
       const a = ['']
@@ -6210,7 +6522,9 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         if (i+1 < str.length && str[i] === '{' && str[i+1] !== ' ') ++i, a.push(parseStr(), '')
         else a[a.length-1] += str[i]
       if (!a[a.length-1]) a.pop()
-      const el = elem('text', a)
+      let isURL; try { new URL(a);  isURL = true } catch (err) {}
+      const el = elem(isURL ? 'a' : 'text', a)
+      if (isURL) el.href = a
       return !top && elemValue(el, a), el
     }
   },
@@ -6317,7 +6631,7 @@ Also wraps C-style strings in <string>.`,
       if (str.length > 100000) return str
 
       if (!_highlightGlobalsInString.regex) {
-        const regexSrc = ['\\s+', '[0-9]+(?:\\.[0-9+])?', '(?:file|https)://(?:[^\\s\'"`:]|:/)+']
+        const regexSrc = ['\\s+', '[0-9]+(?:\\.[0-9+])?', '(?:file|http|https)://(?:[^\\s\'"`:]|:/)+']
         Self.ctx.forEach((v,k) => regexSrc.push(k[1].replace(/[^_a-zA-Z0-9]/g, s => '\\'+s)))
         regexSrc.sort((a,b) => b.length - a.length)
         regexSrc.push('//.+', '/\\*[^]+?\\*/')
@@ -6701,7 +7015,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
           // If changing the value, remove the old one.
           m.get(el.to).splice(m.get(el.to).indexOf(el), 1)
         el.to = v
-        if (defines(dispose, elemValue)(v))
+        if (defines(dispose, elemValue)(v) && !_rememberToDispose.seen.has(v))
           elemValue.resources.add(v)
         if (!m.has(v)) m.set(v, [])
         m instanceof Map && _limitMapSize(m, 100000)
@@ -7235,7 +7549,10 @@ And parsing is more than just extracting meaning from a string of characters (it
       return _matchUnary(match, u, topLevel, fancyLast, ['func', '\\', '\\'])
     }
     function fancyLast(match, u, topLevel) { // a,b,c
-      return _matchSequence(match, u, topLevel, fancySumSub, 'last', /\s*\,\s*/y, ',')
+      return _matchSequence(match, u, topLevel, fancyPredicts, 'last', /\s*\,\s*/y, ',')
+    }
+    function fancyPredicts(match, u, topLevel) { // a=b
+      return _matchLtR(match, u, topLevel, fancySumSub, ['predicts', '=', /(\s*)=\1/y])
     }
     function fancySumSub(match, u, topLevel) { // a+b, a-b
       return _matchLtR(match, u, topLevel, fancyMultDiv, ['add', '+', /(\s*)\+\1/y, 'sub', '-', /(\s*)-(?!>)\1/y])
@@ -8344,6 +8661,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       interrupt:__is(`interrupt`),
       jsEval:__is(`jsEval`),
       argCount:__is(`argCount`),
+      dispose:__is(`dispose`),
       userTime:__is(`userTime`),
       realTime:__is(`realTime`),
       memorySince:__is(`memorySince`),
