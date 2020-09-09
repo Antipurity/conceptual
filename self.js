@@ -203,6 +203,7 @@ __base({
     min:__is(`min`),
     max:__is(`max`),
 
+    sum:__is(`sum`),
     add:__is(`add`),
     sub:__is(`sub`),
     mul:__is(`mul`),
@@ -378,7 +379,7 @@ Label-binding environment is not preserved.`,
       try {
         // Pre-compute compCall and compAdj, so that every call to `callAdjust` doesn't have to.
         if (compCall === undefined) {
-          poIndRc = _postorderAndIndexesAndRefs(expr)
+          poIndRc = _postorderInfo(expr)
           call.env[_id(adjustSave)] = _allocArray(), call.env[_id(adjustLoad)] = undefined
           compCall = _compileBody(expr, false, poIndRc) // Can't interrupt.
         }
@@ -3977,7 +3978,7 @@ It's much more efficient to learn to repeat rather than understand, so the whole
       let [i = 0, outputs = _allocArray(), po, inds, rc] = interrupt(call)
 
       // Evaluating inputs with recursion leaves ugly stack traces in errors, so we iterate over the post-order traversal instead.
-      if (!po) [po, inds, rc] = _postorderAndIndexesAndRefs(x)
+      if (!po) [po, inds, rc] = _postorderInfo(x)
       outputs.length = po.length
       const collected = _allocArray()
       try {
@@ -4290,7 +4291,7 @@ What a function does, does not change when a node in its body changes. That woul
         Object.freeze(d)
         return obj
       } else {
-        const [poIndRc = _postorderAndIndexesAndRefs(x[1])] = interrupt(func)
+        const [poIndRc = _postorderInfo(x[1])] = interrupt(func)
         try {
           obj.a = autograd(poIndRc)
           obj.f = _compileBody(x[1], true, poIndRc)
@@ -4335,7 +4336,7 @@ What a function does, does not change when a node in its body changes. That woul
 
     let owningPoIndRc = false
     if (!poIndRc && _isArray(body) && body[0] !== quote)
-      poIndRc = _postorderAndIndexesAndRefs(body), owningPoIndRc = true
+      poIndRc = _postorderInfo(body), owningPoIndRc = true
 
     const consts = _allocMap()
     const [src, sourceURL, lines] = toSource(body, poIndRc, owningPoIndRc)
@@ -4417,7 +4418,7 @@ What a function does, does not change when a node in its body changes. That woul
                 code.push(`   ${nodeNames[ins[j]]} = ${env(dispose)}(${nodeNames[ins[j]]})`),
                 freeNames.push(nodeNames[ins[j]])
         }
-        if (save) // Save those that need saving, for adjustment.
+        if (save && save.filter(x => x).length) // Save those that need saving, for adjustment.
           code.push(`   const $$$=${env(_allocArray)}()`),
           code.push(`   $$$.push(${save.filter(x => x).map((sv,i) => sv && nodeNames[i])})`),
           code.push(`   ${env(adjustSave)}($$$)`)
@@ -4472,7 +4473,7 @@ What a function does, does not change when a node in its body changes. That woul
         error('Expected', defines(x[0], argCount), 'args but got', x.length-1, 'in', x)
   },
 
-  _postorderAndIndexesAndRefs:{
+  _postorderInfo:{
     docs:`Linearizes all execution-relevant information about a DAG into 3 equal-sized arrays.`,
     interrupt:false,
     call(dag) {
@@ -4676,9 +4677,30 @@ When the array head is a \`construct\`-defining \`concept\`, this allows still c
 Inconvenient compared to being able to refer to closed-over variables directly, but simple and Turing-complete.
 
 This is much like the φ function in SSA forms, but explicitly passing arguments to code blocks.`,
+    future:` * ONLY if we absolutely need super-efficient single-threaded control flow, because that's very complicated:
+ *   The special \`(select BranchIndex …Branches)\` form.
+ *     Make \`_postorderInfo\` also return the \`gotos\` info: usually \`null\`, or an array of indexes of beginnings of branches for \`select\` nodes, or the index to go to after the node has finished executing (the node just before a \`select\` node goes to that node, and the last node in each branch goes to the \`select\` node).
+ *     Interpreters (\`call\`/\`purify\`):
+ *       have an array of "do we know this" (or just store _onlyUndefined for nodes that return undefined, and check for undefined to detect not-yet-computed results);
+ *       follow number-jumps;
+ *       for \`select\` nodes (array-jumps), copy its result and advance if the needed branch is computed, else jump to that branch;
+ *       if any node has an unknown input, go into the special "dynamic evaluation" mode, and compute that input and all its inputs.
+ *     Compilers (\`_compileBody\`):
+ *       follow number-jumps (except for each first jump to a \`select\` node) via \`stage = N; continue\` and putting the switch statement into an infinite loop;
+ *       for first jumps to \`select\` nodes, jump via setting the \`select\`'s result to ours and \`stage = branchIndexes[i]; continue\`;
+ *       for \`select\` nodes (array-jumps), just pass through;
+ *       ref-count backwards from \`select\` nodes (not going beyond where branches of the current \`select\`ion begin), and for each node where the global ref-count is more than the branch-local ref-count and all their not-certain-if-computed inputs, make it lazily-computed and dynamically-returning (basically, switch to the "interpretation" mode in compiled code; cannot think of a way that eliminates more lazy-computation).
+ *     Reversers (\`autograd\`):
+ *       give \`select\`'s gradient to the picked branch's exit (inverting \`gotos\` info);
+ *       do some magic to determine when to lazily construct mergers' arrays and when we can guarantee that gradient will be computed (a node is in all branches), I don't know.`,
     _resultCanBe(x) { _resultCanBe(x[2]), _resultCanBe(x[3]) },
     call(If, Then, Else, ...Args) {
       return If === true ? Then(...Args) : Else(...Args)
+    },
+    purify(IfP, ThenP, ElseP, ...ArgsP) {
+      if (_isArray(IfP) && IfP[0] !== quote) throw impure
+      return IfP === true ? purify([ThenP, ...ArgsP]) : purify([ElseP, ...ArgsP])
+      // If `IfP` was explicitly quoted by `quote`, then it's definitely not `true`.
     },
   },
 
@@ -4788,7 +4810,7 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
 
       if (inputKnown && _isUnknown(inputValue)) inputKnown = false, inputValue = inputValue[1]
       let [i = 0, outputs = _allocArray(), same = _allocArray(), unknown, po, inds, pure = call.pure ? null : new Set] = interrupt(purify)
-      if (!po) [po, inds] = _postorderAndIndexesAndRefs(x)
+      if (!po) [po, inds] = _postorderInfo(x)
       outputs.length = same.length = po.length
       // `unknown` is an array of booleans of length `po.length`, but we only create it on-demand, to optimize for nothing-unknown cases.
       const collected = _allocArray()
@@ -4902,6 +4924,22 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
     ],
     2,
   ],
+
+  sum:{
+    docs:`The sum of values of a tensor, as in \`sum (tensor (1 2 3 4))\`=\`tensor (10)\`.
+The adjustment is passed through to each arg.`,
+    argCount:1,
+    dispose:true,
+    interrupt:false,
+    call(a) {
+      return tf.sum(a)
+    },
+    adjust:[
+      __is(`array`),
+      __is(`_dout`),
+    ],
+    mergeAdjustment:__is(`_mergeTensors`),
+  },
 
   add:{
     docs:`Addition of two tensors, as in \`5+6\`=\`11\`.
@@ -5169,9 +5207,9 @@ More precisely.
 A function that, given linearization of a function's DAG, purifies and returns the expression that computes input change (\`dins\`) given an array of inputs, output, and output change (\`(arrayObject ins out dout)\`).`,
     argCount:1,
     call(poIndRc) {
-      // Example usage: `autograd (_postorderAndIndexesAndRefs ^(matMul ? 2+3))`.
+      // Example usage: `autograd (_postorderInfo ^(matMul ? 2+3))`.
       if (!_isArray(poIndRc) || poIndRc.length != 3)
-        error("Expected result of applying", _postorderAndIndexesAndRefs, "but got", poIndRc)
+        error("Expected result of applying", _postorderInfo, "but got", poIndRc)
       const [po, inds, rc] = poIndRc
       let [save, loaded, douts = _allocArray(), inputAdj, program] = interrupt(autograd)
       douts.length = po.length
@@ -5222,8 +5260,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
             const adj = defines(x[0], adjust)
             if (_isArray(adj) && adj[0] === array)
               if (adj.length !== x.length)
-                error("Adjusting", adj.length-1, "args but got", x.length-1, "args")
-            if (defines(x[0], argCount) === undefined) error("Define", argCount, "of", x[0], "to be", x.length-1)
+                error("Adjusting", adj.length-1, "args but got", x.length-1, "args; define", argCount, "to be", adj.length-1)
 
             _bindInput.in = [array, ins, out, _isArray(douts[i]) && douts[i][0] ? douts[i] : undefined]
             const dins = bound(_bindInput, adj, false)
@@ -5433,19 +5470,20 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       // TODO: Be nice, playful, and a big dreamer. No reality allowed. Paint an exposition of machine learning.
       //   Explaining. Open our eyes with our words, to bind our selves into one, tight enough to withstand learning otherwise.
       ``, // …or just "Are you up for some maintenance, friend? We'll walk through a simple example to make sure that things are working properly."
+      // TODO: `f: \?+(randomVar)  (repeat ^[(f 1) = 3, (f 2) = 4, (f 4) = 6.1])`
+      //   (All that's left is to run it, and fix the bugs.)
       // TODO: Fetch a small dataset like MNIST, create a simple NN regressor (using `randomVar`), and optimize it (and plot the loss). Words only.
-      // But first: `f: \?+(randomVar)  (repeat ^(callAdjust ^((f 1) = 3, (f 2) = 4, (f 4) = 6.1)))`, except `display`ing the loss…
-      //   (Also, `repeat` now uses `callAdjust` anyway, so we don't need to explicitly call it.)
     ],
     call(expr, cl, aj, saveReplay = true) {
       if (call.pure) return call(expr)
-      let [poIndRc, compCall, compAdj, result] = interrupt(callAdjust)
+      let [poIndRc, compCall, compAdj, result, s = 0, n = 0] = interrupt(callAdjust)
       cl && (compCall = cl), aj && (compAdj = aj)
       const prevSave = call.env[_id(adjustSave)], prevLoad = call.env[_id(adjustLoad)]
+      const ps = callAdjust.s, pn = callAdjust.n;  callAdjust.s = s, callAdjust.n = n
       try {
         // Compile call then adjustment, then call then adjust, then assert exact-ness of reversal, then save to replay buffer, then return result.
         if (compCall === undefined) {
-          poIndRc = _postorderAndIndexesAndRefs(expr)
+          poIndRc = _postorderInfo(expr)
           call.env[_id(adjustSave)] = _allocArray(), call.env[_id(adjustLoad)] = undefined
           compCall = _compileBody(expr, false, poIndRc) // Can't interrupt.
         }
@@ -5465,7 +5503,13 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
           return result !== _onlyUndefined ? result : undefined
         if (call.pure) throw impure
 
-        compAdj && compAdj([undefined, result, undefined]) // We don't have a loss function at the top-level, nor a dataset. Use `predicts`.
+        compAdj && compAdj([undefined, result, undefined]) // We don't have a loss function at the top-level, nor a dataset. Only `predicts`.
+
+        // Display average loss, if there is any.
+        if (callAdjust.n) {
+          const s = callAdjust.s, n = callAdjust.n
+          typeof s == 'number' ? display(label('Loss'), s / n) : s.array().then(s => display(label('Loss'), s / n))
+        }
 
         if (call.env[_id(adjustLoad)] && call.env[_id(adjustLoad)].length)
           error("Inexact reversal", call.env[_id(adjustLoad)])
@@ -5473,17 +5517,20 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
           _saveReplay([callAdjust, quote(expr), compCall, compAdj, false])
         return result !== _onlyUndefined ? result : undefined
       } catch (err) {
-        if (err === interrupt) interrupt(callAdjust, _tmp().length=0, _tmp().push(poIndRc, compCall, compAdj, result))
+        if (err === interrupt) interrupt(callAdjust, _tmp().length=0, _tmp().push(poIndRc, compCall, compAdj, result, callAdjust.s, callAdjust.n))
         throw err
       } finally {
         call.env[_id(adjustSave)] = prevSave, call.env[_id(adjustLoad)] = prevLoad
+        callAdjust.s = ps, callAdjust.n = pn
       }
     },
   },
 
 
   randomVar:{
-    docs:`\`(randomVar …Sizes)\`: A \`construct\` for easy creation of randomly-initialized \`variable\`s, biased to identity, with fixed learning rate and momentum.`,
+    docs:`\`(randomVar …Sizes)\`: A \`construct\` for easy creation of randomly-initialized \`variable\`s, biased to identity, with fixed learning rate and momentum.
+
+(Forgive me, Master "Please don't use \`construct\` for macros".)`,
     construct(x, obj) {
       if (obj === undefined) {
         // Basically tf.initializers.glorotNormal for the current value:
@@ -5678,6 +5725,24 @@ This presents significant challenges compared to the simple and limited framewor
     mergeAdjustment:__is(`_mergeTensors`),
   },
 
+  9572:[
+    __is(`sub`),
+    __is(`_inA`),
+    __is(`_inB`),
+  ],
+
+  _knowLoss:{
+    docs:`This function allows intellectual superiority.
+You don't know loss, mind full of gloss. The lossless cannot create a good plot.`,
+    call(x) {
+      if (typeof callAdjust.n != 'number') error("Can only be called inside", callAdjust)
+      const prev = callAdjust.s
+      const s = sum(x)
+      callAdjust.s = add(prev, s), dispose(prev), dispose(s)
+      ++callAdjust.n
+    },
+  },
+
   loss2:{
     docs:`The simplest loss, which adjusts as (minimizes) the difference of tensors.`,
     call(got, actual) {
@@ -5688,9 +5753,9 @@ This presents significant challenges compared to the simple and limited framewor
     adjust:[
       __is(`array`),
       [
-        __is(`sub`),
-        __is(`_inA`),
-        __is(`_inB`),
+        __is(`last`),
+        [__is(`_knowLoss`), __is(9572)],
+        __is(9572),
       ],
       undefined,
     ],
@@ -5699,33 +5764,24 @@ This presents significant challenges compared to the simple and limited framewor
 
 
 /* TODO:
- PROBLEM: Training data must be diversified.
- SOLUTIONS:
-   1. ✅ Have each loss have a random (67%?) chance to be zero.
-     +: Simple (as long as all adjustment functions are hardened against undefined).
-     +: Extensible (the randomness can become a choice as we mean it).
-     -: A lot of work may be wasted (though other losses should make up for it, and the empty tail-end should only be a few losses, so really, this is hardly a disadvantage.)
-   2. Have many dynamically-created DAGs in the replay buffer, and adjust only a random part of each when replaying, and sometimes update values.
-     -: Storing intermediate values for ALL replays may be too memory-hungry.
-     -: Does not fit into the perfect-execution-reversal model for adjustment, and so requires almost impossible effort, AND is inefficient.
-   3. Have the impure-replay buffer contain all env change ops along with their last-update values, and cut them up linearly.
-     +: Very efficient.
-     -: This only works in deep RL because Q-value predictions are independent gradient-wise. Won't work here because we can't separate out independent fragments.
 
- * The special `if` form, because generating control flow would be far too clunky+inefficient otherwise. (But only when we actually need that, because it imposes a LOT of complexity.)
- * Bonus: a language that looks like `f(a,b)`, to have actual non-fake alternatives to `fancy`.
+ * Make `readAt` and `writeAt` fully adjustable!
+ *   `_mergeArrays` should be able to handle not-known-statically indexes, and scatter values at runtime.
+ *   `readAt` should add `dout` to the appropriate spot of the shadow of the read array.
+ *   `writeAt` should adjust the written input with the shadow's adjustment (and set that to zero).
 
  * `_defaultConnection(inSz, outSz)` which produces functions that are both identity-biased and learned-by-adjustment.
  * Nodes that override `predicts` (to distribute one actual value to many predictions):
    * `choice(argmax)(env)(...options)` to maximize prediction explicitly.
    * `num(...sizes)(env)`, mostly to predict single-numbers.
- * `estimator(connection, sz)(x)`, that estimates array DAGs by applying its connection bottom-up and combining children estimates with a double-ended RNNs, and remembers just one variable for every other object.
+ * `estimator(connection, sz)(x)`, that estimates array DAGs by applying its connection bottom-up and combining children estimates with a double-ended RNNs, goes into user functions, and remembers just one variable for every other object.
 
- * TODO: …In-context re/generation ('rigid optimization', as in, non-numeric)? `(typeWanted, typeConsidered, dyn) —> (estimate, dyn)`?
- *   …And DAG/graph estimate combiners…
- * TODO: …Auto-running rich tests, to ensure that self-changes fit better? (In particular, generating adjustment to improve prediction on arbitrary tests…) But how would that be organized, exactly?
+ * In-context re/generation, where program structure is supported only by self-awareness: `(typeWanted, typeConsidered, dyn) —> (estimate, dyn)`.
+ *   This is superior (parallelization-wise) to forcing an order by using reads/writes to an env, but that can still be very useful if we don't control an intermediate function.
+ * The setting "auto-run tests" that will make a "run any test" program run, and predict/minimize the result of each test (for known-output tests, "1" is "passed", "0" is "not passed")? (And some tests like "adjustable functions should get closer to the goal when adjusted".)
+
  * The bootstrapper for intelligent choices: recursive RNNs (stack plus mixing), also named envs.
-   * …Though, if we're 'experts', then can't we be more sophisticated — namely, use Transformers from mixed info to children pre-states, and from children post-states to our post-state?
+   * …Though, if we're 'experts', then can't we be more sophisticated — namely, use Transformers from mixed info to children pre-states, and from children post-states to our post-state? Or, more generally, generate the differentiable operations ourselves.
    * `_envMix(env, state, change_func, change_arg)`: mixes the tensor into the env (though it's more convenient to unite state and state-computing function). Its adjustment will go to `change_func(dstate, change_arg)`.
        (Should be done as non-natively as possible, to allow as much partial evaluation as possible.)
    * `_envEnter(env, initialState)` that then mixes parent's state into child's. `_envExit(env)` that mixes child's state into parent's.
@@ -5736,11 +5792,22 @@ This presents significant challenges compared to the simple and limited framewor
  * The parallel-training loop, sharing data once and variable updates many times.
 
  * Experiments along the way:
+   * Diversify training examples by having `predicts` only do anything in about 2/N cases (N is the number of predictions in an execution).
+     1. ✅ Have each loss have a random (67%?) chance to be zero.
+       +: Simple (as long as all adjustment functions are hardened against undefined).
+       +: Extensible (the randomness can become a choice as we mean it).
+       -: A lot of work may be wasted (though other losses should make up for it, and the empty tail-end should only be a few losses, so really, this is hardly a disadvantage.)
+     2. Have many dynamically-created DAGs in the replay buffer, and adjust only a random part of each when replaying, and sometimes update values.
+       -: Storing intermediate values for ALL replays may be too memory-hungry.
+       -: Does not fit into the perfect-execution-reversal model for adjustment, and so requires almost impossible effort, AND is inefficient.
+     3. Have the impure-replay buffer contain all env change ops along with their last-update values, and cut them up linearly.
+       +: Very efficient.
+       -: This only works in deep RL because Q-value predictions are independent gradient-wise. Won't work here because we can't separate out independent fragments.
    * DropConnect.
    * Inspecting usually-made choices, and crystallization of choices.
-   * Predicting numbers by regressing their bit-pattern, not numbers themselves?
-   * Stochastically-dense layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution and stochastic-gathering, to go from quadratic parameters to linear?
-   * Instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high; maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs?
+   * Predicting numbers by regressing their bit-pattern, not numbers themselves.
+   * Stochastically-dense layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution and stochastic-gathering, to go from quadratic parameters to linear.
+   * Instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high (maximize accuracy, enveloping the test set rather than being to the side of it); maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs.
    * Predicting how likely a user is to collapse/expand a sub-tree in serialization for each sub-tree, and have user clicks be training data.
 
 
@@ -7639,7 +7706,7 @@ And parsing is more than just extracting meaning from a string of characters (it
   },
 
   _basicMany(match, u, syntax, base) { // a b c c:x
-    // syntax: [null, ' ', /\s+/y], or ['map', ', ', /\s*,\s*/y]
+    // `syntax`: null or [null, ' ', /\s+/y], or ['map', ', ', /\s*,\s*/y]
     if (u === _specialParsedValue) {
       const arr = !syntax || !syntax[0] ? [] : [syntax[0]]
       let ctx
@@ -7688,7 +7755,7 @@ And parsing is more than just extracting meaning from a string of characters (it
   },
 
   _basicValue(match, u, callSyntax, base) { // String or label or call.
-    const isEm = base !== _basicOutermost
+    const isEm = base === _fancyOutermost
     if (u === _specialParsedValue) {
       if (isEm && match('?')) return label('input')
       let r
@@ -7696,7 +7763,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       if ((r = match(_basicString)) !== undefined) return r
       if ((r = match(_basicLabel)) !== undefined) return r
       if (isEm && (r = match(_fancyMap, null, base)) !== undefined) return r
-      if ((r = match(callSyntax, null, base)) !== undefined) return r
+      if (callSyntax && (r = match(callSyntax, null, base)) !== undefined) return r
       return
     }
     else if (typeof u == 'string')
@@ -7707,7 +7774,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       match(_basicExtracted, u, base)
     else if (_isArray(u) && u[0] === _unctx('map'))
       match(_fancyMap, u, null, base)
-    else if (_isArray(u))
+    else if (callSyntax && _isArray(u))
       match(callSyntax, u, null, base)
     else match(u)
   },
@@ -7716,15 +7783,17 @@ And parsing is more than just extracting meaning from a string of characters (it
 
   _emitGrouping(match, need) {
     if (need === undefined)
-      return _needsGrouping(match) ? (match('['), true) : false
-    if (need) match(']')
+      return _needsGrouping(match) ? (match(_emitGrouping.groupOpen), true) : false
+    if (need) match(_emitGrouping.groupClose)
+    // .groupOpen ('[' or '('), .groupClose(']' or ')')
   },
 
   _unctx(s) { return serialize.ctx.get(label(s)) },
 
-  _matchLtR(match, u, topLevel, base, reprs) { // [[a+b]+c]+d
+  _matchLtR(match, u, topLevel, base, reprs, reverse = false) { // [[a+b]+c]+d
     // Parses/serializes two-arg functions as left-to-right strings.
     //   reprs: ['add', '+', /\+/y, 'sub', '-', /\-/y].
+    //   (The label can be `null` to parse to a two-arg function call.)
     if (u === _specialParsedValue) {
       let a = match(base), op
       if (a === undefined) return
@@ -7733,26 +7802,28 @@ And parsing is more than just extracting meaning from a string of characters (it
           if (op = match(reprs[i+2])) {
             const b = match(base)
             b === undefined && match.notEnoughInfo('Expected the second arg of '+op.trim())
-            a = [label(reprs[i]), a, b]
+            a = reprs[i] !== null ? [label(reprs[i]), a, b] : !reverse ? [a, b] : [b, a]
             continue outer
           }
         break
       }
       return a
     }
-    for (let i=0; i < reprs.length; i += 3) {
-      if (_isArray(u) && u.length == 3 && u[0] === _unctx(reprs[i])) {
-        const g = _emitGrouping(match)
-        _matchLtR(match, u[1], topLevel, base, reprs), match(reprs[i+1]), match(base, u[2])
-        _emitGrouping(match, g)
-        return
-      }
-    }
+    if (_isArray(u))
+      for (let i=0; i < reprs.length; i += 3)
+        if (reprs[i] !== null ? u.length == 3 && u[0] === _unctx(reprs[i]) : u.length == 2) {
+          const g = _emitGrouping(match)
+          const start = reprs[i] !== null ? 1 : !reverse ? 0 : 1, end = reprs[i] !== null || !reverse ? start+1 : start-1
+          _matchLtR(match, u[start], topLevel, base, reprs, reverse), match(reprs[i+1]), match(base, u[end])
+          _emitGrouping(match, g)
+          return
+        }
     match(base, u, topLevel)
   },
 
   _matchRtL(match, u, topLevel, baseLeft, baseRight, reprs) { // a^[b^[c^d]]
     // reprs: ['pow', '**', /\s*\*\*\s*/y]
+    //   (The label can be `null` to parse to a two-arg function call.)
     if (u === _specialParsedValue) {
       let a = match(baseLeft), op
       if (a === undefined) return
@@ -7760,15 +7831,16 @@ And parsing is more than just extracting meaning from a string of characters (it
         if (op = match(reprs[i+2])) {
           const b = match(baseRight)
           b === undefined && match.notEnoughInfo('Expected the second arg of '+op.trim())
-          a = [label(reprs[i]), a, b]
+          a = reprs[i] !== null ? [label(reprs[i]), a, b] : [a, b]
         }
       return a
     }
-    if (_isArray(u) && u.length == 3)
+    if (_isArray(u))
       for (let i=0; i < reprs.length; i += 3)
-        if (u[0] === _unctx(reprs[i])) {
+        if (reprs[i] !== null ? u.length == 3 && u[0] === _unctx(reprs[i]) : u.length == 2) {
           const g = _emitGrouping(match)
-          match(_matchRtL, u[1], topLevel, baseLeft, baseRight, reprs), match(reprs[i+1]), match(baseRight, u[2])
+          const start = reprs[i] !== null ? 1 : 0
+          match(baseLeft, u[start]), match(reprs[i+1]), match(baseRight, u[start+1])
           _emitGrouping(match, g)
           return
         }
@@ -7865,6 +7937,7 @@ And parsing is more than just extracting meaning from a string of characters (it
         }
         // Serialize grouping brackets via first trying to serialize without them, then emitting them if arrived at the same spot.
         //   It's not fast, but `basic` and `fast` exist to make that not a problem.
+        _emitGrouping.groupOpen = '[', _emitGrouping.groupClose = ']'
         if (!_needsGrouping.pos) _needsGrouping.pos = new Set
         const pos = match()
         if (_needsGrouping.pos.has(pos)) { // Emit base if the second pass is over.
@@ -8064,10 +8137,12 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       }
       if (i > start) s = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
     }
-    const A = s[0], B = s[s.length-1]
-    if (_isArray(s) && typeof s[0] == 'string' && (A === '(' || A === '[' || A === '{') && (B === ')' || B === ']' || B === '}'))
-      s[0] = _colored(elem('bracket', s[0]), 33), // brown
-      s[s.length-1] = _colored(elem('bracket', s[s.length-1]), 33)
+    if (_isArray(s))
+      for (let i=0; i < s.length; ++i) {
+        const v = typeof s[i] == 'string' && s[i].trim()
+        if (typeof v == 'string' && (v === '(' || v === '[' || v === '{' || v === ')' || v === ']' || v === '}'))
+          s[i] = _colored(elem('bracket', s[i]), 33) // Brackets are brown
+      }
 
     let hasOperators = false
     if (_isArray(s) && _isArray(u) && !_isLabel(u) && s.length > 1)
@@ -8290,6 +8365,162 @@ Does not merge the parsed arrays.`,
     },
     serialize:__is(`_basicTopLevel`),
     philosophy:`This could be made even more efficient (make it variable-pointer-length binary, serialize numbers as binary), but we aren't that crazy yet.`,
+  },
+
+  _fancierOutermost:{
+    Initialize() {
+      _fancierOutermost.syntax = fFunc
+      // The most significant syntax functionality is collected in one place for readability.
+      const sFunc = ['func', '\\', '\\']
+      function fFunc(match, u, topLevel) { // \f
+        return _matchUnary(match, u, topLevel, fLast, sFunc)
+      }
+      function fLast(match, u, topLevel) { // a;b;c
+        return _matchSequence(match, u, topLevel, fApplyLeft, 'last', /\s*;\s*/y, ';')
+      }
+      const sApplyLeft = [null, '<|', /(\s*)<\|\1/y]
+      function fApplyLeft(match, u, topLevel) { // f <| a
+        return _matchRtL(match, u, topLevel, fApplyRight, fApplyLeft, sApplyLeft)
+      }
+      const sApplyRight = [null, '|>', /(\s*)\|>\1/y]
+      function fApplyRight(match, u, topLevel) { // a |> f
+        return _matchLtR(match, u, topLevel, fPredicts, sApplyRight, true)
+      }
+      const sPredicts = ['predicts', '=', /(\s*)=\1/y]
+      function fPredicts(match, u, topLevel) { // a=b
+        return _matchLtR(match, u, topLevel, fSumSub, sPredicts)
+      }
+      const sSumSub = ['add', '+', /(\s*)\+\1/y, 'sub', '-', /(\s*)-(?!>)\1/y]
+      function fSumSub(match, u, topLevel) { // a+b, a-b
+        return _matchLtR(match, u, topLevel, fMultDiv, sSumSub)
+      }
+      const sMultDiv = ['mul', '*', /(\s*)\*\1/y, 'div', '/', /(\s*)\/\1/y]
+      function fMultDiv(match, u, topLevel) { // a*b, a/b
+        return _matchLtR(match, u, topLevel, fPow, sMultDiv)
+      }
+      const sPow = ['pow', '**', /(\s*)\*\*\1/y]
+      function fPow(match, u, topLevel) { // a**b
+        return _matchRtL(match, u, topLevel, fRead, fPow, sPow)
+      }
+      const sRead = ['readAt', '.', /(\s*)\.\1/y]
+      function fRead(match, u, topLevel) { // a.b
+        return _matchLtR(match, u, topLevel, fUnary, sRead)
+      }
+      const sUnary = ['quote', '^', '^', 'rest', '…', /…|\.\.\./y]
+      function fUnary(match, u, topLevel) { // …a, ...a; ^a
+        return _matchUnary(match, u, topLevel, fGrouping, sUnary)
+      }
+      function fGrouping(match, u, topLevel) { // (x)
+        if (u === _specialParsedValue) {
+          if (!match(/\s*\(\s*/y)) return fCall(match, u)
+          const r = _fancierOutermost(match, u)
+          r === undefined && match.notEnoughInfo('Expected a value to group')
+          !match(/\s*\)\s*/y) && match.notEnoughInfo("Expected a closing grouping bracket")
+          return r
+        }
+        // Serialize grouping brackets via first trying to serialize without them, then emitting them if arrived at the same spot.
+        //   It's not fast, but `basic` and `fast` exist to make that not a problem.
+        _emitGrouping.groupOpen = '(', _emitGrouping.groupClose = ')'
+        if (!_needsGrouping.pos) _needsGrouping.pos = new Set
+        const pos = match()
+        if (_needsGrouping.pos.has(pos)) { // Emit base if the second pass is over.
+          return fCall(match, u)
+        }
+        _needsGrouping.pos.add(pos)
+        try {
+          return match(_fancierOutermost, u, topLevel)
+        } finally { _needsGrouping.pos.delete(pos) }
+      }
+      function fCallBase(match, u) { // f(a,b) or f{a,b, c,d}
+        if (u === _specialParsedValue) {
+          if (match(/\s*\(\s*/y)) {
+            const r = _fancierOutermost(match, u)
+            !match(/\s*\)\s*/y) && match.notEnoughInfo("Expected the closing grouping bracket `)`")
+            return r
+          }
+          let f = match(_basicValue)
+          if (f === undefined) return
+          while (true) {
+            let ok = false
+            if (match('(')) {
+              f = [f], ok = true
+              while (!match(')')) {
+                const v = match(_fancierOutermost)
+                if (v === undefined) break
+                match(',')
+                f.push(v)
+                match(/\s+/y)
+              }
+            }
+            else if (match('{')) {
+              const m = _basicMany(match, u, [label('map'), ',', /\s*,\s*/y], _fancierOutermost)
+              match(/\s+/y)
+              !match('}') && match.notEnoughInfo("Expected the closing bracket `}`")
+              f = [f, m], ok = true
+            }
+            if (!ok) break
+          }
+          return f
+        }
+        if (!_isArray(u)) return _basicValue(match, u)
+        if (u[0] === bound) return _fancierOutermost(match, u)
+        if (!u.length) return match(_basicValue, arrayObject), match('('), match(')')
+        match(_basicValue, u[0]) // Hopefully there's nothing non-basic about functions.
+        if (u.length == 2 && _isArray(u[1]) && u[1][0] === map)
+          return match('{'), match(_fancierOutermost, u[1]), match('}')
+        match('(')
+        for (let i=1; i < u.length; ++i)
+          match(_fancierOutermost, u[i]), i < u.length-1 && match(',')
+        match(')')
+      }
+      function fCall(match, u) { // f a b  or  f(a,b)
+        if (!_isArray(u) && u !== _specialParsedValue) return _basicValue(match, u)
+        if (_isArray(u) && u[0] === bound) return _fancierOutermost(match, u)
+        const r = _basicMany(match, u, null, fCallBase)
+        return !r ? undefined : r.length > 1 ? r : r.length == 1 ? r[0] : undefined
+      }
+    },
+    call(match, u, topLevel) {
+      let ctx, needsGrouping = !topLevel || match()
+      if (_isArray(u) && u[0] === bound && u[1] instanceof Map && u.length == 3)
+        ctx = u[1], u = u[2], needsGrouping = needsGrouping && match('(')
+      const r = _fancierOutermost.syntax(match, u, topLevel)
+      if (ctx) ctx.forEach((v,k) => (match(' '), match(_basicExtracted, [_extracted, k, v], _fancierOutermost.syntax))), needsGrouping && match(')')
+      return r
+      // .syntax (the matching function that specifies the syntax over basic values; see how Initialize is defined here)
+    },
+  },
+
+  _fancierTopLevel(match, u) { // (f); a b c c:x; a:b
+    if (u === _specialParsedValue) {
+      let arr = _basicMany(match, u, null, _fancierOutermost)
+      match(/\s+/y)
+      if (!_isArray(arr)) return arr
+
+      if (!arr.length) match.notEnoughInfo("No value at top level")
+      if (arr.length == 1) arr = arr[0]
+      const inner = arr[0] === bound ? arr[2] : arr
+      if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length)
+        return [_extracted, ...arr[1].keys(), ...arr[1].values()]
+      if (!_isArray(inner)) return inner
+      if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
+        arr[2] = arr[2][0]
+
+      return arr
+    }
+    _fancierOutermost(match, !_isArray(u) || u.length <= 1 ? [u] : u, true)
+  },
+
+  fancier:{
+    docs:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
+\`label\`, \`'string'\`, \`"string"\`, \`0(1)\`, \`(a:2 a)\`; \`add 1 add(2,3)\`, \`\\?*2 5\`, \`2*(1+2)\`.`,
+    style:__is(`_basicStyle`),
+    parse:__is(`_fancierTopLevel`),
+    serialize:__is(`_fancierTopLevel`),
+    REPL:`also type \`tutorial tutorial\` or \`(docs)\`.`,
+    insertLinkTo:__is(`_basicLinkTo`),
+    _escapeLabel:__is(`_basicEscapeLabel`),
+    _unescapeLabel:__is(`_basicUnescapeLabel`),
   },
 
   _continuation:{
