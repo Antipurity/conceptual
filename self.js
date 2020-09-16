@@ -370,7 +370,7 @@ Label-binding environment is not preserved.`,
       // repeat ^(randomNat 10) 1000
       if (iterations !== undefined && typeof iterations != 'number' && typeof iterations != 'function')
         error("iterations must be undefined or a number or a function, got", iterations)
-      let [poIndRc, compCall, compAdj, i = 0, prevV, into] = interrupt(repeat)
+      let [poIndRc, compCall, compAdj, i = 0, prevV, into] = interrupt(6)
       if (into === undefined)
         into = elemValue(elem('code'), [repeat, expr, iterations]), into.classList.add('code'), log(into)
       let v, done = false
@@ -388,12 +388,13 @@ Label-binding environment is not preserved.`,
           poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray), _allocArray(poIndRc), poIndRc = undefined
 
         while (true) {
-          v = callAdjust(expr, compCall, compAdj)
+          const prev = v
+          v = callAdjust(expr, compCall, compAdj), dispose(prev)
           if (_isUnknown(v)) return elemRemove(into), _unknown([repeat, v[1], iterations], v)
-          _checkInterrupt(expr)
           done = true
           ++i
           if (iterations && (typeof iterations === 'number' ? i >= iterations : iterations(v,i))) return elemRemove(into), v
+          _checkInterrupt(expr)
         }
       } catch (err) {
         // Log our last computed value.
@@ -405,7 +406,7 @@ Label-binding environment is not preserved.`,
 						_smoothHeightPost(into, pre)
 						prevV = v
 					}
-        if (err === interrupt) interrupt(repeat, _tmp().length=0, _tmp().push(poIndRc, compCall, compAdj, i, prevV, into))
+        if (err === interrupt) interrupt.stack.push(poIndRc, compCall, compAdj, i, prevV, into)
         throw err
       }
     },
@@ -542,13 +543,13 @@ Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.s
     call(f,a) {
       if (typeof f != 'function') error("Expected a function but got", f)
       if (!_isArray(a)) error("Expected an array but got", a)
-      let [result = _allocArray(), i = 0] = interrupt(transform)
+      let [result = _allocArray(), i = 0] = interrupt(2)
       result.length = a.length
       try {
         for (; i < a.length; ++i)
           result[i] = f.call(f, a[i])
         return result
-      } catch (err) { if (err === interrupt) interrupt(transform, _tmp().length=0, _tmp().push(result, i));  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(result, i);  throw err }
     },
   },
 
@@ -588,7 +589,8 @@ Makes no attempt to correct for the memory-to-measure, \`(memory.since (memory.s
 
 Gaze upon the ever-shifting radiance of creation.
 Or let go of all you know, to embrace vacuous might.
-Just don't short-sightedly lock yourself into one consequence.`,
+Just don't short-sightedly lock yourself into one consequence.
+Yes.`,
   ],
 
   _disableSmoothTransitions:[
@@ -719,11 +721,12 @@ edit-object>.editorContainer.editable { display:inline-block }
 
 JobIndicator { width:14px; height:14px; margin:.2em; transition:none; background-color:var(--main); border-radius:50%; display:inline-block }
 JobIndicator.yes { background-color:var(--highlight); animation: rotate 4s infinite linear, fadein .2s !important }
-JobIndicator>div { width:4px; height:4px; margin:5px; position:absolute; background-color:var(--highlight); border-radius:50%; transform: rotate(var(--turns)) translate(10px); animation:none }
+JobIndicator>div { width:4px; height:4px; margin:5px; position:absolute; background-color:var(--main); border-radius:50%; transform: rotate(var(--turns)) translate(10px); animation:none }
 @keyframes rotate {
   0% { transform: rotate(-0.25turn) }
   100% { transform: rotate(0.75turn) }
 }
+JobIndicator.yes>.yes { background-color:var(--highlight) }
 
 button { margin:.5em; padding:.5em; border-radius:.3em; border:1px solid var(--highlight); color:var(--highlight); font-size:inherit; min-width:2.4em; min-height:2.4em }
 button:hover, a:hover, collapsed:hover, prompt:hover { filter:brightness(120%) }
@@ -781,11 +784,17 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 separated-text { margin:1em; display:block }
 text>span { font-family:sans-serif }
 
-separated-text>serialization, text>serialization { background-color:rgba(50%, 50%, 50%, 20%); border-radius:.2em }
+separated-text serialization, text serialization { background-color:rgba(50%, 50%, 50%, 20%); border-radius:.2em }
+separated-text serialization serialization, text serialization serialization { background-color:none }
 .nonArray>bracket { font-weight:bold }
 
 svg text { font-family:monospace !important; font-size:medium !important }
 svg, svg * { transition: none !important }
+
+settings>label { visibility:hidden; opacity:0; z-index:20; margin-left:1ch; padding:1ch; width:max-content; border-radius:.3em; position:absolute; pointer-events:none }
+settings:hover>label { visibility:visible; opacity:1; background-color:rgba(30,60,210, .15) }
+
+serialization, serialization * { animation:none !important }
 `,
 
     call(into = document.body) {
@@ -982,7 +991,7 @@ svg, svg * { transition: none !important }
         const needed = new Set
         let b = false
         New && New.forEach(el => {
-          if (el.tagName === 'SERIALIZATION') return
+          if (el.tagName === 'SERIALIZATION' || !el.classList) return
           if (prev && prev.has(el)) needed.add(el)
           else el.classList.add('hover'), needed.add(el)
           el = el.parentNode
@@ -1364,15 +1373,23 @@ Remember to quote the link unless you want to evaluate the insides.`,
   },
 
   stringToDoc:{
-    docs:`Parse text in \`...\` to style it as fancy, and treat other strings as \`structuredSentence\`s. Return an array of children.`,
+    docs:`Parse text in \`...?\` to style it as \`fancy\`, and treat other strings as \`structuredSentence\`s. Return an array of children.
+Text in double-backticks will be replaced with the result of executing it: \`1+2\`=\`\`1+2\`\`.`,
     call(s) {
       if (typeof s != 'string') return s
       let arr = s.split('`')
       for (let i = 0; i < arr.length; ++i)
-        if (i & 1)
-          try { arr[i] = elem('serialization', parse(arr[i], fancy, undefined, parse.dom)[1]) }
-          catch (err) { arr[i] = elem('serialization', arr[i]) }
-        else
+        if (i & 1) {
+					try {
+						if (!arr[i])
+              arr[i+2] && error("Double-backtick expected to close the opened double-backtick"),
+							arr[i+1] = daintyEvaluator([log, parse(arr[i+1], fancy, Self.ctx)]),
+              arr[i+1].style.display = 'inline-block',
+              i += 2
+						else
+              arr[i] = elem('serialization', parse(arr[i], fancy, Self.ctx, parse.dom)[1])
+					} catch (err) { console.log(err), arr[i] = elem('serialization', arr[i]) }
+        } else
           arr[i] = arr[i].split('\n').map(structuredSentence), typeof document != ''+void 0 && arr[i].forEach(el => el.classList.add('text')), interleave(arr[i], '\n')
       return arr
       function interleave(arr, separator) {
@@ -1429,7 +1446,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
     const inside = w.firstChild, preT = _smoothTransformPre(inside), preH = _smoothHeightPre(w.isWindow)
     w.isWindow.remove()
     w.replaceWith(inside)
-    _smoothTransformPost(inside, preT), _smoothHeightPost(inside, preH)
+    _reflow().then(() => _smoothTransformPost(inside, preT), _smoothHeightPost(inside, preH))
   },
 
   _getOuterWindow(el) { return !el ? null : el.isWindow ? el : _getOuterWindow(el.parentNode) },
@@ -1518,16 +1535,16 @@ Remember to quote the link unless you want to evaluate the insides.`,
       display:__is(`display`),
     },
     call(...x) {
-      const prevPure = call.pure
-      log.did = true, call.pure = false
+      const prevPure = call.pure;  call.pure = false
+      log.did = true
       try {
-        let str
-        if (x.length != 1 || !_isStylableDOM(x[0]))
-          str = serialize(x.length > 1 ? x : x[0], _langAt(), _bindingsAt(), serialize.displayed)
-        else str = x[0]
-        let into = call.env[_id(log)]
+        let into = call.env && call.env[_id(log)]
         if (into instanceof Map) into = into.get(log)
-        if (into) {
+        if (into && into.parentNode) {
+					let str
+					if (x.length != 1 || !_isStylableDOM(x[0]))
+						str = serialize(x.length > 1 ? x : x[0], _langAt(), _bindingsAt(), serialize.displayed)
+					else str = x[0]
           if (str.parentNode) str = elemClone(str)
           if (typeof str == 'string') str = document.createTextNode(str)
           const wasMax = _updateMaxScrollBegin()
@@ -1535,7 +1552,7 @@ Remember to quote the link unless you want to evaluate the insides.`,
           _updateBroken(into.parentNode)
           _updateMaxScrollEnd(wasMax)
         } else
-          console.log(str)
+          console.log(...x)
         if (x.length == 1) return x[0]
       } catch (err) { if (err !== impure) console.log(err, err && err.stack), console.log('When trying to log', ...x) }
       finally { call.pure = prevPure }
@@ -1743,6 +1760,13 @@ For anything else, display the globals the expression binds to, and an expandabl
             ])
         },
       },
+      {
+        docs:`The slider representation of options if applicable.`,
+        call([el, v]) {
+          if (_isArray(v) && v[0] === settings && typeof v[2] == 'string')
+            return settings(v)
+        },
+      },
     ],
     call(el) {
       if (typeof document == ''+void 0) return
@@ -1896,11 +1920,11 @@ Allow editing run-time and rewrite-time values.`,
       if (impureHave()) return impureLoad()
       el.classList.add('code')
       env[_id(log)] = el.lastChild
-      let ended = false
+      let empty = false
       const prev = call.env
-      _doJob(expr, env, () => (!result.previousSibling ? (ended = true, el.remove()) : result.remove()))
+      _doJob(expr, env, () => (!result.previousSibling ? (empty = true, el.remove()) : result.remove()))
       call.env = prev
-      return impureSave(!ended ? el : undefined)
+      return impureSave(!empty ? el : undefined)
     },
   },
 
@@ -2667,7 +2691,7 @@ Now, type \`(tutorial)\` and claim what's yours.`,
       const indicator = elem('span')
       let expr = x
       const ed = editor(initial, lang, Self.ctx, next => next !== undefined && updateIndicator(expr = next), next => {
-        _isArray(x) ? writeAt(x, undefined, next) : construct(x, next)
+        writeAt(x, undefined, next)
         expr = next, updateIndicator()
       })
       const observer = () => {
@@ -2790,9 +2814,15 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
           else
             error('Cannot infer the visual type of', opt[1])
         }
+
+        const whole = elem('settings', [el, elem('label')])
+        if (!settings.n) settings.n = 0
+        el.name = whole.lastChild.htmlFor = 'st' + (settings.n++)
+
         elemValue(el, opt)
         if (!el.title) el.title = opt[2]
         el.special = true
+        whole.lastChild.textContent = el.title
         const observer = opt => {
           el.title = opt[2]
           if (!el.isConnected) observe(opt, observer, false)
@@ -2802,29 +2832,32 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
             el.value = opt[1]
           else
             el.checked = opt[1]
+          whole.lastChild.textContent = el.title
           el.dispatchEvent(new Event('input', {bubbles:true}))
         }
         observe(opt, observer, true)
-        return el
+        return whole
       }
     },
   },
 
   rangeSetting(opt, el) {
-    // Creates an <input type=range> when used in a `settings` as setting[3].
+    // Creates an <input type=range> when used in a `settings` array as setting[3].
     //   Extra arguments after this are min, max, step.
+    //   Step can be a number for a linear scale, or `true` for exponential scale.
     if (!el) {
       el = elem('input')
       el.type = 'range'
       el.style.margin = el.style.padding = 0
-      el.oninput = el.onchange = () => writeAt(opt, 1, el.value)
+      el.oninput = el.onchange = () => writeAt(opt, 1, typeof opt[6] == 'number' ? el.value : Math.exp(el.value))
     }
-    const min = el.min = opt[4] || 0
-    const max = el.max = opt[5] || 1
-    el.step = opt[6] || .01
-    el.value = opt[1]
-    el.title = (opt[2] || '').replace(/%%%/g, ((opt[1]*100)|0)+'%')
+    const min = el.min = delog(opt[4] || 0, opt[6])
+    const max = el.max = delog(opt[5] || 1, opt[6])
+    el.step = typeof opt[6] == 'number' ? (opt[6] || .01) : .001
+    el.value = delog(opt[1], opt[6])
+    el.title = (opt[2] || '').replace(/%%%/g, ((opt[1]*100)|0)+'%').replace(/\?\?\?/g, opt[1])
     return el
+    function delog(x, st) { return typeof st == 'number' ? x : Math.log(x) }
   },
 
   Commands:new Map([
@@ -3299,7 +3332,7 @@ All these are automatically tested to be correct at launch.`,
 Everything else about all of existence is a consequence. (Take a moment to think about everything that you have ever known and can know. No matter what it is, it was found.)
 
 Widespread use of universal computers demonstrate this view's practicality. Attempts like the Wolfram Physics Project prove this view's viability as a complete theory of fundamental physics.
-However, the difficulty is not that the view is non-obvious, it's that to feel it deep in your heart can be very hard (in other words, to find and connect and nurture an efficient implementation within humans is tricky, preventing adoption). To prove it more intuitively and without question, we must understand what constitutes a good user of a thing like a programming language.
+However, the difficulty is not that the view is non-obvious, it's that to feel it deep in your heart can be very hard (in other words, to find and connect and nurture an efficient implementation within humans is tricky, preventing adoption). To prove it more intuitively and without question, we must understand what constitutes a good user of a thing like a programming language. We want not just generality, but intelligence too.
 Clearly, randomness is far far far far far too slow for practical applications. But we can do better. There's even a word for it: "arbitrary", to replace "random". We can do things like route differentiable computations through arbitrary programs to their predictions, and predict all numbers seen in user-space, to get more eyes in our brains, to let honesty and self-awareness guide us and become us. We don't even need large neural networks, just the prediction of everything, and then we can really begin to do interesting things.
 Come on. Let's do it, inside this project. I'm excited.`,
       `Everything, nothing, and something. If "everything" is a thing that does everything, and the world is "everything", then "nothing" is exactly subversion of "something". While an "everything" is still a thing, "something", it behaves completely differently in the long term.
@@ -3420,19 +3453,21 @@ If any promises the job depends on have a method .cancel, calls those.`,
         if (defines(conc, _cancel)) env[k] = void defines(conc, _cancel)(env[k])
       })
 
-      let a = _jobs.expr
-      for (let i = 0; i < a.length; i += 3)
-        if (a[i+1] === env) {
-          if (returnJob) return a.splice(i, 3)
-          return a.splice(i, 3), true
-        }
-      a = _jobs.limbo
-      for (let i = 0; i < a.length; i += 3)
-        if (a[i+1] === env) {
-          if (returnJob) return a.splice(i, 3)
-          return a.splice(i, 3), true
-        }
-      return false
+      try {
+				let a = _jobs.expr
+				for (let i = 0; i < a.length; i += 3)
+					if (a[i+1] === env) {
+						if (returnJob) return a.splice(i, 3)
+						return a.splice(i, 3), true
+					}
+				a = _jobs.limbo
+				for (let i = 0; i < a.length; i += 3)
+					if (a[i+1] === env) {
+						if (returnJob) return a.splice(i, 3)
+						return a.splice(i, 3), true
+					}
+				return false
+      } finally { if (!returnJob && typeof document != ''+void 0) _jobs.display(_jobs.indicator) }
     },
   },
 
@@ -3459,6 +3494,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
     call.env = env, call.depth = 0
     _checkInterrupt.step = 0 // So that a step always happens even if we immediately interrupt to step through execution.
+    interrupt.stack = env[_id(interrupt)] // For faster access, both in typing and in running.
     interrupt.started = microstart // So that we can interrupt on timeout.
     _jobs.reEnter = true // So that code can specify custom `_schedule` overrides.
     let v, interrupted = false
@@ -3498,7 +3534,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     },
     call() {
       const DOM = typeof document != ''+void 0
-      if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .1)
+      if (DOM && !_jobs.display) _jobs.display = _throttled(_jobsDisplay, .05)
       if (_jobs.expr.length) {
         let start = _timeSince(), end = start + (typeof process == ''+void 0 || !process.hrtime || !process.hrtime.bigint ? 10 : BigInt(100 * 1000))
         if (!_jobs.duration) _jobs.duration = 0
@@ -3515,7 +3551,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
         _jobs.duration = _timeSince(start)
         _jobs.running = false
       }
-      call.env = undefined
+      interrupt.stack = call.env = undefined
 			if (_jobs.expr.length) _jobsResume(Math.min(_jobs.duration / _maxUsageOfCPU[1] - _jobs.duration, 1000))
       if (DOM) _jobs.display(_jobs.indicator)
       // _jobs.expr (Array), _jobs.limbo (Array), _jobs.duration (Number), _jobs.reEnter (true or a _schedule-replacing function), _jobs.indicator
@@ -3526,14 +3562,14 @@ If any promises the job depends on have a method .cancel, calls those.`,
     if (_jobs.expr.length) setTimeout(_jobs, delay || 0)
   },
 
-  _jobsDisplay(el, n = _jobs.expr.length>>>2) {
+  _jobsDisplay(el, a = Math.floor(_jobs.expr.length/3), b = Math.floor(_jobs.limbo.length/3)) {
     // Creates a <div> inside el for every existing job.
     let ch = el.firstChild || el.appendChild(document.createElement('div')), i = 0
-    for (; i < n; ++i, ch = ch.nextSibling || el.appendChild(document.createElement('div')))
-      ch.style.setProperty('--turns', -i/n + 'turn')
+    for (; i < a+b; ++i, ch = ch.nextSibling || el.appendChild(document.createElement('div')))
+      ch.style.setProperty('--turns', -i/(a+b) + 'turn'), ch.classList.toggle('yes', i < a)
     for (; i = ch && ch.nextSibling, ch; ch = i) el.removeChild(ch)
-    el.title = el.title.replace(/[0-9]+/, n)
-    if (!n) el.classList.toggle('yes', false)
+    el.title = el.title.replace(/[0-9]+/, a+b)
+    el.classList.toggle('yes', a || b && true)
   },
 
   _highlightOriginal(expr, working) {
@@ -3583,9 +3619,11 @@ If any promises the job depends on have a method .cancel, calls those.`,
     docs:`\`a,b,c\` or \`(last …Expressions)\`: returns the last result (the first error or else the last non-error result).
 In Scheme, the equivalent is called \`begin\`.`,
     _resultCanBe(x) { _resultCanBe(x[x.length-1]) },
+    dispose:true,
+    interrupt:false,
     call(...r) {
       // We shuffle in neither `call` nor compilation, so we can just do this:
-      return r[r.length-1]
+      return keep(r[r.length-1])
     },
   },
 
@@ -3979,7 +4017,7 @@ It's much more efficient to learn to repeat rather than understand, so the whole
       if (x[0] === quote) return x[1]
 
       // Don't forget to be interrupt-friendly!
-      let [i = 0, outputs = _allocArray(), po, inds, rc] = interrupt(call)
+      let [i = 0, outputs = _allocArray(), po, inds, rc] = interrupt(5)
 
       // Evaluating inputs with recursion leaves ugly stack traces in errors, so we iterate over the post-order traversal instead.
       if (!po) [po, inds, rc] = _postorderInfo(x)
@@ -4003,7 +4041,7 @@ It's much more efficient to learn to repeat rather than understand, so the whole
         _allocArray(po), inds.forEach(_allocArray), _allocArray(inds), _allocArray(rc)
         return result
       } catch (err) {
-        if (err === interrupt) interrupt(call, _tmp().length=0, _tmp().push(i, outputs, po, inds, rc))
+        if (err === interrupt) interrupt.stack.push(i, outputs, po, inds, rc)
         throw err
       } finally { _allocArray(collected) }
       // .env (current execution environment), .depth (current call depth), .pure.
@@ -4045,11 +4083,11 @@ Cycles are impossible to create using only this.`,
   makeGraph:{
     docs:`\`makeGraph Expr\`: Turns an array graph into an array/object graph, in place.`,
     call(x, e) {
-      let [env = e || _allocMap(), unfinished = new Set] = interrupt(makeGraph)
+      let [env = e || _allocMap(), unfinished = new Set] = interrupt(2)
       // env: original —> constructed|original
       // unfinished: Whether we have not constructed a node yet.
       try { x = walk(x);  !e && _allocMap(env);  return x }
-      catch (err) { if (err === interrupt) interrupt(makeGraph, _tmp().length=0, _tmp().push(env, unfinished)); else !e && _allocMap(env);  throw err }
+      catch (err) { if (err === interrupt) interrupt.stack.push(env, unfinished); else !e && _allocMap(env);  throw err }
 
       function walk(x) {
         if (!_isArray(x)) return x
@@ -4061,7 +4099,7 @@ Cycles are impossible to create using only this.`,
           else x.length = 2, x[0] = quote, x[1] = expr
         }
 
-        let [i] = interrupt(makeGraph)
+        let [i] = interrupt(1)
         try {
           if (i === undefined) {
             if (env.has(x)) return env.get(x)
@@ -4083,7 +4121,7 @@ Cycles are impossible to create using only this.`,
             return env.get(x)
           }
           return x
-        } catch (err) { if (err === interrupt) interrupt(makeGraph, _tmp().length=0, _tmp().push(i));  throw err }
+        } catch (err) { if (err === interrupt) interrupt.stack.push(i);  throw err }
       }
     },
   },
@@ -4299,13 +4337,13 @@ What a function does, does not change when a node in its body changes. That woul
         Object.freeze(d)
         return obj
       } else {
-        const [poIndRc = _postorderInfo(x[1])] = interrupt(func)
+        const [poIndRc = _postorderInfo(x[1])] = interrupt(1)
         try {
           obj.a = _compileBody(autograd(poIndRc))
           obj.f = _compileBody(x[1], true, poIndRc)
           poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray)
         } catch (err) {
-          if (err === interrupt) interrupt(func, _tmp().length=0, _tmp().push(poIndRc))
+          if (err === interrupt) interrupt.stack.push(poIndRc)
           else poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray)
           throw err
         }
@@ -4370,6 +4408,8 @@ What a function does, does not change when a node in its body changes. That woul
       code.push(`return function F(${allowInput ? 'input' : ''}) {`)
       if (!_isArray(body) || body[0] === quote)
         code.push(` return ${env(body)}`)
+      else if (poIndRc[0].length == 1)
+        code.push(` try { return ++${env(call)}.depth, ${env(body[0])}(${body.slice(1).map(env)}) } finally { --${env(call)}.depth }`)
       else {
         code.push(` ${env(_checkInterrupt)}(F)`)
         const backpatchVars = code.push(` VARIABLES`)-1
@@ -4403,27 +4443,34 @@ What a function does, does not change when a node in its body changes. That woul
           //     (Re-computing results requires estimates of runtime of nodes or other predictions, which are unavailable for now.)
           const x = po[i], ins = ind[i]
           _checkArgCount(x)
-          if (_isArray(x[0]) || defines(x, interrupt) !== false) {
+          if (i) if (_isArray(x[0]) || defines(x, interrupt) !== false) {
             // Advance the interrupt stage if we cannot guarantee the function is non-interrupting.
             code.push(`   stage = ${nextStage}; case ${nextStage}:`)
             ++nextStage
           }
           lines.push(code.length+2, x)
 
-          // Collect var names of dependencies, then assign application result to a var.
+          // Collect var names of dependencies.
           const s = _allocArray()
           for (let j=0; j < x.length; ++j)
             s.push( ins[j] !== null ? nodeNames[ins[j]] : env(x[j]) ),
             ins[j] !== null && ++used[ins[j]]
           nodeNames[i] = freeNames.length > 1 ? freeNames.pop() : 'v'+freeNames[0]++
-          code.push(`   ${nodeNames[i]} = ${s[0]}(${s.slice(1)})`)
+
+          // Assign result of application to its var. (Also accommodate some debugging settings.)
+          let expr = `${s[0]}(${s.slice(1)})`
+          if (_debugMemory[1]) expr = `${env(_willDispose)}(${expr}, ${env(x)})`
+          let stmt = `${nodeNames[i]} = ${expr}`
+          if (_debugInterrupt[1] && !(_isArray(x[0]) || defines(x, interrupt) !== false))
+            stmt = `try{${stmt}}catch(err){if(err===interrupt)error("An interrupt in a non-interrupt node:",${env(x)});throw err}`
+					code.push(`   ${stmt}`)
           _allocArray(s)
 
           // Decrease ref-counts of dependencies, and dispose vars and mark for re-use if no longer needed.
           for (let j=0; j < x.length; ++j)
             if (ins[j] !== null && used[ins[j]] === rc[ins[j]] && (!save || !save[ins[j]]))
               if (defines(po[ins[j]], dispose))
-                code.push(`   ${nodeNames[ins[j]]} = ${env(dispose)}(${nodeNames[ins[j]]})`),
+                code.push(`   ${nodeNames[ins[j]]}=${env(dispose)}(${nodeNames[ins[j]]})`),
                 freeNames.push(nodeNames[ins[j]])
         }
         if (save && save.filter(x => x).length) // Save those that need saving, for adjustment.
@@ -4442,8 +4489,8 @@ What a function does, does not change when a node in its body changes. That woul
         code.push(` } catch (err) {`)
         code.push(`  if (err === ${env(interrupt)})`)
         if (nextStage > 1)
-          code[backpatchVars] = ` let [stage=0,${listOfVars}] = ${env(interrupt)}(F)`,
-          code.push(`   err(F, ${env(_tmp())}.length=0, ${env(_tmp())}.push(stage,${listOfVars}))`)
+          code[backpatchVars] = ` let [stage=0,${listOfVars}] = ${env(interrupt)}(${1+listOfVars.length})`,
+          code.push(`   ${env(interrupt)}.stack.push(stage,${listOfVars})`)
         else
           code[backpatchVars] = ` let ${listOfVars}`,
           code.push(`   ;`)
@@ -4462,12 +4509,13 @@ What a function does, does not change when a node in its body changes. That woul
     }
     function env(x) {
       // Returns the string that can be used to refer to the constant value.
+      if (typeof x == 'number') return ''+x
       if (!allowInput && x === input)
         error(x, "is not allowed but is seen anyway")
       else if (x === input) return 'input'
       if (_isArray(x) && x[0] === quote) x = x[1]
       if (!consts.has(x))
-        consts.set(x, 'env' + consts.size)
+        consts.set(x, 'e' + consts.size)
       return consts.get(x)
     }
   },
@@ -4475,7 +4523,7 @@ What a function does, does not change when a node in its body changes. That woul
   _checkArgCount(x) {
     // Checks arg count, and function-ness, at compile time. Does not catch all cases, but it's good enough.
     if (!_isArray(x) || _isArray(x[0])) return
-    if (typeof x[0] != 'function') error('Expected a function to call, got', x[0])
+    if (typeof x[0] != 'function') error('Expected a function to call, got', x[0], 'in', x)
     if (typeof defines(x[0], argCount) == 'number')
       if (defines(x[0], argCount) !== x.length-1)
         error('Expected', defines(x[0], argCount), 'args but got', x.length-1, 'in', x)
@@ -4548,17 +4596,18 @@ The same as \`(make arrayObject …Items)\`.`,
     mergeAdjustment:__is(`_mergeArrayItems`),
   },
   readAt:{
-    docs:`\`read Array Index\`: reads the current value at a position in an array.`,
+    docs:`\`readAt Array Index\`: reads the current value at a position in an array.`,
     argCount:2,
+    dispose:true,
     interrupt:false,
     call(arr, i) {
       if (call.pure && call.pure.has(arr)) {
         const v = arr[i]
         // `v` is a program (that quotes values), so we convert it to a value (with _unknown(…) for programs).
-        return !_isArray(v) || call.pure.has(v) ? v : v[0] === quote ? v[1] : _unknown(v)
+        return !_isArray(v) || call.pure.has(v) ? keep(v) : v[0] === quote ? keep(v[1]) : _unknown(v)
       }
-      if (impureHave()) return impureLoad()
-      return impureSave(arr[i])
+      if (impureHave()) return keep(impureLoad())
+      return keep(impureSave(arr[i]))
     },
     adjust:__is(`_oneValueAdjustment`),
     mergeAdjustment:__is(`_mergeReads`),
@@ -4590,17 +4639,17 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.`,
         if (arr[i] === v) return
         dispose(arr[i])
         arr[i] = keep(v)
-      } else {
+      } else if (_isArray(arr)) {
         // Replace the contents of the whole array.
-        if (!_isArray(arr)) error('Expected an array but got', arr)
         if (!_isArray(v)) error('Expected an array to replace', arr, 'with but got', v)
         v.forEach(keep)
         arr.forEach(dispose)
         arr.length = 0, arr.push(...v)
+      } else construct(arr, v)
+      if (observe.rs && observe.rs.has(arr)) {
+        const b = !observe.changed.size
+        observe.changed.add(arr), b && observe.fn && setTimeout(observe.fn, 50)
       }
-      if (observe.rs && observe.rs.has(arr))
-        !observe.changed.size && _schedule([_callChangeObservers], _newExecutionEnv()),
-        observe.changed.add(arr)
     },
   },
   observe:{
@@ -4611,7 +4660,9 @@ Many updates at the same time are merged into one call, scheduled in a separate 
     interrupt:false,
     call(arr, f, forceTo = undefined) {
       if (!_isArray(arr) && defines(arr, deconstruct) === undefined) return
-      if (!observe.rs) observe.rs = new WeakMap, observe.changed = new Set
+      if (typeof f != 'function') error("Expected a function, got", f)
+      if (defines(f, deconstruct)) error("There has been no need for user-defined observers, so we don't support them:", f)
+      if (!observe.rs) observe.rs = new WeakMap, observe.changed = new Set, observe.fn = _throttled(_callChangeObservers, .1)
       if (!observe.rs.has(arr)) observe.rs.set(arr, [])
       const obs = observe.rs.get(arr)
       if (f === undefined) return obs
@@ -4626,21 +4677,30 @@ Many updates at the same time are merged into one call, scheduled in a separate 
         error('Expected undefined/false/true, got', forceTo)
       if (!obs.length) observe.rs.delete(arr)
       return f
-      // .rs (a Map from arrays to their observers), .changed (a Set of arrays that changed).
+      // .rs (a Map from arrays to their observers), .changed (a Set of arrays that changed), .fn (throttled _callChangeObservers).
     },
   },
   _callChangeObservers:{
     docs:`Calls all observers for all changed arrays.`,
     call() {
-      let [i = 0] = interrupt(_callChangeObservers)
-      try {
-        observe.changed.forEach(arr => {
-          const obs = observe.rs.get(arr)
-          for (; i < obs.length; ++i)
-            obs[i](arr)
-          i = 0, observe.changed.delete(arr)
-        })
-      } catch (err) { if (err === interrupt) interrupt(_callChangeObservers, _tmp().length=0, _tmp().push(i));  throw err }
+      if (!observe.changed.size) return
+      return new Promise(then => {
+        let userTime = 0
+        f()
+        function f() {
+          const start = _timeSince()
+          try {
+						observe.changed.forEach(arr => {
+							const obs = observe.rs.get(arr)
+							if (obs) for (let i=0; i < obs.length; ++i) obs[i](arr)
+							observe.changed.delete(arr)
+
+							if (_timeSince(start) > 5) { setTimeout(f, 50);  userTime += _timeSince(start);  throw null }
+							if (!observe.changed.size) then(userTime + _timeSince(start))
+						})
+          } catch (err) { if (err !== null) throw err }
+        }
+      })
     },
   },
   arrayObject:{
@@ -4708,7 +4768,7 @@ This is much like the φ function in SSA forms, but explicitly passing arguments
     },
     purify(IfP, ThenP, ElseP, ...ArgsP) {
       if (_isArray(IfP) && IfP[0] !== quote) throw impure
-      return IfP === true ? purify([ThenP, ...ArgsP]) : purify([ElseP, ...ArgsP])
+      return IfP === true ? purify([ThenP, ...ArgsP], input, false, true) : purify([ElseP, ...ArgsP], input, false, true)
       // If `IfP` was explicitly quoted by `quote`, then it's definitely not `true`.
     },
   },
@@ -4760,7 +4820,7 @@ Reading from and writing to such arrays during \`purify\` is allowed, even unkno
       ],
     ],
     call(obj) {
-      if (!_isArray(obj)) error("Only arrays are supported, but got", obj)
+      if (!_isArray(obj)) error("Expected an array but got", obj)
       if (call.pure)
         call.pure.add(obj)
       return obj
@@ -4810,7 +4870,7 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
       `purified`,
       `computation`,
     ],
-    call(x, inputValue = input, inputKnown = false, inline = true) {
+    call(x, inputValue = input, inputKnown = false, inline = false) {
       // `inputValue`: what to replace occurences of `input` with.
       // `inputKnown`: whether `inputValue` is in value-space and known (as opposed to program-space and causing recording, the default).
       // `inline`: whether we're inlining a function body into a function (so exceptions will not be swallowed/recorded).
@@ -4818,7 +4878,7 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
       if (x[0] === quote) return x[1]
 
       if (inputKnown && _isUnknown(inputValue)) inputKnown = false, inputValue = inputValue[1]
-      let [i = 0, outputs = _allocArray(), same = _allocArray(), unknown = _allocArray(), po, inds, pure = call.pure ? null : new Set] = interrupt(purify)
+      let [i = 0, outputs = _allocArray(), same = _allocArray(), unknown = _allocArray(), po, inds, pure = inline ? null : new Set] = interrupt(7)
       if (!po) [po, inds] = _postorderInfo(x)
       outputs.length = same.length = unknown.length = po.length
       // `unknown` is an array of booleans of length `po.length`.
@@ -4893,7 +4953,7 @@ I realized my mistake, and though I lost my vision, I can see everything now.`,
         _allocArray(po), inds.forEach(_allocArray), _allocArray(inds)
         return !lastUnk ? lastOut : _unknown(lastOut)
       } catch (err) {
-        if (err === interrupt) interrupt(purify, _tmp().length=0, _tmp().push(i, outputs, same, unknown, po, inds, pure))
+        if (err === interrupt) interrupt.stack.push(i, outputs, same, unknown, po, inds, pure)
         if (err === interrupt) throw err
         if (inline) throw err
         return _unknown(_errorRepr(err)) // If not inlining, don't throw exceptions, return them.
@@ -5087,22 +5147,78 @@ The adjustment is passed through to each arg.`,
     call(a,b) { return tf.matMul(a,b, false, true) },
   },
 
+  _disposableCount:{
+    docs:`A metric for the count of live \`_isDisposable\` objects in the system. All of them need to be \`dispose\`d of.`,
+    call() { return typeof tf == ''+void 0 ? 0 : tf.engine().state.numTensors },
+  },
+
+  _willDispose:{
+    docs:`If the first arg that's \`_isDisposable\` is not disposed, the second arg will be reported to the user.`,
+    call(x, info) {
+      // If `_debugMemory` is checked, store the info, to be displayed if a tensor is not disposed of.
+      //   (Finalizers won't have a chance to dispose anything, so there's no need for WeakRefs.)
+      return _isDisposable(x) && _willDispose.disposable && _willDispose.disposable.set(x, info), x
+    },
+  },
+
+  _debugMemory:[
+    __is(`settings`),
+    false,
+    `Whether to make \`_compileBody\` track every created value to make sure that it's disposed of, when we're finished.`,
+  ],
+
+  _debugInterrupt:[
+    __is(`settings`),
+    false,
+    `Whether \`_compileBody\` should assert that no interrupt occurs in no-interrupt places.`,
+  ],
+
+  _checkMemoryIntegrity:{
+    docs:`If we still have any unfreed tensors that are not visible, this reports the DAG nodes that created them and them.`,
+    call(result, env) {
+      if (!_checkMemoryIntegrity.seen) _checkMemoryIntegrity.seen = new Set
+      if (!_willDispose.disposable) return
+      const seen = _checkMemoryIntegrity.seen
+      try {
+        walk(result), env[_id(commit)] && env[_id(commit)].forEach(walk)
+        const r = _allocArray()
+        _willDispose.disposable.forEach((info, dis) => {
+          if (!seen.has(dis)) r.push([_extracted, info, dis])
+        })
+        _willDispose.disposable.clear()
+        if (r.length)
+          error("Got", result, "but forgot to free:", ...r)
+        _allocArray(r)
+      } finally { seen.clear() }
+
+      function walk(x) {
+        _isDisposable(x) && _checkMemoryIntegrity.seen.add(x)
+        if (!_isArray(x)) return
+        if (_checkMemoryIntegrity.seen.has(x)) return
+        _checkMemoryIntegrity.seen.add(x)
+        x.forEach(walk)
+      }
+    },
+  },
+
+  _isDisposable(x) { return typeof tf != ''+void 0 && x instanceof tf.Tensor },
+
   dispose:{
     docs:`A low-level function for statically disposing a resource (with no references to other resources; currently only tensors).
 A function \`defines\` this to be \`true\` to make execution \`dispose\` its result.
 
 Note that this is only for disposal which we can statically determine, at compile-time. Storing a resource in an array needs \`keep\`.`,
     lookup:{
+      _debugMemory:__is(`_debugMemory`),
       keep:__is(`keep`),
       takeAt:__is(`takeAt`),
     },
-    Initialize() { dispose.keep = new WeakSet },
-    elemValue(x) {
-      return typeof tf != ''+void 0 && x instanceof tf.Tensor
-    },
+    Initialize() { dispose.keep = new WeakMap },
+    elemValue:__is(`_isDisposable`),
     call(x) {
-      if (typeof tf != ''+void 0 && x instanceof tf.Tensor)
-        !dispose.keep.has(x) ? x.dispose() : dispose.keep.delete(x)
+      if (_isDisposable(x))
+        !dispose.keep.has(x) && _willDispose.disposable && _willDispose.disposable.delete(x),
+        !dispose.keep.has(x) ? x.dispose() : dispose.keep.get(x) > 1 ? dispose.keep.set(x, dispose.keep.get(x) - 1) : dispose.keep.delete(x)
     },
   },
 
@@ -5113,8 +5229,8 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     interrupt:false,
     argCount:1,
     call(x) {
-      if (typeof tf != ''+void 0 && x instanceof tf.Tensor)
-        !dispose.keep.has(x) ? dispose.keep.add(x) : error("Can currently only prevent disposal once, but tried to keep", x, "twice")
+      if (_isDisposable(x))
+        !dispose.keep.has(x) ? dispose.keep.set(x, 1) : dispose.keep.set(x, dispose.keep.get(x) + 1)
       return x
     },
   },
@@ -5124,7 +5240,7 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     interrupt:false,
     dispose:true,
     argCount:2,
-    call(a, i) { return readAt(a, i) },
+    call(a, i) { const r = readAt(a, i);  dispose(r);  return r },
     adjust:__is(`_oneValueAdjustment`),
     mergeAdjustment:__is(`_mergeReads`),
   },
@@ -5149,12 +5265,15 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
       function walk(x) {
         if (!x || typeof x != 'object' && typeof x != 'function') return
         if (_rememberToDispose.seen.has(x)) return
-        if (defines(dispose, elemValue)(x) && x !== node)
+        if (_isDisposable(x) && x !== node)
           return _rememberToDispose.seen.add(x), void res.push(x)
         if (!_isArray(x) && !(x instanceof Map) && !(defines.key in x)) return
         _rememberToDispose.seen.add(x)
-        if (_isArray(x)) x.forEach(walk)
-        else if (x instanceof Map) x.forEach(walk)
+        if (_isArray(x)) {
+          x.forEach(walk)
+					for (let i=0; i < x.length; ++i)
+						if (_isDisposable(x[i])) ++_disposableCount.allowed
+        } else if (x instanceof Map) x.forEach(walk)
         else Object.values(x[defines.key]).forEach(walk)
       }
     },
@@ -5221,7 +5340,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
       if (!_isArray(poIndRc) || poIndRc.length != 3)
         error("Expected result of applying", _postorderInfo, "but got", poIndRc)
       const [po, inds, rc] = poIndRc
-      let [save, loaded, dins = _allocArray(), douts = _allocArray(), inputAdj, program] = interrupt(autograd)
+      let [save, loaded, dins = _allocArray(), douts = _allocArray(), inputAdj, program] = interrupt(6)
       douts.length = po.length
       try {
         if (!save) {
@@ -5299,14 +5418,14 @@ A function that, given linearization of a function's DAG, purifies and returns t
           if (program.length == 2 && !program[1]) return null
           if (program.length == 2) program = program[1]
         }
-        let b = purify(program, input, false, false)
+        let b = purify(program)
         if (_isArray(b)) // From value-space of output of `purify`, to program-space.
           b = b[0] === _unknown ? b[1] : quote(b)
         _allocArray(save), _allocArray(dins), _allocArray(douts)
         // This `last` makes sure that exceptions won't cause partial disposal of saved state.
         const thoseSaved = save.filter(x => x)
         return thoseSaved.length ? [last, ...thoseSaved, b, [_allocArray, loaded], b] : b
-      } catch (err) { if (err === interrupt) interrupt(autograd, _tmp().length=0, _tmp().push(save, loaded, dins, douts, inputAdj, program));  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(save, loaded, dins, douts, inputAdj, program);  throw err }
     },
   },
 
@@ -5335,7 +5454,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       ],
     ],
     Initialize() {
-      display.sizes = {top: 0, right: 0, bottom: 20, left: 60, width: 300, height: 150}
+      display.sizes = {top: 10, right: 20, bottom: 20, left: 90, width: 450, height: 150}
     },
     call(lbl, vle) {
       if (typeof document == ''+void 0) return
@@ -5355,6 +5474,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
           call.env[_id(log)] = L
           log(tbl)
         }
+        if (!_updatePlots.rows) _updatePlots.rows = new Set, _updatePlots.fn = _throttled(_updatePlots, .05)
         if (!L.has(lbl)) {
           // Create a table row with the label and the plot.
           const data = vle !== null ? [vle] : []
@@ -5381,37 +5501,53 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
 
         update(L.get(lbl))
         function update(row) {
-          if (typeof ResizeObserver != ''+void 0)
-            row.lastChild.classList.toggle('resizable', row.to.length > 1)
-          if (row.to.length > 1)
-            row.lastChild.lastChild.textContent = '',
-            row.lastChild.firstChild.style.removeProperty('display'),
-            _updatePlot(d3.select(row.lastChild.firstChild), sizeOf(row.lastChild), row.to)
-          else
-            row.lastChild.lastChild.textContent = row.to.length ? ''+row.to[0] : '<Nothing>',
-            row.lastChild.firstChild.style.display = 'none'
-        }
-        function sizeOf(el) {
-          if (el && el.offsetWidth && el.offsetWidth > 150) {
-            const left = 60, bottom = 20
-            return {top: 10, right: 10, bottom, left, width: el.offsetWidth - left - 10, height: el.offsetHeight - bottom - 10}
-          }
-          if (el && el.offsetWidth)
-            return {top: 0, right: 0, bottom: 10, left: 20, width: el.offsetWidth - 20, height: el.offsetHeight - 10}
-          return display.sizes
+          !_updatePlots.rows.size && setTimeout(_updatePlots.fn, _msBeforeInterrupt[1]*2)
+          _updatePlots.rows.add(row)
         }
       } else
         error("Expected undefined or null or a number, got", vle)
     },
   },
 
+  _updatePlots() {
+    // Performs scheduled updates of plots.
+    _updatePlots.rows.forEach(update)
+		function update(row) {
+      _updatePlots.rows.delete(row)
+			if (typeof ResizeObserver != ''+void 0)
+				row.lastChild.classList.toggle('resizable', row.to.length > 1)
+			const hadText = row.lastChild.lastChild.textContent
+			if (row.to.length > 1) {
+				if (hadText)
+					row.lastChild.lastChild.textContent = '',
+					row.lastChild.firstChild.style.removeProperty('display')
+				_updatePlot(d3.select(row.lastChild.firstChild), hadText ? display.sizes : sizeOf(row.lastChild), row.to)
+			} else
+				row.lastChild.lastChild.textContent = row.to.length ? ''+row.to[0] : '<Nothing>',
+				row.lastChild.firstChild.style.display = 'none'
+		}
+		function sizeOf(el) {
+			if (el && el.offsetWidth && el.offsetWidth > 150) {
+				const left = 90, bottom = 20
+				return {top: 20, right: 20, bottom, left, width: el.offsetWidth - left - 20, height: el.offsetHeight - bottom - 20}
+			}
+			if (el && el.offsetWidth)
+				return {top: 0, right: 0, bottom: 10, left: 20, width: el.offsetWidth - 20, height: el.offsetHeight - 10}
+			return display.sizes
+		}
+    // .rows (a Set), .fn (a `_throttled` mirror of this function)
+  },
+
   _updatePlot(svg, sizes, data, begin, end) {
     if (!_isArray(data)) error("Expected an array, got", data)
     const el = svg.node()
+    let transition = false
     if (begin === undefined)
       begin = el._begin !== undefined ? el._begin : 0
+    else transition = true
     if (end === undefined)
       end = el._end !== undefined && el._end !== el._data.length ? el._end : data.length
+    else transition = true
 
     svg
       .attr("width", sizes.width + sizes.left + sizes.right)
@@ -5428,17 +5564,17 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       let zoomBegin = null
       function mouseMove(evt) {
         let [cx,cy] = d3.pointer(evt, this)
-        let i = Math.max(0, Math.min(Math.round(this._x.invert(cx)), this._data.length-1)), data = this._data
+        let i = Math.max(0, Math.min(Math.round(this._x.invert(cx)-1), this._data.length-1)), data = this._data
         if (i < 0 || i >= this._data.length)
           focus.style('opacity', 0), text.style('opacity', 0)
         else
           focus.style('opacity', 1), text.style('opacity', 1),
-          focus.attr('cx', this._x(i)).attr('cy', this._y(data[i])),
-          text.text('At '+i+', the value is\n'+data[i]).style('transform', `translate(${this._x(i)}px, ${this._y(data[i])-28}px)`)
+          focus.attr('cx', this._x(i+1)).attr('cy', this._y(data[i])),
+          text.text('At '+(i+1)+', the value is\n'+data[i]).style('transform', `translate(${this._x(i+1)}px, ${this._y(data[i])-28}px)`)
 
         // Also display the rectangle of the future zoom.
         if (zoomBegin !== null) {
-          let l = this._x(zoomBegin), r = this._x(i)
+          let l = this._x(zoomBegin), r = this._x(i+1)
           if (l === r) l = this._x(0), r = this._x(data.length-1)
           if (i >= 0 && i < this._data.length)
             zoom.style('opacity', 1),
@@ -5453,14 +5589,14 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       // Also allow zooming in by a dragged click (and zooming out, by a quick click).
       svg.on('mousedown', function(evt) {
         let [cx,cy] = d3.pointer(evt, this)
-        const i = Math.max(0, Math.min(Math.round(this._x.invert(cx)), this._data.length-1))
+        const i = Math.max(0, Math.min(Math.round(this._x.invert(cx)-1), this._data.length-1))
         if (i >= 0 && i < this._data.length) zoomBegin = i
         evt.preventDefault()
         mouseMove.call(this, evt)
       }).on('mouseup', function(evt) {
         if (zoomBegin === null) return
         let [cx,cy] = d3.pointer(evt, this)
-        const i = Math.max(0, Math.min(Math.round(this._x.invert(cx)), this._data.length-1)), data = this._data, sizes = this._sizes
+        const i = Math.max(0, Math.min(Math.round(this._x.invert(cx)-1), this._data.length-1)), data = this._data, sizes = this._sizes
         if (i >= 0 && i < this._data.length) {
           if (zoomBegin === i) _updatePlot(d3.select(this), sizes, data, 0, data.length)
           else if (zoomBegin > i) _updatePlot(d3.select(this), sizes, data, i, zoomBegin+1)
@@ -5473,35 +5609,38 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
     } else
       [xAxis, yAxis, plot] = el.childNodes, xAxis = d3.select(xAxis), yAxis = d3.select(yAxis), plot = d3.select(plot)
     // X axis.
-    const x = d3.scaleLinear()
-      .domain([begin, end-1])
+    const x = (el._x || (el._x = d3.scaleLinear()))
       .range([sizes.left, sizes.left + sizes.width - sizes.right])
-    ;(_disableSmoothTransitions[1] ? xAxis : xAxis.transition(200))
+      .domain([begin+1, end])
+    ;(_disableSmoothTransitions[1] || !transition ? xAxis : xAxis.transition(200))
       .attr("transform", `translate(0,${sizes.top + sizes.height - sizes.bottom})`)
-      .call(d3.axisBottom(x).ticks(sizes.width / 80).tickSizeOuter(0))
+      .call(d3.axisBottom(x).ticks(Math.min(end - begin - 1, sizes.width / 80)).tickSizeOuter(0))
 
     // Y axis.
-    const dataSlice = data.slice(begin, end)
-    const min = d3.min(dataSlice), max = d3.max(dataSlice), extra = Math.abs(max-min)*.2
-    const y = d3.scaleLinear()
-      .domain([min-extra, max+extra]).nice()
+    let min = data[begin], max = data[begin]
+    for (let i = begin+1; i < end; ++i)
+      data[i] < min ? (min = data[i]) : (data[i] > max && (max = data[i]))
+    const extra = Math.abs(max-min)*.2
+    min = (min-extra<0) === (min<0) ? min-extra : 0, max = (max+extra<0) === (max<0) ? max+extra : 0
+    const y = (el._y || (el._y = d3.scaleLinear()))
       .range([sizes.top + sizes.height - sizes.bottom, sizes.top])
-    ;(_disableSmoothTransitions[1] ? yAxis : yAxis.transition(200))
+      .domain([min, max]).nice()
+    ;(_disableSmoothTransitions[1] || !transition ? yAxis : yAxis.transition(200))
       .attr("transform", `translate(${sizes.left},0)`)
       .call(d3.axisLeft(y).ticks(sizes.height / 40).tickSizeOuter(0))
 
     el._x = x, el._y = y, el._data = data, el._sizes = sizes, el._begin = begin, el._end = end === data.length ? undefined : end
 
-    ;(_disableSmoothTransitions[1] ? plot.datum(data) : plot.datum(data).transition(200))
-      .attr("fill", "none")
-      .attr("stroke", "steelblue")
-      .attr("stroke-width", 1.5)
-      .attr("stroke-linejoin", "round")
-      .attr("stroke-linecap", "round")
-      .attr("d", d3.line()
-        .defined(d => !isNaN(d))
-        .x((d,i) => x(i))
-        .y(d => y(d)))
+    // Plot.
+    if (!plot.attr('fill'))
+      plot.attr("fill", "none")
+				.attr("stroke", "steelblue")
+				.attr("stroke-width", 1.5)
+				.attr("stroke-linejoin", "round")
+				.attr("stroke-linecap", "round")
+    plot.datum(data)
+    ;(_disableSmoothTransitions[1] || !transition ? plot : plot.transition(200))
+      .attr("d", d3.line().x((d,i) => x(i+1)).y(y))
   },
 
   callAdjust:{ // (Not a paperclip maximizer anymore, since `autograd` just ignores non-adjustable things.)
@@ -5542,38 +5681,55 @@ But let's do the most trivial prediction ever:`,
 
 The loss that is used, \`loss2\`, is the halved square of the difference between predicted and actual. So you should be aware that it's about \`12.5\` if predicting zero, likely fractional.
 
-To implement functionality is to be able to use it repeatedly, without conditionality, heatedly. So, almost 5 bugs later, made it something greater:`,
-      // `v: randomVar() repeat ^(v+1=3; v+2=4; v+4=6.1)` works.
-      //   TODO: Understand why the above leaks memory (tensors).
-      //     …How would we do that, though? Is it possible to have some sort of generic framework for finding memory leaks?…
+To implement functionality is to be able to use it repeatedly, without conditionality, heatedly. So, almost 5 bugs later, made it something greater.
+
+But, it leaks some memory, and it's slow.
+To my little friend, say hello: \`\`settings ^_debugMemory\`\`.
+
+I see the narration has lost its maening to rhyming. To guide it back to the true path…
+Browsers have a built-in profiler, and we have built-in brains, so slowness can go.
+But memory?
+JS has nothing.
+But don't just jump in and start smacking things around in hopes that bugs will disappear. Remember, we're not just the generality of evolution, we're intelligence. We need a relevant system to satisfy here, willfully.
+So, to guide us back to the true path, I drilled through \`stringToDoc\` to bring this motivational device: \`\`settings ^debugMemory\`\`. Enable it, and every unlucky tensor that has not been \`dispose\`d of will light up along with the DAG nodes that produced them, to become easy pickings.
+You may ask yourself: why would we use this device? It will be motivated by there being an error if the allotted and actual tensor counts don't match — a system which brings the distant out-of-memory condition into tangible reach.
+And if it doesn't work? Back in my time, we had to write and debug programs on paper, with blood and tears. And with very small letters. You all have it easy nowadays.
+`,
+      // `v: randomVar() repeat ^(v+1=3; v+2=4; v+4=6.1) 1000` works perfectly.
+
+      // TODO: …Try to find out whether DOM elements don't get freed when a closure has a reference to them.
       [
         __is(`fancier`),
-        `f:\input+randomVar()  (repeat ^(f(1)=3; f(2)=4; f(4)=6.1))`,
+        `f:\input+randomVar()  (repeat ^(f(1)=3; f(2)=4; f(4)=6.1) 1000)`,
 				// TODO: Find out which part leaks memory (`tf.memory()`), and whether the fact that we create an array to adjust a function is the cause.
-        //   (Not clear how, however.)
-        function(r) { return true }, // …Wait, how would we do this if `repeat` will never return?
+        //   (It's probably the `array`s that pass args to adjustment functions.)
+        //     (…But how would we fix that? Do we make definitions of `dispose` be able to be functions, to be called on statically-known unneeded-ness? Any other way?…)
+				// TODO: profile the repeated prediction, and see what parts can be improved. (User-time: 15s; real-time: 1min — with 10ms-to-interrupt. Interrupts are so inefficient, maybe. Check.)
+        function(r) { return true }, // …Wait, how would we do this if `repeat` will never return? Iteration-count, maybe?
       ],
       ``,
       // TODO: explaining. Open our eyes with our words, to bind our selves into one, tight enough to withstand learning otherwise.
-      // And, TODO: have a setting-slider for (the exponent of) the learning rate, because `3e-4` could be far too low sometimes.
-      // And, TODO: profile the repeated loss, and see what parts can be improved.
-      // And, TODO: find a way to update the plot more efficiently than replacing it entirely.
-      // Also, maybe, TODO: in `adjust`'s docs, describe how important it is to everyday life, whether letting your loved ones know exactly how you're feeling so that they can optimize response to maximize your feelings, or remembering who's responsible for which action and how…
-      // TODO: Fetch a small dataset like MNIST, create a simple NN regressor (using `randomVar`), and optimize it (and plot the loss). Words only.
+      // TODO: Fetch a small dataset like MNIST, create a simple NN regressor (using `randomVar`), and optimize it (and plot the loss).
+
+      // TODO: Words about "deep learning is a mindset, also called a universal approximator: just as developing code, it can do anything. Be careless, and it can replace all your thoughts with itself. We can note correspondences between the two", and concepts.
     ],
     call(expr, cl, aj, saveReplay = true) {
-      if (call.pure) return call(expr)
+      if (call.pure) return purify(expr)
       // Set and finally reset some global variables for us to communicate with some other code through.
       //   Perfectly readable, what are you talking about.
       //     Besides, what are the alternatives?
       //       Forcing every expression in all user code to take and return an array with their values?
-      //         That's approximately a million times less readable.
-      let [poIndRc, compCall, compAdj, result, s = 0, n = 0, mustAdjust = false, asCur, alCur] = interrupt(callAdjust)
+      //         By my calculations, that's approximately a million point two times less readable.
+      let [poIndRc, compCall, compAdj, result, s = 0, n = 0, mustAdjust, asCur, alCur, disposable = _allocMap(), numTensors = 0, allowedTensors = 0] = interrupt(12)
       cl && (compCall = cl), aj && (compAdj = aj)
+      const prevDisposable = _willDispose.disposable;  _willDispose.disposable = disposable
       const prevSave = call.env[_id(adjustSave)], prevLoad = call.env[_id(adjustLoad)]
       call.env[_id(adjustSave)] = asCur, call.env[_id(adjustLoad)] = alCur
       const ps = callAdjust.s, pn = callAdjust.n;  callAdjust.s = s, callAdjust.n = n
       predicts.happened = false
+      const prevAllowed = _disposableCount.allowed;  _disposableCount.allowed = allowedTensors
+
+      const startTensors = _disposableCount()
       try {
         // Compile call then adjustment, then call then adjust, then assert exact-ness of reversal, then save to replay buffer, then return result.
         if (compCall === undefined) {
@@ -5583,62 +5739,96 @@ To implement functionality is to be able to use it repeatedly, without condition
         if (compAdj === undefined) {
           if (_isArray(expr) && expr[0] !== quote) {
             const ag = autograd(poIndRc) || null
-            compAdj = ag && _compileBody(ag)
+            compAdj = ag && _compileBody(ag) || null
           } else
             compAdj = null
         }
         if (poIndRc)
           poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray), _allocArray(poIndRc), poIndRc = undefined
 
+        // Call.
+        if (mustAdjust === undefined)
+          asCur = call.env[_id(adjustSave)] = _allocArray(), alCur = call.env[_id(adjustLoad)] = undefined, mustAdjust = false
         if (result === undefined) {
-          call.env[_id(adjustSave)] = _allocArray(), call.env[_id(adjustLoad)] = undefined
-          result = compCall(),
-          result === undefined && (result = _onlyUndefined),
-          call.env[_id(adjustLoad)] = call.env[_id(adjustSave)], call.env[_id(adjustSave)] = undefined
+          result = compCall()
+          result === undefined && (result = _onlyUndefined)
+          alCur = call.env[_id(adjustLoad)] = call.env[_id(adjustSave)], asCur = call.env[_id(adjustSave)] = undefined
+
+					if (predicts.happened) mustAdjust = true
+					if (!mustAdjust)
+						defines(adjustLoad, _cancel)(alCur), alCur = call.env[_id(adjustLoad)] = undefined
+					if (!mustAdjust)
+						return result !== _onlyUndefined ? result : undefined
+					if (call.pure) throw impure
         }
 
-        if (predicts.happened) mustAdjust = true
-        if (!mustAdjust && call.env[_id(adjustLoad)].length)
-          call.env[_id(adjustLoad)].forEach(dispose), _allocArray(call.env[_id(adjustLoad)]), call.env[_id(adjustLoad)] = undefined
-        if (!mustAdjust)
-          return result !== _onlyUndefined ? result : undefined
-        if (call.pure) throw impure
-
+        // Adjust.
         // We don't have a loss function at the top-level, nor a dataset. Only `predicts`.
         compAdj && compAdj([undefined, result, undefined])
 
+        // Check memory integrity, because not `dispose`ing things can be catastrophical. (Oh, and `commit`.)
+        if (alCur && alCur.length)
+          error("Inexact reversal: didn't load", ...alCur)
+        _checkMemoryIntegrity(result !== _onlyUndefined ? result : undefined, call.env)
+        const c = commit()
+        const n = numTensors + (_disposableCount() - startTensors - (_isDisposable(callAdjust.s) ? 1 : 0))
+        if (_disposableCount.allowed < n)
+          error("Did not", dispose, n - _disposableCount.allowed, "tensors; re-run with", _debugMemory)
+        if (_disposableCount.allowed > n)
+          error("Disposed", _disposableCount.allowed - n, "tensors too many")
+
+        // Save the replay if needed.
+        if (c && saveReplay)
+          _saveReplay([callAdjust, quote(expr), compCall, compAdj, false])
+
         // Display average loss, if there is any.
         if (callAdjust.n) {
-          display(label('Loss'), null)
           const s = callAdjust.s, n = callAdjust.n
           const env = call.env
-          typeof s == 'number' ? display(label('Loss'), s / n) : s.array().then(s => {
+          typeof s == 'number' ? display(label('Loss'), s / n) : (display(label('Loss'), null), s.array().then(sv => {
+            dispose(s)
             const penv = call.env;  call.env = env
-            try { display(label('Loss'), s / n) }
+            try { display(label('Loss'), sv / n) }
             finally { call.env = penv }
-          })
+          }))
         }
 
-        if (call.env[_id(adjustLoad)] && call.env[_id(adjustLoad)].length)
-          error("Inexact reversal: didn't load", call.env[_id(adjustLoad)])
-        if (commit() && saveReplay)
-          _saveReplay([callAdjust, quote(expr), compCall, compAdj, false])
         return result !== _onlyUndefined ? result : undefined
       } catch (err) {
-        if (err === interrupt) interrupt(callAdjust, _tmp().length=0, _tmp().push(poIndRc, compCall, compAdj, result, callAdjust.s, callAdjust.n, mustAdjust || predicts.happened, call.env[_id(adjustSave)], call.env[_id(adjustLoad)]))
+        if (err === interrupt) interrupt.stack.push(poIndRc, compCall, compAdj, result, callAdjust.s, callAdjust.n, mustAdjust || predicts.happened, asCur, alCur, disposable, numTensors + (_disposableCount() - startTensors - (_isDisposable(callAdjust.s) ? 1 : 0)), _disposableCount.allowed), compCall = null
+        else result = _errorRepr(err)
         throw err
       } finally {
+        if (compCall) // An error, or normal return.
+          _checkMemoryIntegrity(result !== _onlyUndefined ? result : undefined, call.env), _allocMap(disposable),
+          defines(adjustSave, _cancel)(asCur), defines(adjustLoad, _cancel)(alCur),
+          dispose(callAdjust.s)
         call.env[_id(adjustSave)] = prevSave, call.env[_id(adjustLoad)] = prevLoad
+        _willDispose.disposable = prevDisposable
         callAdjust.s = ps, callAdjust.n = pn
+        _disposableCount.allowed += prevAllowed // Outer `callAdjust`s need to know about what inner ones do.
       }
+      // .s, .n
     },
   },
 
+  _learningRate:[
+    __is(`settings`),
+    3e-4,
+    `The learning rate (multiplier of incoming gradient for variables) is ???.`,
+    __is(`rangeSetting`),
+    1e-7,
+    1,
+    true,
+  ],
 
   randomVar:{
     docs:`\`(randomVar …Sizes)\`: A \`construct\` for easy creation of randomly-initialized \`variable\`s, biased to identity, with fixed learning rate and momentum.
 
 (Forgive me, Master "Please don't use \`construct\` for macros".)`,
+    lookup:{
+      _learningRate:__is(`_learningRate`),
+    },
     construct(x, obj) {
       if (obj === undefined) {
         // Basically tf.initializers.glorotNormal for the current value:
@@ -5665,7 +5855,7 @@ To implement functionality is to be able to use it repeatedly, without condition
           s = tf.add(t, e)
           dispose(t), dispose(e)
         }
-        return [variable, [quote, [s, 0, 0, 0]], 3e-4, 0.9]
+        return [variable, [quote, [s, 0, 0, 0]], [readAt, [quote, _learningRate], 1], 0.9]
       } else;
     },
   },
@@ -5689,6 +5879,7 @@ To implement functionality is to be able to use it repeatedly, without condition
 This implements stochastic gradient descent (SGD) with Nesterov momentum. Here, it's not a separate optimizer, but is specified at each variable.
 When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`, the change multiplier (learning rate, say, 0.0003), and the velocity decay (say, 0.9).`,
     variable:true,
+    dispose:true,
     lookup:{
       randomVar:__is(`randomVar`),
     },
@@ -5703,6 +5894,10 @@ When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`
     adjustSave:true,
     adjust:[
       __is(`last`),
+      [
+        __is(`_willCommit`),
+        __is(`_inA`),
+      ],
       [
         __is(`writeAt`),
         __is(`_inA`),
@@ -5724,10 +5919,6 @@ When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`
         __is(`_inA`),
         2,
       ],
-      [
-        __is(`willCommit`),
-        __is(`_inA`),
-      ],
       undefined,
     ],
     mergeAdjustment:null,
@@ -5740,34 +5931,42 @@ When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`
 Until this is done, the same value of variables is used.`,
     Initialize() { commit.arrs = new Set },
     lookup:{
-      willCommit:__is(`willCommit`),
+      _willCommit:__is(`_willCommit`),
     },
     call(perform = true) {
       if (call.pure) throw impure
       if (!call.env || !call.env[_id(commit)]) return
-      if (perform)
-        call.env[_id(commit)].forEach(arr => {
-          // arr[0] = arr[0] + arr[1]/arr[2];  arr[1]=arr[2]=0
-          if (!arr[2]) return
-          const dv = div(arr[1], arr[2])
-          const sm = add(arr[0], dv)
-          dispose(dv)
-          writeAt(arr, 0, sm)
-          dispose(sm)
-          arr[1] = arr[2] = 0
-        })
+			call.env[_id(commit)].forEach(arr => {
+				// arr[0] = arr[0] + arr[1]/arr[2];  arr[1]=arr[2]=0
+				for (let i=0; i < arr.length; ++i)
+					if (_isDisposable(arr[i])) ++_disposableCount.allowed
+				if (!arr[2]) return
+				if (perform) {
+					const dv = div(arr[1], arr[2])
+					const sm = add(arr[0], dv)
+					dispose(dv)
+					writeAt(arr, 0, sm)
+					dispose(sm)
+				}
+				_isDisposable(arr[1]) && --_disposableCount.allowed, dispose(arr[1]), arr[1] = arr[2] = 0
+			})
       const result = !!call.env[_id(commit)].size
       call.env[_id(commit)].clear()
       return result
     },
   },
 
-  willCommit(arr) {
+  _willCommit(arr) {
     // Makes the later `commit` commit the change (arr[1]/arr[2]) to the value (arr[0]).
+    //   Make sure to call this before any changes to the array.
     !_isArray(arr) && error("Expected an array but got", arr)
     if (call.pure) throw impure
     if (!call.env[_id(commit)]) call.env[_id(commit)] = new Set
-    call.env[_id(commit)].add(arr)
+    if (!call.env[_id(commit)].has(arr)) {
+			call.env[_id(commit)].add(arr)
+      for (let i=0; i < arr.length; ++i)
+        if (_isDisposable(arr[i])) --_disposableCount.allowed
+    }
   },
 
   _staticallyOverridable:{
@@ -5808,6 +6007,10 @@ But the "why" of a thing is often even more important than the thing itself. Whe
 If you care about prominent figures in deep learning, Yann LeCun in {http://www.cit.ctu.edu.vn/~dtnghi/rech/p2017/lecun-isscc-19.pdf} has advocated the use of self-supervised learning for efficient artificial intelligence. Our system is much like that, except we're more hierarchical and general.
 \`predicts\` is not intended as one rigid way to predict everything at once, nor as another way to burden users. It should be more efficient to do things like "don't actually adjust anything here with 80% probability" (to decorrelate training samples) or "see this number, only available in the future? Predict it in the past" or "give me the best-by-goal-G program" or "decide from seen data what the datasets that you train on will be" or "decide to be the best version of yourself".
 This presents significant challenges compared to the simple and limited framework commonly used in deep learning. Literally everything will break. There is only one solution: to get good at everything.`,
+    philosophy:`Exposing predictions to others is very important to everyday life, whether letting your loved ones know exactly how you're feeling about a thing so that they can optimize actions to maximize your feelings, or remembering who's responsible for which action and how, or exposing cared-about parts of intelligence to all for much greater unity and efficiency in a society.
+There are ways to verify this: if efficiency is greater, then a solution out-competes others. In communities of overly positive people, questions like "are you okay" are overly used. Smart people (very often found in puzzle-solving environments such as programming) very often doubt themselves and have imposter syndrome. Brave people care about fear.
+(Mathematicians may object to the use of the word "verify", but we're talking about intelligence here, not abstract towers. It specializes in making the vague real, by optimizing.)
+That honesty is nearly impossible to establish in pre-existing structures, especially things like governance. But the probability is not zero. It can be made real.`,
     call(got, actual, loss=loss2) {
       if (call.pure) throw impure
       return predicts.happened = true, keep(actual) 
@@ -5817,6 +6020,7 @@ This presents significant challenges compared to the simple and limited framewor
       adjust:__is(`adjust`),
     },
     dispose:true,
+    interrupt:false,
     adjustSave:true,
     adjust:[
       __is(`_staticallyOverridable`),
@@ -5864,6 +6068,7 @@ This presents significant challenges compared to the simple and limited framewor
   _knowLoss:{
     docs:`This function allows intellectual superiority.
 You don't know loss, mind full of gloss. The lossless cannot create a good plot.`,
+    interrupt:false,
     call(x) {
       if (typeof callAdjust.n != 'number') error("Can only be called inside", callAdjust)
       const prev = callAdjust.s
@@ -6003,14 +6208,13 @@ And if you have no friends, always try your best to imagine friends that will he
   },
 
   adjust:{
-    docs:`Given inputs, output, and output change, reverses the just-done execution to compute input changes.
+    docs:`Given inputs, output, and output change, reverses the just-done execution to compute input changes (and change \`variable\`s).
 
 (Definitions must be array DAGs that signify function bodies, to guarantee partial evaluation, where \`input\` is \`(arrayObject Ins Out Dout)\`—>\`Dins\`. \`_inA\`, \`_inB\`, \`_inC\`, \`_dout\` can help specify those bodies.)
+(If using the basic primitives to adjust, adjustment must always happen in perfect reversal of execution.)
 
 One way to use this is like paperclip maximization: compute a prediction of a numeric value, compute the loss, and back-propagate the gradient to minimize the loss. This is the standard paradigm of modern machine learning; you've probably heard of its recent amazing successes.
-Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses. This has previously been left relatively unexplored.
-
-If using the basic primitives, adjustment must always happen in perfect reversal of execution, otherwise there will be very non-obvious errors.`,
+Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses.`,
     lookup:{
       autograd:__is(`autograd`),
       mergeAdjustment:__is(`mergeAdjustment`),
@@ -6019,34 +6223,38 @@ If using the basic primitives, adjustment must always happen in perfect reversal
     },
     call(fn, ins, out, dout) {
       if (typeof fn != 'function') error('Expected a function, got', fn)
+			if (call.pure) return purify(defines(fn, adjust), [quote(ins), quote(out), quote(dout)], true, true)
       // Bind the input array and call that.
-      let [dins] = interrupt(adjust)
+      let [dins] = interrupt(1)
       try {
         if (!dins) {
           _bindInput.in = [array, quote(ins), quote(out), quote(dout)]
           dins = bound(_bindInput, defines(fn, adjust), false)
           _bindInput.in = undefined
         }
-        return !call.pure ? call(dins) : purify(dins)
-      } catch (err) { if (err === interrupt) interrupt(adjust, _tmp().length=0, _tmp().push(dins));  throw err }
+        return call(dins)
+      } catch (err) { if (err === interrupt) interrupt.stack.push(dins);  throw err }
     },
     purify(fnProgram, insProgram, outProgram, doutProgram) {
       // If the function is known, inline its adjustment.
       if (_isArray(fnProgram)) throw impure
-      let [args] = interrupt(adjust)
+      let [args] = interrupt(1)
       try {
         if (!args) args = defines(array, purify)(insProgram, outProgram, doutProgram)
         const adj = defines(fnProgram, adjust)
-        return purify(adj, args, true)
-      } catch (err) { if (err === interrupt) interrupt(adjust, _tmp().length=0, _tmp().push(args));  throw err }
+        return purify(adj, args, true, true)
+      } catch (err) { if (err === interrupt) interrupt.stack.push(args);  throw err }
     },
   },
+
+  _disposeEachAndDealloc(x) { x.forEach(dispose), _allocArray(x) },
 
   adjustSave:{
     docs:`Saves a newly-allocated array for adjustment.
 (Transfers responsibility for \`dispose\`al of items in it and marking the array for re-using.)
 A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
-    _cancel(x) { if (_isArray(x)) x.forEach(dispose), _allocArray(x) },
+    interrupt:false,
+    _cancel(x) { if (_isArray(x)) x.forEach(_disposeEachAndDealloc), _allocArray(x) },
     call(x) {
       if (!_isArray(x))
         error("Can only save (newly-allocated) arrays for adjustment (transferring responsibility for disposal), got", x)
@@ -6063,7 +6271,8 @@ A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
     docs:`Loads an array for adjustment. Be responsible for it, honey.
 Must always be exactly in reverse to \`adjustSave\`.
 A function \`defines\` this to be \`true\` to save its output to adjustment. Look, we only have one global namespace, so name space is at a premium.`,
-    _cancel(x) { if (_isArray(x)) x.forEach(dispose), _allocArray(x) },
+    interrupt:false,
+    _cancel(x) { if (_isArray(x)) x.forEach(_disposeEachAndDealloc), _allocArray(x) },
     call() {
       if (call.pure) throw impure
       const stack = call.env[_id(adjustLoad)]
@@ -6093,11 +6302,11 @@ If using the primitives \`impureHave\`/\`impureLoad\`/\`impureSave\` directly, t
         // Create the function.
         obj = arg => {
           // Do not skim the proper usage, dear friend: check once, then load/save once. Especially between interrupts.
-          if (!interrupt(impure)[0])
+          if (!interrupt(1)[0])
             if (impureHave()) return impureLoad()
           try { return impureSave(obj.f(arg)) }
           catch (err) {
-            if (err === interrupt) interrupt(impure, _tmp().length=0, _tmp().push(true))
+            if (err === interrupt) interrupt.stack.push(true)
             else impureSave(_errorRepr(err))
             throw err
           }
@@ -6224,7 +6433,7 @@ If replaying, this returns the past result; if not, returns \`undefined\`, and t
         error("Expected an array of (…? Expr Tape …?) but got", what)
 
       // The below is just a loop that does `call(expr)`, setting up then checking the impurity tape.
-      let [i, expr, tape, index] = interrupt(replay)
+      let [i, expr, tape, index] = interrupt(4)
       if (i === undefined)
         i = 0, expr = what[0], tape = what[1], index = 0
       const load = _id(impureLoad), save = _id(impureSave)
@@ -6239,7 +6448,7 @@ If replaying, this returns the past result; if not, returns \`undefined\`, and t
             error("Wrong handling of impurities: on replay, attempted to load less than was saved")
         }
         // Note: can return avg loss and/or avg update magnitude, to know more numbers.
-      } catch (err) { if (err === interrupt) interrupt(replay, _tmp().length=0, _tmp().push(i, expr, tape, call.env[load]));  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(i, expr, tape, call.env[load]);  throw err }
       finally { call.env[load] = prevLoad, call.env[save] = prevSave }
     },
   },
@@ -7248,7 +7457,10 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
 
       if (doObserve) {
         const reserialize = _throttled(((el, arr, lang, ctx, opt) => {
-          return b => el.isConnected ? el.replaceWith(serialize(arr, lang, ctx, opt && {...opt, observe:false})) : observe(b, reserialize, false)
+          return b => {
+            observe(b, reserialize, false)
+            el.isConnected && el.replaceWith(serialize(arr, lang, ctx, opt))
+          }
         })(resultElem, arr, lang, ctx, opt), .1)
         unboundToBound.forEach((b,u) => {
           if (!backctx.has(b)) observe(b, reserialize, true)
@@ -7522,7 +7734,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
   _revisitElemValue(el) {
     // Garbage-collects unneeded DOM elements.
     // After replacing elemValue.obj (WeakMap) and elemValue.val (Map) with clean versions, call this on Self.into.
-    let [ch] = interrupt(_revisitElemValue)
+    let [ch] = interrupt(1)
     try {
       _checkInterrupt(_revisitElemValue)
       if (ch === undefined && el instanceof Node && 'to' in el)
@@ -7530,7 +7742,7 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
       if (ch === undefined) ch = el.firstChild
       for (; ch; ch = ch.nextSibling)
         _revisitElemValue(ch)
-    } catch (err) { if (err === interrupt) interrupt(_revisitElemValue, _tmp().length=0, _tmp().push(ch));  throw err }
+    } catch (err) { if (err === interrupt) interrupt.stack.push(ch);  throw err }
   },
 
   _whetherToColorVariables:[
@@ -7672,7 +7884,7 @@ And parsing is more than just extracting meaning from a string of characters (it
       const styles = opt && opt.style ? defines(lang, style) || style : undefined
       const sourceURL = opt && opt.sourceURL || ''
 
-      let [i = 0, lastI = 0, prevI = 0, localS = str[0], localI = 0, curBegin = 0, line = 1, column = 1, lineLengths = sourceURL && [], lines = sourceURL && new Map, columns = sourceURL && new Map, struct = styles && [], Unbound = styles && new Map] = interrupt(parse)
+      let [i = 0, lastI = 0, prevI = 0, localS = str[0], localI = 0, curBegin = 0, line = 1, column = 1, lineLengths = sourceURL && [], lines = sourceURL && new Map, columns = sourceURL && new Map, struct = styles && [], Unbound = styles && new Map] = interrupt(13)
       try {
         function localUpdate(newI) {
           // Update localS/localI/curBegin to match the index.
@@ -7783,7 +7995,7 @@ And parsing is more than just extracting meaning from a string of characters (it
         styles && Unbound.set(struct, u)
         return styles ? [b, styleNode(struct)] : b
       } catch (err) {
-        if (err === interrupt) interrupt(parse, _tmp().length=0, _tmp().push(i, lastI, prevI, localS, localI, curBegin, line, column, lineLengths, lines, columns, struct, Unbound))
+        if (err === interrupt) interrupt.stack.push(i, lastI, prevI, localS, localI, curBegin, line, column, lineLengths, lines, columns, struct, Unbound)
         throw err
       }
     },
@@ -8254,7 +8466,6 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       return elem('string', [s[0][0], _highlightGlobalsInString(s[0].slice(1,-1)), s[0].slice(-1)])
     }
     if (_isArray(v) && v[0] === _extracted && v.length == 3 && s.length == 3 && typeof document != ''+void 0) {
-      elemValue(s[2], s[0].to)
       s[1] = elem('operator', s[1])
       const el = elem('extracted', s)
       el.title = 'extracted', el.classList.add('hasOperators')
@@ -8363,7 +8574,7 @@ Does not merge the parsed arrays.`,
         if (!str) throw "Expected input"
         if (!ctx) ctx = defines(Self, lookup)
         const regex = /[ \n]+|:|\(|\)|`(?:[^`]|``)*`|'(?:[^']|'')*'|"(?:[^"]|"")*"|[^ \n:\(\)'"`]+|$/g
-        let [result, i = 0, j, ctxs = [ctx], visited = new Set] = interrupt(fast)
+        let [result, i = 0, j, ctxs = [ctx], visited = new Set] = interrupt(5)
         regex.lastIndex = i
         if (j === undefined) regex.test(str), j = regex.lastIndex
         try {
@@ -8374,7 +8585,7 @@ Does not merge the parsed arrays.`,
           return makeGraph(result[0]) // Note: This is unsafe.
           //   (To make it safe, inspect all available functions, and make the dangerous ones unable to execute here.)
           // That top-level pair of brackets serves as a language marker.
-        } catch (err) { if (err === interrupt) interrupt(fast, _tmp().length=0, _tmp().push(result, i, j, ctxs, visited));  throw err }
+        } catch (err) { if (err === interrupt) interrupt.stack.push(result, i, j, ctxs, visited);  throw err }
 
         function nextToken() { [i, j] = [j, (regex.test(str), regex.lastIndex)] }
 
@@ -8559,7 +8770,7 @@ Does not merge the parsed arrays.`,
           return r.length == 1 ? r[0] : r
         }
         // Emit `(a b c)` if `(0 1 2)`.
-        const linearityPreferred = _isArray(u) && u.length > 1 && (!u[0] || typeof u[0] != 'object' && typeof u[0] != 'function')
+        const linearityPreferred = _isArray(u) && u.length > 1 && (defines(u[0], construct) !== undefined || !_isArray(u[0]) && typeof u[0] != 'function')
         if (linearityPreferred) {
           !topLevel && match('(')
           _basicMany(match, u, null, _fancierOutermost)
@@ -8662,7 +8873,7 @@ Does not merge the parsed arrays.`,
     style:__is(`_basicStyle`),
     parse:__is(`_fancierTopLevel`),
     serialize:__is(`_fancierTopLevel`),
-    REPL:`also type \`tutorial tutorial\` or \`(docs)\`.`,
+    REPL:`also type \`tutorial tutorial\` or \`docs()\`.`,
     insertLinkTo:__is(`_basicLinkTo`),
     _escapeLabel:__is(`_basicEscapeLabel`),
     _unescapeLabel:__is(`_basicUnescapeLabel`),
@@ -8675,7 +8886,7 @@ Does not merge the parsed arrays.`,
         const r = Object.create(null)
         Object.assign(r, call.env)
         if (_isArray(r[_id(interrupt)]))
-          r.set(interrupt, r[_id(interrupt)].map(x => x instanceof Map ? new Map(x) : !_isArray(x) ? x : x.slice()))
+          r[_id(interrupt)] = r[_id(interrupt)].map(x => x instanceof Map ? new Map(x) : !_isArray(x) ? x : x.slice())
         Object.seal(r)
         return r
       } else
@@ -8684,24 +8895,39 @@ Does not merge the parsed arrays.`,
   },
 
   _causeInterrupt(cause, toReEnter = undefined) {
+		if (interrupt.stack) error("Cannot cause an interrupt while restoring from an interrupt")
     call.env[_id(step)] = _checkInterrupt.step
     call.env[_id(_checkInterrupt)] = cause
     call.env[_id(call)] = call.depth
+    interrupt.stack = call.env[_id(interrupt)] = _allocArray()
     if (toReEnter) _jobs.reEnter = toReEnter
     throw interrupt
   },
+
+  _msBeforeInterrupt:[
+    __is(`settings`),
+    10,
+    `When executing a job, work for at least ??? milliseconds before interrupting.
+An interrupt takes time.
+10 ms should be appropriate for smooth UI interaction, but for computation-intensive work, higher values should be preferred.`,
+    __is(`rangeSetting`),
+    10,
+    300,
+    5,
+  ],
 
   _checkInterrupt:{
     docs:`Checks whether an interrupt is appropriate right now.`,
     call(cause) {
       if (interrupt.noInterrupt) return
-      if (!call.env[_id(interrupt)] || !call.env[_id(interrupt)].length) {
-        // If we stepped enough (ensuring progress), and either we have worked for 10 ms or the nesting depth is as wanted by _pausedToStepper, interrupt.
+      if (!call.env) error("This must be done in an explicit", _newExecutionEnv)
+      if (!interrupt.stack) {
+        // If we stepped enough (ensuring progress), and either we have worked for N ms or the nesting depth is as wanted by _pausedToStepper, interrupt.
         if (call.env[_id(step)])
           --call.env[_id(step)], ++_checkInterrupt.step
         else if (call.env[_id(_pausedToStepper)] !== undefined && call.depth <= call.env[_id(_pausedToStepper)])
           _causeInterrupt(cause, _pausedToStepper)
-        else if (_timeSince(interrupt.started, true) > 10)
+        else if (_timeSince(interrupt.started, true) > _msBeforeInterrupt[1])
           ++_checkInterrupt.step, _causeInterrupt(cause) // Ensure progress.
         else _checkInterrupt.step = 0
       }
@@ -8717,12 +8943,12 @@ Does not merge the parsed arrays.`,
       ],
     ],
     call(expr) {
-      let [int = true] = interrupt(step)
+      let [int = true] = interrupt(1)
       try {
         if (int) int = false, _causeInterrupt(expr, _pausedToStepper)
         if (int === false) ++_checkInterrupt.step, int = 0
         return call(expr)
-      } catch (err) { if (err === interrupt) interrupt(step, _tmp().length=0, _tmp().push(int));  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(int);  throw err }
     },
   },
 
@@ -8733,6 +8959,7 @@ Not for use inside that paused job.
     call(expr, env, then, before = env[_id(log)] || Self.into) {
       if (before instanceof Map) before = before.get(log)
       _cancel(env, true)
+      _jobs.limbo.push(expr, env, then)
       env[_id(_pausedToStepper)] = Infinity
       // Hide `before`, and insert a <div> with <button>s inside.
       const el = elem('div')
@@ -8772,82 +8999,42 @@ Not for use inside that paused job.
     },
   },
 
-  _tmp() {
-    // A little convenience method for getting `interrupt.tmp` in less characters.
-    return interrupt.tmp
-  },
-
   interrupt:{
     docs:`Used to make functions re-entrant in a non-interruptible host language, for better UX.
-Define this to be \`false\` in a global if it will never interrupt.`,
+Define this to be \`false\` in a global if it will never interrupt. (\`_debugInterrupt\` can catch lies here.)
+
+Technical details of usage:
+\`_causeInterrupt(cause)\` to unconditionally interrupt execution.
+Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(2)\`, in particular for counters of loops. Make sure to put interruptible computations not here but inside the try/catch below, to not corrupt interrupt state. There is almost no error-checking, for efficiency!
+Wrap function body after getting its state in \`try{…}catch(err){ if (err === interrupt) interrupt.stack.push(i,j);  throw err }\`.`,
     lookup:{
+      _msBeforeInterrupt:__is(`_msBeforeInterrupt`),
+      _debugInterrupt:__is(`_debugInterrupt`),
       check:__is(`_checkInterrupt`),
       continuation:__is(`_continuation`),
       step:__is(`step`),
     },
     philosophy:`Termination checking (totality) is unnecessary if the host can just interrupt and continue. In fact, it is harmful to provide a false assurance of everything terminating {in reasonable time}.
-Interruption (and sandboxing) is absolutely essential for being able to actually use a program comfortably, and for stepping through the program, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes, and/or heuristic-based totality guarantees.
+Interruption (and sandboxing) is absolutely essential for being able to actually use a program comfortably, and for stepping through the program, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes, and/or heuristic-based totality guarantees.`,
+    Initialize() { interrupt.tmp = [] },
+    _cancel(stack) { stack && stack.forEach(dispose) },
+    call(retrieve) {
+      if (retrieve !== retrieve>>>0)
+        error("Expected the count of items to retrieve, got", retrieve)
+      const tmp = interrupt.tmp, stack = interrupt.stack
+      if (!stack) return tmp.length = 0, tmp
+      if (stack.length < retrieve)
+        error("Corrupted the interrupt state somewhere; check correctness of every store/restore, and/or use", _debugInterrupt)
 
-Technical details:
-\`_causeInterrupt(cause)\` to interrupt execution.
-Create function state in \`f\` like \`let [i = 0, j = 0] = interrupt(f)\`, in particular for loops. Make sure to put interruptible computations not here but inside the try/catch below, to not corrupt interrupt state.
-Wrap function body after getting its state in \`try{…}catch(err){ if (err === interrupt) interrupt(f, _tmp().length=0, _tmp().push(i,j));  throw err }\` (\`...args\` in JS allocates, so this way tries to avoid that).`,
-    Initialize() {
-      interrupt.tmp = []
-    },
-    _cancel(stack) {
-      // Dispose of all values (not lengths, nor causes) in the stack.
-      if (!stack || !stack.length) return
-      let end = stack.length-1
-      while (end) {
-        // stack[end] is the length.
-        // stack[end - length] is the first item.
-        // stack[end - length - 1] is the (cause or) previous length.
-        const length = stack[end]
-        const start = end - length
-        for (let i = start; i < end; ++i)
-          dispose(stack[i])
-        end = start-1
-        // --end // No causes.
-      }
-    },
-    call(cause, got = undefined) {
-      if (got === undefined) {
-        // Collect items from the stack into tmp and return it.
-        const tmp = interrupt.tmp
-        if (!call.env || !call.env[_id(interrupt)]) return tmp.length = 0, tmp
-        const stack = call.env[_id(interrupt)]
-        if (!stack.length) return tmp.length = 0, tmp
-        const end = stack.length-1
-        const length = stack[end]
-        tmp.length = length
-        const start = end - length
-        for (let i = start; i < end; ++i)
-          tmp[i - start] = stack[i]
-        stack.length = start
+      tmp.length = retrieve
+      const start = stack.length - retrieve
+      for (let i = start; i < stack.length; ++i) tmp[i - start] = stack[i]
+      stack.length = start
+      if (!start) _allocArray(stack), interrupt.stack = call.env[_id(interrupt)] = undefined
 
-        /*
-        // Check the cause.
-        const got = stack.pop()
-        if (got !== cause) {
-          // Stack corruption.
-          const tmpSlice = tmp.slice()
-          tmp.length = 0
-          errorStack("Interrupt stack corruption sometime before this — invalid cause: expected", cause, "but got", got, "in", stack, "with interrupt state", tmpSlice)
-        }
-        */
+      return tmp
 
-        return tmp
-      }
-
-      // Else store the contents of `interrupt.tmp` in the interrupt stack.
-
-      if (!call.env[_id(interrupt)]) call.env[_id(interrupt)] = []
-      const stack = call.env[_id(interrupt)]
-      // stack.push(cause) // Allow checking the cause, so that debugging is easier.
-      stack.push(...interrupt.tmp, interrupt.tmp.length), interrupt.tmp.length = 0
-
-      // .tmp, .noInterrupt
+      // .tmp, .noInterrupt, .started, .stack
     },
   },
 
@@ -9408,7 +9595,7 @@ The correctness of quining of functions can be tested by checking that the rewri
   _logAll:{
     docs:`Logs all defined sub-functions of a value.`,
     call(f, value) {
-      let [ins = defines(f, _logAll), i = 0] = interrupt(_logAll)
+      let [ins = defines(f, _logAll), i = 0] = interrupt(2)
       try {
         if (!ins) return
         for (; i < ins.length; ++i) {
@@ -9417,7 +9604,7 @@ The correctness of quining of functions can be tested by checking that the rewri
           catch (err) { if (err === interrupt) throw err;  log(_errorRepr(err)) }
           r !== undefined && log(r !== _onlyUndefined ? r : undefined)
         }
-      } catch (err) { if (err === interrupt) interrupt(_logAll, _tmp().length=0, _tmp().push(ins, i));  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(ins, i);  throw err }
     },
   },
 
@@ -9566,7 +9753,7 @@ Preserved for now, because giving the user choices is a valuable idea for explai
             // If we are collapsed and want to return true, un-collapse us.
             //call.env = env
             Math.random()<.01 && _checkInterrupt()
-            let [v = _allocArray(), anyTrue = false, anyFalse = false, i1 = 0, ch1 = el.firstChild, next1 = ch1 && ch1.nextSibling, i2 = 0, ch2 = el.firstChild, next2 = ch2 && ch2.nextSibling] = interrupt(search)
+            let [v = _allocArray(), anyTrue = false, anyFalse = false, i1 = 0, ch1 = el.firstChild, next1 = ch1 && ch1.nextSibling, i2 = 0, ch2 = el.firstChild, next2 = ch2 && ch2.nextSibling] = interrupt(9)
             try {
               v.length = el.childNodes.length
               for (; ch1; [ch1, next1] = [next1, next1 && next1.nextSibling], ++i1)
@@ -9584,7 +9771,7 @@ Preserved for now, because giving the user choices is a valuable idea for explai
               if (anyTrue && el.tagName === 'COLLAPSED')
                 el.click()
               return anyTrue
-            } catch (err) { if (err === interrupt) interrupt(search, _tmp().length=0, _tmp().push(v, anyTrue, anyFalse, i1, ch1, next1, i2, ch2, next2)), v = null;  throw err }
+            } catch (err) { if (err === interrupt) interrupt.stack.push(v, anyTrue, anyFalse, i1, ch1, next1, i2, ch2, next2), v = null;  throw err }
             finally { v && _allocArray(v) }
           }
         }
