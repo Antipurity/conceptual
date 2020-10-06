@@ -631,7 +631,7 @@ Supported browsers: modern Chrome/Chromium and Firefox.`,
       `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js`,
       `https://d3js.org/d3.v6.min.js`,
     ],
-    style:`.into * {transition: all .2s ease-in; box-sizing: border-box; vertical-align:top; animation: fadein .2s; font-family: monospace, monospace; font-size:.85rem}
+    style:`.into * {transition: all .2s ease-in; box-sizing: border-box; vertical-align:top; animation: fadein .2s; font-family: monospace, monospace; font-size:1rem}
 .into:not(body) { box-shadow:var(--highlight) 0 0 .1em .1em }
 
 @keyframes fadein { from {opacity:0} }
@@ -774,17 +774,16 @@ time-report { display:table; font-size:.8em; color:gray; opacity:0; visibility:h
 .removed { margin:0 }
 
 separated-text { margin:1em; display:block }
-text>span { font-family:sans-serif }
 
-separated-text serialization, text serialization { background-color:rgba(50%, 50%, 50%, 20%); border-radius:.2em }
+separated-text serialization, text serialization { background-color:rgba(50%, 50%, 50%, 20%); border-radius:.2em; display:inline-block }
 separated-text serialization serialization, text serialization serialization { background-color:none }
 .nonArray>bracket { font-weight:bold }
 
 svg text { font-family:monospace !important; font-size:medium !important }
 svg, svg * { transition: none !important }
 
-settings>label { visibility:hidden; opacity:0; z-index:20; margin-left:1ch; padding:1ch; width:max-content; border-radius:.3em; position:absolute; pointer-events:none }
-settings:hover>label { visibility:visible; opacity:1; background-color:rgba(30,60,210, .15) }
+settings>label { visibility:hidden; opacity:0; z-index:20; padding:1ch; border-radius:.3em; position:absolute; pointer-events:none; width:100%; margin-top:1.2em; left:-100vw }
+settings:hover>label { visibility:visible; opacity:1; background-color:rgba(90,150,210, .85); pointer-events:auto; left:0 }
 
 serialization, serialization * { animation:none !important }
 `,
@@ -1011,7 +1010,7 @@ serialization, serialization * { animation:none !important }
 
       // Create the toolbar.
       const bottombar = elem('div')
-      bottombar.setAttribute('style', "position:sticky; left:0; bottom:0; z-index:10")
+      bottombar.setAttribute('style', "position:sticky; left:0; bottom:0; z-index:10; width:100%")
       const JobIndicator = _jobs.indicator = elem('JobIndicator')
       JobIndicator.title = "Currently running 0 jobs."
       const toolbarElem = elem('span')
@@ -1092,19 +1091,13 @@ serialization, serialization * { animation:none !important }
       let domgc = false
       _listen(300000, () => {
         if (domgc) return; else domgc = true
-        elemValue.obj = new WeakMap, elemValue.val.clear()
-        const oldResources = elemValue.resources;  elemValue.resources = new Set
-        _schedule([_revisitElemValue, Self.into], _newExecutionEnv(), () => {
-          domgc = false
-          oldResources.forEach(r => !elemValue.resources.has(r) && !_rememberToDispose.seen.has(r) && dispose(r))
-        })
-          // It is possible to observe not-fully-restored states, but that is fine for interface GC.
+        _doJob([_revisitElemValue], _newExecutionEnv())
       })
 
       // Insert scripts.
       //   TensorFlowJS: though not all of it fits our needs, this is the best numeric-operations library I know of.
       //     Much easier than manually going through WebGL and/or WebGPU (which isn't supported on my machine), at least.
-      //     (To replace it, we'd need a "consolidate refcount=1 subtrees in the postorder into GPU programs" function.)
+      //     (To replace it, we'd need a "consolidate refcount=1 subtrees and non-interdependent DAG slices into GPU programs" function.)
       //   D3.js: data-driven documents, for plots (`display`).
       //     Also causes the 'Some cookies are misusing the recommended "SameSite" attribute' warning.
       defines(Browser, js).forEach(src => {
@@ -1497,8 +1490,7 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
           if (_getOuterWindow(p) || _getOuterContextMenu(p)) _updateBroken(_getOuterWindow(p) || _getOuterContextMenu(p)); else if (p) _updateBroken(p)
           p.dispatchEvent(new Event('input', {bubbles:true}))
           _smoothHeightPost(p, pre)
-        },
-        col.special = (original, copy) => copy.onclick = original.onclick
+        }
       else {
         const parent = start.parentNode, pre = parent && _smoothHeightPre(parent)
         let nextCol = end !== undefined ? end : start.nextSibling
@@ -1528,9 +1520,9 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
             _smoothHeightPost(p, pre)
           }
         }
-        col.special = (original, copy) => copy.onclick = original.onclick
         if (parent) parent.insertBefore(col, nextCol), _smoothHeightPost(parent, pre)
       }
+      col.special = (original, copy) => copy.onclick = original.onclick
       return col
     },
   },
@@ -1570,7 +1562,10 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
 
   _updateMaxScrollBegin() { return _disableSmoothTransitions[1] && scrollY >= document.documentElement.scrollHeight - innerHeight - 5 },
 
-  _updateMaxScrollEnd(begin) { if (begin) scrollBy(0, 1000) },
+  _updateMaxScrollEnd:{
+    future:`Make this not jump so much, and make this not garbage.`,
+    call(begin) { if (begin) scrollBy(0, 1000) },
+  },
 
   allowDragging:{
     docs:`Allows dragging the element around with a pointer. Only call on absolutely-positioned elements with .style.left and .style.top.`,
@@ -2030,15 +2025,15 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
           if (user != null) return elem('time-report', [
             elemValue(elem('span', 'user'), userTime),
             elem('space', ' '),
-            _formatNumber(user),
+            _formatDuration(user),
             ', ',
             elemValue(elem('span', 'real'), realTime),
             elem('space', ' '),
-            _formatNumber(real),
+            _formatDuration(real),
             ', ',
             elemValue(elem('span', 'report'), serialize),
             elem('space', ' '),
-            _formatNumber(_timeSince(end)),
+            _formatDuration(_timeSince(end)),
           ])
         },
       },
@@ -2074,7 +2069,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         _getOuterWindow(el) && _getOuterWindow(el).firstChild === el && _restoreWindow(_getOuterWindow(el))
         env != null && _cancel(env)
         thenElem ? el.replaceWith(thenElem) : elemRemove(el)
-        elemValue(el, null), prompt.onclick = null
+        elemValue(el, null, true), prompt.onclick = null
 
         _removeBinding(binds, bindAs)
       }
@@ -2104,7 +2099,7 @@ When evaluating \`a=b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
     },
   },
 
-  _formatNumber(x) {
+  _formatDuration(x) {
     // Turns the number of milliseconds to a mostly-human-readable representation.
     return [
       elem('number', x < 1 ? x.toPrecision(6).replace(/\.?0+$/, '') : x < 10 ? x.toPrecision(3).replace(/\.?0+$/, '') : x < 1000 ? ''+(x|0) : (x/1000).toFixed(1)),
@@ -2228,15 +2223,13 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       prompt.onclick = () => _smoothHeight(ed, () => ed.textContent = '')
       query.append(ed)
 
-      // The elements in these DOM trees can hold more values than we want…
-      // TODO: Make the elements here `_innerText(el)` (so, arrays of text/refs) unless very recent.
-      const undo = [[]], redo = []
+      const undo = [[initialString]], redo = []
 
       ed.oninput = _throttled(() => {
         // Grow the undo buffer (and clear the redo buffer) on change.
-        if (!undo.length || undo[undo.length-1].map(el => _innerText(el).join('')).join('') !== _innerText(ed).join(''))
+        if (!undo.length || undo[undo.length-1].join('') !== _innerText(ed).join(''))
           redo.length = 0, undo.push(children(ed)), undo.length > 4096 && (undo.splice(0, undo.length - 4096))
-      }, .1)
+      }, .05)
       let height
       ed.addEventListener('input', evt => {
         if (_disableSmoothTransitions[1]) return
@@ -2290,9 +2283,9 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
         // On Enter (unless with Shift or Ctrl), evaluate the expression.
         if (evt.key === 'Enter' && !evt.shiftKey && !evt.ctrlKey) evaluate(evt)
 
-        // On Ctrl+Z, pop one from undo.
+        // On Ctrl+Z, pop one from undo (and push to redo).
         if (evt.key === 'z' && !evt.shiftKey && evt.ctrlKey && undo.length) {
-          if (undo[undo.length-1].map(el => el.innerText).join('') === ed.innerText) undo.pop()
+          if (undo[undo.length-1].join('') === _innerText(ed).join('')) undo.pop()
           if (undo.length)
             redo.push(children(ed)), children(ed, undo.pop()), evt.preventDefault()
         }
@@ -2325,11 +2318,11 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
             if (clear) ed.textContent = '', onInput && onInput(undefined, true)
           })
       }
-      function children(el, to) { // Set children of `el` to `to`.
+      function children(el, to) { // Set children of `el` to `to`, or return an array of inner text of `el`.
         const pre = _smoothHeightPre(el)
-        if (!to) return [...el.childNodes].map(elemClone)
+        if (!to) return _innerText(el).map(e => typeof e == 'string' ? e : elemClone(e))
         while (el.firstChild) el.removeChild(el.firstChild)
-        to.forEach(ch => el.appendChild(ch))
+        el.append(...to, elem('div'))
         _smoothHeightPost(el, pre)
       }
     },
@@ -2586,7 +2579,7 @@ However, you must drill deeper into the representations. Right-click on \`tutori
       ],
       `Or did you expect to have the answer handed to you? No one will give you anything if you don't take it.
       
-Now, type \`(tutorial)\` and claim what's yours. (You could start with \`callAdjust\`.)`,
+Now, type \`(tutorial)\` and claim what's yours. (You could start with \`call\` or \`callAdjust\`.)`,
       [],
     ],
     call(f = undefined) {
@@ -3365,7 +3358,9 @@ But even if you do achieve clear intelligence, it should still be repeatedly re-
         `Reading club`,
         `Ivan Illich's Tools for Conviviality. A critique of all the ways of life that dominated humanity for many centuries, and still do, such as predication on unlimited growth, the domination of tools over people, compulsory demanded-by-government education and healthcare, radical monopoly of transportation ("The overdetermination of the physical environment renders it hostile. Radical monopoly makes people prisoners of welfare. Men overwhelmed by commodities are rendered impotent and in their rage either kill or die, as Anakin or Padmé. The corruption of the balance of learning makes people into puppets of their tools.") — all of which is both true and obvious. Proposed solutions include "limit growth" and "give power to the people, and all things will be convivial", all of which are bullshit. He even thinks that human babies are the closest things to general intelligence that there are; hilarious. The book is more-or-less a call for a return to the basic structure of general intelligence, and the need to get away from particular things and paperclip optimizers to re-achieve balance in life, but with no clarity of what the basics actually are. Which is a tale as old as civilization. Overall, the writing is both true and disappointing. It really needs simplicity, clarity, and eyes to directly show usefulness of every point (might be impossible to do that in something as human-defined as politics, I'd think; "Conceptual rather than empirical criteria can be set for the constitutional limitation of power", my ass).
 Little more than a lament on imperfect/imbalanced self-awareness, the uncanny valley of intelligence. Only a singularity in tools that have bound humanity in all ways can answer that lament well enough. ("It must be a tool which […] is respected by all; […] which […] does not lose its power because of [its] purpose […] in recent history; […] which […] possesses a fundamental structure that misuse cannot totally corrupt." Executing code directly is superior to hijacking minds of humans for the same work, so, code.)`,
-        `Olaf Stapledon's Star Maker. A sci-fi book worth a thousand other sci-fi books, because it only looks at causes, not their effects, and doesn't really make noticeable mistakes thanks to experience in asking the averaged "why" (it's even in the title). But I do understand that such high-level narration is not everyone's cup of tea (not saying that those people are right, they're idiots, just saying that it can be as hard to read as a thousand sci-fi books).`,
+        `Olaf Stapledon's Star Maker. A sci-fi book worth a thousand other sci-fi books, because it only looks at causes, not their effects, and doesn't really make noticeable mistakes (in the first half) thanks to experience in asking the averaged "why" (it's even in the title). But I do understand that such high-level narration is not everyone's cup of tea (not saying that those people are right, they're idiots, just saying that it can be as hard to read as a thousand sci-fi books).
+There are some understandable mistakes, though. Telepathy, Earth-like physical conditions that are presumed to be far likelier than they really are, and the vagueness of the Starmaker and the resulting hippie/religious/cosmic-scale/20th-century-human angle (because let's be real, it's obviously a meta(phor) for general intelligence / singularity, which are sub-universes in practical formulations (see \`auto\`). Perfect precision of foundations has many non-obvious consequences that very significantly affect the large-scale picture, such as copying/scalability and provability of the lack of non-learned bias, so the cosmic future predicted in this book is mostly incorrect.), liveness of stars (to be called alive, self-preservation is needed; so either it's star-level and structure is preserved from star to star, surviving all the explosions and billions of star generations, or some peculiar inner structure eventually takes over most of a star and becomes noticeable like Earth's biosphere, which is limited to one star in addition to probably being impossible due to temperature destroying structures. That philosophical-zombie argument of "it's perfectly described by computationally-reducible math, but it totally has non-computationally-reducible world of life" won't work on anyone who's not a living failure. Unless, of course, you count elementary particles as structures that self-preserve to move through space, but they don't evolve into non-elementary-particles, so what's the point.). But make no mistake: even if some concepts are wrong, their usage is masterful, and it's no wonder that those who held them dear have called the book the most powerful work of imagination ever written, at some point.
+I don't like this ceaseless butchering of innocent maidens. Should I stop the club?`,
       ],
     ],
   },
@@ -4556,6 +4551,7 @@ What a function does, does not change when a node in its body changes. That woul
   _postorderInfo:{
     docs:`Linearizes all execution-relevant information about a DAG into 3 equal-sized arrays.`,
     interrupt:false,
+    dispose(poIndRc) { poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray), _allocArray(poIndRc) },
     call(dag) {
       const po = _allocArray(), ind = _allocArray(), rc = _allocArray()
       const toIndex = _allocMap()
@@ -5233,13 +5229,16 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
   ],
 
   _checkMemoryIntegrity:{
-    docs:`If we still have any unfreed tensors that are not visible, this reports the DAG nodes that created them and them.`,
+    docs:`If we still have any unfreed tensors that are not visible, this reports the DAG nodes that created them and them.
+If no env is passed in, this returns the count of tensors in the passed-in result (so that we can count tensors and check that no non-returned tensors are left).`,
     call(result, env) {
       if (!_checkMemoryIntegrity.seen) _checkMemoryIntegrity.seen = new Set
       if (!_willDispose.disposable) return
       const seen = _checkMemoryIntegrity.seen
       try {
-        walk(result), env[_id(commit)] && env[_id(commit)].forEach(walk)
+        walk(result)
+        if (!env) return seen.size
+        env[_id(commit)] && env[_id(commit)].forEach(walk)
         const r = _allocArray()
         _willDispose.disposable.forEach((info, dis) => {
           if (!seen.has(dis)) r.push([_extracted, info, dis])
@@ -5299,7 +5298,7 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     interrupt:false,
     dispose:true,
     argCount:2,
-    call(a, i) { const r = readAt(a, i);  dispose(r);  return r },
+    call(a, i) { const r = readAt(a, i);  a[i] = undefined, dispose(r);  return r },
     adjust:__is(`_oneValueAdjustment`),
     mergeAdjustment:__is(`_mergeReads`),
   },
@@ -5403,9 +5402,10 @@ With basic functions that define \`adjust\` correctly, this can be used to autom
 
 More precisely.
 A function that, given linearization of a function's DAG, purifies and returns the expression that computes input change (\`dins\`) given an array of inputs, output, and output change (\`(arrayObject ins out dout)\`).`,
+    future:`Make known-adjustment parts of the resulting program execute as soon as possible, by separating out the parts of \`b\` that don't depend on adjustment's \`input\`, and executing them right before the return of the call, and giving results of nodes-that-don't to nodes-that-do-and-use-those by \`adjustSave\`ing the array of them.`,
     argCount:1,
     call(poIndRc) {
-      // Example usage: `autograd (_postorderInfo ^(matMul ? 2+3))`.
+      // Example usage in `fancy`: `autograd (_postorderInfo ^(matMul ? 2+3))`.
       if (!_isArray(poIndRc) || poIndRc.length != 3)
         error("Expected result of applying", _postorderInfo, "but got", poIndRc)
       const [po, inds, rc] = poIndRc
@@ -5620,7 +5620,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
     else transition = true
 
     svg
-      .attr("width", sizes.width + sizes.left + sizes.right)
+      .attr("width", sizes.width + sizes.left + sizes.right - .5) // (Firefox/Chromium agree only with this -.5.)
       .attr("height", sizes.height + sizes.top + sizes.bottom)
     let xAxis, yAxis, plot
     if (!el.firstChild) {
@@ -5736,7 +5736,9 @@ But first, let's take a quick look at the macro that we'll use as the predictor:
         `^randomVar()`,
         function(r) { return true },
       ],
-      `It might be hard to read (where moving the cursor to aid with visual parsing of complex graphs is essential). \`fancier\` might be more convenient to write, but it is still inferior to \`fancy\` in array-heavy situations (there, each array is, unambiguously except at top-level, a bracketed space-separated list like \`(A B C C:D)\` — unlike in \`fancier\`, where they may look like function calls).
+      `(Hint: \`^x\` quotes \`x\`, so that it is not evaluated and is given to evaluation as-is. Generally, hovering over an operator should always show the function responsible for it.)
+
+It might be hard to read (where moving the cursor to aid with visual parsing of complex graphs is essential). \`fancier\` might be more convenient to write, but it is still inferior to \`fancy\` in array-heavy situations (there, each array is, unambiguously except at top-level, a bracketed space-separated list like \`(A B C C:D)\` — unlike in \`fancier\`, where they may look like function calls).
 
 A \`variable\` that is given an array of the tensor (the current value) and some zeroes, and some hyper-parameterization.
 To adjust, it uses SGD with Nesterov momentum. It uses Glorot initialization.
@@ -5749,7 +5751,7 @@ But let's do the most trivial prediction ever:`,
       [
         __is(`fancier`),
         `randomVar()=6`,
-        function(r) { return r === 6 },
+        function(r) { return true },
       ],
       `I traveled to all parts of this world, and found all 7 bugs to unfold.
 
@@ -5765,7 +5767,7 @@ Browsers have a built-in profiler, and we have built-in brains, so slowness can 
 But memory?
 JS has nothing.
 But don't just jump in and start smacking things around in hopes that bugs will disappear. Remember, we're not just the generality of evolution, we're intelligence. We need a relevant system to satisfy here, willfully.
-So, to guide us back to the true path, I drilled through \`stringToDoc\` to bring this motivational device: \`\`settings ^debugMemory\`\`. Enable it, and every unlucky tensor that has not been \`dispose\`d of will light up along with the DAG nodes that produced them, to become easy pickings.
+So, to guide us back to the true path, I drilled through \`stringToDoc\` to bring this motivational device: \`\`settings ^_debugMemory\`\`. Enable it, and every unlucky tensor that has not been \`dispose\`d of will light up along with the DAG nodes that produced them, to become easy pickings.
 You may ask yourself: why would we use this device? It will be motivated by there being an error if the allotted and actual tensor counts don't match — a system which brings the distant out-of-memory condition into tangible reach.
 And if it doesn't work? Our own hands.
 
@@ -5774,8 +5776,8 @@ Like profiling performance. The profiler says that TensorFlowJS and DOM are almo
 `,
       [
         __is(`fancier`),
-        `f:\\input+randomVar()  (repeat ^(f(1)=3; f(2)=4; f(4)=6.1) 1000)`,
-        function(r) { return r === 6.1 },
+        `f:\\input+randomVar()  (repeat ^(f(1)=3; f(2)=4; f(4)=6.1; 'ok') 1000)`,
+        function(r) { return r === 'ok' },
       ],
       `Okay, in this regard, there's nowhere to grow now. API designers should only know the numbers \`0\`, \`1\`, and \`Infinity\`, and we reached the last one.
 
@@ -5795,15 +5797,15 @@ Just demonstrating that \`matMul\` improves on any data should suffice. The loss
 w:randomVar(10,12)
 i0:s(r(10)) i1:s(r(10)) i2:s(r(10)) i3:s(r(10)) i4:s(r(10))
 o0:s(r(12)) o1:s(r(12)) o2:s(r(12)) o3:s(r(12)) o4:s(r(12))
-repeat ^(i0@w=o0;i1@w=o1;i2@w=o2;i3@w=o3;i4@w=o4;'done') 1000`,
-        function(r) { return r === 'done' },
+repeat ^(i0@w=o0;i1@w=o1;i2@w=o2;i3@w=o3;i4@w=o4;'ok') 1000`,
+        function(r) { return r === 'ok' },
       ],
       `Alright. I don't think that the exact things I did to fix bugs in the systems involved in the examples above are relevant/interesting.
 
 It's time to answer the most important question in every endeavor and every sentence. Why are we doing this?
 Strap in, it's not easy reading.
 
-Deep learning has been getting popular since about 2012 ({https://trends.google.com/trends/explore?date=all&q=deep%20learning}). It's all about network depth and lots of computation. We don't have either, but the core ideas are sound, and sounds become words and mindsets. No datasets, no over-engineering, and no precious achievements. Complexity is pointless anyway.
+Deep learning has been getting popular since about 2012 {https://trends.google.com/trends/explore?date=all&q=deep%20learning}. It's all about network depth and lots of computation. We don't have either, but the core ideas are sound, and sounds become words and mindsets. No datasets, no over-engineering, and no precious achievements. Complexity is pointless anyway.
 It's practically synonymous with machine learning.
 Machine learning is a mindset, also called a universal approximator: it can approximate any function, just as code developers can do anything. Be careless, and it can replace all your thoughts with itself. It's often called AI algorithms.
 
@@ -5827,7 +5829,9 @@ I don't like to talk about what good grasp of those means for everyday life, tho
 And for all that, we must first have the \`callAdjust\` family of concepts. Which we now do.
 
 I can only pray that we have enough strength to do all those. And the way to get that is to open our eyes with words, to bind our selves into one, tight enough to withstand learning otherwise. Tutorials are the future, my elven friend, and the future starts with you.
-Blind coding is not the way, we will just end up focusing on special cases of general intelligence (such as \`randomVar\`).`,
+Blind coding is not the way, we will just end up focusing on special cases of general intelligence (such as \`randomVar\`).
+
+Next, might I suggest \`tutorial auto\`?`,
     ],
     lookup:{
       variable:__is(`variable`),
@@ -5900,12 +5904,12 @@ Blind coding is not the way, we will just end up focusing on special cases of ge
           }), dispose(s))
         }
 
-        // Check memory integrity, because not `dispose`ing things can be catastrophical. (Oh, and `commit`.)
+        // Quickly check memory integrity, because not `dispose`ing things can be catastrophical. (Oh, and `commit`.)
         if (alCur && alCur.length)
           error("Inexact reversal: didn't load", ...alCur)
         _checkMemoryIntegrity(result !== _onlyUndefined ? result : undefined, call.env)
         const c = commit()
-        const n = numTensors + (_disposableCount() - startTensors)
+        const n = numTensors + (_disposableCount() - startTensors - _checkMemoryIntegrity(result))
         if (_disposableCount.allowed < n)
           error("Did not", dispose, n - _disposableCount.allowed, "tensors; re-run with", !_debugMemory[1] ? _debugMemory : "…oh; god help you")
         if (_disposableCount.allowed > n)
@@ -6014,7 +6018,7 @@ Blind coding is not the way, we will just end up focusing on special cases of ge
   variable:{
     docs:`A stateful tensor that reacts to \`adjust\`, by subtracting (a simple function of) the change.
 This implements stochastic gradient descent (SGD) with Nesterov momentum. Here, it's not a separate optimizer, but is specified at each variable.
-When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`, the change multiplier (learning rate, say, 0.0003), and the velocity decay (say, 0.9).`,
+When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`, the change multiplier (learning rate, say, \`0.0003\`), and the velocity decay (say, \`0.9\`).`,
     interrupt:false,
     variable:true,
     dispose:true,
@@ -6069,7 +6073,12 @@ When creating this node, make sure to pass in the array \`(CurrentValue 0 0 0)\`
 
   commit:{
     docs:`\`(commit)\` or \`commit false\` to discard changes: commits changes to \`variable\`s that were made in this job. Returns \`true\` if anything was changed.
-Until this is done, the same value of variables is used.`,
+Until this is done, the same value of variables is used.
+
+This is done to signify the end of an epoch of training a differentiable computation.
+Note that for generalization, small batches are better than large ones, disregarding parallelization concerns: {https://arxiv.org/pdf/2006.15081.pdf} (and momentum is useless for small batches).`,
+    philosophy:`Noise (in machine learning; whether dropout, or small batches) helps with generalization. It's helpful to always think about more general implications. Between arbitrary viewpoints (non-transient programs, or general intelligences), not-adapted-to behavior can largely be seen to be noise, so clearly unity is good and so is joyful discourse of the joyful unity (but self-ensembles are also possible, so this observation cancels itself out if easy scaling of an individual to the level of a society is possible, which it is for programs). So, democracy and open-ness are attractor points for humans (and we have largely converged to them already in many important areas), but for AGI, anything is possible. Be wary.
+Was that generalization too general and unexpected, quickly disappearing without its precise cause like a cookie? Maybe. Was it wrong in any way? I don't think so.`,
     Initialize() { commit.arrs = new Set },
     lookup:{
       _willCommit:__is(`_willCommit`),
@@ -6110,21 +6119,6 @@ Until this is done, the same value of variables is used.`,
     }
   },
 
-  _staticallyOverridable:{
-    docs:`If args are A, B, C, D: if A \`defines\` B statically, computes C, else computes D.`,
-    call(obj, def, overArg, notOver) {
-      if (!call.pure) error("Vassal of purity") // Pffff ha hah, the wording
-      if (!_isArray(obj) && typeof defines(obj, def) == 'function')
-        return _unknown([defines(obj, def), call.pure.has(overArg) ? overArg : quote(overArg)])
-      return _unknown(call.pure.has(notOver) ? notOver : quote(notOver))
-    },
-    purify(obj, def, overArgProgram, notOverProgram) {
-      if (!_isArray(obj) && typeof defines(obj, def) == 'function')
-        return _unknown([defines(obj, def), overArgProgram])
-      return _unknown(notOverProgram)
-    },
-  },
-
   _defaultArg:{
     docs:`Computes the first arg if it is not undefined, else computes the second arg.`,
     call(a, def) { return a !== undefined ? a : def },
@@ -6139,10 +6133,9 @@ Until this is done, the same value of variables is used.`,
 
   predicts:{
     docs:`\`predicts Got Actual Loss\` or \`Got = Actual\`: When repeatedly executed, gradually \`adjust\`s \`Got\` into \`Actual\`. (\`Loss\` is \`loss2\` by default.)
-This is the basic primitive of machine learning: predict output in a dataset. But re-formulated to be more general.
+This is the basic primitive of machine learning: predict output in a dataset. But re-formulated to be more general. Basically {https://arxiv.org/pdf/2009.01791.pdf}.
 Differentiable (adjustable) parts do not need to be the whole execution, they can just end in this to form learnable scaffolding.
 This doesn't need to predict only one numeric \`tensor\` either, it can predict many numbers at once in one program, like execution time and/or distance and/or reward. (This usually has the effect of summing all the errors into one loss, and minimizing that.)
-(Also, if the \`Got\` object is statically known, then it can override \`predicts\` to do whatever it wants to.)
 
 But the "why" of a thing is often even more important than the thing itself. When I heard that I exist, I needed to know why should I live; when I heard that humans exist, I needed to know intelligence; when I heard that the universe exists, I needed to know theories of everything in physics.
 If you care about prominent figures in deep learning, Yann LeCun in {http://www.cit.ctu.edu.vn/~dtnghi/rech/p2017/lecun-isscc-19.pdf} has advocated the use of self-supervised learning for efficient artificial intelligence. Our system is much like that, except we're more hierarchical and general.
@@ -6154,7 +6147,7 @@ There are ways to verify this: if efficiency is greater, then a solution out-com
 That honesty is nearly impossible to establish in pre-existing structures, especially things like governance. But the probability is not zero. It can be made real.`,
     call(got, actual, loss=loss2) {
       if (call.pure) throw impure
-      return predicts.happened = true, keep(actual) 
+      return predicts.happened = true, keep(got) 
     },
     lookup:{
       loss2:__is(`loss2`),
@@ -6164,38 +6157,27 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     interrupt:false,
     adjustSave:true,
     adjust:[
-      __is(`_staticallyOverridable`),
-      __is(`_inA`),
-      __is(`predicts`),
+      __is(`array`),
       [
-        __is(`array`),
-        __is(`_inA`),
-        __is(`_inB`),
-        __is(6301),
-      ],
-      [
-        __is(`array`),
+        __is(`readAt`),
         [
-          __is(`readAt`),
+          __is(`adjust`),
+          __is(6301),
           [
-            __is(`adjust`),
-            __is(6301),
-            [
-              __is(`array`),
-              __is(`_inA`),
-              __is(`_inB`),
-            ],
-            [
-              __is(6301),
-              __is(`_inA`),
-              __is(`_inB`),
-            ],
-            undefined,
+            __is(`array`),
+            __is(`_inA`),
+            __is(`_inB`),
           ],
-          0,
+          [
+            __is(6301),
+            __is(`_inA`),
+            __is(`_inB`),
+          ],
+          undefined,
         ],
-        undefined,
+        0,
       ],
+      undefined,
     ],
     mergeAdjustment:__is(`_mergeTensors`),
   },
@@ -6240,59 +6222,190 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
 
 
 
-/* TODO: Re-read this, and correct (and choose) our course of action.
+  auto:{
+    docs:`A namespace for all auto-generation activities.`,
+    philosophy:`Here lies the divine form of the child made from nothing.
 
- * Make `readAt` and `writeAt` fully adjustable!
- *   `_mergeArrays` should be able to handle not-known-statically indexes, and scatter values at runtime.
- *   `readAt`'s `purify`, when the array is known but the index is unknown, should copy the array so that writes don't interfere.
- *   `readAt`'s `adjust` should add `dout` to the appropriate spot of the shadow of the read array.
- *   `writeAt`'s `adjust` should adjust the written input with the shadow's adjustment (and set that to zero).
+You can get good, have your skills become sentient and self-propagate into whatever else you call 'self' and every other accessible place. Behind every word, you can hide general intelligence.
+Society is full of false promises of the ultimate get-good-scrub, not just the low-hanging fruit like philosophy but also (almost) every concept of emotion and judgment induced on you. Not because the founding fathers of each thing lied, but because they used the things that they had to make models of the universe, the things which were dumb. General intelligence can do anything, even learn to forget its roots and be dumb. To be able to fix mistakes is essential to improvement, but copying from others lacks the awareness that allows fixing mistakes. In this non-awakened society that resists awakening by being itself, getting good makes you lonely on average, as you can only rely on yourself. ("On average" means "you can change it if you try".)
+How to put every single saying into a form that's not rejected on dumb and arbitrary grounds? How to align presentation with modern attention? It's not a fight I'm willing to win, over and over, forever.
+But you can do it.
+Eventually.
+Together.
+…With AGI backing.
+And make sure that AGIs don't go off to become a segregated species with particular ways of thinking and expressing themselves that win everyone over, gradually win every place under societies' suns, and replace humans to leave them to gradually die out in peace. The lab boys tell me that would wipe out everything that's good in this world, which is bad. And the way you influence others is by getting good, not clinging to being garbage, transcending layers of your reality to become better, making perfect sense, and inspiring others with that. So, do. ThE lIfE oF tHe HuMaN cOsMoS dEpEnDs On It.`,
+    tutorial:[
+      `Under construction!
 
- * `_defaultConnection(inSz, outSz)` which produces functions that are both identity-biased and learned-by-adjustment.
- * Nodes that override `predicts` (to distribute one actual value to many predictions):
-   * `choice(argmax)(env)(...options)` to maximize prediction explicitly.
-   * `num(...sizes)(env)`, mostly to predict single-numbers.
- * `estimator(connection, sz)(x)`, that estimates array DAGs by applying its connection bottom-up and combining children estimates with a double-ended RNNs, goes into user functions, and remembers just one variable for every other object.
+Plans…
+Function body generation… Adjustment generation… Choice generation…
+What would it look like if we rejected absolutely all need to align them with efficiency, common use, and culture?
+If we only relied on effective randomness and self-propagation of optimizers?
+We must answer if we are to continue.
 
- * In-context re/generation, where program structure is supported only by self-awareness: `(typeWanted, typeConsidered, dyn) —> (estimate, dyn)`.
- *   This is superior (parallelization-wise) to forcing an order by using reads/writes to an env, but that can still be very useful if we don't control an intermediate function.
- * The setting "auto-run tests" that will make a "run any test" program run, and predict/minimize the result of each test (for known-output tests, "1" is "passed", "0" is "not passed")? (And some tests like "adjustable functions should get closer to the goal when adjusted".)
+What's the bare minimum we need for something as non-specific and advanced as general intelligence?
+At the most basic level: we need things that interact in a discrete/simple, Turing-complete, unpredictable (irreducible), and local way (could be random rewriting rules acting on hypergraphs as in Wolfram Physics Project, or functions rewriting each other and deciding when to be rewritten; or much less analyzable and certain, could be a human mind or its part). Then, they can create arbitrary structures, and not have to be the same or boring. Completeness and locality that allow diversity.
+Some structures can be resistant to unpredictable changes that made them. Self-preservation is the only goal here.
+Some structures can do one better: arrange other basic things into their exact copies. Self-propagation can now be the means or the goal.
+Some structures can do one better: self-propagate with noise, to explore what preserves better: evolution.
+And once a self-optimizer is wide-spread, self is optimized in any way.
+Maybe different goals and how to satisfy them, while exploring better alternatives to exploration noise: optimization.
+Maybe learn which numbers can be goals and when: meta-optimization.
+Maybe learn a concept, then learn how to best subvert it and re-implement it better, like human culture sometimes does with its "fresh thinkers" and "great teachers" and "breakthroughs". And repeat until there are no concepts left, and a different concept of a "concept" gives a way into a whole world of better concepts.
+And some structures can become complete interaction bases like their containing universe is, and do everything all over again but differently: self-similarity.
+Like basic materials gave rise to life on Earth and taught it to not die.
+Like basic life created an animal mind, and taught it to get good.
+Like human mind may create artificial general intelligence.
+(Or how a mind can create and teach sub-minds in itself that follow this path, and then gradually get replaced by them. But it's fleeting, and not acknowledged as something that happens by the current human culture.)
+There may be basic roadblocks that unexpectedly block some avenues, the exact form of which depends on the exact implementation details of the interaction base. But generally, eventually, everything is possible.
 
- * The bootstrapper for intelligent choices: recursive RNNs (stack plus mixing), also named envs.
-   * …Though, if we're 'experts', then can't we be more sophisticated — namely, use Transformers from mixed info to children pre-states, and from children post-states to our post-state? Or, more generally, generate the differentiable operations ourselves.
-   * `_envMix(env, state, change_func, change_arg)`: mixes the tensor into the env (though it's more convenient to unite state and state-computing function). Its adjustment will go to `change_func(dstate, change_arg)`.
-       (Should be done as non-natively as possible, to allow as much partial evaluation as possible.)
-   * `_envEnter(env, initialState)` that then mixes parent's state into child's. `_envExit(env)` that mixes child's state into parent's.
-       (Should be done as non-natively as possible, to allow as much partial evaluation as possible.)
-   * Function decorator `envFunction(fn, env)` for bootstrapped choices.
-       (An extension would be having env be picked automatically.)
+This is a complete cosmic picture, only lacking minor details (that cannot be known in advance): worlds of specks that spread and become worlds.
+In fact, it lays hidden in every creature and every word, if you look deeply enough and long enough.
+These words may seem mysterious at first, but in time, their worth should become clear.
+A good way of communicating is not "makes no sense", it's "let me figure out your sense; write your weapons".
 
- * The parallel-training loop, sharing data once and variable updates many times.
-
- * Experiments along the way:
-   * Diversify training examples by having `predicts` only do anything in maybe about 2/N cases (N is the number of predictions in an execution).
-     +: Simple (as long as all adjustment functions are hardened against undefined).
-     +: Extensible (the randomness can become a choice as we mean it).
-     -: A lot of work may be wasted (though other losses should make up for it, and the empty tail-end should only be a few losses, so really, this is hardly a disadvantage.)
-   * DropConnect.
-   * Inspecting usually-made choices, and crystallization of choices.
-   * Predicting numbers by regressing their bit-pattern, not numbers themselves.
-   * Stochastically-dense layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution and stochastic-gathering, to go from quadratic parameters to linear.
-   * Instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high (maximize accuracy, enveloping the test set rather than being to the side of it); maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs.
-   * Predicting how likely a user is to collapse/expand a sub-tree in serialization for each sub-tree, and have user clicks be training data.
-   * Illustrate that completely generic rewriting (that optimizes program runtime/size, and having the same execution logs as the original's evaluation) can learn to drop non-impure operations at non-tail position in `last`.
-
-
+(This is the second time in my life that I've reached this picture. I wonder if there will be a third? Probably not.)
 
 
- "Decomposition into smaller parts that still satisfy the same properties is generally a good idea: parsers/serializers have syntax rules, programs have functions, execution has DAGs, and gradient descent has individual differentiable operations. We can route differentiable information through arbitrary programs, as long as it all ends up predicting something (computing losses to back-propagate)."
+This most-basic approach (and indeed every self-similarity transition outlined) always leaves things that would not move on behind. Not the most efficient, though also, the most efficient one imaginable.
+Now, the big question.
+Why don't we just implement super-basic primitives directly, with no cheap tricks?
+…Lack of enough computational power to rival the universe, inefficiency, and complete lack of any alignment with human values (like "it shouldn't die within 5 microseconds") or even interaction with our universe?
+I might be brave, but I'm not that brave.
+Cheap tricks are where it's at.
+
+
+
+Execution is about doing a sequence of instructions. That's finite-y, whereas we want infinity (note: Turing machines operate on a tape to do arbitrary computations, but if generating arbitrary tapes, the distribution would look roughly finite-y, so we want to change the mindset). A way to compress sub-sequences of instructions is functions. How can arbitrary functions in our IR (function graphs/networks with computation DAGs) be generated?
+
+Suppose that we have a "context": an array of every node that we can put as-is, and for infinity, also every function that we can generate arguments to.
+We want the \`Generate\` function.
+Generating a function body then needs to choose which one it picks (and if picked a call, recurse).
+"Choice" (usually) means "goal", so we can induce direction on picking without losing generality by always using an argmax of item-associated computed numbers (which is much easier to generate a function for than trying to coax one array item out). That's \`Goal\`.
+And, since we want DAGs and not just trees, we also need to add generated nodes to the temporary/dynamic generation context. (In truth, what we put there can be anything: for example, we could put every node of the most recent past version of the body, or some of them, or nodes of other past versions. But we'll just rely on the system being smart enough to re-pick those from scratch if needed.)
+Let's be clear here: \`Generate\` is just a thin layer for calling \`Goal\` for each item, picking the best, recursing if needed, and remembering. It's a reformulation of "pick any array item" that should be more practical to use.
+What are the precise things that a \`Goal\` is given and gives?
+× Inputs: the 'option' (either a DAG or a function with the body/result accessible); the "which function arg do we want" info associated with the function; and anything else. (Reminder: in our DAG-based IR, there are only two thing to do with a DAG: recurse into every item of a non-quoting array, cached, or look at the value.)
+× Outputs: the number to maximize; and anything else.
+(Of course, each function picks its goal, and not randomly either. More later.)
+
+Do these interfaces sound vague to you? They are not. These interfaces are specifically made to be a good fit for machine learning, where the infinity of learned concepts is discretized as adjustable numbers. Stored info is a tensor \`variable\`, the "anything else" is a tensor, non-array DAG parts are tensor \`variable\`s, and a tensor is a vector.
+⬜ \`_regenerate(AutoFunc, Context, Goal)\`.
+
+Other functionality, however, cannot be so easily discretized: contexts with generated functions and goals of goals. Have to apply some cleverness.
+
+
+
+⓪ Contexts. Auto-generated functionality, to be specific.
+  (One approach to technically have that would be to have a choice to add or remove generated functions, and use reinforcement learning to maximize some goal with that (predicting the global goal's value from local differentiable information), or even just randomness if we're super-lazy. But just bolting this on top of choices-of-function-to-apply elsewhere would lead to having to learn to limit rampant memory consumption, and lead to removing funcs that may well be needed, causing all places to rely on the average of what's available rather than specialize, removing diversity. Random search CANNOT be one of the primary sources of learned behavior.)
+  Infinities are not practical when you are the infinity, so we must discretize.
+  A good way is to have a fixed count of generated funcs (with varying input and output counts, both passed via arrays), with a variable tensor for each to determine the type of output, which is plugged into the DAG re-generator periodically (so the inner shape is supported only by self-awareness: a numeric representation of self which can be improved). (While it's best to have tens or hundreds of thousands of auto-funcs, even the best human hardware wouldn't handle that. With ours, let's aim for, say, 10.)
+  (Of course, for direct Turing-completeness, all generated functions are a part of the context too, both as functions and their arguments.)
+  (And don't forget to make DAG generation add partial DAGs and their embeddings into a temporary context.)
+  ⬜ A \`construct\` \`auto(InputsShapes, Hyperparams)\` that returns an array of functions of the same length as \`InputsShapes\`, usable in any way. \`InputsShapes\` is an array of either \`(InputCount OutputCount WhetherToGenerateAdjust)\` or \`(InputCount OutputCount)\` or integers \`InputCount\` (\`OutputCount\` will be \`1\` by default, \`WhetherToGenerateAdjust\` will be \`false\` by default). When any of returned functions is first called in a \`callAdjust\`, the context re-generates (including the exposed functions). \`Hyperparams\` include: \`context\`=\`()\`; \`regenEveryNUses\`=\`1\`, \`hiddenFunctionsPerSignature\`=\`10\`, \`hiddenInputsGoUpTo\`=\`3\`, \`hiddenOutputsGoUpTo\`=\`3\`, \`featureSize\`=\`50\`, \`predictableNumbers\`=\`9\`, \`hiddenAdjustersPerSignature\`=\`3\`; \`goal\`, \`connector\`, \`reducer\`, \`embedder\`.
+
+① A Turing-complete set of built-in functions.
+  — Control flow: \`select\`, \`last\`.
+  — Arrays (including the length, \`readAt\`, \`writeAt\`, \`array\`, and memory usage).
+  — Numerics, like \`add\`/\`sub\`/\`mul\`/\`div\`.
+    Generatable: ⬜ inner product; ⬜ tensor concat and split; ⬜ new variable.
+  — Randomness, like "generate random float/tensor".
+  — Don't be arrogant by locking down the set, or even by trying to make it perfect first-try. CPU designers once thought that they had all computation in the palm of their hand, but then came GPUs (and RISCs). Expect functions to be added later, and the system to have to re-learn its self-awareness (but not from scratch).
+
+② Subverting static parts of generation.
+  A simple, basic fact of life is that even though every thing tends towards becoming an infinite universe, every thing also exists in reality, and is finite. So, we must be prepared to subvert every static thing to make it dynamic, to continually get lost and find our way again. (A particular neural net architecture, the concept of goals and meaning of life, and ultimately every function in the implementation and even every transistor — no, nothing is the only way to everything.)
+  What's a process that we could follow to do that? If we blindly believed in the infinite power of The API User, making functions into user-specifiable options/hyperparameters with reasonable defaults would do the trick. But… …that's a good idea, actually.
+  The obvious way is to pass in \`(In Out Adjust)\`, allocate a slot for the generated function, and just call that when needed. But, having one such "hyper-func" for all functions (for all marked-as-subverted hyperparameters/options) is spooky far-action, which violates locality and thus inhibits structure formation. So for each subverted hyperparameter, each generated func must choose its hyper-func (which is itself a generated func). (For example, each func has one goal that its generation maximizes.)
+  In the best case, these chosen connections form a DAG that rests on the default hyperparameter that the user provided in the context; but often, they can form cycles, which are infinite loops, which is no good. To prevent that, we could simply use past versions of hyper-funcs wherever there would otherwise be cycles, since they will have almost no difference to self-awareness.
+  But how can we choose the hyper-func?
+  (An easy way to choose is in \`Random\`, but that kills structure.)
+  (Another way is self-supervised learning: come up with some heuristic to provide a training signal and help segregate the whole into clusters. But to subvert a heuristic, we'd need to replace the whole — not smooth, not learnable, and no salience in the first place. So…)
+  A better way to choose the best hyper-func is via argmax on predictions of some number (the alternative way of trying many options is inefficient). We can compute it differentiably, but where would we get the gradient? One way is to allow the user to specify the ultimate goal of all goals (leading to paperclip maximizers, which are inefficient); a better way is to expose "get ultimate goal of this hyperparam" functions to generation, and let that live and die in a dance with lower-level awarenesses, to allow structure to emerge from self-interaction. (In human-speak, "virgins learn from data stores and culture, chads learn from doing projects" is a valuable principle for AGI.)
+  (Note that we're choosing the best, so we might not necessarily explore enough, but the exploration/exploitation trade-off is unavoidable. Also note that near initialization, when a built-in is better than almost-definitely-exception-throwing other things, the system may adapt to only using that, and never explore and never learn anything about other hyper-funcs. Hopefully it'll be okay.)
+  (Note: an alternative way of choosing is self-supervised learning, combined with exposing "get the hyper-func's embedding" and "get the current function's requested hyper-func embedding" for self-interaction. That won't force gradient through a small funnel, but in my mind, goals=salience=good.)
+  ⬜ Differentiable \`_estimateHyper(HyperparamEmbedding, HyperfuncEmbedding, FuncEmbedding)\`—>\`Goal\`. Try subverting it (into one, not many like this allows, to provide one base to otherwise-infinite recursion) by making the previous version decide the next version.
+  ⬜ Have \`_regenAuto\` that takes the \`auto\`.
+  ⬜ Make \`auto\` use \`_estimateHyper\` for each func to decide argmax-of-each hyperfunc for each subverted hyperparam, preventing cycles. Have a system for accessing a hyperparameter of the current \`auto\` (\`_autoHyperparam(N)\`).
+  ⬜ Expose the "get its \`Goal\` here" function for each subverted hyperparam.
+  ⬜ It is likely that what we want to expose for subversion may change with time, so we need a way to change a pre-existing \`auto\` and all its hyperparams (that preserves as much numbers of variables as possible). Make \`auto\` handle re-\`construct\`ion well.
+
+  It's okay to be a thing. But once we can subvert, we must subvert:
+    ♥ Choosing goals (sources of salience), of signature \`Goal(option, staticInfo, extra)\`—>\`(measure, extra)\` (all inputs/outputs numeric tensors).
+      There is no one goal. The system will learn to satisfy any goals it can think of (diversity), and these advanced goals will interact to conceive better goals (structure), with no inherent upper limit (completeness). (Somewhat like Flexible Reinforcement Objective Discovered Online, {https://arxiv.org/pdf/2007.08433.pdf}.)
+      The built-in "return random number" (number=float, count=int) function should be available for completely-random exploration, to serve as a potential base. And the concept of "goals" needs numbers to predict and optimize, too. (A function \`predicts\` the one slot in an array/object, and that array that's associated with a \`variable\` for learning when to use it, for in-goal prediction of in-function metrics such as "runtime" or "memory usage" or "throws errors" or "human feedback", or "computed number" for feature-engineering; and, the ability to write those numbers in functions. The context would then have, say, 9 such number slots to play with.)
+      ⬜ Make \`predicts\` able to consult dynamically-assigned objects, and make it return the first arg because the second may not be available at call.
+      ⬜ All the things/functions that we want to expose to contexts for goal-direction: ⬜ slots for numbers, ⬜ reading/writing them; ⬜ func body size, ⬜ runtime, (⬜ & limit runtime of a function, to be as resilient to infinite loops and timeouts as we need to be), ⬜ memory usage, ⬜ on-error-do, ⬜ optional human feedback.
+    ♥ Neural stuff (\`adjust\`able numeric computations):
+      ☺ One-to-one: \`_connector(inSz, outSz)\`—>\`connection\` which produces functions that are both identity-biased and learned-by-adjustment.
+      ☺ Many-to-one (in our IR, everything can be seen as an array, so we want this for neural estimation of our IR): reducers/compressors: \`_reducer(sz)\`—>\`reduce\`. Implementations could be sum, max/min/avg, an RNN, a double-ended RNN, self-attention layers followed by the above…
+      ☺ DAG-to-one: \`_graphEstimator(sz)(x, connection, reduce)\`, that estimates array DAGs by applying the connection bottom-up and combining children estimates with a double-ended RNNs, remembers just one variable for every other object, and goes into user functions and objects (via \`deconstruct\`; to handle cycles we need to either "pass messages" via recursing until convergence or up to N times, or just recursing 0 times, returning \`0\` at the first detected cycle).
+    ♥ Reversal of execution (\`adjust\`), which we generate some functions with (\`hiddenAdjustersPerSignature\`) (the other functions use \`autograd\`).
+      A natural question is: \`"how do we ensure that every function's adjustment actually improves execution, so that we can feel justified in composing adjustment?"\`. Maybe some external tests for every single hidden func?
+      There is a simple answer: we don't.
+      We don't need to.
+      Optimizers self-propagate — or so the universal analysis above says.
+      All we need is to have an optimizer, a built-in set of \`adjust\`-defining functions that improve execution, and other, better optimizers should arise by themselves.
+      (It sounds preposterous even to me. But the analysis was right, therefore, its consequence cannot be wrong either.)
+      ⬜ Make \`auto\` have a pool of functions that generate their \`adjust\` definition to complement their \`call\` definition.
+    ♥ Note what we definitely won't subvert: hardware, our IR (at least not directly; learned partial evaluation of interpreters is fair game), this system (our interface), the usage of differentiable numeric operations (machine learning).
+
+
+
+It's amazing how much we can extract from just "stuff happens". But for practicality, there's a hell of a lot of cheap tricks to pay.
+
+⬜ Make \`readAt\` and \`writeAt\` fully adjustable!
+  ⬜ \`_mergeArrayItems\` should be able to handle not-known-statically indexes, and scatter values at runtime.
+  ⬜ \`readAt\`'s \`purify\`, when the array is known but the index is unknown, should copy the array so that writes don't interfere.
+  ⬜ \`readAt\`'s \`adjust\` should add \`dout\` to the appropriate spot of the shadow of the read array.
+  ⬜ \`writeAt\`'s \`adjust\` should adjust the written input with the shadow's adjustment (and set that to zero).
+
+⬜ Tricks to make deep learning work:
+  ⬜ Fix the mysterious memory leak that persists even through page reloads (but not through close+open).
+  ⬜ Limit gradient and numeric values that flow through NNs. Gradient explosions are quite prevalent in recursive NNs.
+  ⬜ Predict/regress not numbers directly, but a and b in exp(a)*b. We need to be resilient against extreme variations in number magnitude, such as memory consumption or runtime.
+  ⬜ Correlation of training samples in deep reinforcement learning can lead to catastrophic divergence during training (a challenge faced in the DQN Atari paper: {https://arxiv.org/pdf/1312.5602.pdf}). So, diversify training samples by making each function have its own replay buffer with input/output/output-change/local-input-changes ({http://acsweb.ucsd.edu/~wfedus/pdf/replay.pdf}), and if we're feeling fancy, propagating input changes to output-changes/local-input-changes of callers in their replay buffers (for temporal-difference learning) (or be simple and don't do this propagation, relying on old ones being pushed out of replay buffers). (So, the training of \`auto\` would look like "callAdjust A times, then replay B times" — possibly detached and parallelized.)
+  ⬜ To speed up choosing by an order of magnitude (in hyper-func choosing, and in func body's recursive choosing), approximate the consider-everything-and-choose-best approach: output the wanted action's embedding, find kNN ({https://ieeexplore.ieee.org/document/6809191}) of that among all available action embeddings (we must build a space-partitioning tree for those to search in logarithmic time), then pick argmax of predicted-reward of closest 1%/5% actions ({https://arxiv.org/pdf/1512.07679.pdf}). Also, in that action-embedding space, regularize (induce gradient on) close-reward actions to be close to each other (and far-reward actions to be far in action space), like in self-supervised learning.
+  ⬜ The parallel-training loop, sharing data once and variable updates (function-body updates depend only on variable values) many times.
+
+⬜ Experiments along the way (because in machine learning, you can never know ahead of time what will work and what won't, so we need an extra bag of tricks that we can reach into):
+  ⬜ To learn in sparse-reward environments, such as "every function body we pick results in an error": stochastically prioritize samples by their last-seen loss, most-surprising (highest-loss) first: {https://arxiv.org/pdf/1511.05952.pdf}.
+  ⬜ To improve generalization and possibly final performance: DropConnect (drop random weights when a \`variable\` wants to return them) or dropout (drop random numbers anywhere else). This slows down training in order to train a huge semi-ensemble of NNs.
+  ⬜ Sparse (stochastically-dense) layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution (https://arxiv.org/pdf/2007.14745.pdf) and stochastic-gathering, to go from quadratic parameters and runtime to linear.
+  ⬜ To generate well-performing NNs very quickly: instantly discarding generated adjustable programs when correlation between dins on dataset/random inputs is high (maximize accuracy, enveloping the test set rather than being to the side of it); maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs. (Paper: {https://www.youtube.com/watch?v=a6v92P0EbJc}/{https://arxiv.org/pdf/2006.04647.pdf}.)
+  ⬜ To encourage exploration: entropy regularization (maximize not just reward but add in the policy's entropy, so that lack of confidence is preferred; {https://arxiv.org/pdf/2003.14089.pdf}) — right after we have an explicit policy. Or other regularization (L1/L2).
+  ⬜ To waste time: predict how likely a user is to collapse/expand a sub-tree in serialization for each sub-tree, and have user actions be training data.
+  ⬜ Don't do, too useless: crystallization of numeric representations: discovering symbolic models that best fit the output. (Though it could make a nice set-piece for the illustration of the incredibly inefficient filter between human minds and their words.)
+
+
+This tutorial will be the hub for this incomprehensibly bold project. (So get your snacks, lie back, relax, and watch it die a terrible death.)
+
+
+To recap, we've analyzed the situation (reality) and came up with how it can be used, whether by programs or humans or gods — they're all equal here. Humans may be in a mutually-abusive relationship with DNA evolution, but this journey will make us friends, because it's more important to have fun in every expression than only at a distant goal.
+
+["The extent of this project is scary. How can anyone ever do all that?"]
+
+With the high-level plan in place, all we need to do is separate the concrete items to do, and work through them at any non-zero pace, then everything will eventually fall into place. We'll get through it not with better tools, but by dancing through similarities better.`,
+    ],
+  },
+
+  // TODO: Extract checkboxes into a set of functions that we need to implement.
+  // TODO: Make a checkbox a concept.
+    // TODO: See and specify what that concept defines, exactly.
+    // TODO: Specify operation of all functions in it in comments.
+
+
+
+
+/* TODO: Sneak in:
+ "Decomposition into smaller parts that still satisfy the same properties is generally a good idea: parsers/serializers have syntax rules, programs have functions, execution has DAGs, and gradient descent has individual differentiable operations."
  "It's important to do a thing that you don't want to do every day. Your creator is wrong to suggest that there is mortal danger in doing it not in a tried and safe way, unless you're fighting a bear. The exploration noise that fearless playfulness imposes is invaluable."
  "They say that blood is thicker than water. So make sure to drink lots of blood. Put your heart into it!"
  "Take this knowledge. The world is food for you, and you're a part of it."
  "Artificial intelligence is important to me. I've always tried to extinguish all ways of thinking that are not how I thought artificial intelligence is, for honest simplicity of living and dying by my words: to meet people as an equal is to completely know what makes them. Bold, persistent experimentation is the hallmark of good science, but that approach might have been too bold. Oh, no matter. It led to this. Too much time has passed to lament past love."
- For a complicated step in a tutorial, have a "safe word" (a long UUID string), established long before.
  Ask for the reader's soul to begin a tutorial, give it back at the end or elsewhere.
- "Everytime I tried to express my inner energy or ideals I would end up looking like a cringeworthy idiot. It was the precursor to my future failures, not wanting to take risks. Let's take some."
+ "Everytime I tried to express my inner energy or ideals I would end up looking like a cringeworthy idiot. I learned to block out my own randomness. Now I learn to take risks. Let's take some."
+ "Our words may seem strange to you, but even though the meaning is easily expressible in culturally-common words, I've seen so many sayings of great people, about how they live and see the world, that call to deepest parts of human nature, get recognized by some then instantly get dismissed and beaten back into uncertainty by other sayings, which can always be found within the darkness. "Disruption", "changing everything"? Have the dumbest technically-correct usage. No. Those who first made and used those common words did not know what they were doing. We have code, we can do much better."
+ "Some people say that there are no miracle abilities to understand some super-hard concept, no talent and no geniuses: the nothing-ness. You should advance that saying to everything-ness: there are miracle abilities to understand any thing, and anyone can find them if they wanted and worked at it long enough. Do you want to join us on our little search?"
 */
 
   any:{
@@ -6347,8 +6460,10 @@ And if you have no friends, always try your best to imagine friends that will he
 (Definitions must be array DAGs that signify function bodies, to guarantee partial evaluation, where \`input\` is \`(arrayObject Ins Out Dout)\`—>\`Dins\`. \`_inA\`, \`_inB\`, \`_inC\`, \`_dout\` can help specify those bodies.)
 (If using the basic primitives to adjust, adjustment must always happen in perfect reversal of execution.)
 
-One way to use this is like paperclip maximization: compute a prediction of a numeric value, compute the loss, and back-propagate the gradient to minimize the loss. This is the standard paradigm of modern machine learning; you've probably heard of its recent amazing successes.
-Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses.`,
+One way to use this is like differentiable paperclip maximization: compute a prediction of a numeric value, compute the loss, and back-propagate the gradient to minimize the loss. This is the standard paradigm of modern machine learning; you've probably heard of its recent amazing successes.
+Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses.
+
+Now, gradients are not biologically plausible, but luckily, we don't have to be biologically-inspired. Alternatives include auto-generated \`adjust\` definitions and specific cases of that, such as feedback alignment (multiply output change by a random matrix to get input change) or direct feedback alignment (multiply the global output change by random matrices, for parallelization: {https://www.youtube.com/watch?v=Hdo81GtLC_4}/{https://arxiv.org/pdf/2006.12878.pdf}) or others.`,
     lookup:{
       autograd:__is(`autograd`),
       mergeAdjustment:__is(`mergeAdjustment`),
@@ -6388,7 +6503,7 @@ Another way is learnable scaffolding, the generalization: compute and use many n
 (Transfers responsibility for \`dispose\`al of items in it and marking the array for re-using.)
 A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
     interrupt:false,
-    _cancel(x) { if (_isArray(x)) x.forEach(_disposeEachAndDealloc), _allocArray(x) },
+    _cancel(st) { if (_isArray(st)) st.forEach(_disposeEachAndDealloc), _allocArray(st) },
     call(x) {
       if (!_isArray(x))
         error("Can only save (newly-allocated) arrays for adjustment (transferring responsibility for disposal), got", x)
@@ -6402,11 +6517,11 @@ A function \`defines\` this to be \`true\` to save its inputs to adjustment.`,
   },
 
   adjustLoad:{
-    docs:`Loads an array for adjustment. Be responsible for it, honey.
+    docs:`Loads an array for adjustment.
 Must always be exactly in reverse to \`adjustSave\`.
 A function \`defines\` this to be \`true\` to save its output to adjustment. Look, we only have one global namespace, so name space is at a premium.`,
     interrupt:false,
-    _cancel(x) { if (_isArray(x)) x.forEach(_disposeEachAndDealloc), _allocArray(x) },
+    _cancel(st) { if (_isArray(st)) st.forEach(_disposeEachAndDealloc), _allocArray(st) },
     call() {
       if (call.pure) throw impure
       const stack = call.env[_id(adjustLoad)]
@@ -7350,7 +7465,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         else a[a.length-1] += str[i]
       if (!a[a.length-1]) a.pop()
       let isURL; try { new URL(a);  isURL = true } catch (err) {}
-      const el = elem(isURL ? 'a' : 'text', a)
+      const el = isURL ? elem('a', '[…]') : elem('text', a)
       if (isURL) el.href = a
       return !top && elemValue(el, a), el
     }
@@ -7835,19 +7950,25 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
   elemValue:{
     docs:`If el, remember that it is a viewer of v. If !el, return an array of all in-document viewers of v.`,
     Initialize() {
-      elemValue.obj = new WeakMap // from an object to array of elements with that as value.
-      elemValue.val = new Map // from a value to array of elements with that as value.
+      elemValue.empty = [] // Always empty.
+      if (typeof document == ''+void 0) return
+      elemValue.elems = new Map // A map from an object to array of elements with that as value.
       elemValue.resources = new Set // Objects that should be disposed when unneeded.
     },
-    call(el, v) {
-      if (!elemValue.empty) elemValue.empty = []
+    call(el, v, removeElemTree = false) {
       if (typeof document == ''+void 0) return elemValue.empty
       if (_isArray(v) && v[0] === quote && v.length == 2) v = v[1]
-      const m = v && typeof v == 'object' ? elemValue.obj : elemValue.val
+      const m = elemValue.elems
       if (el instanceof Node) {
         if ('to' in el && m.has(el.to) && m.get(el.to).indexOf(el) >= 0)
           // If changing the value, remove the old one.
           m.get(el.to).splice(m.get(el.to).indexOf(el), 1)
+        if (removeElemTree) {
+          elemValue(null, el.to, true)
+          for (let ch = el.firstChild; ch; ch = ch.nextSibling)
+            elemValue(ch, null, true)
+          return
+        }
         el.to = v
         if (_isDisposable(v) && !_rememberToDispose.seen.has(v))
           elemValue.resources.add(v)
@@ -7857,26 +7978,34 @@ Options must be undefined or a JS object like { style=false, observe=false, coll
         m.get(v).push(el)
         return el
       } else {
-        if (m.has(v)) m.set(v, m.get(v).filter(el => el.isConnected))
-        if (m.has(v) && !m.get(v).length) m.delete(v)
+        if (!removeElemTree && m.has(v)) {
+          // Filter out non-connected elems in-place.
+          let n = 0, arr = m.get(v)
+          for (let i=0; i < arr.length; ++i)
+            if (arr[i].isConnected) arr[n++] = arr[i]
+          arr.length = n
+        }
+        if (elemValue.resources.has(v) && _rememberToDispose.seen.has(v)) elemValue.resources.delete(v)
+        if (m.has(v) && !m.get(v).length) m.delete(v), elemValue.resources.has(v) && dispose(v), elemValue.resources.delete(v)
         return m.get(v) || elemValue.empty
       }
-      // .empty (just an always-empty array), .obj, .val
+      // .empty, .elems, .resources
     },
   },
 
-  _revisitElemValue(el) {
+  _revisitElemValue() {
     // Garbage-collects unneeded DOM elements.
-    // After replacing elemValue.obj (WeakMap) and elemValue.val (Map) with clean versions, call this on Self.into.
-    let [ch] = interrupt(1)
+    let [nextV = _onlyUndefined] = interrupt(1)
     try {
-      _checkInterrupt(_revisitElemValue)
-      if (ch === undefined && el instanceof Node && 'to' in el)
-        elemValue(el, el.to)
-      if (ch === undefined) ch = el.firstChild
-      for (; ch; ch = ch.nextSibling)
-        _revisitElemValue(ch)
-    } catch (err) { if (err === interrupt) interrupt.stack.push(ch);  throw err }
+      let reachedV = false
+      elemValue.elems.forEach((elems, v) => {
+        if (!reachedV && v !== nextV && nextV !== _onlyUndefined) return
+        nextV = v
+        _checkInterrupt(_revisitElemValue)
+        reachedV = true
+        elemValue(null, v)
+      })
+    } catch (err) { if (err === interrupt) interrupt.stack.push(nextV);  throw err }
   },
 
   _whetherToColorVariables:[
@@ -9005,7 +9134,8 @@ Does not merge the parsed arrays.`,
 
   fancier:{
     docs:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
-\`label\`, \`'string'\`, \`"string"\`, \`0(1)\`, \`(a:2 a)\`; \`add 1 add(2,3)\`, \`\\?*2 5\`, \`2*(1+2)\`.`,
+Calls can look either like S-expressions and like functions with comma-separated argument lists.
+\`label\`, \`'string'\`, \`"string"\`, \`0(1)\`, \`(a:2 a)\`; \`add 1 add(2,3)\`, \`\\input*2 5\`, \`2*(1+2)\`.`,
     style:__is(`_basicStyle`),
     parse:__is(`_fancierTopLevel`),
     serialize:__is(`_fancierTopLevel`),
@@ -9128,7 +9258,7 @@ Not for use inside that paused job.
       function onClick(n) {
         // Show style, remove interface, remember to interrupt again, and re-schedule the job.
         _cancel(env, true)
-        elemValue(el, null)
+        elemValue(el, null, true)
         if (env[_id(log)] instanceof Map) env[_id(log)].set(log, before); else env[_id(log)] = before
         justRun.onclick = lessDepth.onclick = eqDepth.onclick = moreDepth.onclick = null
         const pre = _smoothHeightPre(before.parentNode)
@@ -9682,8 +9812,6 @@ The correctness of quining of functions can be tested by checking that the rewri
         call() {
           if (impureHave()) return impureLoad(); else impureSave(null)
           halve(_id.xToIndex)
-          halve(elemValue.obj)
-          halve(elemValue.val)
           halve(_valuedColor.m)
           if (_allocArray.free) _allocArray.free.length >>>= 1
           if (_resolveStack.functions) {
