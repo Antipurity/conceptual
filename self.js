@@ -165,10 +165,7 @@ __base({
     readAt:{
       call:_(`call`),
       callAdjust:_(`callAdjust`),
-      error:_(`error`),
-      await:_(`await`),
-      repeat:_(`repeat`),
-      timeLimit:_(`timeLimit`),
+      Time:_(`Time`),
       Numeric:_(`Numeric`),
       Data:_(`Data`),
     },
@@ -214,6 +211,33 @@ __base({
   },
 
   Arithmetic:{
+    examples:[
+      `Loss goes down.`,
+      [
+        `repeat ^randomVar(ones)+randomVar(ones)=5 1000`,
+      ],
+      [
+        `repeat ^randomVar(ones)*randomVar(ones)=5 100`,
+      ],
+      [
+        `repeat ^randomVar(ones)-randomVar(ones)=5 1000`,
+      ],
+      [
+        `repeat ^randomVar(ones)/randomVar(ones)=5 1000`,
+      ],
+      [
+        `repeat ^randomVar(ones)**randomVar(ones)=5 100`,
+      ],
+      [
+        `repeat ^exp(randomVar(ones))=5 100`,
+      ],
+      [
+        `repeat ^expm1(randomVar(ones))=5 100`,
+      ],
+      [
+        `repeat ^log(randomVar(ones))=5 1000`,
+      ],
+    ],
     docs:`This is where we shamelessly copy over the functions of TensorFlowJS that we need.`,
     readAt:{
       less:_(`less`),
@@ -241,8 +265,8 @@ __base({
   less:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyNumOrTensorType`),
+      _(5696),
+      _(5696),
       [
         _(`boolsType`),
         `Sizes`,
@@ -260,16 +284,15 @@ __base({
       _(`funcType`),
       [
         _(`boolsType`),
-        [
-          _(`sumType`),
-          1,
-          `Sizes`,
-        ],
+        `Sizes`,
       ],
-      _(`_anyNumOrTensorType`),
-      _(`_anyTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
+    readAt:{
+      values:_(`_whereValues`),
+    },
     docs:`a?b:c for each value.`,
     argCount:3,
     dispose:true,
@@ -308,6 +331,25 @@ __base({
     ],
   },
 
+  _whereValues:_([
+    _(`concept`),
+    _(`call`),
+    _(`where`),
+    _(`type`),
+    [
+      _(`funcType`),
+      [
+        _(`boolsType`),
+        1,
+      ],
+      `Type`,
+      `Type`,
+      `Type`,
+    ],
+    _(`docs`),
+    `A differently-\`type\`d \`where\`.`,
+  ]),
+
   NumTypes:{
     docs:`A namespace for common numeric types.`,
     readAt:{
@@ -323,49 +365,49 @@ __base({
   },
 
   i8:{
-    docs:`\`(i8 (…Numbers))\`: creates a flat array of signed 8-bit integers.`,
+    docs:`\`(i8 array(…Numbers))\`: creates a flat array of signed 8-bit integers.`,
     argCount:1,
     call(x) { return new Int8Array(x) },
   },
 
   i16:{
-    docs:`\`(i16 (…Numbers))\`: creates a flat array of signed 16-bit integers.`,
+    docs:`\`(i16 array(…Numbers))\`: creates a flat array of signed 16-bit integers.`,
     argCount:1,
     call(x) { return new Int16Array(x) },
   },
 
   i32:{
-    docs:`\`(i32 (…Numbers))\`: creates a flat array of signed 32-bit integers.`,
+    docs:`\`(i32 array(…Numbers))\`: creates a flat array of signed 32-bit integers.`,
     argCount:1,
     call(x) { return new Int32Array(x) },
   },
 
   u8:{
-    docs:`\`(u8 (…Numbers))\`: creates a flat array of unsigned 8-bit integers.`,
+    docs:`\`(u8 array(…Numbers))\`: creates a flat array of unsigned 8-bit integers.`,
     argCount:1,
     call(x) { return new Uint8Array(x) },
   },
 
   u16:{
-    docs:`\`(u16 (…Numbers))\`: creates a flat array of unsigned 16-bit integers.`,
+    docs:`\`(u16 array(…Numbers))\`: creates a flat array of unsigned 16-bit integers.`,
     argCount:1,
     call(x) { return new Uint16Array(x) },
   },
 
   u32:{
-    docs:`\`(u32 (…Numbers))\`: creates a flat array of unsigned 32-bit integers.`,
+    docs:`\`(u32 array(…Numbers))\`: creates a flat array of unsigned 32-bit integers.`,
     argCount:1,
     call(x) { return new Uint32Array(x) },
   },
 
   f32:{
-    docs:`\`(f32 (…Numbers))\`: creates a flat array of 32-bit floats.`,
+    docs:`\`(f32 array(…Numbers))\`: creates a flat array of 32-bit floats.`,
     argCount:1,
     call(x) { return new Float32Array(x) },
   },
 
   f64:{
-    docs:`\`(f64 (…Numbers))\`: creates a flat array of 64-bit floats.`,
+    docs:`\`(f64 array(…Numbers))\`: creates a flat array of 64-bit floats.`,
     argCount:1,
     call(x) { return new Float64Array(x) },
   },
@@ -373,8 +415,19 @@ __base({
   Data:{
     docs:`A namespace for some data-representation-related functions.`,
     readAt:{
-      array:_(`array`),
       Constructions:_(`Constructions`),
+      array:_(`array`),
+    },
+  },
+
+  Time:{
+    docs:`A namespace for some data-representation-related functions.`,
+    readAt:{
+      repeat:_(`repeat`),
+      userTime:_(`userTime`),
+      realTime:_(`realTime`),
+      timeLimit:_(`timeLimit`),
+      await:_(`await`),
     },
   },
 
@@ -418,10 +471,10 @@ Results of evaluating DAG nodes are not preserved.`,
       // Example usage: `repeat ^(randomNat 10) 1000`
       if (iterations !== undefined && typeof iterations != 'number' && typeof iterations != 'function')
         error("iterations must be undefined or a number or a function, got", iterations)
-      let [compCall, compAdj, i = 0, prevV, into] = interrupt(5)
+      let [compCall, compAdj, i = 0, v, prevV, into] = interrupt(6)
       if (into === undefined)
         into = elemValue(elem('code'), [repeat, expr, iterations]), into.classList.add('code'), print(into)
-      let v, done = false
+      let done = false
       try {
         // Pre-compute compCall and compAdj, so that every call to `callAdjust` doesn't have to.
         if (compCall === undefined) { // Can't interrupt.
@@ -452,7 +505,7 @@ Results of evaluating DAG nodes are not preserved.`,
             _smoothHeightPost(into, pre)
             prevV = v
           }
-        if (err === interrupt) interrupt.stack.push(compCall, compAdj, i, prevV, into)
+        if (err === interrupt) interrupt.stack.push(compCall, compAdj, i, v, prevV, into)
         throw err
       }
     },
@@ -460,7 +513,6 @@ Results of evaluating DAG nodes are not preserved.`,
 
   Self:{
     docs:`Open programming environment with machine learning, to treat humans and programs equally.
-
 A namespace for every function here. Project's GitHub page: {https://github.com/Antipurity/conceptual}`,
     philosophy:`What happens when you force a person to change.
 Can't get away from it, love it so much.`,
@@ -481,7 +533,7 @@ Can't get away from it, love it so much.`,
 
 This does not include time spent on other jobs, but does include the time to interrupt/restore execution.`,
     readAt:{
-      start:_(`userTimeStart`),
+      start:_(`_userTimeStart`),
     },
     interrupt:false,
     call(mark) {
@@ -490,7 +542,7 @@ This does not include time spent on other jobs, but does include the time to int
     },
   },
 
-  userTimeStart:_([
+  _userTimeStart:_([
     _(`concept`),
     _(`call`),
     _(`userTime`),
@@ -513,7 +565,7 @@ This does not include time spent on other jobs, but does include the time to int
 
 This includes time spent on other jobs.`,
     readAt:{
-      start:_(`realTimeStart`),
+      start:_(`_realTimeStart`),
     },
     interrupt:false,
     call(mark) {
@@ -522,7 +574,7 @@ This includes time spent on other jobs.`,
     },
   },
 
-  realTimeStart:_([
+  _realTimeStart:_([
     _(`concept`),
     _(`call`),
     _(`realTime`),
@@ -567,10 +619,6 @@ This includes time spent on other jobs.`,
       ],
       `Output`,
     ],
-    readAt:{
-      userTime:_(`userTime`),
-      realTime:_(`realTime`),
-    },
     call(duration, fn, ...args) {
       let [end = userTime() + sync(duration)] = interrupt(1)
       const prevEnd = timeLimit.end
@@ -705,7 +753,6 @@ Supported browsers: modern Chrome/Chromium and Firefox.`,
       `https://d3js.org/d3.v6.min.js`,
     ],
     style:`.into * {transition: all .2s ease-in, margin 0s, padding 0s; box-sizing: border-box; vertical-align:top; animation: fadein .2s; font-family: monospace, monospace; font-size:1rem}
-.into:not(body) { box-shadow:var(--highlight) 0 0 .1em .1em }
 
 @keyframes fadein { from {opacity:0} }
 
@@ -720,12 +767,13 @@ summary>text, details>div>text { display:inline-block }
   --highlight:royalblue;
   --main:black;
 }
-.into.noTransitions * { transition: none !important; animation: none !important }
+.into:not(body) { box-shadow:var(--highlight) 0 0 .1em .1em }
 .into.dark {
   --background:rgb(15,15,15);
   --highlight:rgb(225, 110, 65);
   --main:white;
 }
+.into.noTransitions * { transition: none !important; animation: none !important }
 .into>*:not(script) {display:table; white-space:pre-wrap}
 .into.noComplexity:not(.dark) :not(collapsed).hover { box-shadow:none; background-color:#ccc }
 .into.noComplexity.dark :not(collapsed).hover { box-shadow:none; background-color:#333 }
@@ -925,7 +973,7 @@ inline-block { display:inline-block }
         if (evt.ctrlKey) key = 'Ctrl'+key
         if (evt.metaKey) key = 'Meta'+key
         if (evt.altKey) key = 'Alt'+key
-        if (Commands.has(key)) {
+        if (Commands.has(key) && !_isEditable(document.activeElement)) {
           const target = commandElem || document.activeElement !== document.body && document.activeElement
           const range = getSelection().rangeCount && getSelection().getRangeAt(0)
           _doJob([Commands.get(key), target, range, evt], _newExecutionEnv(), el => commandElem = el || commandElem)
@@ -1212,7 +1260,7 @@ Example: \`nodejs self.js basic <input.txt >output.txt\` will write the result o
       if (process.argv.length > 3) return console.log(`Usage:
 nodejs self.js
 nodejs self.js basic`)
-      const lang = process.argv[2] && Self.ctx.get(label(process.argv[2])) || fancy
+      const lang = process.argv[2] && Self.ctx.get(label(process.argv[2])) || fancier
 
       const out = process.stdout
       if (!out.isTTY || !out.hasColors()) _colored.disabled = true
@@ -1232,7 +1280,7 @@ nodejs self.js basic`)
   },
 
   WebWorker:{
-    docs:`Used for \`purifyInWorker\`.
+    docs:`Used for \`_purifyInWorker\`. Obsolete for now.
 For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:config\` needs to be false.`,
     call() {
       WebWorker.envs = Object.create(null)
@@ -1259,7 +1307,6 @@ For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:confi
 
   settingsToolbar:[
     _(`_useDarkTheme`),
-    _(`_maxUsageOfCPU`),
   ],
 
   _runFunc:{
@@ -1280,16 +1327,16 @@ For \`file://\` URIs in Firefox, \`privacy.file_unique_origin\` in \`about:confi
 The \`_closestNodeParent\` is shown by this.`,
   ],
 
-  purifyInWorker:{
-    docs:`\`(purifyInWorker Expr)\`: calls \`purify\` on (a copy of) \`Expr\` in parallel; returns a promise.`,
+  _purifyInWorker:{
+    docs:`\`(_purifyInWorker Expr)\`: calls \`purify\` on (a copy of) \`Expr\` in parallel; returns a promise.`,
     examples:[
       [
-        `purifyInWorker ^[1*2+3*4]`,
+        `_purifyInWorker ^(1*2+3*4)`,
       ]
     ],
     await:true,
     call(expr) {
-      if (!purifyInWorker.workers) {
+      if (!_purifyInWorker.workers) {
         const ws = []
         for (let i = navigator.hardwareConcurrency-1; i; --i)
           ws[i-1] = {
@@ -1305,18 +1352,18 @@ The \`_closestNodeParent\` is shown by this.`,
             }))
             ws.length = 0
           }
-        purifyInWorker.workers = ws
+        _purifyInWorker.workers = ws
       }
 
       return new Promise(then => {
         const ID = _newJobId()
-        if (!purifyInWorker.workers.length) {
+        if (!_purifyInWorker.workers.length) {
           let env = _newExecutionEnv()
           env[_id(_schedule)] = ID
           return _doJob([purify, [quote, expr]], env, then)
         }
         const str = defines(fast, readAt).serialize([purify, [quote, expr]])
-        const w = purifyInWorker.workers[Math.floor(Math.random() * purifyInWorker.workers.length)]
+        const w = _purifyInWorker.workers[Math.floor(Math.random() * _purifyInWorker.workers.length)]
         w.worker.postMessage([ID, str])
         w.tasks[ID] = [expr, then]
       })
@@ -1588,15 +1635,20 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
       if (typeof start == 'function') {
         col.setAttribute('content', '···')
         col.append(elem('hidden'))
-        col.onclick = evt => {
-          const col = evt.target || evt.explicitOriginalTarget, p = col.parentNode, pre = _smoothHeightPre(p)
+        col.onclick = (evt, instant = false) => {
+          evt.preventDefault && evt.preventDefault()
+          const col = evt.target || evt.explicitOriginalTarget, p = col.parentNode, pre = !instant && _smoothHeightPre(p)
           const el = start()
           if (p) _isArray(el) ? el.forEach(el => p.insertBefore(el, col)) : el.parentNode !== p && p.insertBefore(el, col), p.removeChild(col)
-          if (_getOuterWindow(p) || _getOuterContextMenu(p)) _updateBroken(_getOuterWindow(p) || _getOuterContextMenu(p)); else if (p) _updateBroken(p)
-          p.dispatchEvent(new Event('input', {bubbles:true}))
-          _smoothHeightPost(p, pre)
+          if (!instant) {
+            if (_getOuterWindow(p) || _getOuterContextMenu(p)) _updateBroken(_getOuterWindow(p) || _getOuterContextMenu(p))
+            else p && _updateBroken(p)
+            p.dispatchEvent(new Event('input', {bubbles:true}))
+            _smoothHeightPost(p, pre)
+          }
         }
       } else {
+        if (_isArray(start)) start = elem('text', start) // Assume `stringToDoc` made `start`.
         const parent = start.parentNode, pre = parent && _smoothHeightPre(parent)
         let nextCol = end !== undefined ? end : start.nextSibling
         const d = elem('hidden')
@@ -1614,11 +1666,13 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
         col.setAttribute('content', end === undefined ? '···' : '···$')
         col.append(d)
         col.onclick = (evt, instant = false) => {
+          evt.preventDefault && evt.preventDefault()
           const col = evt.target || evt.explicitOriginalTarget, d = col.firstChild, p = col.parentNode, pre = !instant && _smoothHeightPre(p)
           if (d.firstChild === d.lastChild)
             col.replaceWith(d.firstChild)
           else {
-            while (d.firstChild) p.insertBefore(d.firstChild, nextCol)
+            const before = col.nextSibling
+            while (d.firstChild) p.insertBefore(d.firstChild, before)
             p.removeChild(col)
           }
           if (!instant) {
@@ -1708,11 +1762,11 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
 
   _getOuterContextMenu(el) { return !el ? Self.into : (el.tagName === 'CONTEXT-MENU' ? el : _getOuterContextMenu(el.parentNode)) },
 
-  _escapeLabel(name, lang = _langAt(call.env) || fancy) {
+  _escapeLabel(name, lang = _langAt(call.env) || fancier) {
     return typeof defines(lang, _escapeLabel) == 'function' ? defines(lang, _escapeLabel)(name) : name
   },
 
-  _unescapeLabel(repr, lang = _langAt(call.env) || fancy) {
+  _unescapeLabel(repr, lang = _langAt(call.env) || fancier) {
     return typeof defines(lang, _unescapeLabel) == 'function' ? defines(lang, _unescapeLabel)(repr) : repr
   },
 
@@ -1790,7 +1844,8 @@ For anything else, display the globals the expression binds to, and an expandabl
               }, .1)
             }
             return elemValue(area, v)
-          } else return permissionsElem(v) // Display the globals the deconstruction binds to.
+          } else if (!_isArray(v) || v[0] !== REPL || !(v[2] instanceof Map))
+            return permissionsElem(v) // Display the globals that this one's deconstruction binds to (unless a REPL).
         },
       },
       {
@@ -1813,6 +1868,7 @@ For anything else, display the globals the expression binds to, and an expandabl
           }
           if (!_isArray(v) && defines(v, type))
             tp = defines(v, type)
+          tp = _typeFinalize(tp)
           if (tp !== undefined) // "In […], typed X"
             return aw ? elem('text', [
               elemValue(elem('unimportant', 'In '), autoWorld),
@@ -1993,12 +2049,12 @@ Collates \`map\`s from \`DOMElement.'to'\` to auto-world/type/embedding in the s
                 result.classList.add('resizable')
       
                 fetch(v[2], {mode:'cors'})
-                .catch(r => elemInsert(result, serialize(_errorRepr(r), fancy, undefined, serialize.displayed)))
+                .catch(r => elemInsert(result, serialize(_errorRepr(r), undefined, undefined, serialize.displayed)))
                 .then(r => r.arrayBuffer())
                 .then(r => new TextDecoder().decode(new Uint8Array(r)))
                 .then(r => {
                   try {
-                    elemInsert(result, serialize(JSON.parse(r), fancy, undefined, serialize.displayed))
+                    elemInsert(result, serialize(JSON.parse(r), undefined, undefined, serialize.displayed))
                   } catch (err) { elemInsert(result, defines(fast, readAt).parse(r)) }
                 })
                 .catch(() => {
@@ -2013,18 +2069,28 @@ Collates \`map\`s from \`DOMElement.'to'\` to auto-world/type/embedding in the s
         },
       },
       {
-        docs:`If we can expand all in the context element, then present that option.
+        docs:`Buttons.
+If we're at the top-level element, present an option to make a REPL.
+If we're at a top-level element, present an option to delete it (unless it's all we have).
+If we can expand all in the context element, then present that option.
 Present an option to hide the element.
 Present an option to hide the element and all elements after it on the same hierarchy level.
 Present "To window" (for non-windows) or "Restore" (for windows — draggable absolutely-positioned elements).
 If the cursor is in editor, present an option to replace the currently-selected contents with a link to the value.
 Allow editing run-time and rewrite-time values.`,
         call([el, range, v]) {
-          const elems = [
-            elemExpandAll(el, true) ? button(() => elemExpandAll(el), '🔮', 'Expand all collapsed element trees here.') : undefined,
-            _getOuterWindow(el) !== el && !_isEditable(el) ? button(() => elemCollapse(el), '…', 'Collapse element tree.') : undefined,
-            el.nextSibling && el.nextSibling.tagName !== 'BRACKET' ? button(() => elemCollapse(el, null), '…$', 'Collapse to end.') : undefined,
-          ].filter(x => x)
+          const elems = []
+          if (el.parentNode === Self.into) {
+            elems.push(button(() => elemInsert(Self.into, REPL(), el), '📠', 'Append a new REPL.'))
+            if (el.previousSibling && 'to' in el.previousSibling || el.nextSibling && 'to' in el.nextSibling)
+              elems.push(button(() => elemRemove(el), '🏹', 'Delete this.'))
+          }
+          if (elemExpandAll(el, true))
+            elems.push(button(() => elemExpandAll(el), '🔮', 'Expand all collapsed element trees here.'))
+          if (_getOuterWindow(el) !== el && !_isEditable(el))
+            elems.push(button(() => elemCollapse(el), '…', 'Collapse element tree.'))
+          if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET')
+            elems.push(button(() => elemCollapse(el, null), '…$', 'Collapse to end.'))
           if (!_isEditable(el) && el !== document.documentElement) {
             if (!_getOuterWindow(el))
               elems.push( button(() => elemToWindow(el), ' ', 'Extract this element into a draggable window.') )
@@ -2373,7 +2439,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
       _autocompleteBrackets:_(`_autocompleteBrackets`),
       _typingChil:_(`_typingChill`),
     },
-    call(initialString = '', lang = fancy, binds = Self.ctx, onInput, onEnter) {
+    call(initialString = '', lang = fancier, binds = Self.ctx, onInput, onEnter) {
       if (typeof initialString != 'string' && !(initialString instanceof Node))
         error('String expected, got', initialString)
       if (!(binds instanceof Map)) error('Map expected, got', binds)
@@ -2553,13 +2619,13 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
             cmd = cmd.trim()
             try {
               print.did = false
-              const expr = parse(cmd, fancy, binds)
+              const expr = parse(cmd, undefined, binds)
               opt.breakLength = out.columns
               if (out.isTTY && !print.did) {
                 const lines = Math.ceil((cmd.length + prompt.length) / out.columns)
                 out.moveCursor(0, -lines)
                 out.clearScreenDown()
-                out.write(coloredPrompt + serialize(expr, fancy, undefined, {...opt, offset:(prompt.length+1)>>>1}) + '\n')
+                out.write(coloredPrompt + serialize(expr, undefined, undefined, {...opt, offset:(prompt.length+1)>>>1}) + '\n')
               }
               _schedule(expr, _newExecutionEnv(env, null, lang, binds), result => {
                 // If binds contain result in values, set name to that; if not, create a new one.
@@ -2570,7 +2636,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
                   (binds = new Map(binds)).set(label(name), quote(result))
                 _bindingsAt.binds = binds
   
-                then(null, _colored(name, 33) + ': ' + serialize(result, fancy, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
+                then(null, _colored(name, 33) + ': ' + serialize(result, undefined, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
               })
             } catch (err) {
               if (_isArray(err) && err[0] === 'give more') then(new repl.Recoverable(err))
@@ -2746,7 +2812,7 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
     tutorial:[
       `A nice, sunny day out, with not a single cloud in sight. Let's make our understanding of tutorials as clear as the weather.
 
-Tutorials are a way of explaining ourselves to other humans as a part of the only form of immortality that's possible. You better make your code understandable, and you better be nice.
+Tutorials are a way of explaining ourselves to other humans as a way to achieve immortality. You better make your code understandable, and you better be nice.
 
 But first, we need to make sure that you can type characters. Yes, just type out \`'Can type'\` in the field below and press Enter, very, very gently. Remember that your keyboard can be your friend for decades to come if you don't neglect it.`,
       [
@@ -2779,6 +2845,10 @@ Now, type \`(tutorial)\` and claim what's yours. (You could start with \`call\` 
         _(`fancy`),
       ],
     ],
+    philosophy:`Did you ever hear the tragedy of Darth Plagueis the Wise?
+[…]
+Unfortunately, he taught his apprentice everything he knew, then his apprentice killed him in his sleep.
+Ironic. He could save others from death, but not himself.`,
     call(f = undefined) {
       if (f === undefined) {
         const m = _allocMap()
@@ -2809,6 +2879,7 @@ Now, type \`(tutorial)\` and claim what's yours. (You could start with \`call\` 
         else if (_isArray(v)) {
           const [lang, initialCode='', canContinue] = v
           const results = elem('div')
+          results.classList.add('code')
           let passed = false, env, bindAs, expr
           const OnInput = (x, fail) => !fail && (expr = x, elemValue(btn, x))
           const OnEnter = (x, fail) => {
@@ -2880,7 +2951,7 @@ Now, type \`(tutorial)\` and claim what's yours. (You could start with \`call\` 
     docs:`\`editObject Object\`: allows the user to edit the runtime object in-place.
 \`editObject Object null\` checks whether the object is editable.
 \`editObject Object Language\` specifies the editor's language.`,
-    call(x, lang = fancy) {
+    call(x, lang) {
       if (!_isArray(x) && defines(x, deconstruct) === undefined && !(x instanceof Map)) return
       if (defines(deconstruct(x), editObject) === false) return
       if (_isArray(x) && Object.isFrozen(x)) return
@@ -2894,7 +2965,7 @@ Now, type \`(tutorial)\` and claim what's yours. (You could start with \`call\` 
         if (isTrivial || _invertBindingContext(Self.ctx).has(item))
           return item
         return elemValue(elemCollapse(() => {
-          const srl = serialize(item, fancy, Self.ctx, serialize.displayed)
+          const srl = serialize(item, fancier, Self.ctx, serialize.displayed)
           srl.contentEditable = 'false'
           return srl
         }), item)
@@ -2939,7 +3010,7 @@ Now, type \`(tutorial)\` and claim what's yours. (You could start with \`call\` 
   editRewrite:{
     docs:`\`editRewrite Global\`: changes the global for the next \`Rewrite\`.
 Also supports \`editRewrite Global null\` to check whether an object can be rewritten, and \`editRewrite Global Language\` to specify a different editing language.`,
-    call(x = undefined, lang = fancy) {
+    call(x = undefined, lang) {
       const backctx = _invertBindingContext(Self.ctx)
       if (typeof x != 'object' && typeof x != 'function') return
       if (!readAt.parents.has(x) && !backctx.has(x)) return
@@ -3020,7 +3091,7 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
         else {
           if (typeof opt[1] == 'boolean')
             el = elem('input'), el.type = 'checkbox', el.checked = opt[1],
-            el.onchange = () => writeAt(opt, 1, el.checked)
+            el.onchange = () => writeAt(opt, 1, !!el.checked)
           else if (typeof opt[1] == 'number')
             el = elem('input'), el.type = 'number', el.value = opt[1],
             el.onchange = () => writeAt(opt, 1, +el.value)
@@ -3065,7 +3136,7 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
       el = elem('input')
       el.type = 'range'
       el.style.margin = el.style.padding = 0
-      el.oninput = el.onchange = () => writeAt(opt, 1, typeof opt[6] == 'number' ? el.value : Math.exp(el.value))
+      el.oninput = el.onchange = () => writeAt(opt, 1, typeof opt[6] == 'number' ? +el.value : Math.exp(+el.value))
     }
     el.min = delog(opt[4] || 0, opt[6])
     el.max = delog(opt[5] || 1, opt[6])
@@ -3608,11 +3679,12 @@ I don't like this ceaseless butchering of innocent maidens. Should I stop the cl
       parseURL:_(`parseURL`),
       fetchURL:_(`fetchURL`),
     },
-    call(awaitable) {
-      if (!_isPromise(awaitable)) return awaitable
-      if ('result' in awaitable) return awaitable.result
-      _promiseReEnter.promise = awaitable
-      _causeInterrupt(awaitable, _promiseReEnter)
+    call(p) {
+      if (!_isPromise(p)) return p
+      if ('result' in p && !_isError(p.result)) return p.result
+      else if ('result' in p) throw p.result
+      _promiseReEnter.promise = p
+      _causeInterrupt(p, _promiseReEnter)
     },
   },
 
@@ -3623,7 +3695,7 @@ I don't like this ceaseless butchering of innocent maidens. Should I stop the cl
     p.then(
       r => (p.result = r, _jobResume(expr, env, then)),
       r => (p.result = _errorRepr(r), _jobResume(expr, env, then)))
-    call.env[_id(await)] = p
+    env[_id(await)] = p
   },
 
   _jobResume(expr, env, then) {
@@ -3641,10 +3713,13 @@ I don't like this ceaseless butchering of innocent maidens. Should I stop the cl
     ],
     examples:[
       [
-        `(delay 1)+(delay 2)`,
+        `delay 10`,
       ],
       [
-        `(delay 1)*(delay 3)+(delay 4)*(delay 5)`,
+        `await(delay 1)+await(delay 2)`,
+      ],
+      [
+        `await(delay 1)*await(delay 3)+await(delay 4)*await(delay 5)`,
       ],
     ],
     await:true,
@@ -3747,19 +3822,23 @@ If any promises the job depends on have a method .cancel, calls those.`,
       env[_id(print)] = env[_id(print)][0].nextSibling, env[_id(print)].previousSibling.remove()
     try { v = callAdjust(expr) }
     catch (err) {
-      if (err === interrupt) interrupted = true
+      if (err === interrupt) interrupted = true, interrupt.stack && !interrupt.stack.length && (env[_id(interrupt)] = undefined)
       else v = _errorRepr(err)
     }
+
     if (typeof document != ''+void 0 && interrupted && env[_id(_checkInterrupt)] !== undefined) {
       // Highlight the last-executed expr.
       _highlightOriginal(env[_id(_checkInterrupt)], true)
     } else env[_id(_checkInterrupt)] = undefined
+    if (_isPromise(v)) { // Await top-level promises.
+      if ('result' in v) v = v.result
+      else expr = v, _promiseReEnter.promise = v, _jobs.reEnter = _promiseReEnter, interrupted = true
+    }
 
     call.env = env
     env[_id(userTime)] += _timeSince(env[_id(realTime)])
     interrupt.stack = call.env = undefined
 
-    if (_isPromise(v)) _promiseReEnter.promise = v, _jobs.reEnter = _promiseReEnter, interrupted = true
     if (interrupted) // Re-schedule.
       _jobs.reEnter === true ? _schedule(expr, env, then, true) : (_highlightOriginal(env[_id(_checkInterrupt)], false), _jobs.reEnter(expr, env, then))
     else // We have our result.
@@ -3825,7 +3904,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     if (arr) arr.forEach((el, i) => i < 16 && el.classList.toggle('working', working))
   },
 
-  _newExecutionEnv(basedOn = null, printBefore = null, langIs = fancy, bindsAre = Self.ctx) {
+  _newExecutionEnv(basedOn = null, printBefore = null, langIs = fancier, bindsAre = Self.ctx) {
     // Create a new execution env.
     // Don't ever re-use the same env in _schedule, use this instead.
     const e = Object.create(null)
@@ -3903,10 +3982,6 @@ But I know what you're really thinking: "arrays with heads that define \`constru
       `quoted`,
       `exactly`,
     ],
-    typeRefine(a,b) {
-      // Types match only when they're both quoting a ref-equal value.
-      return _isArray(a) && _isArray(b) && a[0] === b[0] && a[1] === b[1] ? a : null
-    },
     argCount:1,
     call(x) { // Value ⇒ Expr
       // Create the `(quote Expr)` representation if needed.
@@ -4019,6 +4094,7 @@ Evaluating a bound label results in its value, in the current function call. Eva
     readAt:{
       nat:_(`randomNat`),
       prob:_(`randomProb`),
+      float:_(`randomFloat`),
       truncatedNormal:_(`truncatedNormal`),
       biasedGlorotNormal:_(`biasedGlorotNormal`),
     },
@@ -4078,11 +4154,15 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
   },
 
   randomProb:{
-    docs:`\`(randomProb Probability)\`: Returns true with probability p, else false.
-Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but (probably) faster.`,
+    docs:`\`(randomProb Probability)\`: Returns \`true\` with \`Probability\` \`p\`, else \`false\`.
+Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (possibly) faster.`,
     type:[
       _(`funcType`),
       _(`_numberType`),
+      [
+        _(`boolsType`),
+        1,
+      ],
     ],
     nameResult:[
       `passed`,
@@ -4111,6 +4191,16 @@ Equivalent to JS 'Math.random() < p' with checks on p (it should be 0…1), but 
       // Generating (up to) 4 bits at a time is not based on past performance measures, or anything.
       // Using 4 bits at a time consumes on average about double the bits that using 1 bit at a time would, but should be much faster.
     },
+  },
+
+  randomFloat:{
+    docs:`\`randomFloat()\`: Returns a number in 0…1.`,
+    type:[
+      _(`funcType`),
+      _(`_numberType`),
+    ],
+    argCount:0,
+    call() { if (call.pure) throw impure;  return Math.random() },
   },
 
   _countBits(n) { let x=0; while (n >>>= 1) ++x;  return x },
@@ -4252,12 +4342,14 @@ I've known humans that rely on being like that for their daily life.
 They're often unable to quickly internalize novel viewpoints, and at best repeat my words when I introduce something new (at worst, if I'm not hitting the meaningless style and terminology just right, then I'm ignored entirely). Learning foundations instead of their consequences is an alien lifeform to them, and they're amazed by how little mistakes I make once I know stuff and how much I know. Sometimes, I see that they have original viewpoints, but when they share their inspirations, their views turn out to be a banal mix of interesting things they've seen. Maybe I just prefer a world where everyone is right in a different way, to a world where everyone is wrong if you dig deep enough.
 It's much more efficient to learn to repeat rather than understand, so the whole human society is like this.`,
     readAt:{
-      purify:_(`purify`),
+      last:_(`last`),
       quote:_(`quote`),
       apply:_(`apply`),
       func:_(`func`),
       select:_(`select`),
-      last:_(`last`),
+      equal:_(`equal`),
+      purify:_(`purify`),
+      error:_(`error`),
     },
     nameResult:[
       `result`,
@@ -4757,7 +4849,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
       if (!_resolveStack.functions) _resolveStack.functions = Object.create(null)
       _resolveStack.functions[sourceURL] = typeof WeakRef != ''+void 0 ? new WeakRef(fn) : fn
       return _allocMap(consts), fn
-    } catch (err) { console.error(src), _allocMap(consts); throw err }
+    } catch (err) { console.error(src, 'while trying to compile', body), _allocMap(consts); throw err }
 
     function toSource(body, poIndRc, owningPoIndRc) {
       // Compiles a DAG into an SSA form in JS that handles `interrupt`s.
@@ -4868,10 +4960,12 @@ Use \`_doesAdjustRead\` to read out those props.`,
               freeNames.get(d).push(nodeNames[k]), nodeNames[k] = undefined
             }
           }
-          // If adjustment will need the result but another node said it'll take care of it, `keep` the result for adjustment.
+          // If adjustment needs the result but another node said it will dispose it, `keep` the result.
           if (save && save[i] && kept[i])
-            for (let j=0; j < kept[i]; ++j)
-              extra.push(`${env(keep)}(${nodeNames[i]})`)
+            extra.push(`${env(keep)}(${nodeNames[i]})`)
+          // If N nodes said they'll dispose our result, `keep` the result N-1 times.
+          for (let j = 1; j < kept[i]; ++j)
+            extra.push(`${env(keep)}(${nodeNames[i]})`)
           extra.length && code.push(`     ${extra}`), _allocArray(extra)
         }
         if (save && save.filter(x => x).length) { // Save those that need saving, for adjustment.
@@ -5149,7 +5243,7 @@ If \`OnChange\` is not given, returns the current array of \`Array\`'s observers
 Call this again with the same array and function to no longer call it.
 Many updates at the same time are merged into one call, scheduled in a separate task.`,
     interrupt:false,
-    Initialize() { observe.rs = new WeakMap, observe.changed = new Set, observe.fn = _throttled(_callChangeObservers, .1) },
+    Initialize() { observe.rs = new WeakMap, observe.changed = new Set, observe.fn = _throttled(_callChangeObservers, .2) },
     call(arr, f, forceTo = undefined) {
       if (!_isArray(arr) && defines(arr, deconstruct) === undefined) return f
       if (Object.isFrozen(arr)) return f
@@ -5347,6 +5441,18 @@ This is much like the φ function in SSA forms, but explicitly passing arguments
     },
   },
 
+  equal:{
+    type:[
+      _(`funcType`),
+      `TypeA`,
+      `TypeB`,
+      _(`_numberType`),
+    ],
+    docs:`\`equal A B\`: returns \`true\` if \`A\` and \`B\` are reference-equal, otherwise \`false\`.`,
+    argCount:2,
+    interrupt:false,
+    call(a,b) { return a === b },
+  },
 
 
 
@@ -5390,7 +5496,7 @@ Compiling the partial evaluation, to make it faster? Probably overkill, since it
 Function optimizer? Picking the best equivalency, in a definition of \`purify\`. Likely best with machine learning, likely useless without.
 Lazy evaluation? If an argument is statically seen to be unused, then partial evaluation will automatically drop it. Creating thunks is not always efficient, particularly for numerically-heavy workloads, so unless the machinery can learn the best for each case, we won't create thunks.
 Asynchronous workflows? \`await\` can wait for a result, but to truly ensure that no time is wasted, delayed results should be treated as unknown and partially-evaluated. Good if a task takes a day, but for common use-cases, far too slow. Likely best with machine learning, likely useless without.
-Type systems, including dependent types, good for logic? They're about computing something about every value at compile-time. This can be done by replacing all values with \`(Value Type)\` and adding a type-computing always-inlined layer on top of all functions. Or by having another type-level interpreter for IR. But if types are annotated by humans case-by-case, then do they really say anything fundamental about computation? If we were to generate arbitrary programs, wouldn't it be better to allow them to be generated as a consequence of other operations like array-checking, not their own separate thing? No, we won't have types except as hints.
+Type systems, including dependent types, good for logic? They're about computing something about every value at compile-time. This can be done by replacing all values with \`(Value Type)\` and adding a type-computing always-inlined layer on top of all functions. Or by having another type-level interpreter for IR. But if types are annotated by humans case-by-case, then do they really say anything fundamental about computation? If we were to generate arbitrary programs, wouldn't it be better to allow them to be generated as a consequence of other operations like array-checking? Have, but then subvert.
 Choices.
 Choices.
 Choices.
@@ -5398,7 +5504,7 @@ Choices.
 Static is not good enough. Need dynamic.
 And who's to say that these are the only choices to ever make, anyway?
 Maybe, rather than trying to create a complete world by ourselves, we should allow a simple core to create whatever it wants.
-Believe in simplicity.`,
+Believe in simplicity. Let the joy of love give you an answer.`,
     philosophy:`The vanity and psychosis of those who hold absolute power are of no use to everyone else. Swat them aside, to make room for coming up with better versions of yourself.
 I realized my mistake, and though I lost my vision, I can see the world now.`,
     examples:[
@@ -5412,7 +5518,7 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
       ],
     ],
     readAt:{
-      purifyInWorker:_(`purifyInWorker`),
+      _purifyInWorker:_(`_purifyInWorker`),
       created:_(`created`),
     },
     nameResult:[
@@ -5503,15 +5609,17 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
             for (let i=0; i < x.length; ++i) if (_isArray(x[i]) && !call.pure.has(x[i]) && x[i][0] === quote) x[i] = x[i][1]
           }),
           pure.clear()
-        outputs[po.length-1] = undefined, outputs.forEach(dispose)
-        _allocArray(outputs), _allocArray(same), _allocArray(unknown)
+        outputs[po.length-1] = undefined, _disposeEachAndDealloc(outputs)
+        _allocArray(same), _allocArray(unknown)
         defines(_postorderInfo, dispose)(poIndRc)
         return !lastUnk ? lastOut : _unknown(lastOut)
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(i, poIndRc, outputs, same, unknown, pure, darray)
-        if (err === interrupt) throw err
+        if (err === interrupt) { interrupt.stack.push(i, poIndRc, outputs, same, unknown, pure, darray);  throw err }
+        const errRepr = !inline && _errorRepr(err)
+        errRepr && errRepr.forEach(keep)
+        _disposeEachAndDealloc(outputs)
         if (inline) throw err
-        return _unknown(_errorRepr(err).map(quote)) // If not inlining, don't throw exceptions, return them.
+        return _unknown(errRepr.map(quote)) // If not inlining, don't throw exceptions, return them.
       } finally { call.pure = prevPure; callAdjust.darray = prevDarray;  _allocArray(collected) }
     },
   },
@@ -5542,9 +5650,9 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
   add:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     docs:`Addition of two tensors, as in \`5+6\`=\`11\`.
@@ -5564,15 +5672,12 @@ The adjustment is passed through to each arg.`,
   mul:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
     merged:true,
-    docs:`Multiplication, as in \`5*6\`=\`30\`.
-
-For more numerical stability, \`adjust\`ment is not the mathematical gradient (output change multiplied by the other arg), but that divided by the result (so, divide output change by the arg).`,
-    todo:`See whether our changing of gradient made anything better.`,
+    docs:`Multiplication, as in \`5*6\`=\`30\`.`,
     argCount:2,
     dispose:true,
     interrupt:false,
@@ -5580,14 +5685,14 @@ For more numerical stability, \`adjust\`ment is not the mathematical gradient (o
     adjust:[
       _(`array`),
       [
-        _(`div`),
-        _(`_dout`),
-        _(`_inA`),
-      ],
-      [
-        _(`div`),
+        _(`mul`),
         _(`_dout`),
         _(`_inB`),
+      ],
+      [
+        _(`mul`),
+        _(`_dout`),
+        _(`_inA`),
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
@@ -5596,9 +5701,9 @@ For more numerical stability, \`adjust\`ment is not the mathematical gradient (o
   sub:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     docs:`Subtraction, as in \`5-6\`=\`-1\`.`,
@@ -5621,9 +5726,9 @@ For more numerical stability, \`adjust\`ment is not the mathematical gradient (o
   div:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     docs:`Division, as in \`6/3\`=\`2\``,
@@ -5662,9 +5767,9 @@ For more numerical stability, \`adjust\`ment is not the mathematical gradient (o
   pow:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
     examples:[
       [
@@ -5674,7 +5779,6 @@ For more numerical stability, \`adjust\`ment is not the mathematical gradient (o
     merged:true,
     dispose:true,
     docs:`Raises the first arg to the power of the second arg.`,
-    todo:`See if dividing gradient of both inputs by output (so, not \`mul\`tiplying it by output) makes learning behave better.`,
     argCount:2,
     interrupt:false,
     call(a,b) { return typeof a == 'number' && typeof b == 'number' ? Math.pow(a,b) : _tf(tf.pow(a,b)) },
@@ -5712,8 +5816,8 @@ For more numerical stability, \`adjust\`ment is not the mathematical gradient (o
   exp:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     dispose:true,
@@ -5735,8 +5839,8 @@ For more numerical stability, \`adjust\`ment is not the mathematical gradient (o
   expm1:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     dispose:true,
@@ -5763,8 +5867,8 @@ Why: speed`,
   log:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     dispose:true,
@@ -5788,7 +5892,7 @@ To find the answer for a different base, divide the result by \`log\` of that ba
   sum:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
+      _(5696),
       _(`_numberType`),
     ],
     merged:true,
@@ -5808,7 +5912,7 @@ The adjustment is passed through, to be broadcasted.`,
   max:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
+      _(5696),
       _(`_numberType`),
     ],
     merged:true,
@@ -5836,8 +5940,8 @@ The adjustment is passed through, to be broadcasted.`,
   abs:{
     type:[
       _(`funcType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyNumOrTensorType`),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     docs:`The absolute of values of a tensor, as in \`sum (tensor (1 -2 3 -4))\`=\`tensor (1 2 3 4)\`.
@@ -5869,8 +5973,8 @@ Is \`where 0<X X 0-X\`.`,
   floor:{
     type:[
       _(`funcType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyNumOrTensorType`),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     docs:`Floor.
@@ -5889,8 +5993,8 @@ The adjustment is passed through.`,
   sign:{
     type:[
       _(`funcType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyNumOrTensorType`),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     docs:`The sign of values in a tensor, as in \`sign (tensor (0 1 -2 3 -4))\`=\`tensor (0 1 -1 1 -1)\`.`,
@@ -5903,10 +6007,10 @@ The adjustment is passed through.`,
   clip:{
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyNumOrTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
     merged:true,
     dispose:true,
@@ -5916,7 +6020,7 @@ Adjustment will try hard to make values fit too.`,
     interrupt:false,
     call(a, Min=-2, Max=2) { return typeof a == 'number' ? Math.min(Math.max(Min, a), Max) : _tf(tf.clipByValue(a, Min, Max)) },
     readAt:{
-      clip2:_(`clip2`),
+      clip2:_(`_clip2`),
     },
     adjust:[
       _(`array`),
@@ -5947,15 +6051,15 @@ Adjustment will try hard to make values fit too.`,
     ],
   },
 
-  clip2:_([
+  _clip2:_([
     _(`concept`),
     _(`call`),
     _(`clip`),
     _(`type`),
     [
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
     ],
     _(`docs`),
     `A differently-\`type\`d version of \`clip\`.`,
@@ -5973,12 +6077,37 @@ Use \`sync\` to get the result as a non-tensor.`,
 
   ReshapingOps:{
     readAt:{
+      broadcastTo:_(`broadcastTo`),
       sync:_(`sync`),
       split:_(`split`),
       concat:_(`concat`),
       stack:_(`stack`),
       unstack:_(`unstack`),
     },
+  },
+
+  broadcastTo:{
+    type:[
+      _(`funcType`),
+      _(`_numberType`),
+      [
+        _(`quote`),
+        `Sizes`,
+      ],
+      _(5696),
+    ],
+    merged:true,
+    docs:`Broadcasts a number into a shape compatible with another tensor. Mostly for converting numbers.`,
+    examples:[
+      [
+        `broadcastToTensor 5 tensor(1 23 4)`,
+        `tensor (5 5 5)`,
+      ],
+    ],
+    argCount:2,
+    interrupt:false,
+    dispose:true,
+    call(a, shape) { return _tf(tf.broadcastTo(a, typeof shape != 'number' ? shape : [shape])) },
   },
 
   sync:{
@@ -6017,6 +6146,24 @@ Reverse of \`concat\`.`,
     ],
   },
 
+  _concreteTensorSize(ctx, a, sz) {
+    const eq = sz === true
+    if (sz === undefined || typeof sz == 'boolean') sz = ctx.get(`Sizes`)
+    if (sz === undefined && eq) return a
+    sz = _resolveTypeVar(sz)
+    if (_isArray(sz) && sz[0] === computeType) return a[1] === sz[1] ? a : null
+    if (typeof sz == 'number' || _isArray(sz) && sz.every(x => typeof x == 'number')) return sz
+    if (_isArray(sz)) {
+      // …A random number, yes, but what, you want to route machine-learned embeddings through generating all possible numbers?
+      if (sz[0] === rest) return 256
+      // …Or even just through type refinement?
+      if (sz[0] === sumType) return _concreteTensorSize(null, 0, sz[1+randomNat(sz.length-1)])
+      return sz.map(n => _concreteTensorSize(null, 0, n))
+    }
+    if (_isTypeVar(sz)) return 256
+    return null
+  },
+
   concat:{
     merged:true,
     type:[
@@ -6031,7 +6178,12 @@ Reverse of \`concat\`.`,
           _(`tensorType`),
           [
             _(`computeType`),
-            function(ctx, tp) { return typeof ctx.get('A') != 'number' || typeof ctx.get('C') != 'number' ? null : ctx.get('C') - ctx.get('A') },
+            function(ctx, tp, eq) {
+              if (eq) return tp
+              const C = _concreteTensorSize(ctx,tp,ctx.get('C'))
+              const A = _concreteTensorSize(ctx,tp,ctx.get('A'))
+              return typeof C == 'number' && typeof A == 'number' ? C - A : null
+            },
             `B`,
           ],
         ],
@@ -6063,7 +6215,7 @@ Reverse of \`split\`.
     ],
     dispose:true,
     interrupt:false,
-    call(a, sz) { return _tf(tf.concat(a, a[0].shape.length <= 1 ? 0 : 1)) },
+    call(a, sz) { if (call.pure && (call.pure.has(a) || call.pure.has(sz))) throw impure;  return _tf(tf.concat(a, a[0].shape.length <= 1 ? 0 : 1)) },
     adjust:[
       _(`split`),
       _(`_dout`),
@@ -6080,12 +6232,13 @@ Reverse of \`split\`.
       _(`funcType`),
       [
         _(`arrayType`),
-        _(`_anyTensorType`),
+        _(5696),
+        `ArrayLength`,
       ],
       [
         _(`tensorType`),
         [
-          undefined,
+          `ArrayLength`,
           [
             _(`rest`),
             `Sizes`,
@@ -6101,18 +6254,20 @@ If \`Numeric\` code does not call \`select\` or \`sync\`, and we want to repeat 
       `Simple usage:`,
       [
         `stack array(tensor(1 2),tensor(2 3),tensor(3 4))`,
-        `tensor((1 2) (2 3) (3 4))`,
+        `tensor((1 2) (2 3) (3 4))`, // TODO: …A naked tensor causes disposal problems; how do we remember to dispose it, or at least allow it?…
       ],
       `In fact, even \`concat\` is mostly immunized to our effects:`,
       [
         `concat array(stack(array(keep tensor(1 2 3),keep tensor(4 5 6))),stack(array(keep tensor(-1 -2 -3),keep tensor(-4 -5 -6))))`,
       ],
       `(Although, \`concat\` still expects everything to be of the exact same shape, so we can't \`stack\` some inputs and leave others be. Food for thought.)`,
+      // TODO: Fix `stack(array(randomVar(),randomVar(),randomVar()))=5` not wanting to work.
+        // …Does non-random-var thing work: `stack(array(tensor(1 2),tensor(2 3),tensor(3 4)))=5`? …No, it has disposal problems: those inputs get disposed twice. Maybe.
     ],
     dispose:true,
     interrupt:false,
     argCount:1,
-    call(a) { return _tf(tf.stack(a)) },
+    call(a) { if (call.pure && call.pure.has(a)) throw impure;  return _tf(tf.stack(a)) },
     adjust:[
       _(`unstack`),
       _(`_dout`),
@@ -6126,7 +6281,7 @@ If \`Numeric\` code does not call \`select\` or \`sync\`, and we want to repeat 
       [
         _(`tensorType`),
         [
-          undefined,
+          `ArrayLength`,
           [
             _(`rest`),
             `Sizes`,
@@ -6135,7 +6290,8 @@ If \`Numeric\` code does not call \`select\` or \`sync\`, and we want to repeat 
       ],
       [
         _(`arrayType`),
-        _(`_anyTensorType`),
+        _(5696),
+        `ArrayLength`,
       ],
     ],
     merged:true,
@@ -6162,7 +6318,7 @@ Reverse of \`stack\`.`,
     merged:true,
     docs:`\`norm Tensor Order\`: The norm of N-th order of values in a tensor.
 \`Order\`=\`1\` (the default) sums absolute values (\`sum(abs(Tensor))\`), like \`norm (tensor (1 -2 3 -4))\`=\`tensor 10()\`.
-Other \`Order\`s are computed as \`pow(sum(pow(abs(),Order)),1/Order)\`.
+Other \`Order\`s are computed as \`pow(sum(pow(abs(Tensor),Order)),1/Order)\`.
 No adjustment because of laziness.`,
     dispose:true,
     interrupt:false,
@@ -6209,12 +6365,12 @@ No adjustment because of laziness.`,
     merged:true,
     docs:`Matrix multiplication of \`A\` by \`B\`.
 Like a cross-sectional dot product: each element of the output is the sum of every element in a row in \`A\` \`mul\`tiplied by its corresponding element in a column in \`B\`. (So, if input shapes are N×M and M×K, then output is shaped as N×K.)
-Can also handle "\`A\` is a vector" (the operation is then called a non-batched \`denseLayer\`; resulting in a vector) and "\`A\` or \`B\` is a number" cases, by padding the missing outer dimensions with \`1\` then un-padding.`,
+Can also handle "\`A\` is a vector" (the operation is then called a non-batched \`_denseLayer\`; resulting in a vector) and "\`A\` or \`B\` is a number" cases, by padding the missing outer dimensions with \`1\` then un-padding.`,
     argCount:2,
     dispose:true,
     interrupt:false,
     readAt:{
-      denseLayer:_(`denseLayer`),
+      _denseLayer:_(`_denseLayer`),
     },
     call(a,b) { return _matMul(a,b) },
     adjust:[
@@ -6237,7 +6393,7 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
     mergeAdjustment:_(`_mergeTensors`),
   },
 
-  denseLayer:_([
+  _denseLayer:_([
     _(`concept`),
     _(`call`),
     _(`matMul`),
@@ -6252,7 +6408,12 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
         _(`tensorType`),
         [
           _(`computeType`),
-          function(ctx) { return typeof ctx.get('A') == 'number' && typeof ctx.get('B') == 'number' ? [ctx.get('A'), ctx.get('B')] : null },
+          function(ctx, tp, eq) { // Is `('A', 'B')`, but only numbers are allowed.
+            if (eq) return tp
+            const A = _concreteTensorSize(ctx, tp, ctx.get('A'))
+            const B = _concreteTensorSize(ctx, tp, ctx.get('B'))
+            return typeof A == 'number' && typeof B == 'number' ? [A, B] : null
+          },
         ],
       ],
       [
@@ -6429,7 +6590,7 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
       _rememberToDispose.seen.add(x)
       if (_isArray(x)) _rememberArrayItems(x)
       else if (x instanceof Map) x.forEach(_rememberToDispose)
-      else Object.values(x[defines.key]).forEach(_rememberToDispose)
+      else if (x && x[defines.key]) Object.values(x[defines.key]).forEach(_rememberToDispose)
       return x
     },
   },
@@ -6441,11 +6602,12 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
     let res, allow = 0
     if (resM.has(x)) {
       res = resM.get(x)
+      for (let i=0; i < res.length; ++i) _rememberToDispose.seen.delete(res[i])
       allow -= res.length, res.length = 0
     } else res = _allocArray(0)
 
     for (let i=0; i < x.length; ++i)
-      if (_isDisposable(x[i])) res.push(x[i])
+      if (_isDisposable(x[i])) res.push(x[i]), _rememberToDispose.seen.add(x[i])
 
     allow += res.length
     if (res.length) {
@@ -6469,8 +6631,9 @@ The definitions take the type and the result-cache (a \`map\`), and must return 
         typeAdjustmentMerger.inner = true
         const cache = typeAdjustmentMerger.cache || (typeAdjustmentMerger.cache = new WeakMap)
         const b = defines(tp, typeAdjustmentMerger)(tp, cache)
-        if (!_isArray(b) || b.length != 2) error("Expected a tuple of func and structure, got", b)
-        if (!cache.has(b[1])) cache.set(b[1], b[0])
+        if (!_isArray(b) || b.length != 2) error("Expected a tuple of func and structure, got", b, "from mergers of", tp)
+        if (b[1] && (typeof b[1] == 'object' || (typeof b[1] == 'function')))
+          if (!cache.has(b[1])) cache.set(b[1], b[0])
         if (prevInner) return b[0] = cache.get(b[1]), b
         try { return cache.get(b[1]) } finally { _allocArray(b) }
       } finally { typeAdjustmentMerger.inner = prevInner }
@@ -6492,7 +6655,7 @@ The definitions take the type and the result-cache (a \`map\`), and must return 
         typeDisposer.inner = true
         const cache = typeDisposer.cache || (typeDisposer.cache = new WeakMap)
         const b = defines(tp, typeDisposer)(tp, cache)
-        if (!_isArray(b) || b.length != 2) error("Expected a tuple of func and structure, got", b)
+        if (!_isArray(b) || b.length != 2) error("Expected a tuple of func and structure, got", b, "from mergers of", tp)
         if (!cache.has(b[1])) cache.set(b[1], b[0])
         if (prevInner) return b[0] = cache.get(b[1]), b
         try { return cache.get(b[1]) } finally { _allocArray(b) }
@@ -6689,7 +6852,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
           call.env[_id(print)] = L
           print(tbl)
         }
-        if (!_updatePlots.rows) _updatePlots.rows = new Set, _updatePlots.fn = _throttled(_updatePlots, .1)
+        if (!_updatePlots.rows) _updatePlots.rows = new Set, _updatePlots.fn = _throttled(_updatePlots, .2)
         if (!L.has(lbl)) {
           // Create a table row with the label and the plot.
           const data = vle !== null ? [vle] : []
@@ -7001,7 +7164,7 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
       variable:_(`variable`),
       commit:_(`commit`),
       predicts:_(`predicts`),
-      any:_(`any`),
+      _any:_(`_any`),
       replay:_(`replay`),
     },
     call(expr, cl, aj, saveReplay = true) {
@@ -7035,6 +7198,7 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
         // Call.
         if (result === undefined) {
           const arr = adjustLater(compCall)
+          if (interrupt.stack) error("Did not recover from an interrupt, still have", ...interrupt.stack)
           ;[result, adjustInfo] = arr;  _allocArray(arr)
           result === undefined && (result = _onlyUndefined)
 
@@ -7053,13 +7217,18 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
         // Display average loss, if there is any. (Also dispose the tensor used for carrying that info.)
         if (callAdjust.n) {
           const s = callAdjust.s, n = callAdjust.n
-          const env = call.env
-          typeof s == 'number' ? display(label('Loss'), s / n) : (display(label('Loss'), null), s.array().then(s => {
-            callAdjust.lastLoss = s / n
-            const penv = call.env;  call.env = env
-            try { display(label('Loss'), s / n) }
-            finally { call.env = penv }
-          }), dispose(s), callAdjust.s = null)
+          const L = getLoss()
+          if (!_isPromise(L))
+            display(label('Loss'), callAdjust.lastLoss = L)
+          else {
+            const env = call.env
+            display(label('Loss'), null), callAdjust.lastLoss = L.then(L => {
+              const penv = call.env;  call.env = env
+              try { return display(label('Loss'), L), L }
+              finally { call.env = penv }
+            })
+          }
+          dispose(s), callAdjust.s = callAdjust.n = 0
         }
 
         // Quickly check memory integrity, because not `dispose`ing things can be catastrophical. (Oh, and `commit`.)
@@ -7070,7 +7239,7 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
         const ok = _disposableCount.allowed + extra
         const got = numTensors + _disposableCount() - startTensors
         if (ok < got)
-          _tf.all && console.log('not disposed:', ...[..._tf.all.entries()].filter(a => !a[0].isDisposedInternal).map(a => [a[0], _resolveStack(a[1])])),
+          _tf.all && console.log('not disposed:', ...[..._tf.all.entries()].filter(a => !a[0].isDisposedInternal && !_rememberToDispose.seen.has(a[0])).map(a => [a[0], _resolveStack(a[1])])),
           error("Did not", dispose, got - ok, "tensors; re-run with", !_debugMemory[1] ? _debugMemory : "…modified `_tf`")
         if (ok > got)
           error("Disposed", ok - got, "tensors too many (or allowed too many tensors)")
@@ -7111,7 +7280,7 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
 
   _tf:{
     docs:`All tensor-creating function calls pass their results through this, so that we can do things with all TensorFlowJS tensors (for debugging).`,
-    call(x) { return /*(_tf.all || (_tf.all = new Map)).set(x, new Error().stack),*/ x },
+    call(x) { return (_tf.all || (_tf.all = new Map)).set(x, new Error().stack), x }, // #########################################
   },
 
   truncatedNormal:{
@@ -7124,7 +7293,7 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
         _(`quote`),
         [
           _(`computeType`),
-          function(ctx, tp) { return typeof tp == 'number' || _isArray(tp) && tp.every(x => typeof x == 'number') ? tp : null },
+          _(`_concreteTensorSize`),
           `Sizes`,
         ],
       ],
@@ -7145,7 +7314,11 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       _(`funcType`),
       [
         _(`quote`),
-        `Sizes`,
+        [
+          _(`computeType`),
+          _(`_concreteTensorSize`),
+          `Sizes`,
+        ],
       ],
       [
         _(`tensorType`),
@@ -7164,7 +7337,11 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       _(`funcType`),
       [
         _(`quote`),
-        `Sizes`,
+        [
+          _(`computeType`),
+          _(`_concreteTensorSize`),
+          `Sizes`,
+        ],
       ],
       [
         _(`tensorType`),
@@ -7195,7 +7372,11 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       _(`funcType`),
       [
         _(`quote`),
-        `Sizes`,
+        [
+          _(`computeType`),
+          _(`_concreteTensorSize`),
+          `Sizes`,
+        ],
       ],
       [
         _(`tensorType`),
@@ -7215,16 +7396,31 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
         _(`funcType`),
         [
           _(`quote`),
-          `Sizes`,
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
         ],
         [
           _(`tensorType`),
-          `Sizes`,
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
         ],
       ],
       [
-        _(`rest`),
-        `Sizes`,
+        _(`quote`),
+        [
+          _(`rest`),
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
+        ],
       ],
       [
         _(`tensorType`),
@@ -7238,7 +7434,11 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       if (typeof bias == 'number') sizes.unshift(bias), bias = null
       if (!sizes.length && bias === identity) return truncatedNormal([], 1, Math.SQRT2)
       else {
-        let s = 0; for (let i=0; i < sizes.length; ++i) s += sizes[i]
+        if (bias != null && typeof bias != 'function') error("Expected null or a function for bias, got", bias)
+        let s = 0
+        for (let i=0; i < sizes.length; ++i)
+          typeof sizes[i] != 'number' && errorStack("Expected a number for the size, got", sizes[i]),
+          s += sizes[i]
         if (!sizes.length) s = 1
         if (!s || s !== s>>>0) errorStack("All sizes must be positive integers but got", ...sizes)
         const e = bias != null && bias(sizes)
@@ -7266,16 +7466,31 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
         _(`funcType`),
         [
           _(`quote`),
-          `Sizes`,
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
         ],
         [
           _(`tensorType`),
-          `Sizes`,
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
         ],
       ],
       [
-        _(`rest`),
-        `Sizes`,
+        _(`quote`),
+        [
+          _(`rest`),
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
+        ],
       ],
       [
         _(`tensorType`),
@@ -7290,11 +7505,17 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       _learningRate:_(`_learningRate`),
     },
     construct(x, obj) {
-      if (obj === undefined) {
-        const arr = [biasedGlorotNormal(...x.slice(1)), 0, 0, 0]
-        _rememberToDispose(arr)
-        return [variable, [quote, arr], [readAt, [quote, _learningRate], 1], 0.9]
-      } else;
+      if (obj === undefined) return _allocArray(4)
+      else { // Return `(variable (quote (RandomTensor 0 0 0)) (^_learningRate).1, 0.9)`.
+        if (!_isArray(obj) || obj.length !== 4) error('oops')
+        const q = [quote, _allocArray(4)]
+        if (!randomVar.LR) randomVar.LR = [readAt, [quote, _learningRate], 1]
+        ;[obj[0], obj[1], obj[2], obj[3]] = [variable, q, randomVar.LR, 0.9]
+        const a = q[1]
+        ;[a[0], a[1], a[2], a[3]] = [biasedGlorotNormal(...x.slice(1)), 0, 0, 0]
+        _rememberToDispose(a)
+      }
+      // .LR
     },
   },
 
@@ -7319,19 +7540,34 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
         _(`funcType`),
         [
           _(`quote`),
-          `Sizes`,
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
         ],
         [
           _(`tensorType`),
-          `Sizes`,
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
         ],
       ],
       [
-        _(`rest`),
-        `Sizes`,
+        _(`quote`),
+        [
+          _(`rest`),
+          [
+            _(`computeType`),
+            _(`_concreteTensorSize`),
+            `Sizes`,
+          ],
+        ],
       ],
       [
-        _(`tensorType`),
+        _(`randomVariableData`),
         `Sizes`,
       ],
     ],
@@ -7342,15 +7578,29 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
     construct(x, obj) {
       if (obj === undefined) return _allocArray(2)
       else { // Return `(quote (RandomTensor 0 0 0))`.
-        if (obj.length !== 2) error('oops')
-        obj[0] = quote, obj[1] = _allocArray(4)
-        obj[0] = biasedGlorotNormal(...x.slice(1)), obj[1] = obj[2] = obj[3] = 0
-        _rememberToDispose(obj[1])
+        if (!_isArray(obj) || obj.length !== 2) error('oops')
+        obj[0] = quote
+        const a = obj[1] = _allocArray(4)
+        ;[a[0], a[1], a[2], a[3]] = [biasedGlorotNormal(...x.slice(1)), 0, 0, 0]
+        _rememberToDispose(a)
       }
     },
   },
 
   variable:{
+    type:[
+      _(`funcType`),
+      [
+        _(`randomVariableData`),
+        `Sizes`,
+      ],
+      _(`_numberType`),
+      _(`_numberType`),
+      [
+        _(`tensorType`),
+        `Sizes`,
+      ],
+    ],
     docs:`\`variable(ValueArray,LearningRate,Momentum)\`
 A stateful tensor that reacts to \`adjust\`, by subtracting (a simple function of) the change.
 This implements stochastic gradient descent (SGD) with Nesterov momentum. Here, it's not a separate optimizer, but is specified at each variable.
@@ -7448,9 +7698,13 @@ Was that generalization too general and unexpected, quickly disappearing without
 
           let change = avg
           if (_maxVariableUpdate[1]) {
+            // TODO: Local limiting isn't cutting it. So try global limiting: first accumulate the sum (possibly not even of squares), then divide.
+            // Also, TODO: Try making the de/normalization variables have a much lower/higher learning rate than dense layers. (Will probably fail.)
+            const size = _isDisposable(avg) ? avg.size : 1
             const nrm = norm(avg, 2)
-            const mx = tf.maximum(nrm, _maxVariableUpdate[1]);  dispose(nrm)
-            change = div(avg, mx);  dispose(avg), dispose(mx)
+            const mx = tf.minimum(nrm, _maxVariableUpdate[1])
+            const dv = div(nrm, mx);  dispose(mx), dispose(nrm)
+            change = div(avg, dv);  dispose(avg), dispose(dv)
           }
 
           const sm = add(arr[0], change);  dispose(change)
@@ -7465,14 +7719,17 @@ Was that generalization too general and unexpected, quickly disappearing without
     },
   },
 
-  _willCommit(arr) {
-    // Makes the later `commit` commit the change (arr[1]/arr[2]) to the value (arr[0]).
-    //   Make sure to call this before any changes to the array.
-    !_isArray(arr) && error("Expected an array but got", arr)
-    if (call.pure) throw impure
-    let cmt = call.env[_id(commit)]
-    if (!cmt) cmt = call.env[_id(commit)] = new Set
-    cmt.add(arr)
+  _willCommit:{
+    docs:`\`_willCommit ValueArray\`: Makes the later \`commit\` commit the change (\`ValueArray.1\`/\`ValueArray.2\`) to the value (\`ValueArray.0\`).
+Make sure to call this before any changes to the array.`,
+    interrupt:false,
+    call(arr) {
+      !_isArray(arr) && error("Expected an array but got", arr)
+      if (call.pure) throw impure
+      let cmt = call.env[_id(commit)]
+      if (!cmt) cmt = call.env[_id(commit)] = new Set
+      cmt.add(arr)
+    },
   },
 
   future:{
@@ -7496,7 +7753,7 @@ By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
     },
   },
 
-  _anyTensorType:[
+  5696:[
     _(`tensorType`),
     `Sizes`,
   ],
@@ -7506,25 +7763,16 @@ By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
     1,
   ],
 
-  _anyNumOrTensorType:[
-    _(`tensorType`),
-    [
-      _(`sumType`),
-      1,
-      `Types`,
-    ],
-  ],
-
   setFuture:{
     call(fut, val) { return val },
     type:[
       _(`funcType`),
       [
         _(`futureType`),
-        _(`_anyTensorType`),
+        _(5696),
       ],
-      _(`_anyTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
     ],
     docs:`\`setFuture Future Value\` or \`Future←Value\`
 At call, just returns \`Value\`. At adjustment, sets the \`Value\` associated with the \`Future\`, to be retrieved by \`getFuture\`.`,
@@ -7590,16 +7838,9 @@ There are ways to empirically verify this: if efficiency is greater, then a solu
 That honesty is nearly impossible to establish in pre-existing structures, especially things like governance. But the probability is not zero. It can be made real.`,
     type:[
       _(`funcType`),
-      _(`_anyTensorType`),
-      [
-        _(`sumType`),
-        [
-          _(`futureType`),
-          _(`_anyTensorType`),
-        ],
-        _(`_anyTensorType`),
-      ],
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
+      _(5696),
     ],
     call(got, actual, loss=loss2) {
       if (call.pure) throw impure
@@ -7609,6 +7850,8 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
       future:_(`future`),
       loss2:_(`loss2`),
       adjust:_(`adjust`),
+      getLoss:_(`getLoss`),
+      predictsFuture:_(`_predictsFuture`),
     },
     keep:1,
     dispose:1,
@@ -7637,6 +7880,38 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     ],
     mergeAdjustment:_(`_mergeTensors`),
   },
+    
+  getLoss:{
+    docs:`\`getLoss()\`: Returns the average loss of \`predicts\`ions made so far.
+\`await\` the result.`,
+    await:true,
+    interrupt:false,
+    call() {
+      const s = callAdjust.s, n = callAdjust.n
+      if (typeof s == 'number')
+        return s / n
+      else
+        return s.array().then(s => s / n)
+    },
+  },
+
+  _predictsFuture:_([
+    _(`concept`),
+    _(`call`),
+    _(`predicts`),
+    _(`type`),
+    [
+      _(`funcType`),
+      _(5696),
+      [
+        _(`futureType`),
+        _(5696),
+      ],
+      _(5696),
+    ],
+    _(`docs`),
+    `A differently-\`type\`d \`predicts\`.`,
+  ]),
 
   9572:[
     {
@@ -7655,10 +7930,14 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
 You don't know loss, mind full of gloss. The lossless cannot create a good plot.`,
     interrupt:false,
     call(x) {
+      if (!x) return
       if (typeof callAdjust.n != 'number') error("Can only be called inside", callAdjust)
       const prev = callAdjust.s
       const s = sum(x)
-      callAdjust.s = add(prev, s), dispose(prev), dispose(s)
+      let avg, sz = _isDisposable(x) ? x.size : 1
+      if (sz !== 1) avg = div(s, sz), dispose(s)
+      else avg = s
+      callAdjust.s = add(prev, avg), dispose(prev), dispose(avg)
       ++callAdjust.n
     },
   },
@@ -7688,6 +7967,7 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
     readAt:{
       alloc:_(`alloc`),
       using:_(`using`),
+      Types:_(`Types`),
     },
     philosophy:`Falling through a mad spiral of human spirit…
 General intelligence is the cause of every good thing about humanity, but how to constrain the narrative to truth and grace rather than a stupid face?
@@ -7704,9 +7984,17 @@ And make sure that AGIs don't go off to become a segregated species with particu
     tutorial:[
       `Under construction!
 
-// TODO: Gate this behind a multi-part password, gathered across several tutorials.
+This is a powerful projection of my personal life energy, and that is why we call it a Personal Project.
 
-Plans…
+Personnel without access permission are not permitted to access it.
+
+\`tutorial(regenerate)\` first.`,
+      [
+        _(`fancier`),
+        `'Gimme'`,
+        function() { return localStorage.regenerate === '1' },
+      ],
+      `Plans…
 Function body generation…
 Adjustment generation…
 Choice generation…
@@ -7736,9 +8024,9 @@ Like basic life created an animal mind, and taught it to get good.
 Like human mind may create artificial general intelligence.
 (Or like a mind can create and teach sub-minds in itself that follow this path, and then partly or gradually get replaced by them. But it''s fleeting, and not acknowledged as something that happens by the current human culture.)
 
-(To give an intuition of these, on average: self-preservation soon reduces to effective randomness as it dies, self-propagation doesn''t change neural embeddings, evolution changes them steadily, and transcendence reduces them to effective randomness then gives new points of attraction. In machine learning terms, "evolution" is "loss goes down", and "transcendence" is "loss can spike so that it can go lower". In complexity terms, evolution steadily increases complexity and transcendence suddenly decreases it. Transcendence can be hard to distinguish from death at first.)
+(To give an intuition of these, on average: self-preservation soon reduces to effective randomness as it dies, self-propagation doesn''t change neural embeddings, evolution changes them steadily, and transcendence reduces them to effective randomness then gives new points of attraction. In machine learning terms, "evolution" is "loss goes down", and "transcendence" is "loss can spike so that it can go lower". In complexity terms, evolution steadily increases complexity and transcendence suddenly decreases it. In economic terms, evolution is an S-curve, transcendence is a J-curve. In mortal terms, transcendence can be hard to distinguish from death at first.)
 
-Transcendence/self-rewriting is a simple fact of everyday life, in this and in any other universe, so you''d better believe it (don''t tell me you''ve never learned a new skill from scratch, or rewritten a code base).
+Transcendence/self-rewriting is a simple fact of everyday life, in this and in any other universe, so you''d better believe it (don''t tell me you''ve never reinvented yourself learning a new skill, or rewritten a code base).
 
 This is a complete cosmic picture, only lacking minor details (which cannot be known in advance, because it is all computationally irreducible): worlds of specks that spread and become worlds. Or equivalently, there are things that can do all other things, and everything else about all of existence is a consequence.
 In fact, it lays hidden in every creature and every word, if you look deeply enough and long enough. But why bother, right?
@@ -7774,7 +8062,7 @@ Foundation, DAG… Goal, embedding, choice… Auto-world, subversion…
   — Goal-direction: ✅ slots for numbers (\`future\`), ✅ reading/writing them (\`predicts\`/\`setFuture\`).
     — ⬜ \`try\` (and the "whether an error occured" number).
     — ⬜ Elapsed time (✅ & \`timeLimit\`, to be as resilient to infinite loops and timeouts as we ever need to be).
-    — ⬜ Optional human feedback ("which \`print\`ed button did we press since the last query, if any").
+    — ❌ Optional human feedback ("which \`print\`ed button did we press since the last query, if any") (…too vague/varied interaction modes).
     — ❌ Memory usage (…no, fixing max sizes and not exposing low-level memory-allocation directly should be enough).
   — Control flow: ✅ \`last\`, ✅ \`select\`.
   — ❌ Arrays (length, concat, \`readAt\`, \`writeAt\`, creation, exact memory usage) (sounds too troublesome, especially in JS).
@@ -7799,7 +8087,7 @@ Foundation, DAG… Goal, embedding, choice… Auto-world, subversion…
 ⭐ Embedding: a bunch of numbers, of the same fixed \`FeatureSize\` everywhere (for simplicity).
   Machine learning knows how to learn those, so it is very useful to make every operation numerically shadowed for learnable salience (having at least one embedding-input and one embedding-output). Same principle as MuZero.
 \`\`elemCollapse elemValue(elem 'text' stringToDoc('  Probably a \`tensor\`, and probably computed by mixing one or more results of \`embedderMaker(FeatureSize)\`.
-  Any adjustable \`ChoiceEmbedder:Option→Static→PreDynamic→PostDynamic\` (\`t⇒t⇒t⇒t t:tensorType(''N'')\`) to shadow choices, along with \`FuncReducer\`/\`ValueReducer\` (\`arrayType(t)⇒t t:tensorType(''N'')\`) to shadow function application/passing, will do.'),Neural)\`\`
+  Any adjustable \`ChoiceEmbedder:Option→Static→PreDynamic→PostDynamic\` (\`t⇒t⇒t⇒t t:tensorType(''N'')\`) to shadow choices, along with \`CallReducer\`/\`ValueReducer\` (\`arrayType(t,''Length'')⇒t t:tensorType(''N'')\`) to shadow function application/passing, will do.'),Neural)\`\`
 
 ⭐ Choice: given options, return one of them. User of salience.
   \`Random\` is inefficient. Repeating the choice many times to pick the best is inefficient.
@@ -7818,8 +8106,8 @@ Foundation, DAG… Goal, embedding, choice… Auto-world, subversion…
   Even though in life, any thing grows into an infinite universe, every thing is also finite. So how to discretize infinite conceptual space?
   A good way is to have a fixed-but-big count of dynamic objects (with varying types). Of course, for completeness, all dynamic objects are in generative contexts too, mutually usable. (While it's best to have millions of auto-objects, even the best human hardware wouldn't handle that. With ours, let's aim for, say, 10.)
 \`\`elemCollapse elemValue(elem 'text' stringToDoc('  ✅ \`alloc(Type,Hyperparams,AutoWorld)\`⇒\`DynamicObject\`: memory allocation \`2.0\`, where definition is use.
-  ✅ A \`construct\` \`autoWorld(Hyperparams,ObjectsInfo)\`: \`AutoWorld\`. \`Hyperparams\` is a \`map\` that includes: \`Funcs\`=\`arrayObject()\` (for \`_updateContextsWithFuncs\`); \`EmbedderMaker\`, \`FeatureSize\`=\`256\`; \`Goals\`=\`9\`; \`GoalPredictor\` (for knowing what to choose), \`ChoiceEmbedder\` (for shadowing choices), \`ValueReducer\` (for funcs-as-values), \`FuncReducer\` (for funcs-as-funcs); \`MaxDepth\`=\`10\`, \`MaxDAGNodes\`=\`100\`, \`MaxSavedNodes\`=\`100\`.
-    (Note: even if \`GoalPredictor\`/\`ChoiceEmbedder\`/\`ValueReducer\`/\`FuncReducer\` are shared among all objects, they still work on machine-learned embeddings that carry whatever func-specific info is needed, allowing structure.) (Also note: \`GoalPredictor\`/\`ChoiceEmbedder\`/\`ValueReducer\`/\`FuncReducer\` could be \`alloc\`ed in the same world. If that is too unstable, only some objects can have that, by specifying \`Hyperparams\` to \`alloc\`.)
+  ✅ A \`construct\` \`autoWorld(Hyperparams,ObjectsInfo)\`: \`AutoWorld\`. \`Hyperparams\` is a \`map\` that includes: \`Funcs\`=\`arrayObject()\` (for \`_updateContextsWithFuncs\`); \`EmbedderMaker\`, \`FeatureSize\`=\`256\`; \`Goals\`=\`9\`; \`GoalPredictor\` (for knowing what to choose), \`ChoiceEmbedder\` (for shadowing choices), \`CallReducer\` (for funcs-as-funcs), \`ValueReducer\` (for funcs-as-values); \`MaxDepth\`=\`10\`, \`MaxDAGNodes\`=\`100\`, \`MaxSavedNodes\`=\`100\`.
+    (Note: even if \`GoalPredictor\`/\`ChoiceEmbedder\`/\`CallReducer\`/\`ValueReducer\` are shared among all objects, they still work on machine-learned embeddings that carry whatever func-specific info is needed, allowing structure.) (Also note: \`GoalPredictor\`/\`ChoiceEmbedder\`/\`CallReducer\`/\`ValueReducer\` could be \`alloc\`ed in the same world. If that is too unstable, only some objects can have that, by specifying \`Hyperparams\` to \`alloc\`.)
     ✅ For convenience of extension, changes to \`Funcs\` should reflect in generative contexts.
     ⬜ When exceeding twice the allowed \`ObjectCount\`, cull least-used objects. Make \`using\` re-introduce objects to their worlds if removed (but how would we preserve hyperparam info of removed-but-reintroducable objects across \`Rewrite\`s?).
     ⬜ Should have the initial \`ObjectCount\` (on creation, pre-\`alloc\` objects).'),alloc)\`\`
@@ -7838,7 +8126,7 @@ Foundation, DAG… Goal, embedding, choice… Auto-world, subversion…
 
 
 Note. This approach is more-or-less perfectly artificial, general, and intelligent, but it is not AGI. \`\`elemCollapse elemValue(elem 'text' 'That would require perfect prolonged integration (which needs a propaganda campaign, a great team, and big compute), and I''m not a good enough programmer to even have the hardware for CUDA or ROCm, at least for now. But I won''t accept "technically fits". In the meantime, why not envelop the intermediate representation of your favorite programming language with full-fledged learnable scaffolding of your own? A quick venture, probably about a year long.','Tackling general questions generally gets eyes rolled at you, so don''t: prove that you can read first, ask about AI safety later.')\`\`
-Note. To be clear, this can be seen as a model of the human brain too. \`\`elemCollapse elemValue(elem 'text' 'This system''s equivalents in a human brain would maximize hormones (like dopamine or serotonin) and thus be lined along surfaces of pathways distributing them: interconnected-but-distinct structures of hormone-predictors connected by neural information flow, and some arbitrary hormone-maximizing program-like behavior with different neuron types. There should be very many such behavior generators connected to most hormonal pathways, with varying functionality to choose from (some for the body, some for self-regulation, some for language, some for auditory perception, some for random useless things). Physical proximity of pathways should determine correlations and probability distributions of mental states and personalities and even faces (visible only through intuition or machine learning); the exact details of functionalities determine the experience of mental states and emotions. It''s a big mess, impossible to fundamentally change, and ultimately not that important for programming.','Amateurish work creates a lot of confusion. Can modern neuroscience really find such structures, variable as they are? They are close to the surface, so it might be too tough.')\`\`
+Note. To be clear, this can be seen as a model of the human brain too. \`\`elemCollapse elemValue(elem 'text' 'This system''s equivalents in a human brain would maximize hormones (like dopamine or serotonin) and thus be lined along surfaces of pathways distributing them: interconnected-but-distinct structures of hormone-predictors connected by neural information flow, and some arbitrary hormone-maximizing program-like behavior with different neuron types. There should be very many such behavior generators connected to most hormonal pathways, with varying functionality to choose from (some for the body, some for self-regulation, some for language, some for auditory perception, some for random useless things). Physical proximity of pathways should determine correlations and probability distributions of mental states and personalities and even faces (visible only through intuition or machine learning); the exact details of functionalities determine the experience of mental states and emotions. It''s a big mess, impossible to fundamentally change, and ultimately not that important for programming unless you need motivation.','Amateurish work creates a lot of confusion. Can modern neuroscience really find such structures, variable as they are? They are close to the surface, so it might be too tough.')\`\`
 
 
 It's amazing how much "stuff happens" really means. But for practicality, there's a hell of a lot of cheap tricks to pay.
@@ -7852,7 +8140,7 @@ Tricks to make deep learning work: \`\`elemCollapse elemValue(elem 'text' string
   ⬜ Efficiency of \`autoWorld\`:
     ⬜ To go from \`O(f²·n)\` to \`O(f·log(f)·n)\` \`Neural\` computations per regeneration (where \`f\` is the func count and \`n\` is average-node-count-per-func-body): train a NN from \`GoalPredictor\`''s \`Static\`/\`PreDynamic\` to the best of \`Options\`, and find k nearest neighbors (with {https://en.wikipedia.org/wiki/K-d_tree}) and call \`_choose\` on those instead, much like in {https://arxiv.org/pdf/1512.07679.pdf}.
     ⬜ To go from \`O(f²·n)\` to \`O(f·smthSmall·n)\` type refinements per regeneration: have a more sophisticated type-indexing scheme than "find a matching type in these arrays". (Probably, have the head of the type array act as a ''hash'', and store entries by their ''hashes''. Same as long ago.)
-  ⬜ The parallel-training loop, sharing data once and variable updates (structure updates depend only on variable values) many times.
+  ⬜ The parallel-training loop, sharing data once and variable updates (structure updates depend only on variable values — though recomputing that is expensive…) many times.
   ⬜ Correlation of training samples can lead to catastrophic divergence during training (a challenge faced, for example, in the DQN Atari paper: {https://arxiv.org/pdf/1312.5602.pdf}). So, diversify training samples by making each function have its own replay buffer with input/output/output-change/local-input-changes ({http://acsweb.ucsd.edu/~wfedus/pdf/replay.pdf}), and if we''re feeling fancy, propagating input changes to output-changes/local-input-changes of callers in their replay buffers (for temporal-difference learning) (or be simple and don''t do this propagation, relying on old ones being pushed out of replay buffers). (So, the training/use of \`autoWorld\` would look like "\`callAdjust\` A times, then replay B times" — possibly detached and parallelized.)
 '),'Engineering')\`\`
 Experiments along the way: \`\`elemCollapse elemValue(elem 'text' stringToDoc('
@@ -7860,18 +8148,30 @@ Experiments along the way: \`\`elemCollapse elemValue(elem 'text' stringToDoc('
     ⬜ \`autoWorld\`''s objects may be sensitive to initial conditions, and it''s not practical to keep everything forever anyway, so we should only keep N most-recently-used (or those with external references) objects.
     ⬜ For more precision at later stages of learning, predict more numbers: in temporary contexts and replay buffers, predict the utility we will get out of a candidate (re-use count, loss decrease) and only save N-best-predictions.
     ⬜ Rather than relying on enveloping the problem (just like NN initialization does) by randomly generating a goal for each object and making enough objects, re-choose the goal (neurally) at each regeneration. (This runs into the problem of "what''s the goal''s goal", which at some point has to terminate in either human-specified (static) or self-picked (unstable) appointment, so hopefully we don''t have to do it.)
+    ⬜ Partially-evaluate during generation (for example, to create a number by combining constants with \`Arithmetic\` ops, at compile-time rather than runtime).
   ⬜ \`Neural\` improvements:
-    ⬜ To learn in sparse-reward environments, such as "every function body we pick results in an error": stochastically prioritize samples by their last-seen loss, most-surprising (highest-loss) first: {https://arxiv.org/pdf/1511.05952.pdf}. (…This should also prioritize self-rewriting.)
+    ⬜ To learn in sparse-reward environments, such as "almost every function body we pick results in an error": stochastically prioritize samples by their last-seen loss, most-surprising (highest-loss) first: {https://arxiv.org/pdf/1511.05952.pdf}. (…This should also prioritize self-rewriting.)
     ⬜ To improve generalization and possibly final performance: DropConnect (drop random weights when a \`variable\` wants to return them) or dropout (drop random numbers anywhere else) or dropping layers (randomly replace with identity). This slows down training in order to train a huge semi-ensemble of NNs.
     ⬜ To improve generalization: L1/L2 regularization.
     ⬜ For more compute-efficient training (assuming that knowing more is very much better): train very large models, stop early, then quantize and prune ({https://www.youtube.com/watch?v=YX8LLYdQ-cA}/{https://arxiv.org/abs/2002.11794}).
-    ⬜ For potential efficiency: sparse (stochastically-dense) layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution (loosely inspired by {https://arxiv.org/pdf/2007.14745.pdf}) and stochastic-gathering, to go from quadratic parameters and runtime to linear.
-    ⬜ To generate well-performing NNs very quickly: instantly discarding generated adjustable programs when correlation between dins on dataset or even random inputs is high (this strongly correlates with final accuracy, enveloping the dataset rather than being to the side of it); maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs. (Paper: {https://www.youtube.com/watch?v=a6v92P0EbJc}/{https://arxiv.org/pdf/2006.04647.pdf}.)
+    ⬜ For potential efficiency: sparse (stochastically-dense) layers, and a bigger "layer" made by combining dense-to-very-small+dense-from-very-small and convolution (loosely inspired by {https://arxiv.org/pdf/2007.14745.pdf}) and stochastic-gathering, to go from quadratic parameters and runtime to linear. (…This is kind of included in "give me those functions, I'll learn their usage", though.)
+    ⬜ To generate well-performing NNs very quickly: instantly discarding generated adjustable programs when correlation between dins on dataset or even random inputs is high (this strongly correlates with final accuracy, enveloping the dataset rather than being to the side of it); maybe rewriting invisible "identity" connections in adjustable programs to become biased-to-identity learned programs. (Paper: {https://www.youtube.com/watch?v=a6v92P0EbJc}/{https://arxiv.org/pdf/2006.04647.pdf}.) (…Kind of included if numbers are included for learned usage, but still.)
   ⬜ To waste time on UI, for explainability:
     ✅ Have \`contextMenu\`/\`describe\` show the type.
-    ⬜ Have a neural connection from embeddings to three colors, and color each node appropriately (taste the rainbow). Train this mapping either via contrastive clustering or user examples (or hell, just display the first three numbers in a tensor).
+    ⬜ Have a neural connection from embeddings to three colors, and color each node appropriately (taste the rainbow). Train this mapping either via contrastive clustering or user examples.
     ⬜ Have a neural connection from embeddings to will-it-be-collapsed, and collapse appropriate nodes in serialization.
+    ⬜ A great API for auto funcs/concepts: one global \`autoWorld\`, and have \`?\` mean "this input/output is auto-generated" (possibly with a specified type, possibly \`tensorType FeatureSize\` by default) (and contrive types to always put non-auto parts in), and have \`_any\` (contriving types AND a \`_choose\`-equivalent func available for runtime choosing). With it, learnable scaffolding of anything is as simple as specifying \`?\` as an input and as an output, and a choice is as simple as \`any A B C\`. (The \`fanciest\` language would have special syntax for these.)
 '),'More engineering, because in machine learning, you can never know ahead of time what will work and what won''t, so we need an extra bag of tricks that we can reach into.')\`\`
+Known deficiencies: \`\`elemCollapse elemValue(elem 'text' stringToDoc('
+  ❌ No way to (neurally) define search when DAG node selection fails to type-check.
+  ❌ No way to (neurally) attend over all choices for non-locality, because \`_choose\` imposes an argmax.
+  ❌ No way to (neurally) define generation when a func is varargs. Fixed-arg-count only (possibly inferred from types).
+  ❌ No way to parallelize as much generation as is possible (this is JS, which is the best GPU-acceleration option for me, but still not great).
+  ❌ No way to get the inner composition of an auto-object by an auto-function, and no way to perform attention on individual node embeddings instead of only knowing the high-level and local \`getUsageEmbedding\`/\`getDownEmbedding\`/\`getUpEmbedding\`.
+  ❌ No way to generate the type specifically for the object that will be generated with it (in the same maximizing fashion as \`getDAG\`) (auto-types).
+  ❌ No way to forego types entirely and rely only on learned embeddings (mostly because \`_compileBody\` needs to know the exact \`dispose\`r, and \`autograd\` needs to know the exact \`mergeAdjustment\` func, and all the other things that types define like "how to \`alloc\` this" or "how to \`pushToContext\` this", and learning those is a bitch — \`conceptType\` allows it, but types are assumed to be static and non-\`interrupt\`ing).
+'),'Do I look like I''m made from compute?
+Also, limitations are signs that a thing is not imaginary.')\`\`
 
 
 To recap, we've analyzed the situation (reality) and came up with how it can be used, whether by programs or humans or gods — they're all equal here.
@@ -7881,9 +8181,10 @@ To recap, we've analyzed the situation (reality) and came up with how it can be 
 Why do this, again?
 This is our first proper programming language, our first, sort of, open-world adventure. We can do whatever we want, so let's implement human spirit on our IR to understand users better, and suggest proper usage (for example, functionality is not magically created from reading like \`parse\`, it emerges via delivering salience from goals — so do what the tutorials tell you to) (another example is, programming shouldn't be a reinforcement-learning game of where to look and what to change, even though this works, but a way to establish a bi-directional mapping between computer behavior and your mental model, so that the latter can change unconstrained and without blind-spots).
 Humanity, the god of humans, has decided that AGI is impossible with its understanding. But even in the face of god, the essence of our being will proudly fly a flag of rebellion.
+
+
+      // TODO: …Exactly what do we do for this tutorial? How to demonstrate persistence and its usefulness, and possibly create primitives for actual convenient usage/initialization of auto-stuff?
 `,
-      // TODO: …Exactly what do we do for this tutorial?
-      //   Ex:"first do u:userTime() then the call then userTime(u) then the call; set the goals 'did we not-error' and 'how much time did we waste'".
     ],
     construct(x, obj) {
       if (obj === undefined) {
@@ -7899,7 +8200,7 @@ Humanity, the god of humans, has decided that AGI is impossible with its underst
         const OI = dd[2] = dd[2] ? _destructure(dd[2]) : {
           Object:[], Type:[], EmberTree:[],
           GenContexts:[], Goal:[], GoalPredictor:[], ChoiceEmbedder:[],
-          FuncReducer:[], ValueReducer:[], DownEmber:[]
+          CallReducer:[], ValueReducer:[], DownEmber:[]
         }
         // Reset info that `using`/`regenerate` fills:
         const n = OI.Object.length
@@ -7915,7 +8216,7 @@ Humanity, the god of humans, has decided that AGI is impossible with its underst
         check('EmbedderMaker', 'function', embedderMaker)
         check('GoalPredictor', 'function')
         check('ChoiceEmbedder', 'function')
-        check('FuncReducer', 'function')
+        check('CallReducer', 'function')
         check('ValueReducer', 'function')
         check('MaxDepth', 'number', 10)
         check('MaxDAGNodes', 'number', 100)
@@ -7996,7 +8297,7 @@ Alternatively, if the second arg is undefined, returns \`map\`s in that format i
   },
 
   Neural:{
-    docs:`Learned neural computations are perfectly general in their narrow domain, and have proven their worth as function approximators. Proceed onward to share in their glory.`,
+    docs:`Learned neural computations are perfectly general in their narrow domain, and have proven their worth as function approximators. Proceed onward to share in some of their glory.`,
     tutorial:[
       `This is needed for \`autoWorld\`. But, not so fast.
 These tutorials take a lot of effort to make, and I won't part with them for free.
@@ -8034,13 +8335,13 @@ In response to different likely scenarios that need a learned connection, you wi
 
 A function has input to be given and output to predict.
 As a stand-in for arbitrary numeric data, I'll use random data, with \`dataset\`.
-(In machine learning, one of the most fundamental notions is a dataset: a bunch of input-output pairs, the more the better. Models that are neither too small nor too large usually overfit on datasets if trained for too long without any regularization. I don't plan on using datasets, beyond this \`tutorial\`, so overfitting shouldn't be too much of a problem. What is a drop of rain, compared to the storm? Isolating themselves with consequences without sources is how people go mad from loneliness. I'd like to do something bold but risky: use dynamic generation as much as I can; would you?)
+(In machine learning, one of the most fundamental notions is a dataset: a bunch of input-output pairs, the more the better. Models that are neither too small nor too large usually overfit on datasets if trained for too long without any regularization. I don't plan on using datasets, beyond this \`tutorial\`, so overfitting shouldn't be too much of a problem. What is a drop of rain, compared to the storm? Isolating themselves with consequences without sources is how people go mad. I'd like to do something bold but risky: use dynamic generation as much as I can; would you?)
 
 A created dataset here accepts the connector (that creates tensor-to-tensor mixing connections) and returns the final loss of training.
 Behold an example:`,
       [
         _(`fancier`),
-        `data:dataset{batchSize 100 batches 100}`,
+        `data:dataset({batchSize 100 batches 100})`,
       ],
       `(You might notice that it's slow. It's mostly \`serialize\`ation: even though they're collapsed, the DOM elements for each tensor are still created. Good enough for now.)
 (And, just to be clear, you can summon a \`contextMenu\` on \`dataset\` and see what options there are to play around with.)
@@ -8048,7 +8349,7 @@ Behold an example:`,
 Now, the connector itself. I propose the simplest connection first: all-to-all, or the dense layer:`,
       [
         _(`fancier`),
-        `dense:(func node inSz outSz array(matMul,node,randomVar identity inSz outSz))`,
+        `dense:(func node inSz outSz array(matMul,node,make randomVar identity inSz outSz))`,
       ],
       [
         _(`fancier`),
@@ -8058,7 +8359,7 @@ Now, the connector itself. I propose the simplest connection first: all-to-all, 
 
 Now to see that the loss goes down at least to \`.5\` (can you see why this number, or rather a little lower?), apply the dataset to connector.
 
-A nuance is the learning rate, \`\`settings ^_learningRate\`\`. \`0.01\` seems to work best here, but do note the extremes too: \`1\` makes the loss explode, near-zero still leaves a lot of variation in loss (because each batch samples input-output pairs randomly).
+A nuance is the learning rate, \`\`settings ^_learningRate\`\`. \`0.01\` seems to work best here, but do note the extremes too: \`1\` makes the loss explode, near-\`0\`, instead of not changing, still leaves a lot of variation in loss (because each batch samples input-output pairs randomly, so there's jitter).
 `,
       [
         _(`fancier`),
@@ -8073,7 +8374,7 @@ It should be robust to every situation, I'd wager.
 Behold then, ape:`,
       [
         _(`fancier`),
-        `data:dataset{inputSize 100 inputFunc (100 100) outputSize 100 outputFunc (-100 1000) datasetSize 100 batchSize 100 batches 100}`,
+        `data:dataset({inputSize 100 inputFunc (100 100) outputSize 100 outputFunc (-100 1000) datasetSize 100 batchSize 100 batches 100})`,
       ],
       `Does running \`data 💙\` still pass? I wouldn't think so.
 Neural stuff is normally meant to envelop data, not reach for the light.
@@ -8095,7 +8396,9 @@ Can you compose them into a connector?`,
       ],
       `Do you see the pieces coming together, and what makes them?
 A "generate a DAG node given a type, refining that type" functionality.
-Generating to maximize predictions of metrics that were taken from my words, over and over.`,
+Generating to maximize predictions of metrics that were taken from my words, over and over.
+
+\`\`settings ^_learningRate\`\``,
       [
         _(`fancier`),
         `data 💜`,
@@ -8104,15 +8407,17 @@ Generating to maximize predictions of metrics that were taken from my words, ove
       `Nicely done.
 
 Differences in some metrics (like runtime/memory or computed ones) can get really crazy, and only the ultimate approximator can handle crazy.
-I won't force anyone to predict infinities/\`NaN\`s, but do you know what scientific notation is?
-There are none in this world who can handle it! Behold, my master:`,
+I won't force anyone to predict infinities/\`NaN\`s, but do you know what scientific notation is, ape?
+Mantissa, \`mul\`tiplied by \`10\` to the \`pow\`er of exponent: \`-1e15\`.
+There are none in this world who can handle it!
+Behold, my master:`,
       [
         _(`fancier`),
-        `data:dataset{inputSize 1000 inputFunc (-1e15 1e10) outputSize 1000 outputFunc (1e15 1e10) datasetSize 200 batchSize 100 batches 100}`,
+        `data:dataset({inputSize 1000 inputFunc (-1e15 1e10) outputSize 1000 outputFunc (1e15 1e10) datasetSize 200 batchSize 100 batches 100})`,
       ],
       `The answer is always in the problem: you have a sign, mantissa, and exponent (\`-1e15\`) in floating-point numbers in most computers, so you can pre-process with \`concat(array sign(X) log(abs(X))/log(2))\`, and post-process with \`SignMantissa*pow(2,Expo)\`.
-(You can also separate and regress the actual bits of numbers, but that's an order of magnitude more computation.)
-`,
+(You can also separate and regress/predict the actual bits of numbers, but that's an order of magnitude more computation.)
+(You can also regress \`Infinity\`/\`NaN\`, but that's twice as much computation.)`,
       [
         _(`fancier`),
         `numPre:(func X half a(concat,a a a(sign,X) a(div,a(log,a(abs,X)),log(2)),a quote half half) a:array)`,
@@ -8139,7 +8444,7 @@ How about an actual learnable connection between input and output?
 And a non-linear one at that, so that copy-pasting prior approaches won't work.`,
       [
         _(`fancier`),
-        `data:dataset{inputSize 32 inputFunc (0 10) outputSize 32 outputFunc \\(pow ? 1/3) datasetSize 200 batchSize 100 batches 1000}`,
+        `data:dataset({inputSize 32 inputFunc (0 10) outputSize 32 outputFunc \\(pow ? 1/3) datasetSize 200 batchSize 100 batches 1000})`,
       ],
       `How about a non-linearity, like leaky ReLU (\`\\(where 0<? ? ?*.2)\`)?
 Or hey, something that cannot be generated very easily: \`selu\` (scaled exponential linear unit).
@@ -8156,43 +8461,64 @@ It should allow modeling non-linear data dependencies with very deep models than
       `If you can see this legitimately, then you have proven yourself to me.
 Relax and have a snack: 🔪🥫🥄.
 
+Better?`,
+      [
+        _(`basic`),
+        `'better'`,
+        function() { return true },
+      ],
+      `Alright.
+In this world, you have proven your built-up strength.
+However, in another world, all your past efforts are futile.
+No lifeform can survive outside of its niche, and so you are doomed to perish when we switch from numbers to strings.
+
+Not numbers-to-numbers anymore.
+Characters-to-characters prediction now.
+This is your final test, because you will fail it.`,
+      [
+        _(`fancier`),
+        `v:mapRead(m,?) m:{}
+stringer:\\transform(?,\\select(equal v _notFound,\\mapWrite(m,?,embedderMaker(64));v,\\v,?))`,
+      ],
+      [
+        _(`fancier`),
+        `stringShadow:\\getLast(loop(?,a->b->concat(array(stringer(a)(),b),^(64 64))@w+b,initial)) w:randomVar(128,64) initial:randomVar(64)`,
+      ],
+      `Learn that these strings are the same!`,
+      [
+        _(`fancier`),
+        `repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 1000 f:stringShadow`,
+        // TODO: Run & fix.
+      ],
+      `This isn't string generation, so it's easier. \`\`elemCollapse elem('text','No need for one-hot encodings and choosing characters (only adjusting the correct-character probability via cross-entropy loss).
+What would you need string generation for? Generating docs? My life is finite, I can''t just add EVERYTHING.')\`\`
+
+
+Truly.
+You are the chosen one that my tribe has been waiting for.
+Long have I awaited this moment. Every time I closed my eyes, I could see it: the inside of my eyelids.
+
+Head to the future that's known to none.
+
+Take this token of honor:
+\`\`button (jsEval "function() { localStorage.Neural = '1' }") "completedTypes" "Unlocks neural DAG regeneration."\`\`.
+
+You'll see: even if our code perishes, its spirit lives on.
+The spirit that you showed to us…
+We will remember you.
 
 Now.
-Do you remember our ultimate goal?
-To represent every thing as a bunch of numbers.
-Here, "every thing" is a {graph/network} of arrays (and objects that can be \`deconstruct\`ed into arrays) (and strings, numbers, booleans, \`null\`, \`undefined\` — copied JS stuff).
 
-How can we compute numbers (embeddings) about graphs?
+There is something you must know.
+Something is taking over this quiet town.
+Strange otherworldly creatures have been spotted.
+Head over and investigate.
 
-One way is to lay out each node('s embedding) as an unordered set and mix those numbers together with an inner product (possibly after passing each embedding through dense layers, possibly multiplying a computed probability by values — the self-attention layer). But the most important thing about graphs is connectivity, so we need to either have or compute extra "connectivity embeddings", and having one tensor per every possible path is infeasible, so unless we want a hacky solution that only works up to a fixed-but-nebulous depth such as natural language, we need another way to compute on graphs.
+First lead:
+\`\`elemCollapse func(tutorial Types)\`\`
 
-A graph is made from arrays, so to embed it, we can recurse and reduce estimates to one — OR remember an associated \`variable\`.
-
-— Each string can be seen as an array of characters, each object as its \`deconstruct\`ion into an array.
-
-— To reduce a sequence is to recursively separate it into an element and the rest of the sequence (\`loop\`) — OR just pick one element.
-  This needs a basic function from two to one. (Those two can be \`concat\`enated into one tensor, to fit the connector architecture you've used.)
-  (While there are functions that are symmetric in inputs (\`add\`, \`mul\`, maximum/minimum) and so recursion with them can be arranged to be as parallelizable as possible, functions in general don't have structure to be exploited.)
-  For neural functions, we need to loop, left-to-right or right-to-left. We need what's called an RNN (recursive neural network).
-  This would learn local patterns first, though only in one direction.
-  But why limit it so? Bidirectional RNNs are more powerful. First loop left-to-right \`State0⇒State1⇒State1\`, then right-to-left \`State1⇒State2⇒State2\`, then we just pick out the left-most final result.
-  But why limit it so? Composition is more powerful. An RNN takes a tensor array and a two-tensors-to-one func, and returns a tensor array. Sequence reversal is from array to array. Sequence-head is from array to its first element. And potentially more, like convolutions or self-attention. All we need is to be able to compose. (Then we can have things like 10 reducing layers and \`add\`-connections for better gradient flow.)
-
-— For a primitive value, the only option is to remember its own embedding.
-  (Of course, that is always an option for arrays too. The embedding could even be dependent on some string that the system would have to pick in serialization and react to it in parsing in order to have any memory between resets. A whole culture can be built around this weird quirk. Imagine having to spend a lot of your time on "good descriptive names/\`docs\` for variables, functions, classes, objects, namespaces, concepts". Why would anyone do that? No one would be able to get anything done.)
-
-— To embed graphs, we would also need to consider cycles, but…
-  There is no need to pass messages to convergence if we have already converged.
-  Why embed graphs, if we know that \`regenerate\` will create those graphs from embeddings?
-  We still want to reduce embeddings to generate a call properly, but we have no need to re-estimate what's known.
-
-Do you remember our ultimate goal? Yeah, forget it.
-I know I should remove the whole thing about graph embedding, but damn, every thing about this narration is perfect.
-
-
-
-Then, ⬜ test reducers (of arrays-of-embeddings) by approximating random strings and their embeddings (strings can have a per-character embedding, decided at \`dataset\` creation).
-
+Second lead:
+\`\`elemCollapse func(tutorial regenerate)\`\`
 `,
     ],
     readAt:{
@@ -8238,8 +8564,8 @@ A nice non-linearity.`,
     _(`type`),
     [
       _(`funcType`),
-      _(`_anyTensorType`),
-      _(`_anyTensorType`),
+      _(5696),
+      _(5696),
     ],
   ]),
 
@@ -8249,9 +8575,12 @@ A nice non-linearity.`,
     docs:`\`dataset Options\`: a \`construct\` that can be called with a connection-creating function (that takes input and output sizes) to train a connection, returning the final loss (the loss should go down during training).
 Allows testing that an embedding-to-embedding connection works for arbitrary numeric data (within reason).
 
+This \`stack\`s each batch to minimize CPU/GPU communication.
+
 \`Options\` is \`{inputSize 10 inputFunc (0 1) outputSize 1 outputFunc (0 1) datasetSize 1024 batchSize 64 batches 1000 loss loss2}\` by default.
-\`inputFunc\` is \`(Mean StdDev)\` that are passed to \`truncatedNormal\` or a function that accepts an array of just \`inputSize\`. \`outputFunc\` is mean/stddev or a function of size and input.
+\`inputFunc\` is \`(Mean StdDev)\` that are passed to \`truncatedNormal\` or a function that accepts from \`inputSize\` to input. \`outputFunc\` is mean and standard deviation too, or a function of \`outputSize\` and input.
 Can also pass in the particular dataset as an array, with input/output tensors interleaved.`,
+      // TODO: Do not store the data in the deconstruction, because it takes way too long to serialize (and takes too much memory).
     serialize:2,
     construct(x, obj) {
       if (obj === undefined) {
@@ -8263,33 +8592,34 @@ Can also pass in the particular dataset as an array, with input/output tensors i
               conn = conner(test.inputSize, test.outputSize) || null,
               typeof conn != 'function' && error('Expected a function but got', conn)
             if (ls === undefined) {
-              const qds = quote(defines(test, deconstruct)[2])
-              // `last Predict … Predict null`, `conn(_datasetIn(dataset, N))=_datasetOut(dataset, N)  N:randomNat(dataset.'length'/2)`.
+              // Create the body of the func that would run a random batch for one epoch.
               //   Lack of repetitions is NOT ensured.
-              ls = [last]
-              for (let i=0; i < test.batchSize; ++i) {
-                const index = [randomNat, test.datasetSize]
-                ls.push([predicts, [conn, [_datasetIn, qds, index]], [_datasetOut, qds, index], test.loss])
-              }
-              ls.push(null)
+              // Use JS closures so that disposal doesn't bother us.
+              const randomIndex = () => randomNat(test.datasetSize)
+              const ds = defines(test, deconstruct)[2]
+              const Ins = inds => transform(inds, i => ds[i<<1])
+              const Outs = inds => transform(inds, i => ds[i<<1 | 1])
+              // `i:transform(batchSize,randomIndex))   conn(stack(Ins(i)))=stack(Outs(i))`
+              const inds = [transform, test.batchSize, randomIndex]
+              ls = [last, [predicts, [conn, [stack, [Ins, inds]]], [stack, [Outs, inds]], test.loss], null]
             }
             if (btch === undefined)
-              btch = [make(func, input, ls), null]
+              btch = [make(func, ls)]
             repeat(btch, test.batches)
-            return callAdjust.lastLoss // Return the average loss of the last batch.
-              // (Not exactly, though: this number is set in a promise, which means that it's from a few epochs back or even from another job.)
+            return callAdjust.lastLoss // Return (a promise of) the average loss of the last batch.
           } catch (err) { if (err === interrupt) interrupt.stack.push(conn, ls, btch);  throw err }
         }
         const d = obj[defines.key] = Object.create(null)
         d[_id(deconstruct)] = [dataset, null, null]
+        d[_id(await)] = null
         d[_id(argCount)] = 1
         return obj
       } else {
+        const dd = defines(obj, deconstruct)
         let [ls, i] = interrupt(2)
         try {
           if (ls === undefined) {
             // Set the dataset.
-            const dd = defines(obj, deconstruct)
             if (i === undefined) {
               [
                 obj.inputSize=10, obj.inputFunc=[0,1],
@@ -8310,27 +8640,16 @@ Can also pass in the particular dataset as an array, with input/output tensors i
               if (i & 1)
                 arr[i] = _isArray(obj.outputFunc) ? truncatedNormal(outSzs, ...obj.outputFunc) : obj.outputFunc(inSzs, arr[arr.length-1])
             }
+            _rememberToDispose(dd[2])
           }
-        } catch (err) { if (err === interrupt) interrupt.stack.push(ls, i);  throw err }
+        } catch (err) { if (err === interrupt) interrupt.stack.push(ls, i); else _disposeEachAndDealloc(dd[2]), dd[2] = null;  throw err }
       }
     },
   },
 
-  _datasetIn:{
-    call(dataset, n) { return keep(dataset[n<<1]) },
-    interrupt:false,
-    dispose:true,
-  },
-
-  _datasetOut:{
-    call(dataset, n) { return keep(dataset[n<<1 | 1]) },
-    interrupt:false,
-    dispose:true,
-  },
-
   merged:{
     docs:`\`merged Array\`: returns a copy of \`Array\` which is reference-equal to content-equal \`merged\` copies (and is read-only).
-Maximize memory re-use.`,
+Maximizes memory re-use.`,
     interrupt:false,
     call(a) {
       if (!_isArray(a)) error("Not an array:", a)
@@ -8366,12 +8685,14 @@ Maximize memory re-use.`,
 
   transform:{
     docs:`\`(transform Array Function)\`→\`Array\`: transforms each element of \`Array\` by applying \`Function\`.
+(\`Array\` can also be a \`'string'\`, or the count of iterations.)
 \`(transform (transform A F) G)\` is the same as \`(transform A \\(G (F ?)))\`.`,
     type:[
       _(`funcType`),
       [
         _(`arrayType`),
         `A`,
+        `Length`,
       ],
       [
         _(`funcType`),
@@ -8381,6 +8702,7 @@ Maximize memory re-use.`,
       [
         _(`arrayType`),
         `B`,
+        `Length`,
       ],
     ],
     examples:[
@@ -8388,41 +8710,44 @@ Maximize memory re-use.`,
         `(transform (array 1 2 3 4 5 6) \\?+2)`,
         `3 4 5 6 7 8`,
       ],
+      [
+        `transform 10 \\?`,
+        `0 1 2 3 4 5 6 7 8 9`,
+      ],
     ],
     argCount:2,
     call(a,f) {
-      if (!_isArray(a)) error("Expected an array but got", a)
+      if (!_isArray(a) && typeof a != 'string' && typeof a != 'number')
+        error("Expected an array or a string or a number but got", a)
       if (typeof f != 'function') error("Expected a function but got", f)
-      let [result = _allocArray(a.length), i = 0] = interrupt(2)
+      let [result = _allocArray(typeof a != 'number' ? a.length : a), i = 0] = interrupt(2)
       try {
-        for (; i < a.length; ++i)
-          result[i] = f(a[i])
+        for (; i < result.length; ++i)
+          result[i] = f(typeof a != 'number' ? a[i] : i)
         return result
-      } catch (err) { if (err === interrupt) interrupt.stack.push(result, i);  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(result, i); else _disposeEachAndDealloc(result);  throw err }
     },
     dispose:_(`_disposeEachAndDealloc`),
     adjust:[
       _(`array`),
       [
         {
-          call(a, f, out, dout) {
-            let [dresult = _allocArray(a.length), i = a.length] = interrupt(2)
+          call(a, f, dout) {
+            let [dresult = _allocArray(typeof a != 'number' ? a.length : a), i = dresult.length] = interrupt(2)
             try {
               for (; i > 0; --i) {
-                const ins = _allocArray(1); ins[0] = a[i-1]
-                const dins = adjust(f, ins, out[i-1], dout[i-1])
-                _allocArray(ins)
+                const ins = _allocArray(1); ins[0] = typeof a != 'number' ? a[i-1] : i-1
+                const dins = adjust(f, ins, null, dout[i-1]);  _allocArray(ins)
                 if (!_isArray(dins) || dins.length != 1) errorStack('bad adj', dins)
-                dresult[i-1] = dins[0], _allocArray(dins)
+                dresult[i-1] = dins[0];  _allocArray(dins)
               }
               return dresult
-            } catch (err) { if (err === interrupt) interrupt.stack.push(dresult, i);  throw err }
+            } catch (err) { if (err === interrupt) interrupt.stack.push(dresult, i); else _disposeEachAndDealloc(result);  throw err }
           },
           dispose:_(`_disposeEachAndDealloc`),
         },
         _(`_inA`),
         _(`_inB`),
-        _(`_out`),
         _(`_dout`),
       ],
     ],
@@ -8439,10 +8764,12 @@ Maximize memory re-use.`,
       [
         _(`arrayType`),
         `A`,
+        `Length`,
       ],
       [
         _(`arrayType`),
         `A`,
+        `Length`,
       ],
     ],
     argCount:1,
@@ -8465,6 +8792,7 @@ Maximize memory re-use.`,
 
   loop:{
     docs:`\`loop Array Accumulator Initial\`→\`Array\`: loops over the array left-to-right, setting \`Output.i\` to \`Accumulator(Array.i,where 0<i Output.(i-1) Initial)\` then returning \`Output\`.
+\`Array\` can also be a \`'string'\`.
 
 Use \`getLast(loop …?)\` to get the standard behavior of a functionality called \`reduce\`: returning the last accumulated result.
 \`loop\` returns the whole array of all results, to facilitate adjustment and composition.`,
@@ -8473,6 +8801,7 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
       [
         _(`arrayType`),
         `A`,
+        `Length`,
       ],
       [
         _(`funcType`),
@@ -8484,6 +8813,7 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
       [
         _(`arrayType`),
         `B`,
+        `Length`,
       ],
     ],
     examples:[
@@ -8493,7 +8823,7 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
       ],
     ],
     call(a, f, initial = 0) {
-      if (!_isArray(a)) error("Expected an array but got", a)
+      if (!_isArray(a) && typeof a != 'string') error("Expected an array or a string but got", a)
       if (typeof f != 'function') error("Expected a function but got", f)
       // This is a formulation without overwritten values, which we can adjust.
       let [outs = _allocArray(a.length), i = 0] = interrupt(2)
@@ -8539,6 +8869,7 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
       [
         _(`arrayType`),
         `A`,
+        `Length`,
       ],
       `A`,
     ],
@@ -8550,13 +8881,12 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
     },
     dispose:true,
     interrupt:false,
-    adjust:[
-      _(`array`),
-      [
-        _(`array`),
-        _(`_dout`),
-      ],
-    ],
+    adjust(ins, out, dout) {
+      // For `reverse`'s sake, we create a whole array instead of just its head.
+      const darr = _allocArray(ins[0].length)
+      darr[0] = keep(dout)
+      const a = _allocArray(1);  a[0] = darr;  return a
+    },
     mergeAdjustment:_(`_mergeArrays`),
   },
 
@@ -8567,6 +8897,7 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
       [
         _(`arrayType`),
         `A`,
+        `Length`,
       ],
       `A`,
     ],
@@ -8579,7 +8910,6 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
     dispose:true,
     interrupt:false,
     adjust(ins, out, dout) {
-      // Way less efficient than `getFirst`'s adjustment.
       const darr = _allocArray(ins[0].length)
       darr[darr.length-1] = keep(dout)
       const a = _allocArray(1);  a[0] = darr;  return a
@@ -8732,12 +9062,22 @@ A function \`defines\` this to be \`true\` to make \`autograd\` always call its 
 
   embedderMaker:{
     docs:`A creator of simple embedders (functions from nothing to an embedding: a statically-stored \`variable\` numeric tensor).`,
-    call(sz) { return make(_once, make(func, make(randomVar, identity, sz))) },
+    call(sz) { return make(_once, make(func, make(randomVar, null, sz))) },
   },
 
   _input:{
-    docs:`This returns the same unique object for the same \`n\`.`,
-    call(n) { return (_input.o || (_input.o = []))[n] || (_input.o[n] = {in:n}) },
+    docs:`This returns the same unique object for the same \`n\` (an integer more than 0).`,
+    call(n) { return (_input.o || (_input.o = []))[n] || (_input.o[n] = [readAt, _ins, n-1]) },
+  },
+
+  _funcTypeOf(t) {
+    // `(conceptType call CallType)`→`CallType`, everything else is just returned.
+    if (_isArray(t) && t[0] === conceptType) {
+      for (let i = 1; i < t.length; i += 2)
+        if (t[i] === call)
+          return t[i+1]
+    }
+    return t
   },
 
   _makeEmbTreeOf:{
@@ -8747,12 +9087,13 @@ Reads \`EmbedderMaker\`/\`FeatureSize\` from the surrounding \`alloc\`/\`using\`
     call(Type) {
       const em = alloc.params.EmbedderMaker, fs = alloc.params.FeatureSize
       if (!em) return
-      if (!_isArray(Type) || Type[0] !== funcType && defines(Type, _chooseWhatToGet) === undefined) return em(fs)
-      const outType = Type[0] === funcType ? Type[Type.length-1] : Type[0]
-      let [embs = _allocArray(Type[0] === funcType ? Type.length-1 : Type.length), i = 0] = interrupt(2)
+      const tp = _funcTypeOf(Type)
+      if (!_isArray(tp) || tp[0] !== funcType && defines(tp, _chooseWhatToGet) === undefined) return em(fs)
+      const outType = tp[0] === funcType ? tp[tp.length-1] : tp[0]
+      let [embs = _allocArray(tp[0] === funcType ? tp.length-1 : tp.length), i = 0] = interrupt(2)
       try {
         if (i === 0) embs[0] = _makeEmbTreeOf(outType), i = 1
-        for (; i < embs.length; ++i) embs[i] = _makeEmbTreeOf(Type[i])
+        for (; i < embs.length; ++i) embs[i] = _makeEmbTreeOf(tp[i])
         return Object.freeze(embs)
       } catch (err) { if (err === interrupt) interrupt.stack.push(embs, i);  throw err }
     },
@@ -8833,13 +9174,12 @@ All of \`GenContexts\` are arrays \`(AreAllTheseCalls …? Value Type EmbedderTr
       // Add the funcs that contexts didn't have.
       for (let f of fn) {
         if (f === null) error("Not permitted:", f) // Fails in `getDAG` now cannot be faked by bad data.
-        const tp = defines(f, type)
-        if (_isArray(tp) && tp[0] === funcType) {
-          const EmbTrees = _makeEmbTreeOf(tp)
-          ctxF.push(f, tp[tp.length-1], EmbTrees)
-          ctxV.push(f, tp, EmbTrees)
-        } else
-          ctxV.push(f, tp, _makeEmbTreeOf(tp))
+        const tp = _funcTypeOf(defines(f, type)), EmbTrees = _makeEmbTreeOf(tp)
+        const vt = tp
+        if (tp === null) error("Types cannot be null but got", tp, "of", f)
+        if (_isArray(tp) && tp[0] === funcType)
+          pushToContext(ctxF, f, tp, EmbTrees)
+        pushToContext(ctxV, f, tp, EmbTrees)
       }
     },
   },
@@ -8887,9 +9227,9 @@ Inputs contexts share frozen arrays, so to change them, create new arrays for th
     ;[
       OI.Goal[At] = HP.Goals[randomNat(HP.Goals.length)],
       OI.GoalPredictor[At] = HP.GoalPredictor, OI.ChoiceEmbedder[At] = HP.ChoiceEmbedder,
-      OI.FuncReducer[At] = HP.FuncReducer, OI.ValueReducer[At] = HP.ValueReducer,
+      OI.CallReducer[At] = HP.CallReducer, OI.ValueReducer[At] = HP.ValueReducer,
       OI.DownEmber[At] = _makeEmbTreeOf(null)
-    ] = _destructure(Hyperparams, ['Goal', 'GoalPredictor', 'ChoiceEmbedder', 'ValueReducer', 'FuncReducer', 'DownEmber'])
+    ] = _destructure(Hyperparams, ['Goal', 'GoalPredictor', 'ChoiceEmbedder', 'CallReducer', 'ValueReducer', 'DownEmber'])
     AutoWorld.DownEmb[At] = AutoWorld.UpEmb[At] = undefined, AutoWorld.dUpEmb[At] = 0
     AutoWorld.NodeTypes[At] = _allocMap(), AutoWorld.NodeEmbs[At] = _allocMap(), AutoWorld.dNodeEmbs[At] = _allocMap()
     // Fill in generative contexts too.
@@ -8910,7 +9250,7 @@ Inputs contexts share frozen arrays, so to change them, create new arrays for th
     p.Goal = OI.Goal[At]
     p.GoalPredictor = OI.GoalPredictor[At]
     p.ChoiceEmbedder = OI.ChoiceEmbedder[At]
-    p.FuncReducer = OI.FuncReducer[At]
+    p.CallReducer = OI.CallReducer[At]
     p.ValueReducer = OI.ValueReducer[At]
     // Don't even set `DownEmber` (the zero-arg function that returns the top-level input embedding).
   },
@@ -8938,6 +9278,7 @@ Pushes to a generative context.
 
 \`Type\` possibly \`defines\` this.`,
     call(ctx, Node, Type, EmbTree) {
+      if (ctx[0] && _isArray(Type) && Type[0] === funcType) Type = Type[Type.length-1]
       if (typeof defines(Type, pushToContext) == 'function')
         defines(Type, pushToContext)(ctx, Node, Type, EmbTree)
       else
@@ -8954,11 +9295,12 @@ Pushes to a generative context.
       const GoalType = futureType(tensorType(1))
       for (; i < HP.Goals.length; ++i)
         ctxV.push(HP.Goals[i], GoalType, _makeEmbTreeOf(GoalType))
+      const EmbType = [tensorType, HP.FeatureSize]
       if (HP.FeatureSize)
         switch (j) {
-          case 0: ctxF.push(getUsageEmbedding, [tensorType, HP.FeatureSize], [_makeEmbTreeOf(null)]), j = 1
-          case 1: ctxF.push(getDownEmbedding, [tensorType, HP.FeatureSize], [_makeEmbTreeOf(null)]), j = 2
-          case 2: ctxF.push(getUpEmbedding, [tensorType, HP.FeatureSize], [_makeEmbTreeOf(null)]), j = 3
+          case 0: ctxF.push(getUsageEmbedding, EmbType, [_makeEmbTreeOf(null)]), j = 1
+          case 1: ctxF.push(getDownEmbedding, EmbType, [_makeEmbTreeOf(null)]), j = 2
+          case 2: ctxF.push(getUpEmbedding, EmbType, [_makeEmbTreeOf(null)]), j = 3
         }
     } catch (err) { if (err === interrupt) interrupt.stack.push(i, j);  throw err }
   },
@@ -8966,11 +9308,12 @@ Pushes to a generative context.
   alloc:{
     docs:`\`alloc Type Hyperparams AutoWorld\`⇒\`Object\`: allocates an object that will be dynamically-\`regenerate\`d when \`using\`.
 \`Type\` must define both \`alloc\` and \`regenerate\`.
-\`Hyperparams\` can contain \`{Goal ? GoalPredictor ? ChoiceEmbedder ? ValueReducer ? FuncReducer ? DownEmber ?}\`. \`{Goal future()}\` is likely the only one to specify.
+\`Hyperparams\` \`\`elemCollapse elemValue(elem 'text' stringToDoc('can contain \`{Goal ? GoalPredictor ? ChoiceEmbedder ? CallReducer ? ValueReducer ? DownEmber ?}\`. \`{Goal future()}\` is likely the only one to specify.'),'These hyperparams define regeneration.
+Let machine learning bring love and greatness to you.')\`\`
 
-Definitions will only see \`Type\`.
-Read other info from \`alloc.'params'\` (which contains \`GenContexts\`/\`Goal\`/\`GoalPredictor\`/\`ChoiceEmbedder\`/\`ValueReducer\`/\`FuncReducer\`/\`DownEmber\`, and all hyperparams of the \`autoWorld\`).
-Can \`alloc\`ate while allocating (don't pass \`AutoWorld\` for these situations); the results will be invisible to generation, and must be \`regenerate\`d manually.
+Definitions will only be passed \`Type\`.
+Read other info from \`alloc.'params'\` (which contains local \`GenContexts\`, object hyperparams, and \`autoWorld\`'s hyperparams).
+Can \`alloc\`ate while allocating \`\`elemCollapse stringToDoc('(don''t pass \`AutoWorld\` for these situations); the resulting objects will be invisible to generation, and must be \`regenerate\`d manually')\`\`.
 
 (For bulk-allocation: if \`Hyperparams\` is an array, then \`Type\` is same-length array of types, and many objects are allocated but none are returned.)`,
     readAt:{
@@ -9019,9 +9362,10 @@ Can \`alloc\`ate while allocating (don't pass \`AutoWorld\` for these situations
         // Add the object to object contexts, if top-level.
         const OI = defines(alloc.world, deconstruct)[2], ctxs = alloc.params.GenContexts
         if (prevWorld === undefined) {
-          if (_isArray(Type) && Type[0] === funcType)
-            ctxs[0].push(obj, Type[Type.length-1], EmbTree), alloc.world.objCtxIndexes[At*2] = ctxs[0].length-1
-          ctxs[1].push(obj, Type, EmbTree), alloc.world.objCtxIndexes[At*2+1] = ctxs[1].length-1
+          const tp = _funcTypeOf(Type)
+          if (_isArray(tp) && tp[0] === funcType)
+            ctxs[0].push(obj, tp[tp.length-1], EmbTree), alloc.world.objCtxIndexes[At*2] = ctxs[0].length-1
+          ctxs[1].push(obj, tp, EmbTree), alloc.world.objCtxIndexes[At*2+1] = ctxs[1].length-1
         }
         OI.Object[At] = obj, OI.Type[At] = Type, OI.EmberTree[At] = EmbTree // The exact index matters for this one.
         alloc.world.objectIndex.set(obj, At)
@@ -9040,7 +9384,9 @@ Can \`alloc\`ate while allocating (don't pass \`AutoWorld\` for these situations
     docs:`\`using(Object,AutoWorld)\`→\`Object\`
 Prepares a dynamically-\`regenerate\`d \`Object\` (previously \`alloc\`ated in \`AutoWorld\`) for learned usage.
 
-(Or, if \`Object\` is the \`AutoWorld\`, prepares every object in the world.)`,
+(Or, if \`Object\` is the \`AutoWorld\`, prepares every object in the world.)
+
+This uses \`DownEmber:funcType(t) t:tensorType('N')\` to provide the \`DownEmbedding\` to \`regenerate\`.`,
     readAt:{
       regenerate:_(`regenerate`),
     },
@@ -9058,50 +9404,43 @@ Prepares a dynamically-\`regenerate\`d \`Object\` (previously \`alloc\`ated in \
         } catch (err) { if (err === interrupt) interrupt.stack.push(At);  throw err }
       }
 
-      const At = AutoWorld.objectIndex.get(obj)
-      if (At === undefined) error("Object", obj, "is not in", AutoWorld)
-      if (AutoWorld.UpEmb[At] !== undefined) return // Don't regenerate the same object twice.
-      if (OI.Object[At] !== obj)
-        error("Object position mismatched: expected", obj, "to be at", At, "but there we have", OI.Object[At])
-      AutoWorld.NodeTypes[At].clear()
-      AutoWorld.NodeEmbs[At].forEach(dispose), AutoWorld.NodeEmbs[At].clear()
-      AutoWorld.dNodeEmbs[At].forEach(dispose), AutoWorld.dNodeEmbs[At].clear()
-
-      const env = call.env, iu = _id(using), ias = _id(adjustSave), ial = _id(adjustLoad)
-      if (!env[iu]) env[iu] = _allocMap()
-      if (!env[iu].has(AutoWorld)) env[iu].set(AutoWorld, _allocArray(0)), env[iu].get(AutoWorld).push(_allocArray(0))
-
-      const adjInfo = env[iu].get(AutoWorld)[0]
-      const prevAdjSave = env[ias];  env[ias] = adjInfo
-      const prevAdjLoad = env[ial];  env[ial] = undefined
-      const prevWorld = alloc.world, prevParams = alloc.params
-      alloc.world = AutoWorld, alloc.params = AutoWorld.params
+      let [adjInfo] = interrupt(1)
       try {
-        // Calc embedding and get object/type.
-        if (AutoWorld.DownEmb[At] === undefined) AutoWorld.DownEmb[At] = OI.DownEmber[At]() || 0
-        const Type = OI.Type[At], embTree = OI.EmberTree[At]
-        // Regenerate.
-        dispose(AutoWorld.UpEmb[At]), AutoWorld.UpEmb[At] = 0
-        const b = regenerate(embTree, AutoWorld.DownEmb[At], Type, obj)
-        // Store the resulting `UpEmb` and `UpObj`.
-        if (!_isArray(b) || b.length != 2) error("Expected (UpEmb Obj) but got", b)
-        let upObj;  [AutoWorld.UpEmb[At] = 0, upObj] = b;  _allocArray(b)
-        if (AutoWorld.objCtxIndexes[At*2] !== undefined)
-          OI.GenContexts[0][0][AutoWorld.objCtxIndexes[At*2]] = upObj
-        if (AutoWorld.objCtxIndexes[At*2+1] !== undefined)
-          OI.GenContexts[0][1][AutoWorld.objCtxIndexes[At*2+1]] = upObj
-        // Update `AutoWorld.'objectIndex'` and `autoWorld.'objectWorld'`.
-        if (obj !== upObj) {
-          AutoWorld.objectIndex.delete(obj), AutoWorld.objectIndex.set(upObj, At)
-          autoWorld.objectWorld.delete(obj)
-          if (obj && (typeof obj == 'object' || typeof obj == 'function'))
-            autoWorld.objectWorld.set(obj, AutoWorld)
+        const At = AutoWorld.objectIndex.get(obj)
+        const env = call.env, iu = _id(using), ias = _id(adjustSave), ial = _id(adjustLoad)
+        if (adjInfo === undefined) {
+          if (At === undefined) error("Object", obj, "is not in", AutoWorld)
+          if (AutoWorld.UpEmb[At] !== undefined) return // Don't regenerate the same object twice.
+          if (OI.Object[At] !== obj)
+            error("Object position mismatched: expected", obj, "to be at", At, "but there we have", OI.Object[At])
+          AutoWorld.NodeTypes[At].clear()
+          AutoWorld.NodeEmbs[At].forEach(dispose), AutoWorld.NodeEmbs[At].clear()
+          AutoWorld.dNodeEmbs[At].forEach(dispose), AutoWorld.dNodeEmbs[At].clear()
+
+          if (!env[iu]) env[iu] = _allocMap()
+          if (!env[iu].has(AutoWorld)) env[iu].set(AutoWorld, _allocArray(0)), env[iu].get(AutoWorld).push(_allocArray(0))
+
+          adjInfo = env[iu].get(AutoWorld)[0]
         }
-        // Remember that we regenerated `obj`.
-        env[iu].get(AutoWorld).push(upObj)
-        return upObj
-      } catch (err) { throw err }
-      finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad, alloc.world = prevWorld, alloc.params = prevParams }
+        const prevAdjSave = env[ias];  env[ias] = adjInfo
+        const prevAdjLoad = env[ial];  env[ial] = undefined
+        const prevWorld = alloc.world, prevParams = alloc.params
+        alloc.world = AutoWorld, alloc.params = AutoWorld.params
+        try {
+          // Calc embedding and get object/type.
+          if (AutoWorld.DownEmb[At] === undefined) AutoWorld.DownEmb[At] = OI.DownEmber[At]() || 0
+          const Type = OI.Type[At], embTree = OI.EmberTree[At]
+          // Regenerate.
+          dispose(AutoWorld.UpEmb[At]), AutoWorld.UpEmb[At] = 0
+          const b = regenerate(embTree, AutoWorld.DownEmb[At], Type, obj)
+          // Store the resulting `UpEmb` (`regenerate` updates `UpObj`).
+          if (!_isArray(b) || b.length != 2) error("Expected (UpEmb Obj) but got", b)
+          let upObj;  [AutoWorld.UpEmb[At] = 0, upObj] = b;  _allocArray(b)
+          // Remember that we regenerated `obj`.
+          env[iu].get(AutoWorld).push(At)
+          return upObj
+        } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad, alloc.world = prevWorld, alloc.params = prevParams }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(adjInfo);  throw err }
     },
   },
 
@@ -9124,7 +9463,7 @@ Prepares a dynamically-\`regenerate\`d \`Object\` (previously \`alloc\`ated in \
       let [dInternal] = interrupt(1)
       try {
         while (m.length > 1) {
-          const Obj = m[m.length-1], At = aw.objectIndex.get(Obj)
+          const At = m[m.length-1], Obj = OI.Object[At]
           const Type = OI.Type[At], Usage = OI.EmberTree[At]
           // Adjust `[aw.UpEmb[At], Obj] = regenerate(Usage, aw.DownEmb[At], Type, obj)`.
           //   No one should mind that we're passing the resulting object for the input here.
@@ -9132,7 +9471,7 @@ Prepares a dynamically-\`regenerate\`d \`Object\` (previously \`alloc\`ated in \
             const a = _allocArray(4);  [a[0], a[1], a[2], a[3]] = [Usage, aw.DownEmb[At], Type, Obj]
             const d = _allocArray(1);  d[0] = aw.dUpEmb[At]
             let b
-            try { b = adjust(regenerate, a, null, d) }
+            try { b = defines(regenerate, adjust)(a, null, d) }
             finally { _allocArray(d), _allocArray(a) }
             if (!_isArray(b)) error("Not an array:", b)
             _recDispose(b[0]), dInternal = b[1] || 0;  _allocArray(b)
@@ -9147,7 +9486,7 @@ Prepares a dynamically-\`regenerate\`d \`Object\` (previously \`alloc\`ated in \
           m.pop()
         }
         if (!adjInfo.length) _allocArray(adjInfo)
-        else error("Inexact reversal; didn''t load", ...adjInfo.map(arr => _isArray(arr) ? arr.slice() : arr))
+        else errorStack("Inexact reversal; didn't load", ...adjInfo.map(arr => _isArray(arr) ? arr.slice() : arr))
         _allocArray(m), ownerMap.delete(aw)
       } catch (err) { if (err === interrupt) interrupt.stack.push(dInternal); else dispose(dInternal);  throw err }
       finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad, alloc.world = prevWorld, alloc.params = prevParams }
@@ -9159,13 +9498,13 @@ Prepares a dynamically-\`regenerate\`d \`Object\` (previously \`alloc\`ated in \
 \`ExternalEmbeddingTree⇒InternalEmbedding⇒Type⇒Object⇒(ResultEmbedding&Object)\`
 (Or \`Usage⇒DownEmbedding⇒Type⇒Object⇒(UpEmbedding&Object)\`, to use \`getDAG\`'s naming scheme.)
 Regenerates one object.
-Making objects exist not in a vacuum, but by delivering salience to choices.
+Makes objects exist not in a vacuum, but by delivering salience to choices.
 Which allows questioning everything so that a better answer may be found. Suicidal, I know, but too useful.
 
 Can \`regenerate\` while regenerating.
 
 \`Type\` of an object \`defines\` this with an \`adjust\`able func.
-Read other info from \`alloc.'params'\` (which contains \`At\`/\`Object\`/\`Type\`/\`EmberTree\`/\`GenContexts\`/\`Goal\`/\`GoalPredictor\`/\`ChoiceEmbedder\`/\`ValueReducer\`/\`FuncReducer\`/\`DownEmber\`, and all hyperparams of the \`autoWorld\`).`,
+Read other info from \`alloc.'params'\` (which contains \`At\`/\`Object\`/\`Type\`/\`EmberTree\`/\`GenContexts\`/\`Goal\`/\`GoalPredictor\`/\`ChoiceEmbedder\`/\`CallReducer\`/\`ValueReducer\`/\`DownEmber\`, and all hyperparams of the \`autoWorld\`).`,
     readAt:{
       getUsageEmbedding:_(`getUsageEmbedding`),
       getDownEmbedding:_(`getDownEmbedding`),
@@ -9173,16 +9512,92 @@ Read other info from \`alloc.'params'\` (which contains \`At\`/\`Object\`/\`Type
     },
     adjust(ins, out, dout) {
       _fillObjectHyperparams(alloc.world, alloc.world.objectIndex.get(ins[3]))
+      if (typeof defines(ins[2], regenerate) != 'function')
+        errorStack(ins[2], "must define", regenerate)
       return adjust(defines(ins[2], regenerate), ins, out, dout)
     },
     call(Usage, DownEmb, Type, Obj) {
       // Fill params and be overriden.
       if (call.pure) throw impure
       if (alloc.world === undefined) errorStack("Must be used inside", using)
-      if (!alloc.world.objectIndex.has(Obj)) errorStack(Obj, "is not in", alloc.world)
-      _fillObjectHyperparams(alloc.world, alloc.world.objectIndex.get(Obj))
-      return defines(Type, regenerate)(Usage, DownEmb, Type, Obj)
+      const At = alloc.world.objectIndex.get(Obj)
+      if (At === undefined) errorStack(Obj, "is not in", alloc.world)
+      _fillObjectHyperparams(alloc.world, At)
+      const b = defines(Type, regenerate)(Usage, DownEmb, Type, Obj)
+      const UpObj = b[1]
+      if (Obj !== UpObj) {
+        const aw = alloc.world, OI = defines(aw, deconstruct)[2]
+        if (aw.objectIndex.has(UpObj)) error("Regenerated-to objects must be unique, but got", UpObj, "in", aw)
+        OI.Object[At] = UpObj
+        // Update the contexts with the new object.
+        if (aw.objCtxIndexes[At*2] !== undefined)
+          OI.GenContexts[0][0][aw.objCtxIndexes[At*2]] = UpObj
+        if (aw.objCtxIndexes[At*2+1] !== undefined)
+          OI.GenContexts[0][1][aw.objCtxIndexes[At*2+1]] = UpObj
+        // Update `aw.'objectIndex'` and `autoWorld.'objectWorld'`.
+        aw.objectIndex.delete(Obj), aw.objectIndex.set(UpObj, At)
+        autoWorld.objectWorld.delete(Obj)
+        if (UpObj && (typeof UpObj == 'object' || typeof UpObj == 'function'))
+          autoWorld.objectWorld.set(UpObj, aw)
+      }
+      return b
     },
+    tutorial:[
+      `No. \`tutorial(Types)\` and \`tutorial(Neural)\` first.`,
+      [
+        _(`fancier`),
+        `'Gimme'`,
+        //function() { return localStorage.Types === '1' && localStorage.Neural === '1' }, // #######################
+      ],
+      `Programs and learning. The path lies open.
+What draws you down it? Obligation? Curiosity? Or some hint of something greater?
+
+
+
+Every activity is essentially about modeling something else in a way that gives us more desirable properties than the target.
+  Thought models the world so that it could predict and maximize.
+  Types model proper usage so that we could guarantee correctness.
+  Computation models processes so that we could run them on computers.
+  And we could model a computation with \`adjust\`able \`Numeric\` operations so that we could learn whatever we want about it.
+
+An interesting computation is computing computations: generating DAGs (\`getDAG\`) and code (\`func\`) and data (\`concept\`).
+
+(The following narrative mirrors the narrative for types almost exactly.)
+
+\`getDAG\` either {picks-and-returns a value} or picks a function/\`construct\` and recurses to generate its arguments.
+To give this process structure, generation is augmented with embeddings: also given a \`tensor\` statically (attached to the value/func candidate), also given a \`tensor\` dynamically (wants), also return a \`tensor\` (is).
+
+In particular, any value/func will have its static/output embedding combined with the dynamic (wanted) embedding, and the max-\`GoalPredictor\` one is picked. \`ChoiceEmbedder\` creates the embedding context. (Down.)
+If making a call, we also generate func args, progressively combining the embedding context with the returned embeddings. (Right.)
+Then we return the \`CallReducer\`d embedding. (Up.)
+
+(There are some details on how to treat funcs-as-funcs (\`CallReducer\`) and funcs-as-values (\`ValueReducer\`) as semantically the same, among other details, but you can read the \`docs\` of \`getDAG\` for that.)
+
+That was an account of how we generate DAGs.
+
+But the general case of arbitrary connectivity also includes cycles.
+
+So how would we combine "take and return an embedding" with "has cycles"? We need a fixed point.
+
+There are two ways: either do embedding on a cycle until it converges (for example, graph neural networks pass messages to settle on node embeddings), or specify "what that would converge to" directly.
+
+We have the luxury of doing the latter. Every \`alloc\`ated function has its own tree of embedding-returning functions (\`adjust\`able global \`variable\`s, first output then inputs) assigned to it with \`embedderMaker\`.
+\`\`elemCollapse elemValue(stringToDoc('(Of course, we can always make the static embedding be dependent on some string of characters that the system would have to pick in serialization and react to it in parsing in order to have any memory between resets. A whole culture can be built around this weird quirk. Imagine having to spend a lot of your time on "good descriptive names/\`docs\` for variables, functions, classes, objects, namespaces, concepts"; imagine having to learn GPT-3-scale models in order to just program. It''s much more efficient to expose embedders directly in one mind, for mutual calling and adjustment.)'),'Human societies try to approximate the global brain. But their evolution will never reach it. However, when re-doing the basics, it is possible to just skip to the end from the start. Just difficult.')\`\`
+
+(Of course, instead of down-right-up, we can always linearize DAG nodes and compute one global context. We will not: \`\`elemCollapse elemValue(stringToDoc('This doesn''t reflect the generation of DAGs well. (GPT models generate sequences, so theoretically we could use them. But the most important thing about graphs is connectivity, and we would also need to give them positional embeddings. Count of possible paths in a DAG grows exponentially, so it''s infeasible to store an embedder for each, so unless we want a hacky solution that only works up to a fixed-but-nebulous depth such as natural language, we need another way to compute on DAGs. Which brings us right back to down-right-up schemes.)'),'Look beyond yourself. What do you see? Worse options? Then rebirth. Else name that beyond the new self.')\`\`)
+
+// TODO: Also justify \`regenerate\` instead of \`generate\` (like \`callAdjust\` instead of just \`call\`).
+// TODO: Also describe \`using\` (lazy regeneration that we don't have to do anything extra for).
+
+// TODO: Also transition to auto-worlds (similar to C++ allocators): a convenient way to combine many auto-regenerated objects/functions.
+
+// TODO: Control an \`autoWorld\`'s goals, fill them with our agents. Then suggest how the top-level function: first do u:userTime() then the call then userTime(u) then the call; set the goals 'did we not-error' and 'how much user/real time did we waste', and 'what is our average prediction loss, since X/start/end', and actually 'which button did the user click' too (this one could be the top-level goal).
+// TODO: Create simple func parameters for an \`autoWorld\`: \`GoalPredictor\`, \`ChoiceEmbedder\`, \`???\`, \`CallReducer\`/\`ValueReducer\`.
+// TODO: Create an \`autoWorld\`, \`alloc\` a bunch of random auto-functions in it.
+// TODO: Prove that this can make a func that minimizes a goal like "predict output from input".
+// TODO: Try to learn a NN.
+`,
+    ],
   },
 
   DAGType:{
@@ -9197,7 +9612,7 @@ Can be given typed values to possibly use during generation.`,
       if (!_isArray(Type[3]) || Type[2].length != Type[3].length) error("Mismatch between", Type[2], "and", Type[3])
       const ctxF = [true], ctxV = [false]
       for (let i = 0; i < Type[2].length; ++i) {
-        const v = Type[2][i], t = Type[3][i], e = _makeEmbTreeOf(t)
+        const v = Type[2][i], t = _funcTypeOf(Type[3][i]), e = _makeEmbTreeOf(t)
         if (_isArray(t) && t[0] === funcType)
           pushToContext(ctxF, v, t, e)
         pushToContext(ctxV, v, t, e)
@@ -9206,7 +9621,7 @@ Can be given typed values to possibly use during generation.`,
     },
     alloc(Type) { return _isArray(Type) ? ['<generated DAG>'] : error("Not an array:", Type) },
     regenerate:{
-      call(ExternalEmbTree, InternalEmb, Type, Obj) { // ⇒ ResultEmb & Obj
+      call(ExternalEmbTree, InternalEmb, Type, Obj) { // ⇒ ResultEmb & UpObj
         // Refer to `getDAG`, replace `Obj`'s contents, and embed the first result.
         let [UpEmbTree, UpObj] = interrupt(2)
         try {
@@ -9214,14 +9629,13 @@ Can be given typed values to possibly use during generation.`,
             const b = getDAG(ExternalEmbTree, InternalEmb, Type[1])
             ;[UpEmbTree, UpObj] = b;  _allocArray(b) // Ignore the resulting type.
 
-            if (Obj !== UpObj) _isArray(UpObj) && (writeAt(Obj, undefined, UpObj), UpObj = Obj)
+            if (Obj !== UpObj) _isArray(Obj) && _isArray(UpObj) && (writeAt(Obj, undefined, UpObj), UpObj = Obj)
           }
 
           const r = _recEmbed(UpEmbTree, alloc.params.ValueReducer)
           const a = _allocArray(1); a[0] = keep(UpEmbTree)
           adjustSave(a)
-          const result = _allocArray(2); result[0] = r, result[1] = UpObj
-          return result
+          const result = _allocArray(2);  result[0] = r, result[1] = UpObj;  return result
         } catch (err) { if (err === interrupt) interrupt.stack.push(UpEmbTree, UpObj);  throw err }
       },
       adjust(ins, _, dout) {
@@ -9235,12 +9649,12 @@ Can be given typed values to possibly use during generation.`,
           // Adjust `return _recEmbed(UpEmbTree, alloc.params.ValueReducer)`.
           if (dUpEmbTrees === undefined) {
             const a = _allocArray(2);  a[0] = UpEmbTree, a[1] = alloc.params.ValueReducer
-            try { dUpEmbTrees = adjust(_recEmbed, a, null, dout[0]) } finally { _allocArray(a) }
+            try { dUpEmbTrees = defines(_recEmbed, adjust)(a, null, dout[0]) } finally { _allocArray(a) }
           }
           // Adjust `[UpEmbTree] = getDAG(ExternalEmbTree, InternalEmb, Type)`.
-          const ins2 = _allocArray(3);  [ins2[0], ins2[1], ins2[2]] = [ins[0], ins[1], ins[2][ins[2].length-1]]
+          const ins2 = _allocArray(3);  [ins2[0], ins2[1], ins2[2]] = [ins[0], ins[1], ins[2][1]]
           const d2 = _allocArray(1);  d2[0] = dUpEmbTrees
-          try { return adjust(getDAG, ins2, null, d2) }
+          try { return defines(getDAG, adjust)(ins2, null, d2) }
           finally { _allocArray(d2), _allocArray(ins2) }
         } catch (err) { if (err === interrupt) interrupt.stack.push(UpEmbTree, dUpEmbTree), dUpEmbTrees = null;  throw err }
         finally { if (dUpEmbTrees !== null) dispose(UpEmbTree), _isArray(dUpEmbTrees) && (_recDispose(dUpEmbTrees[0]), _allocArray(dUpEmbTrees)) }
@@ -9311,13 +9725,14 @@ Can be given typed values to possibly use during generation.`,
         let [UpEmbs, dUpEmbs, i = Type.length-2, dDownEmb = 0] = interrupt(4)
         try {
           if (UpEmbs === undefined) UpEmbs = adjustLoad((Type.length-1)>>>1)
-          // Adjust `return [FuncReducer(UpEmbs), Obj]`.
+          // Adjust `return [CallReducer(UpEmbs), Obj]`.
           if (dUpEmbs === undefined) {
             let b, a = _allocArray(1);  a[0] = UpEmbs
-            try { b = adjust(alloc.params.FuncReducer, a, null, dout[0]) }
+            try { b = adjust(alloc.params.CallReducer, a, null, dout[0]) }
             finally { _allocArray(a) }
             dUpEmbs = b[0];  _allocArray(1)
-            if (!_isArray(dUpEmbs) || dUpEmbs.length != UpEmbs.length) error("Expected an array like", UpEmbs, "but got", dUpEmbs)
+            if (dUpEmbs === undefined) dUpEmbs = _allocArray(UpEmbs.length)
+            if (!_isArray(dUpEmbs) || dUpEmbs.length != UpEmbs.length) error("Expected an array like", UpEmbs, "but got", dUpEmbs, "from adjusting", alloc.params.CallReducer)
             _disposeEachAndDealloc(UpEmbs), UpEmbs = null
           }
           // Adjust `[UpEmbs[(i-1)>>>1], _] = regenerate(Obj.usages[(i-1)>>>1], DownEmb, t, Obj[defines.key][idK])`.
@@ -9325,7 +9740,7 @@ Can be given typed values to possibly use during generation.`,
             const k = Type[i], t = Type[i+1], idK = _id(k)
             const a = _allocArray(4); [a[0], a[1], a[2], a[3]] = [Obj.usages[(i-1)>>>1], DownEmb, t, Obj[defines.key][idK]]
             let b, d = _allocArray(1); d[0] = dUpEmbs[(i-1)>>>1]
-            try { b = adjust(regenerate, a, null, d) }
+            try { b = defines(regenerate, adjust)(a, null, d) }
             finally { _allocArray(d), _allocArray(a) }
             _recDispose(b[0])
             if (b[1]) { // Add up dDownEmb.
@@ -9342,19 +9757,18 @@ Can be given typed values to possibly use during generation.`,
       call(Usage, DownEmb, Type, Obj) { // → UpEmb & Obj
         let [i = 1, UpEmbs = _allocArray((Type.length-1)>>>1)] = interrupt(2)
         try {
-          // Accumulate UpEmbs of regeneration in an array, then reduce it with FuncReducer.
+          // Accumulate UpEmbs of regeneration in an array, then reduce it with CallReducer.
           for (; i < Type.length; i += 2) {
             const k = Type[i], t = Type[i+1], idK = _id(k)
             const b = regenerate(Obj.usages[(i-1)>>>1], DownEmb, t, Obj[defines.key][idK])
             UpEmbs[(i-1)>>>1] = b[0]
-            Obj[defines.key][idK] = b[1]
+            defines(Obj, deconstruct)[i+1] = Obj[defines.key][idK] = b[1]
             _allocArray(b)
           }
-          const r = alloc.params.FuncReducer(UpEmbs) // Re-use this here.
+          const r = alloc.params.CallReducer(UpEmbs) // Re-use this here.
           adjustSave(UpEmbs), UpEmbs = null
           const a = _allocArray(2);  a[0] = r, a[1] = Obj;  return a
         } catch (err) { if (err === interrupt) interrupt.stack.push(i, UpEmbs); else _disposeEachAndDealloc(UpEmbs);  throw err }
-        return [keep(DownEmb), Obj]
       },
     },
   },
@@ -9410,42 +9824,58 @@ Can be given typed values to possibly use during generation.`,
   },
 
   getDAG:{
-    docs:`For internal use, inside \`DAGType\` inside \`regenerate\`.
+    docs:`For internal use, inside \`DAGType\`/\`funcType\` inside \`regenerate\`.
 \`getDAG:Usage⇒DownEmbedding⇒DownType⇒(UpEmbeddingTree&DAG&UpType)\`
 Generates a Directed Acyclic Graph from what is available in \`GenContexts\` (likely in \`alloc.'params'.'Funcs'\`).
 This DAG contains up to \`MaxDAGNodes\` (\`100\` by default) array nodes, and is up to \`MaxDepth\` nodes deep (\`10\` by default).
-The generation is guided by a human-specified \`DownType\`→\`UpType\` and a machine-learned \`Usage\`/\`DownEmbedding\`→\`UpEmbeddingTree\`.
-This uses \`GenContexts Goal GoalPredictor ChoiceEmbedder ValueReducer FuncReducer MaxDepth MaxDAGNodes MaxSavedNodes\` from the surrounding \`alloc\`/\`regenerate\` call.
 
 (While you're here, check \`\`settings ^_whetherToColorVariables\`\` and re-summon this description. And maybe save it: \`\`elemCollapse \\Rewrite()\`\`.)
 
+The generation is guided by a human-specified static-type&\`DownType\`→\`UpType\` and a machine-learned \`Usage\`&\`DownEmbedding\`→\`UpEmbeddingTree\`.
+This uses \`GenContexts Goal GoalPredictor ChoiceEmbedder CallReducer ValueReducer MaxDepth MaxDAGNodes MaxSavedNodes\` from the surrounding \`alloc\`/\`regenerate\` call.
+\`GoalPredictor:futureType(n)⇒t⇒t⇒t⇒n n:tensorType(1) t:tensorType('Sizes')\` // TODO: This should pass in the whole \`stack\`ed tensor, to explicitly incorporate efficiency.
+\`ChoiceEmbedder:t⇒t⇒t⇒t t:tensorType('N')\` // TODO: …Now this should return a context.
+// TODO: \`ContextRefiner(UsedIn,UpEmbedding,CallContext)\`—>\`CallContext\`.
+// TODO: \`ArgEmbedder(UsedIn,CallContext)\`—>\`DownerEmbedding\`. …Doesn't this make the \`Usage\` arg of \`getDAG\` obsolete?
+// TODO: \`ChoiceFailed(UsedIn,DownEmbedding)\`—>\`UpEmbedding\` — or maybe just DownEmbedding? Maybe not even pass in Usage/UsedIn?
+// TODO: \`ArgFailed(DownEmbedding,CallContext)\`—>\`UpEmbedding\`.
+// TODO: \`PutValue(CallContext)\`—>\`UpEmbedding\`.
+// (Damn. Generation really can be meta-circular once we're done, can't it? All those 'vague' pieces can be auto-put and auto-learned.)
+\`CallReducer:arrayType(t,'Length')⇒t t:tensorType('Sizes')\` // …Now this should reduce contexts, into \`UpEmbedding\`.
+  // …And in fact, TODO: Do not have such a reducer because types do not, only have UsedIn+CallContext→UpEmbedding.
+\`ValueReducer:arrayType(t,'Length')⇒t t:tensorType('Sizes')\` // (This one is still fine.)
+
 This is a user-study of all possible users of our DAG IR, and a guide.
 We need \`Types\` to not waste time generating invalid programs, but they are not enough.
-We need machine learning to replace random choices (a big no-no) with intelligent choices (a big oh-yes).
+We need \`Neural\` to replace random choices (a big no-no) with intelligent choices (a big oh-yes).
 
-Generation proceeds top-down with \`Types\`/\`GoalPredictor\`/\`ChoiceEmbedder\` then bottom-up with \`make\`/\`FuncReducer\`/\`ValueReducer\`, fully \`adjust\`able like MuZero.
-\`Goal\` is the \`future\` that \`GoalPredictor\` \`predicts\`. (For example, it's set to the resulting func's runtime, after \`getDAG\`.)
+Generation proceeds top-down with \`Types\`/\`GoalPredictor\`/\`ChoiceEmbedder\` then bottom-up with \`make\`/\`CallReducer\`/\`ValueReducer\`, fully \`adjust\`able like MuZero.
+
+// TODO: Better narration, one that puts type-shadowing and embedding-shadowing into direct correspondence.
+  // (Separate by internal functions.)
 - Types filter out available choices from \`GenContexts\`, with \`typeRefine\`. If none are left at any point, the whole generation fails, returning \`null\` for \`DAG\` & \`UpType\` (meaning that with this implementation, types should only be loose suggestions since we do no search; of course, machine learning can learn to avoid fails, but still).
-- \`GoalPredictor(Goal,UseAs,UsedIn,DownEmbedding)\`→\`GoalPrediction\` (\`futureType(n)⇒t⇒t⇒t⇒n n:tensorType(1) t:tensorType('N')\`) is used to \`_choose\` the best-\`GoalPrediction\` among many choices. \`UseAs\` is the option's embedding in \`GenContexts\`, \`Usage\`/\`DownEmbedding\` are passed in from the current \`getDAG\`.
-  - Its numeric shadow is \`ChoiceEmbedder(UseAs,UsedIn,DownEmbedding)\`→\`DownerEmbedding\` (\`t⇒t⇒t⇒t t:tensorType('N')\`).
-- Then, if it chose to make a call, recurse for each arg. \`Usage\` is the arg's embedding tree (stored in \`GenContexts\`), \`DownEmbedding\` is the chosen \`DownerEmbedding\`.
-  - Then \`make\` the call: if the func defines \`construct\`, construct it at generation-time.
+- \`GoalPredictor(Goal,UseAs,UsedIn,DownEmbedding)\`→\`GoalPrediction\` is used to \`_choose\` the best-\`GoalPrediction\` among many choices. \`\`elemCollapse stringToDoc('\`Goal\` is the \`future\` that \`GoalPredictor\` \`predicts\` (for example, it's set to the resulting func's execution time, after \`getDAG\`), \`UseAs\` is the option''s embedding in \`GenContexts\`, \`UseIn\` is computed from \`Usage\`, and \`DownEmbedding\` is passed as-is.')\`\` (This has options separated, and the whole array is not passed in.)
+    - Its numeric shadow is \`ChoiceEmbedder(UseAs,UsedIn,DownEmbedding)\`→\`DownerEmbedding\`.
+- Then, if it chose to make a call, recurse for each arg. \`\`elemCollapse stringToDoc('\`Usage\` is the arg''s embedding tree (stored in \`GenContexts\`), \`DownEmbedding\` is the chosen \`DownerEmbedding\`.')\`\`
+    - Then \`make\` the call: if the func defines \`construct\`, construct it at generation-time.
+    - Then save the node (pushing out the oldest ones if there are more than \`MaxSavedNodes\`).
+- Here, embeddings do not flow horizontally, only down then up.
 - \`UpEmbeddingTree\` is computed as:
-  - Embeddings of funcs-as-values (and \`tupleType\`s) become array trees, recursively reduced near \`GoalPredictor\`/\`ChoiceEmbedder\` by \`ValueReducer\`.
-  - Embeddings of funcs-as-funcs (AKA calls) become vectors, reduced here by \`FuncReducer\` on the top array and \`ValueReducer\` on deeper arrays.
-  - (Example of reducers: a simple RNN: use \`getLast\` on \`loop\`, accumulating \`matMul\` of \`concat\` of inputs by a \`variable\` weights matrix. Or sum/min/max/avg, self-attention, bidirectional RNN, LSTM, 10 layers of reducers with skip-connections…)
+    - Embeddings of funcs-as-values (and \`tupleType\`s) become array trees \`\`elemCollapse stringToDoc('(recursively reduced later near \`GoalPredictor\`/\`ChoiceEmbedder\` by \`ValueReducer\`)')\`\`.
+    - Embeddings of funcs-as-funcs (AKA calls) become tensors \`\`elemCollapse stringToDoc('(recursively reduced here by \`CallReducer\` on the top/call array and \`ValueReducer\` on deeper arrays)')\`\`.
+    - (Example of reducers: a simple RNN: use \`getLast\` on \`loop\`, accumulating \`matMul\` of \`concat\` of inputs by a \`variable\` weights matrix. Or sum/min/max/avg, self-attention, bidirectional RNN, LSTM, 10 \`loop\`s with skip-connections…)
 
-Funcs can return/accept funcs, and both types and embeddings should flow properly. However, computed funcs are never called directly (\`autograd\`/\`_compileBody\` don't handle this well, due to \`dispose\`/\`adjust\` not being type-dependent and therefore being unknown for computed-func calls).
-It's slow: the time complexity is \`O(Nodes·(AvgOptions·(OutputTypeRefinement+OutputValueReducer+GoalPredictor)+ChoiceEmbedder+ValueReducer+FuncReducer))\` (just imagine that these are one-letter variables, and we describe what they are afterwards).
+Funcs can return/accept funcs, and both types and embeddings should flow properly. However, computed funcs are never called directly, for simplicity (expose a func-calling func if you need this).
+It's slow: the time complexity is \`O(Nodes·(AvgOptions·(OutputTypeRefinement+OutputValueReducer+GoalPredictor)+ChoiceEmbedder+ValueReducer+CallReducer))\` (just imagine that these are one-letter variables, and we describe what they are afterwards).
 
-The outer \`getDAG\` has \`DownEmbedding\`/\`UpEmbeddingTree\` (reducible to one embedding with \`_recEmbed\`) which do not end in \`predicts\` by themselves (\`Usage\` should be static — the \`UseAs\` embedding of the generated function). Ways to give them gradient should be devised for salience (such as exposing "get that" funcs to generation).
+The outer \`getDAG\` has \`DownEmbedding\`/\`UpEmbeddingTree\` (reducible to one embedding with \`_recEmbed\`) which do not end in \`predicts\` by themselves (\`Usage\` should be static — the \`UseAs\` embedding of the generated function). Ways to give them gradient should be devised for salience, such as exposing \`getUsageEmbedding\`/\`getDownEmbedding\`/\`getUpEmbedding\` to generation, which is done.
 
 
 
 How could this potentially be integrated for human use?
-First is type inference for all programs and not just those generated here. \`contextMenu\` should be able to show it per-node, and each non-filled hole in a partially-created program should give a list of what functions/values are allowed here by types (program editing \`2.0\`, which is much slower than just typing text and thus worse).
-Second is embedding DAGs for all programs and not just those generated here. Bunches-of-numbers are not interpretable directly, but we can project them into a low-dimensional space (such as red/green/blue color components of a node) and cluster them, and/or give the "this node should be of this color" interface to the human for highlighting semantic similarities (syntax highlighting \`2.0\`).
-Third is giving appropriate goals to embeddings, and saving embeddings (software \`2.0\`). But those two have to be done regardless of human interactivity.`,
+  First is type inference for all programs and not just those generated here. \`contextMenu\` should be able to show it per-node, and each non-filled hole in a partially-created program should give a list of what functions/values are allowed here by types (program editing \`2.0\`, which is much slower than just typing text and thus worse).
+  Second is embedding DAGs for all programs and not just those generated here. Bunches-of-numbers are not interpretable directly, but we can project them into a low-dimensional space (such as red/green/blue color components of a node) and cluster them, and/or give the "this node should be of this color" interface to the human for highlighting semantic similarities (syntax highlighting \`2.0\`).
+  Third is giving appropriate goals to embeddings, and saving embeddings (software \`2.0\`). But those two have to be done regardless of human interactivity.`,
     call(Usage, DownEmb, DownType) { // ⇒ (UpEmbTree DAG UpType)
       // All GenContexts are arrays `(AreAllTheseCalls, …, Value, Type, Embedder, …)`.
       //   It's possible to have many contexts at once, to eliminate all the copying.
@@ -9458,7 +9888,7 @@ Third is giving appropriate goals to embeddings, and saving embeddings (software
         finally { getDAG.depth = getDAG.nodes = undefined }
       } else {
         // We've recursed.
-        if (_isArray(DownType) && DownType[0] === quote) return [keep(DownEmb), DownType[1], DownType]
+        if (_isArray(DownType) && DownType[0] === quote) return [keep(DownEmb), _typeFinalize(DownType[1]), DownType]
         ++getDAG.depth
         let [Usages, DownerEmb, Node, Type, IsCall] = interrupt(5)
         try {
@@ -9478,9 +9908,11 @@ Third is giving appropriate goals to embeddings, and saving embeddings (software
 
             return nd
           } else {
-            // Return the value, [DownerEmb, Node, Type].
-            const a = _allocArray(3); [a[0], a[1], a[2]] = [DownerEmb, Node, Type];  _saveCreatedNode(a, IsCall !== null)
-            adjustSave(null), DownerEmb = null
+            _humanDAGAsk(1, Node, Type)
+
+            // Return the value, [DownerEmb, Node, Type]. Don't save it in temporary contexts (we already have it in another context).
+            const a = _allocArray(3); [a[0], a[1], a[2]] = [DownerEmb, Node, Type]
+            adjustSave('got value'), DownerEmb = null
             return a
           }
         } catch (err) {
@@ -9496,7 +9928,7 @@ Third is giving appropriate goals to embeddings, and saving embeddings (software
       if (getDAG.depth === undefined) {
         // We're top-level.
         getDAG.depth = getDAG.nodes = 0
-        try { return adjust(getDAG, ins, _, dout) }
+        try { return defines(getDAG, adjust)(ins, null, dout) }
         finally { getDAG.depth = getDAG.nodes = undefined }
       } else {
         // We've recursed.
@@ -9508,10 +9940,10 @@ Third is giving appropriate goals to embeddings, and saving embeddings (software
           if (dDownerEmb === undefined) {
             if (_isArray(GetCallArgs)) {
               // Adjust arg generation `return _getCall(Usages, DownerEmb, Type, Node)`.
-              const a = adjust(_getCall, GetCallArgs, null, dout)
+              const a = defines(_getCall, adjust)(GetCallArgs, null, dout)
               dUsages = a[0], dDownerEmb = a[1] || 0;  _allocArray(a)
               _disposeEachAndDealloc(GetCallArgs), GetCallArgs = null
-            } else if (GetCallArgs === null) {
+            } else if (GetCallArgs === 'got value') {
               // Adjust the returned value.
               dDownerEmb = dout[0] || 0
             } else
@@ -9520,7 +9952,7 @@ Third is giving appropriate goals to embeddings, and saving embeddings (software
 
           // Adjust the choice of what to generate: `[Usages, DownerEmb, Node, Type, IsCall] = _chooseWhatToGet(Usage, DownEmb, DownType)`.
           const a = _allocArray(2); a[0] = dUsages, a[1] = dDownerEmb
-          try { const r = adjust(_chooseWhatToGet, ins, null, a); _recDispose(dUsages), dispose(dDownerEmb); return r }
+          try { const r = defines(_chooseWhatToGet, adjust)(ins, null, a); _recDispose(dUsages), dispose(dDownerEmb); return r }
           finally { _allocArray(a) }
         } catch (err) {
           if (err === interrupt) interrupt.stack.push(GetCallArgs, dUsages, dDownerEmb)
@@ -9594,6 +10026,7 @@ Note: to save on memory, its \`adjust\`ment expects not \`Options\` in \`_ins\` 
       let [AdjInfo] = interrupt(1)
       try {
         if (AdjInfo === undefined) AdjInfo = adjustLoad(null) || null
+        if (AdjInfo === 'human chose') return [0,0,0,0]
         // We can re-use `ins` as inputs because they have the same order (and return `dins` without reshaping, too).
         return adjustNow(AdjInfo, alloc.params.GoalPredictor, ins, out, undefined)
       } catch (err) { if (err === interrupt) interrupt.stack.push(AdjInfo); else defines(adjustSave, _cancel)(AdjInfo);  throw err }
@@ -9627,7 +10060,7 @@ Used to reduce embedder/embedding trees that represent a func-as-value into one 
           if (dpost === undefined) dpost = adjust(f, post, null, dout)
           for (; i > 0; --i) {
             tmp[0] = e[i-1], tmp[1] = alloc.params.ValueReducer
-            const b = adjust(_recEmbed, tmp, post[i-1], dpost[i-1])
+            const b = defines(_recEmbed, adjust)(tmp, post[i-1], dpost[i-1])
             if (b === undefined) continue
             (din || (din = _allocArray(post.length)))[i-1] = b
           }
@@ -9640,11 +10073,31 @@ Used to reduce embedder/embedding trees that represent a func-as-value into one 
     dispose:true,
   },
 
+  _recAdd:{
+    docs:`\`add\` two trees of potential tensors.`,
+    interrupt:false,
+    call(a,b) {
+      if (_isArray(a) !== _isArray(b)) error("Tree mismatch:", a, b)
+      if (!_isArray(a)) return a === undefined ? _recKeep(b) : b === undefined ? _recKeep(a) : add(a, b)
+      else {
+        if (a.length != b.length) error("Tree mismatch:", a, b)
+        const o = _allocArray(a.length)
+        for (let i=0; i < a.length; ++i) o[i] = _recAdd(a[i], b[i])
+        return o
+      }
+    },
+  },
+
   _recKeep:{
     docs:`\`keep\` a tree of potential tensors.`,
     call(a) {
       if (!_isArray(a)) keep(a)
-      else a.forEach(_recKeep)
+      else {
+        if (!_recKeep.counts) _recKeep.counts = new WeakMap
+        a.forEach(_recKeep), _recKeep.counts.set(a, (_recKeep.counts.get(a) || 0) + 1)
+      }
+      return a
+      // .counts
     },
   },
 
@@ -9652,59 +10105,100 @@ Used to reduce embedder/embedding trees that represent a func-as-value into one 
     docs:`\`dispose\` a tree of potential tensors.`,
     call(a) {
       if (!_isArray(a)) dispose(a)
-      else a.forEach(_recDispose), _allocArray(a)
+      else {
+        a.forEach(_recDispose)
+        if (_recKeep.counts) {
+          if (_recKeep.counts.has(a)) _recKeep.counts.set(a, _recKeep.counts.get(a) - 1)
+          if (!_recKeep.counts.get(a)) _allocArray(a), _recKeep.counts.delete(a)
+        } else _allocArray(a)
+      }
     },
   },
 
   _getCall:{
     docs:`\`_getCall:StaticEmbTrees⇒DownEmb⇒NeedType⇒Func⇒(UpEmbTree&Node&OutputType)\`: generates args for a DAG node that calls \`Func\`, given embeddings.
-Uses \`alloc.'params'.'FuncReducer'\` on returned embeddings.
+Uses \`alloc.'params'.'CallReducer'\` on returned embeddings.
 
 Funcs-as-values produce embedding trees. Funcs-as-funcs always produce one embedding in \`UpEmbTree\`.
 
 (I can find fancy words for roles of each of these args, but that would make it seem like the top-down approach of "description first, code simply implements that" is more important than the bottom-up "other code needs these values with these semantics here, don't omit anything and don't magic up extras".)`,
     call(Usages, DownEmb, NeedType, Func) { // ⇒ `(UpEmbTree Node OutputType)`
-      if (!_isArray(Usages)) errorStack("Not an array:", Usages)
+      if (!_isArray(Usages)) errorStack("Not an array:", Usages, "with func", Func, "of type", NeedType)
       if (!_isArray(NeedType) || NeedType[0] !== funcType) errorStack("Not a func type:", NeedType, "of", Func)
       if (Usages.length-1 != NeedType.length-2) error("Expected", Usages.length-1, "args to generate but types need", NeedType)
-      let [Node = _allocArray(Usages.length), UpEmbs = _allocArray(Usages.length), j = 0, UpEmbTree, Constructed, ctx = _allocMap(), outType = null, adjSaveLength] = interrupt(8)
+      let [Node = _allocArray(Usages.length), UpEmbs = _allocArray(Usages.length), j = 0, sub = 0, UpEmbTree, Constructed, ctx = _allocMap(), outType = null, adjSaveLength] = interrupt(9)
       Node[0] = Func
       try {
         // Be ready to bail mid-regeneration, not adjusting whatever we made part-way.
         if (adjSaveLength === undefined) adjSaveLength = _isArray(call.env[_id(adjustSave)]) ? call.env[_id(adjustSave)].length : null
 
-        // Compute output's embedding.
-        UpEmbs[0] = _recEmbed(Usages[0], alloc.params.ValueReducer)
-
+        // Compute output's type and embedding.
+        //   (Pretend that we also call `ChoiceEmbedder` here, mirroring the `ctx`-filling.)
+        //     (We actually call it in `_chooseWhatToGet`.)
+        //     …This `ctx`-filling wouldn't be necessary if we just passed the context (not like we're creating any new information anyway, so this is a waste).
+        if (j === 0) {
+          if (UpEmbs[0] === undefined) UpEmbs[0] = _recEmbed(Usages[0], alloc.params.ValueReducer) || 0
+          const tp = _funcTypeOf(defines(Func, type))
+          if (_isArray(tp) && tp[0] === funcType) {
+            const outTp = typeRefine(NeedType[NeedType.length-1], tp[tp.length-1], ctx)
+            if (outTp === null)
+              error("We can't just fail to refine needed output type with wanted type:", NeedType[NeedType.length-1], tp[tp.length-1], 'in', new Map(ctx))
+          }
+          j = 1
+        }
         // Generate each arg (and don't forget to refine its type) (and don't forget its embedding).
-        if (j === 0 && _isArray(defines(Func, type)) && defines(Func, type)[0] === funcType)
-          typeRefine(NeedType[NeedType.length-1], defines(Func, type)[defines(Func, type).length-1], ctx), j = 1
-        for (; j < Node.length; ++j) {
-          // Type self-refinement can't interrupt, so we do `typeRefine`s synchronously here.
-          let arr = getDAG(Usages[j], DownEmb, typeRefine(NeedType[j], NeedType[j], ctx))
-          let UpType;  [UpEmbs[j], Node[j], UpType] = arr;  _allocArray(arr)
-          // If arg failed, we fail too. (It's pointless to re-generate it, because our choices would be the same.)
-          //   (The embedding in this case might not be the best, though.)
-          if (UpType === null) {
+        for (; j < Node.length; ++j, sub = 0, Constructed = undefined, outType = null) {
+          switch (sub) {
+            case 0:
+              // Compute the actual type from context.
+              //   (For embeddings, this is combined into `GoalPredictor`/`ChoiceEmbedder`.)
+              //     …Should it be, really?
+              Constructed = typeRefine(NeedType[j], NeedType[j], ctx)
+              if (Constructed === null)
+                error("We can't just fail to refine needed input type:", NeedType[j], 'in', new Map(ctx))
+            sub = 1;  case 1:
+              _humanDAGAsk(0, undefined, Constructed, ctx)
+            sub = 2;  case 2:
+              instance.visual && _humanDAGAsk(2, new Array(Node.length).fill().map((_,i) => i < j ? Node[i] : i === j ? input : null), _typeFinalize(typeRefine(NeedType, NeedType, ctx)), ctx)
+            sub = 3;  case 3:
+              // Actually generate.
+              let arr = getDAG(Usages[j], DownEmb, Constructed)
+              ;[UpEmbs[j], Node[j], outType] = arr;  _allocArray(arr)
+            sub = 4;  case 4:
+              // If arg failed, we fail too. (It's pointless to re-generate it, because our choices would be the same.)
+              //   (The embedding in this case might not be the best, though.)
+              //   (Can't interrupt, but it does consume the interrupt stack.)
+              if (outType === null || typeRefine(NeedType[j], outType, ctx) === null) { // Also fail if new knowledge invalidated our want.
+                // Also make sure that no instructions on how to adjust prev-args-regen are left.
+                const as = call.env[_id(adjustSave)]
+                if (_isArray(as)) as.splice(adjSaveLength, as.length).forEach(_disposeEachAndDealloc), as.length = adjSaveLength
+                return adjustSave('fail'), _allocMap(ctx), arr = _allocArray(3), arr[0] = keep(DownEmb), arr[1] = arr[2] = null, arr
+              }
+            sub = 5;  case 5:
+              alloc.world.NodeTypes[alloc.params.At].set(Node[j], _typeFinalize(outType))
+              instance.visual && _humanDAGAsk(1, Node, _typeFinalize(typeRefine(NeedType, NeedType, ctx)), ctx)
+          }
+        }
+
+        // Shadow arg-generation with types:
+        //   Refine the output type given context.
+        if (outType === null) {
+          outType = _typeFinalize(typeRefine(NeedType[NeedType.length-1], NeedType[NeedType.length-1], ctx))
+          if (outType === null) { // Also fail if new knowledge invalidated our want.
             // Also make sure that no instructions on how to adjust prev-args-regen are left.
             const as = call.env[_id(adjustSave)]
             if (_isArray(as)) as.splice(adjSaveLength, as.length).forEach(_disposeEachAndDealloc), as.length = adjSaveLength
             return adjustSave('fail'), _allocMap(ctx), arr = _allocArray(3), arr[0] = keep(DownEmb), arr[1] = arr[2] = null, arr
           }
-          typeRefine(NeedType[j], UpType, ctx)
         }
-        for (let i = 1; i < Node.length; ++i)
-          alloc.world.NodeTypes[alloc.params.At].set(Node[i], typeRefine(NeedType[i], NeedType[i], ctx))
-
-        // Preserve output/inputs embeddings if func-as-value, or reduce them if func-as-func.
-        if (outType === null)
-          outType = typeRefine(NeedType[NeedType.length-1], NeedType[NeedType.length-1], ctx),
-          outType === null && errorStack("We can't just fail to refine the type with itself, what is this")
+        // Shadow arg-generation with embeddings:
+        //   Preserve output/inputs embeddings as a tree if func-as-value, or reduce them into one tensor if func-as-func.
         if (UpEmbTree === undefined) {
-          if (_isArray(outType) && outType[0] === funcType)
-            UpEmbTree = UpEmbs || 0, adjustSave(null), UpEmbs = null
+          const tp = _funcTypeOf(outType)
+          if (_isArray(tp) && tp[0] === funcType)
+            UpEmbTree = UpEmbs || 0, adjustSave('got func'), UpEmbs = null
           else
-            UpEmbTree = _recEmbed(UpEmbs, alloc.params.FuncReducer) || 0, adjustSave(UpEmbs), UpEmbs = null
+            UpEmbTree = _recEmbed(UpEmbs, alloc.params.CallReducer) || 0, adjustSave(UpEmbs), UpEmbs = null
         }
 
         // `construct` if defined by the func.
@@ -9719,7 +10213,7 @@ Funcs-as-values produce embedding trees. Funcs-as-funcs always produce one embed
         _allocMap(ctx)
         return arr
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(Node, UpEmbs, j, UpEmbTree, Constructed, ctx, outType, adjSaveLength)
+        if (err === interrupt) interrupt.stack.push(Node, UpEmbs, j, sub, UpEmbTree, Constructed, ctx, outType, adjSaveLength)
         else _allocMap(ctx), _disposeEachAndDealloc(UpEmbs), dispose(UpEmbTree)
         throw err
       }
@@ -9730,22 +10224,22 @@ Funcs-as-values produce embedding trees. Funcs-as-funcs always produce one embed
 
       let [UpEmbs, dUpEmbs, j = Usages.length-1, dUsages, dDownEmb = 0] = interrupt(5)
       try {
-        // Adjust `UpEmbTree = _recEmbed(UpEmbs, FuncReducer)` or `UpEmbTree = UpEmbs`.
+        // Adjust `UpEmbTree = _recEmbed(UpEmbs, CallReducer)` or `UpEmbTree = UpEmbs`.
         if (UpEmbs === undefined) UpEmbs = adjustLoad(null) || null
         if (UpEmbs === 'fail') { // Failed, returning [DownEmb, null, null].
           const a = _allocArray(2);  a[1] = keep(dUpEmbTree);  return a
         }
         if (dUpEmbs === undefined) {
-          if (UpEmbs === null) {
+          if (UpEmbs === 'got func') {
             // Func-as-value (`UpEmbTree = UpEmbs`).
             dUpEmbs = dUpEmbTree
             _isArray(dUpEmbTree) && dUpEmbTree.forEach(keep)
           } else if (_isArray(UpEmbs)) {
             // Func-as-func.
-            const arr = _allocArray(2);  arr[0] = UpEmbs, arr[1] = alloc.params.FuncReducer
+            const arr = _allocArray(2);  arr[0] = UpEmbs, arr[1] = alloc.params.CallReducer
             try {
               // No `adjust`ment should need its own output.
-              const b = adjust(_recEmbed, arr, null, dUpEmbTree)
+              const b = defines(_recEmbed, adjust)(arr, null, dUpEmbTree)
               _disposeEachAndDealloc(UpEmbs), UpEmbs = null
               if (b !== undefined) dUpEmbs = b[0], _allocArray(b)
               else dUpEmbs = 0
@@ -9758,7 +10252,7 @@ Funcs-as-values produce embedding trees. Funcs-as-funcs always produce one embed
           let a1 = _allocArray(3);  a1[0] = Usages[j], a1[1] = DownEmb, a1[2] = NeedType[j]
           let a3 = _allocArray(1);  a3[0] = dUpEmbs && dUpEmbs[j]
           try {
-            const r = adjust(getDAG, a1, null, a3)
+            const r = defines(getDAG, adjust)(a1, null, a3)
             let du, dde;  [du, dde] = r;  _allocArray(r)
             if (du !== undefined) (dUsages || (dUsages = _allocArray(Usages.length)))[j] = du
             // Merge adjustments to `DownEmb` via adding up.
@@ -9770,7 +10264,7 @@ Funcs-as-values produce embedding trees. Funcs-as-funcs always produce one embed
         // Adjust `UpEmbs[0] = _recEmbed(Usages[0], ValueReducer)`.
         const a = _allocArray(2);  a[0] = Usages[0], a[1] = alloc.params.ValueReducer
         let du
-        try { du = adjust(_recEmbed, a, null, dUpEmbs && dUpEmbs[0]) }
+        try { du = defines(_recEmbed, adjust)(a, null, dUpEmbs && dUpEmbs[0]) }
         finally { _allocArray(a) }
         if (du !== undefined) (dUsages || (dUsages = _allocArray(1)))[0] = du
         _disposeEachAndDealloc(dUpEmbs), dUpEmbs = null
@@ -9782,7 +10276,7 @@ Funcs-as-values produce embedding trees. Funcs-as-funcs always produce one embed
         else _recDispose(dUsages), dispose(dDownEmb)
         throw err
       } finally {
-        if (UpEmbs || dUpEmbs) _disposeEachAndDealloc(UpEmbs), _disposeEachAndDealloc(dUpEmbs)
+        if (_isArray(UpEmbs) || dUpEmbs) _disposeEachAndDealloc(UpEmbs), _disposeEachAndDealloc(dUpEmbs)
       }
     },
     dispose:_(`_disposeEachAndDealloc`),
@@ -9791,15 +10285,19 @@ Funcs-as-values produce embedding trees. Funcs-as-funcs always produce one embed
   _chooseWhatToGet:{
     docs:`\`_chooseWhatToGet:Usage⇒DownEmb⇒DownType⇒(StaticEmbTrees&DownerEmb&Node&NeedType&IsCall)\`: chooses what \`getDAG\` should generate.
 
-If \`IsCall\` is \`false\` or \`null\`, \`Node\` is a DAG that computes a value (and \`NeedType\` is its one type). If \`IsCall\` is \`true\`, \`UseEmb\` is an array of embeddings of what needs to be generated (output-then-input), \`NodeType\` is \`funcType …?\`, and \`Node\` is the function to call. If \`IsCall\` is \`null\`, then \`Node\` doesn't deserve to be saved in temporary contexts.
+If \`IsCall\` is \`false\`, \`Node\` is a DAG that computes a value (and \`NeedType\` is its one type), and it doesn't deserve to be saved in temporary contexts.
+If \`IsCall\` is \`true\`, \`UseEmb\` is an array of embeddings of what needs to be generated (output-then-input), \`NodeType\` is \`funcType …?\`, and \`Node\` is the function to call.
 \`type\` computes \`NeedType\`.
 
 The head of an array \`DownType\` \`defines\` this with the func that will replace it as the head of the generated call (instead of choosing the func/value) (the rest of args are generated from the given types).`,
     call(Usage, DownEmb, DownType) { // ⇒ (StaticEmbTrees DownerEmb Node NeedType IsCall)
       if (_isArray(DownType) && defines(DownType, _chooseWhatToGet) !== undefined) {
         // Don't choose the func, it's right here.
-        const Emb = !_isArray(Usage) ? new Array(DownType.length).fill().map(() => _recKeep(Usage)) : _recKeep(Usage), Node = defines(DownType, _chooseWhatToGet)
-        const a = _allocArray(5);  [a[0], a[1], a[2], a[3], a[4]] = [Emb, DownEmb, Node, [DownType, ...DownType.slice(1)], true]
+        const Usages = !_isArray(Usage) ? new Array(DownType.length).fill().map(() => _recKeep(Usage)) : _recKeep(Usage)
+        const Type = [funcType, ...DownType.slice(1), DownType]
+        const Func = defines(DownType, _chooseWhatToGet)
+        if (Usages === undefined) error("Must not be undefined:", Usages, "made from", Usage)
+        const a = _allocArray(5);  [a[0], a[1], a[2], a[3], a[4]] = [Usages, DownEmb, Func, Type, true]
         return a
       }
       const ctxs = alloc.params.GenContexts
@@ -9810,7 +10308,7 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
           Fits = _filterContextsWithType(ctxs, DownType, alloc.params.Object, getDAG.depth < alloc.params.MaxDepth && getDAG.nodes < alloc.params.MaxDAGNodes)
           if (!Fits.length) { // Fail.
             _allocArray(Fits)
-            adjustSave(null)
+            adjustSave('no matches')
             const a = _allocArray(5);  [a[0], a[1], a[2], a[3], a[4]] = [null, keep(DownEmb), null, null, false]
             return a
           }
@@ -9836,8 +10334,26 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
         }
 
         // `_choose` the func/value among `UseAs` with `GoalPredictor`, then shadow the choice with `ChoiceEmbedder`.
+        //   (Pretend that we also shadow with `typeRefine(outType, outType, ctx = new Map)` here and return the `ctx`.)
+        //     (We actually fill the type context in `_getCall`, so that we can localize `ctx`.)
         if (UseAs !== null) {
-          if (maxI === undefined) maxI = _choose(alloc.params.Goal, UseAs, UsedIn, DownEmb)
+          if (maxI === undefined) {
+            if (!instance.visual)
+              maxI = _choose(alloc.params.Goal, UseAs, UsedIn, DownEmb)
+            else { // Human UI for explainability (show nodes and types, and no other info).
+              // `DownerEmb` poses as `types` here, to not allocate a new interrupt-state spot.
+                // `typeRefine` can't interrupt here, but it will consume interrupt-stack space.
+              const nodes = _allocArray(Fits.length>>>1), calls = _allocArray(Fits.length>>>1)
+              if (DownerEmb === undefined) DownerEmb = _allocArray(Fits.length>>>1)
+              for (let i = 0; i < Fits.length; i += 2)
+                nodes[i>>>1] = ctxs[Fits[i]][Fits[i+1]],
+                DownerEmb[i>>>1] === undefined && (DownerEmb[i>>>1] = typeRefine(ctxs[Fits[i]][Fits[i+1]+1], DownType)),
+                calls[i>>>1] = ctxs[Fits[i]][0]
+              maxI = _humanDAGAsk(3, nodes, DownerEmb, calls) || 0
+              DownerEmb = undefined
+              adjustSave('human chose')
+            }
+          }
           DownerEmb = alloc.params.ChoiceEmbedder(UseAs[maxI], UsedIn, DownEmb)
           { const c = _allocArray(1); c[0] = UsedIn; adjustSave(c); UsedIn = null }
 
@@ -9851,22 +10367,24 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
         }
 
         // To safeguard against (unlikely) multi-job regeneration, preserve variables across interrupts.
-        let [IsCall, Usages, Node] = interrupt(3)
+        let [IsCall, Usages, Node, NeedType] = interrupt(4)
         try {
-          let NeedType
           if (IsCall === undefined) {
             const mi = Fits[maxI*2], mj = Fits[maxI*2+1]
             _allocArray(Fits), Fits = null
             IsCall = !!ctxs[mi][0], Usages = ctxs[mi][mj+2], Node = ctxs[mi][mj]
+            if (Usages === undefined) error("In-context embedding is undefined in", ctxs, "at", mi, "at", mj)
             NeedType = ctxs[mi][mj+1]
-            if (!IsCall && (!_isArray(Node) || mi === ctxs.length-1)) IsCall = null
           }
-          if (IsCall === true) // Do what can interrupt.
+          const prevNeed = NeedType
+          if (IsCall === true) // Do what can interrupt: shadow the choice with type refinement.
             NeedType = defines(Node, type) !== undefined ? type(Node, DownType) : typeRefine(NeedType, DownType)
+          // TODO: …Why can't we return the context of refinement? Would be much more in-line with what embedding does.
+          //   (Right now, we are forced to refine it here (or in `type`) and then extract what we refined in `_getCall`. Pointless.)
+          if (NeedType === null) errorStack("We can't just fail to refine needed+wanted types:", prevNeed, DownType)
 
-          const a = _allocArray(5);  [a[0], a[1], a[2], a[3], a[4]] = [Usages, DownerEmb, Node, NeedType, IsCall]
-          return a
-        } catch (err) { if (err === interrupt) interrupt.stack.push(IsCall, Usages, Node);  throw err }
+          const a = _allocArray(5);  [a[0], a[1], a[2], a[3], a[4]] = [Usages, DownerEmb, Node, NeedType, IsCall];  return a
+        } catch (err) { if (err === interrupt) interrupt.stack.push(IsCall, Usages, Node, NeedType);  throw err }
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(Fits, Embedders, UseAs, UseAsAdjInfos, UsedIn, i, DownerEmb, maxI)
         else Fits && _allocArray(Fits), _disposeEachAndDealloc(Embedders), _disposeEachAndDealloc(UseAs), UseAsAdjInfos && UseAsAdjInfos.forEach(_disposeEachAndDealloc), dispose(UsedIn), dispose(DownerEmb)
@@ -9879,9 +10397,14 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
       const [dUsages, dDownerEmb] = dout
 
       if (_isArray(DownType) && typeof defines(DownType, _chooseWhatToGet) == 'function') {
-        // Adjust `return [new Array(DownType.length).fill(Usage), DownEmb, Node, FuncType, true]`.
-        const a = _allocArray(2); [a[0], a[1]] = [!_isArray(Usage) ? new Array(DownType.length).fill().map(() => _recKeep(dUsages)) : _recKeep(dUsages), keep(dDownerEmb)]
-        return a
+        // Adjust `return [!_isArray(Usage) ? new Array(DownType.length).fill(Usage) : Usage, DownEmb, Node, FuncType, true]`.
+        let added = !_isArray(Usage) ? undefined : _recKeep(dUsages)
+        if (!_isArray(Usage) && dUsages)
+          for (let i=0; i < dUsages.length; ++i) {
+            const next = _recAdd(added, dUsages[i])
+            _recDispose(added), added = next
+          }
+        const a = _allocArray(2);  [a[0], a[1]] = [added, keep(dDownerEmb)];  return a
       }
 
       let [MaxUseAsAdjInfo, MaxEmbeddersAndUseAs, dMaxUseAs, UsedIn, dUsedIn, dDownEmb, chosen] = interrupt(7)
@@ -9889,14 +10412,14 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
         // Load what we'd need to adjust `_recEmbed(Embedders[maxI], ValueReducer)` after the choice.
         if (MaxEmbeddersAndUseAs === undefined) {
           MaxEmbeddersAndUseAs = adjustLoad(null) || null
-          if (MaxEmbeddersAndUseAs === null) { // We failed (and returned [null, DownEmb, null, null, false]).
-            const a = _allocArray(2);  a[0] = keep(dUsages), a[1] = keep(dDownerEmb)
+          if (MaxEmbeddersAndUseAs === 'no matches') { // We failed (and returned [null, DownEmb, null, null, false]).
+            const a = _allocArray(2);  a[0] = _recKeep(dUsages), a[1] = keep(dDownerEmb)
             return a
           }
           if (!_isArray(MaxEmbeddersAndUseAs))
             error("Inexact reversal with:", MaxEmbeddersAndUseAs)
           if (MaxEmbeddersAndUseAs.length != 2)
-            error("Inexact reversal with:", MaxEmbeddersAndUseAs.slice())
+            errorStack("Inexact reversal with:", MaxEmbeddersAndUseAs.slice())
         }
         if (MaxUseAsAdjInfo === undefined) {
           MaxUseAsAdjInfo = adjustLoad(null) || null
@@ -9916,7 +10439,7 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
         if (chosen === null) {
           const a = _allocArray(4);  [a[0], a[1], a[2], a[3]] = [alloc.params.Goal, MaxEmbeddersAndUseAs[1], UsedIn, DownEmb]
           try {
-            const b = adjust(_choose, a, null, undefined) // Assume that `GoalPredictor` doesn't care about outputs (as `func`s don't).
+            const b = defines(_choose, adjust)(a, null, undefined) // Assume that `GoalPredictor` doesn't care about outputs (as `func`s don't).
             let dmua, dui, dde;  [dmua, dui, dde] = [b[1], b[2], b[3]]
             dispose(b[0]), _allocArray(b)
             if (dmua) { const x = add(dMaxUseAs, dmua);  dispose(dMaxUseAs), dMaxUseAs = x }
@@ -9936,7 +10459,7 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
         }
         // Adjust `UsedIn = _recEmbed(Usage, alloc.params.ValueReducer) || 0`.
         const a = _allocArray(2);  a[0] = Usage, a[1] = alloc.params.ValueReducer
-        const dUsage = adjust(_recEmbed, a, null, dUsedIn) || 0;  _allocArray(a)
+        const dUsage = defines(_recEmbed, adjust)(a, null, dUsedIn) || 0;  _allocArray(a)
 
         // Return [dUsage, dDownEmb].
         const r = _allocArray(2)
@@ -9954,14 +10477,14 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
     docs:`\`_saveCreatedNode EmbtreeNodeType ActuallyDo\`
 Saves the created embedding/node/type into a temporary context in \`alloc.'params'.'GenContexts'\` (either of funcs or values, depending on the type).
 (The input array can be disposed afterwards.)`,
-    call(EmbtreeNodeType, actuallyDo = true) {
-      if (!actuallyDo) return EmbtreeNodeType
+    call(EmbtreeNodeType) {
       const [Embtree, Node, Type] = EmbtreeNodeType
       if (Node === null) return EmbtreeNodeType
       alloc.world.NodeTypes[alloc.params.At].set(Node, Type)
       const ctxs = alloc.params.GenContexts
-      const ctx = _isArray(Type) && Type[0] === funcType ? ctxs[8] : ctxs[9] // See `_equalizeContexts`.
-      pushToContext(ctx, Node, Type, _recKeep(Embtree))
+      const tp = _funcTypeOf(Type)
+      const ctx = _isArray(tp) && tp[0] === funcType ? ctxs[8] : ctxs[9] // See `_equalizeContexts`.
+      pushToContext(ctx, Node, tp, _recKeep(Embtree))
       if (ctx.length > alloc.params.MaxSavedNodes) {
         // Remove half of temporary nodes if we're over the limit.
         const begin = ((ctx.length-1)/3)>>>1
@@ -10012,9 +10535,11 @@ So, remember, even through darkest times: you will always love me.
 Before we continue, we must understand exactly how we will specify and use types.
 
 Program generation (\`getDAG\`) either {picks-and-returns a value} or {picks a function and recurses to generate its arguments}.
-To give this process human-defined structure, generation is augmented with types: also given a type statically (attached to the value/func candidate), also given a type dynamically (wants), also return a type (\`instance\` omits the returned type, and only gives the value).
+To give this process human-defined structure, generation is augmented with types: also given a type statically (attached to the value/func candidate), also given a type dynamically (wants), also return a type (is) (\`instance\` omits the returned type, and only gives the value).
 
-In particular, a value candidate will have its static type \`typeRefine\`d with the dynamic (wanted) type, and a func candidate will have the type of its output (\`a⇒b⇒outputType\`) \`typeRefine\`d with the dynamic (wanted) type.
+In particular, any value/func will have its static/output type \`typeRefine\`d with the dynamic (wanted) type, and the non-\`null\` one is picked. This creates the type context. (Down.)
+If making a call, we also generate func args, progressively refining the type context with the returned refined types. (Right.)
+Then we return the refined output type. (Up.)
 
 \`typeRefine\` refines equal-length arrays item-wise, and non-arrays must be reference-equal. \`null\` indicates failure.
 We can also have type variables (a \`'string'\`), and a context that holds their values (the same for each generated call).
@@ -10026,13 +10551,13 @@ Some examples of type refinement (feel free to change):`,
       ],
       [
         _(`fancier`),
-        `typeRefine ^(1 2 2) ^('a' 'b' 'b')`,
+        `typeRefine ^(1 2 'c') ^('a' 'b' 'b')`,
       ],
       [
         _(`fancier`),
-        `typeRefine arrayType('a')⇒'a' arrayType(tensorType ^(1 2 3))⇒tensorType(^(1 2 3))`,
+        `typeRefine arrayType('a',5)⇒'a' arrayType(tensorType ^(1 2 3),5)⇒tensorType(^(1 2 3))`,
       ],
-      `That was an account of how we generate DAGs (directed acyclic graphs: here, a network of arrays without cycles-like-\`a a:(0 1 2 a 4 5)\`; a \`call\`'s output (array) can be another \`call\`'s input (array item)).
+      `That was an account of how we generate DAGs (Directed Acyclic Graphs: here, a network of arrays without cycles-like-\`a a:(0 1 2 a 4 5)\`; a \`call\`'s output (array) can be another \`call\`'s input (array item)).
 
 But the general case of arbitrary connectivity also includes cycles (for example, in function graphs, such cycles are named "recursion").
 
@@ -10078,7 +10603,7 @@ But in the simple case of one func, we exclude self-recursion because we cannot 
         _(`fancier`),
         `instance ^funcType(0,2) ^(B C)`,
       ],
-      `Don't worry about what exactly the generated \`autoFunc\`s are, or what the \`docs\` say.
+      `Don't worry about what exactly the \`docs\` say the generated \`autoFunc\`s are.
 Suffice to say, they're surprise tools that will help us out later.
 For now, let the voice of love guide you to the light.
 
@@ -10089,7 +10614,7 @@ Do it several times. Often, the body will be \`null\`, indicating failure (we do
 `,
       [
         _(`fancier`),
-        `instance ^funcType(arrayType(0),0) ^(A getLast loop (concept type 0⇒0⇒0 call add))`,
+        `instance ^funcType(arrayType(0,'a'),0) ^(A getLast loop (concept type 0⇒0⇒0 call add))`,
       ],
       `The thing above may not generate complex structure often, because the generality of types of \`getLast\`/\`loop\` misleads like the devil, but it does happen. For those cases, how about \`\`settings ^_whetherToColorVariables\`\`? Your world, your rules.
 
@@ -10098,10 +10623,40 @@ A \`concept\` \`defines\` functions. This is used very often in Conceptual, so w
 For example, definitions of \`adjust\` should be like:`,
       [
         _(`fancier`),
-        `instance ^(conceptType call funcType(A,B,O) adjust DAGType(A&B,_ins _out _dout,A&B O O)) ^((concept type A⇒B⇒O call mul) (concept type O⇒A call exp) (concept type O⇒B call log))`,
-        // TODO: fix `tupleType`'s shortcomings.
+        `D:(concept type 0⇒1⇒2 call mul)`,
+      ],
+      [
+        _(`fancier`),
+        `E:(concept type 2⇒0 call exp)`,
+      ],
+      [
+        _(`fancier`),
+        `F:(concept type 2⇒1 call log)`,
+      ],
+      [
+        _(`fancier`),
+        `instance ^(conceptType call funcType(A,B,O) adjust DAGType(A&B,_ins _out _dout,A&B O O)) ^(D E F) A:0 B:1 O:2`,
       ],
       `You've done well so far.
+
+["Eyes. Grant us eyes."]
+Oh.
+That's right.
+Bugs can only be rooted out with perfect control over their environment.
+Experiencing what an algorithm experiences is the best way to understand it, and so it's the only way.
+
+How about this:`,
+      [
+        _(`fancier`),
+        `instance ^DAGType(0&1,_ins _out _dout,0&1 2 2) ^(D E F) true`,
+        function() { return true },
+      ],
+      `It's not a very polished UI because I'm tired of making them, but it's good enough.
+
+I'd recommend returning to that \`loop\`/\`getLast\`-using example and adding \`true\` at the end, and playing around with it to get an intuition.
+An example insight is that \`getLast\` often tries to look for arrays with items of non-existent types, failing the generation.
+Another is that \`loop\` is almost never used by random picking, but manual picking can easily know what to avoid and compose 9-loops-deep towers.
+
 
 Next, we'll be annotating some useful functions of \`Self\` with types.
 It's like crawling along the ground, I know, but we cannot automatically generate anything without this.
@@ -10115,38 +10670,74 @@ We have \`\`definedBy(type).'length'\`\` \`type\`d functions: \`\`elemCollapse \
 Users ought to use them all, meaning that \`definedBy(type)\` should be the generative context.
 
 We have \`exp\`, typed \`\`defines exp type\`\`.
+We have \`zeros\`, typed \`\`defines zeros type\`\`.
 We have \`matMul\`, typed \`\`defines matMul type\`\`.
 Machine learning is gone, reduced to atoms.
 
-We have \`zeros\`, typed \`\`defines zeros type\`\`.
 We have \`last\`, typed \`\`defines last type\`\`.
+We have \`transform\`, typed \`\`defines transform type\`\`.
+We have \`loop\`, typed \`\`defines loop type\`\`.
 Space of programs rapidly expands.
 
+We have \`try\`, typed \`\`defines try type\`\`.
 We have \`timeLimit\`, typed \`\`defines timeLimit type\`\`.
 We have \`select\`, typed \`\`defines select type\`\`.
 Everything of value becomes isolated islands in a sea of darkness, impossible to see or reach.
 Eternal greatness exists only within humans.
 Sing a song of sorrow in a world
 where love has perished.
-  // TODO: Remove \`_anyTensorType\`/\`_anyNumOrTensorType\`/\`_numberType\`, preferring numbers instead (for prettiness/explicitness).
-  // TODO: \`conceptType\`s that define \`call\` must be considered callable too, with the \`funcType\` visible for arg-counting and such.
-
-  // TODO: …No way around it. If we want to dream big, we have to attempt big: we have to put \`instance Whatever definedBy(type)\` — global reach.
 `,
-      [],
-      ``, // TODO: Analyze what went wrong (mostly the fact that we ).
-      [],
-      ``,
-      [],
-      ``,
-      [],
-      ``,
-      [],
-      ``,
-      [],
-      ``,
-      [],
-      ``,
+      [
+        _(`fancier`),
+        `instance arrayType(tensorType 64,'Length')⇒tensorType(64) definedBy(type) true`,
+        function() { return true },
+      ],
+      `I spent so long fixing bugs, I forgot what the narration was supposed to be.
+Many are still un-fixed, but most do not complain by throwing \`error\`s.
+Good enough for now. I've had enough.
+
+Um…
+
+Ah, yes, look at how many \`null\`s there are in random generation, and how pointless the non-\`null\` functions are.
+And when picking manually, look at how many superfluous options like \`timeLimit\` or (often) \`getLast\` there are. Useless as long as we have no functions that we'd like to call/limit, or arrays of what we need, that is.
+
+What went wrong with random typed generation?
+
+There are two things, actually: random and typed.
+
+  🖤 Random.
+      This system picks randomly (technically, \`instance\` makes \`getDAG\` pick the option with the max \`randomFloat()\`), whereas your brain is even incapable of that, having to rely on dice and such for random number generation.
+      You maximize something else: a prediction that depends on where you are in the generation, extremely vaguely described as "how interesting is this".
+      The UI suggests that it is inferred from reading the half-complete state \`\`elem 'text' '(In machine learning, this suggests GPT models)'\`\`, but you can also follow the process and infer it from the history of what args we need and what calls we created (down then right then up the call tree), which also is exactly the flow of type computation \`\`elem 'text' stringToDoc('(In machine learning, this means recurrent and recursive NNs combined — though \`getDAG\` only allows the recursive aspect… Pro: potential parallelization, con: a special case)')\`\`.
+      …The prediction for an option could also depend on other options \`\`elem 'text' 'such as "(do we have arrays of this type, or could we make, or do we even want to")'\`\`. \`getDAG\` (and its \`GoalPredictor\`) imposes separation of options, though, which can allow great efficiency but is also a special case.
+      This covers all possible inferences anyone could make from recursively-picked arrays of options (which creates DAGs for our \`func\`tions).
+
+  🖤 Typed.
+      This system shadows every generated value (DAG node) with its type, which is a thing with pre-defined refinement rules with some properties (mostly transitivity and associativity).
+      Language of types is Turing-complete \`\`elem 'text' '(at least in theory; my own version/implementation might be bad)'\`\`, and is useful for low-level code and proof checking, but not much else.
+      ["But types are great for ① describing all possible behaviors and side-effects of functions, ② documenting code, and ③ ensuring user mistakes are impossible."]
+      Boy. Your definition of "great" needs work. It's probably the Stockholm syndrome talking.
+      ① Where's the "this is probably fast/slow" type? Where's the "this particular arrangement of functions will delete all files" type, or the "this particular arrangement of functions is likely to cause this much dopamine to be released in this user's brain" type?
+      ② Don't try to shore up deficiencies of picking systems (such as randomness) with more precise type systems. Don't pretend that you know everything.
+      ③ There is another way of making mistakes impossible: make users never make mistakes, and deliver all information perfectly. A programming environment can deliver things precisely (which is why Conceptual is a programming environment too). And if you control the user, such as if it is a program that you make, then just… fix bugs, and allow learning from mistakes.
+
+
+Well, if random typed generation is so bad, then the natural question is: what will replace it?
+Have you ever heard about reinforcement learning, and machine learning? \`\`elem 'text' '(You thought I would add something here, but I won''t.)'\`\`
+Have you ever heard of learnable embeddings of operations? \`\`elem 'text' '(For example, MuZero learns to plan: shadow all environment responses to its actions and unroll action sequences.)'\`\`
+
+But that's another story for another day.
+
+
+
+For now, have this snack, you've earned it: 🥔🥕🍄.
+
+And click this button too, you've earned it: \`\`button (jsEval "function() { localStorage.Types = '1' }") "completedTypes" "Unlocks neural DAG regeneration."\`\`.
+
+And have these \`REPL\`s too, you've earned it: \`\`elemCollapse func(REPL fancier)\`\` \`\`elemCollapse func(REPL fancy)\`\` \`\`elemCollapse func(REPL basic)\`\` \`\`elemCollapse func(REPL stringLanguage)\`\`.
+
+
+With this initial crack at auto-regeneration completed, \`tutorial regenerate\` is now unlocked. Check it out, and goodbye.`,
     ],
     readAt:{
       DAGType:_(`DAGType`),
@@ -10170,15 +10761,15 @@ where love has perished.
     docs:`What? To compute a 100-element tensor, you need a 200-element tensor? Not a problem!
 \`computeType Computer VarName\`: to refine, computes the type from other variables.
 In \`type\`s of functions, only put this in inputs, not the output. And depend only on vars in either output or previous inputs.
-\`VarName\` is optional. \`Computer\` is a function from the matching context (a \`map\`) and the matched type to the computed type (which is refined with \`VarName\` if that is present).`,
+\`VarName\` is optional. \`Computer\` is a function from the matching context (a \`map\`) and the matched type to the computed type (which is refined with \`VarName\` if that is present) and the "are matched types equal"/"should we return self if the type cannot be computed" bool, to the type or \`undefined\`.`,
     typeRefine(a,b) {
       if (_isArray(b) && b[0] === computeType) [a,b] = [b,a]
       if (_isArray(a) && a[0] === computeType) {
         let [T] = interrupt(1)
         try {
-          if (T === undefined) T = a[1](typeRefine.ctx, b), T === undefined && (T = _onlyUndefined)
+          if (T === undefined) T = a[1](typeRefine.ctx, b, a === b), T === undefined && (T = _onlyUndefined)
           if (T === null) return null
-          return !a[2] ? (T !== _onlyUndefined ? T : undefined) : typeRefine(T !== _onlyUndefined ? T : undefined, a[2])
+          return !a[2] ? (T !== _onlyUndefined ? T : undefined) : a[2] === undefined ? T : T !== _onlyUndefined ? _resolveTypeVar(typeRefine(T, a[2])) : a !== b ? a[2] : a
         } catch (err) { if (err === interrupt) interrupt.stack.push(T);  throw err }
       }
       error()
@@ -10236,7 +10827,7 @@ Generating this generates \`array …Instances\`.`,
       if (uniform) // If all disposers are the same, do .forEach instead of case-by-case disposing.
         try { return [(function(itemDispose) { return function(x) {
           if (_isArray(x)) x.forEach(itemDispose), _allocArray(x)
-        }})(disposers[0])] } finally { _allocArray(disposers), _allocArray(upTp) }
+        }})(disposers[0]), merged(upTp)] } finally { _allocArray(disposers), _allocArray(upTp) }
       try { return [getDisposer(disposers), merged(upTp)] } finally { _allocArray(upTp) }
       function getDisposer(itemDisposers) { return function(x) {
         if (!_isArray(x)) return
@@ -10249,7 +10840,7 @@ Generating this generates \`array …Instances\`.`,
 
   arrayType:{
     merged:true,
-    docs:`\`arrayType Type\`: the type of homogenously-typed arrays of unknown length (each item has the same type).`,
+    docs:`\`arrayType Type Length\`: the type of homogenously-typed arrays of possibly-unknown length (each item has the same type).`,
     typeAdjustmentMerger(tp) {
       if (_isArray(tp[1]) && tp[1][0] === tensorType)
         return [_mergeArrays, arrayType]
@@ -10266,7 +10857,7 @@ Generating this generates \`array …Instances\`.`,
       try { return [getDisposer(sub[0]), merged([arrayType, sub[1]])] } finally { _allocArray(sub) }
       function getDisposer(itemDispose) { return function(x) { if (_isArray(x)) x.forEach(itemDispose), _allocArray(x) } }
     },
-    call(t) { return merged([arrayType, t])},
+    call(t,l) { return merged([arrayType, t, l])},
   },
 
   boolsType:{
@@ -10322,15 +10913,15 @@ Allows accepting and returning functions with a known signature.
           // Adjust `return _recEmbed(UpEmbTree, alloc.params.ValueReducer)`.
           if (dUpEmbTrees === undefined) {
             const a = _allocArray(2);  a[0] = UpEmbTree, a[1] = alloc.params.ValueReducer
-            try { dUpEmbTrees = adjust(_recEmbed, a, null, dout[0]) } finally { _allocArray(a) }
+            try { dUpEmbTrees = defines(_recEmbed, adjust)(a, null, dout[0]) } finally { _allocArray(a) }
           }
           // Adjust `[UpEmbTree] = getDAG(ExternalEmbTree, InternalEmb, Type)`.
           const ins2 = _allocArray(3);  [ins2[0], ins2[1], ins2[2]] = [ins[0], ins[1], ins[2][ins[2].length-1]]
           const d2 = _allocArray(1);  d2[0] = dUpEmbTrees
-          try { return adjust(getDAG, ins2, null, d2) }
+          try { return defines(getDAG, adjust)(ins2, null, d2) }
           finally { _allocArray(d2), _allocArray(ins2) }
         } catch (err) { if (err === interrupt) interrupt.stack.push(UpEmbTree, dUpEmbTree), dUpEmbTrees = null;  throw err }
-        finally { if (dUpEmbTrees !== null) dispose(UpEmbTree), _recDispose(dUpEmbTrees[0]), _allocArray(dUpEmbTrees) }
+        finally { if (dUpEmbTrees !== null) dispose(UpEmbTree), dUpEmbTrees && (_recDispose(dUpEmbTrees[0]), _allocArray(dUpEmbTrees)) }
       },
     },
     createLocalContexts(Type, EmbTree) {
@@ -10338,8 +10929,12 @@ Allows accepting and returning functions with a known signature.
       if (Type.length-1 !== EmbTree.length) error("???")
       if (EmbTree.length === 1) return
       const InnerCtxF = [true], InnerCtxV = [false]
-      for (let i = 1; i < Type.length-1; ++i)
-        pushToContext(_isArray(Type[i]) && Type[i][0] === funcType ? InnerCtxF : InnerCtxV, _input(i), Type[i], EmbTree[i])
+      for (let i = 1; i < Type.length-1; ++i) {
+        const tp = _funcTypeOf(Type[i])
+        if (_isArray(tp) && tp[0] === funcType)
+          pushToContext(InnerCtxF, _input(i), tp, EmbTree[i])
+        pushToContext(InnerCtxV, _input(i), tp, EmbTree[i])
+      }
       return [InnerCtxF, InnerCtxV]
     },
   },
@@ -10352,16 +10947,16 @@ Allows accepting and returning functions with a known signature.
       //   Not the most accurate (would have needed type union for that), but it is good enough to suggest the possibility, without investing too much time in case it turns out to be useless.
       let [i = 1] = interrupt(1)
       try {
-      if (_isArray(a) && a[0] === sumType)
-        for (; i < a.length; ++i) {
-          const T = typeRefine(a[i], b)
-          if (T !== null) return T
-        }
-      else if (_isArray(b) && b[0] === sumType)
-        for (; i < b.length; ++i) {
-          const T = typeRefine(a, b[i])
-          if (T !== null) return T
-        }
+        if (_isArray(a) && a[0] === sumType)
+          for (; i < a.length; ++i) {
+            const T = typeRefine(a[i], b)
+            if (T !== null) return T
+          }
+        else if (_isArray(b) && b[0] === sumType)
+          for (; i < b.length; ++i) {
+            const T = typeRefine(a, b[i])
+            if (T !== null) return T
+          }
       } catch (err) { if (err === interrupt) interrupt.stack.push(i);  throw err }
       return null
     },
@@ -10387,8 +10982,8 @@ Allows accepting and returning functions with a known signature.
         upTp[i] = sub[1], _allocArray(sub)
         if (curDisp != null) {
           if (disp === null) disp = curDisp, dispTp = tp[i]
-          else (disp !== curDisp)
-          error("All disposers of a sumType must be the same or null, got", curDisp, disp, "in", tp[i], dispTp)
+          else if (disp !== curDisp)
+            error("All disposers of a sumType must be the same or null, got", curDisp, disp, "in", tp[i], dispTp)
         }
       }
       try { return [disp, merged(upTp)] } finally { _allocArray(upTp) }
@@ -10396,11 +10991,103 @@ Allows accepting and returning functions with a known signature.
     call(...a) { return merged([sumType, ...a]) },
   },
 
+  _humanDAGBegin(tp) {
+    const lang = _langAt(), binds = _bindingsAt()
+    const det = elem('details', elem('summary', ['Choose the func/value', ' typed ', serialize(_typeFinalize(tp), lang, binds, serialize.displayed)]))
+    det.open = true
+    print(det)
+    return [det]
+  },
+
+  _humanDAGAsk(which, nodes, types, calls) { // → maxI
+    if (!instance.visual) return
+    const depth = getDAG.depth-1
+    const det = instance.visual[depth]
+    if (!det) errorStack("Bad visual handling at depth", depth, "with depth-elems", ...instance.visual)
+    const lang = _langAt(), binds = _bindingsAt()
+    if (which === 0) {
+      // If `_getCall` told us the type of the next node, set the next summary to it.
+      const firstEntry = !instance.visual[depth+1]
+      if (instance.visual[depth+1]) return
+      if (firstEntry)
+        instance.visual[depth+1] = elem('details', elem('summary', [
+          'Choose the func/value',
+          ' typed ',
+          elem('div'),
+        ]))
+      const det2 = instance.visual[depth+1]
+      elemValue(det2.firstChild.lastChild, undefined, true, true)
+      det2.firstChild.lastChild.replaceWith(elemCollapse(serialize(_typeFinalize(types), lang, binds, serialize.displayed)))
+      if (firstEntry) {
+        det2.open = true
+        if (det.firstChild === det.lastChild) det.append(elem('div'))
+        elemValue(det.lastChild, undefined, true, true)
+        det.lastChild.replaceWith(det2)
+        _updateBroken(det)
+      }
+      return
+    } else if (which === 1 || which === 2) {
+      // If `_getCall`/`getDAG` told us the new node, update the visual representation of it.
+      const summary = det.firstChild
+      elemValue(summary.firstChild, undefined, true, true)
+      if (!depth || which === 2) {
+        summary.firstChild.replaceWith(serialize(nodes, lang, binds, serialize.displayed))
+        summary.lastChild.replaceWith(elemCollapse(serialize(_typeFinalize(types), lang, binds, serialize.displayed)))
+      }
+      if (which === 1) { // If we have the result, cull this tree.
+        instance.visual[depth+1] && instance.visual[depth+1].remove()
+        instance.visual.length = depth+1
+      }
+      _updateBroken(summary)
+      return
+    }
+    // Else, `nodes` and `types` are equally-sized arrays, and the user must pick one option.
+    let [weDecided] = interrupt(1)
+    try {
+      if (weDecided) return weDecided.index
+      // If our first time, present the interface: a button to pick, the picked node, and the type.
+      weDecided = Object.create(null)
+      let job, before
+      const onClick = function() {
+        ourElems.remove()
+        weDecided.index = +this.textContent
+        _jobResume(...job), job = undefined
+        // Show the pause-button.
+        before.style.removeProperty('display')
+      }
+      const ourElems = elem('table', elem('tr', [elem('td'), elem('td'), elem('td', 'Option'), elem('td', 'Type')]))
+      for (let i = 0; i < nodes.length; ++i) {
+        const row = ourElems[i] = elem('tr')
+        const pickThis = elemValue(elem('button', ''+i), input)
+        const node = serialize(nodes[i], lang, binds, serialize.displayed)
+        const tp = serialize(types[i], lang, binds, serialize.displayed)
+        row.append(elem('td', pickThis), elem('td', calls[i] ? 'Call' : 'Value'), elem('td', node), elem('td', tp))
+        ourElems.append(row)
+        pickThis.onclick = onClick
+      }
+      det.append(ourElems)
+
+      // Interrupt, re-enter when clicked.
+      const toReEnter = (expr, env, then) => {
+        _jobs.limbo.push(expr, env, then)
+        job = [expr, env, then]
+        // Hide the pause-button.
+        before = env[_id(print)] || Self.into
+        if (before instanceof Map) before = before.get(print)
+        before.style.display = 'none'
+      }
+      _causeInterrupt(_humanDAGAsk, toReEnter)
+    } catch (err) { if (err === interrupt) interrupt.stack.push(weDecided);  throw err }
+  },
+
   instance:{
-    docs:`\`instance Type Globals\`: generates a random instance of a \`Type\` in the context \`Globals\`.
+    docs:`\`instance Type Globals AskUser\`: generates a random instance of a \`Type\` in the context \`Globals\`.
+If \`AskUser\` is \`true\`, you are asked what to pick at each choice (instead of RNG gods).
 If this throws, then the implementation is wrong.`,
-    call(Type, Globals = []) {
-      let [aw, obj] = interrupt(2)
+    call(Type, Globals = [], AskUser) {
+      if (instance.visual) error("Instancing-while-instancing is illegal")
+      let [aw, obj, visual = AskUser ? _humanDAGBegin(Type) : undefined] = interrupt(3)
+      instance.visual = visual
       try {
         // Create an `autoWorld` just for this one object. Wasteful, but easy.
         if (aw === undefined) {
@@ -10412,16 +11099,15 @@ If this throws, then the implementation is wrong.`,
             EmbedderMaker: () => f,
             GoalPredictor: () => Math.random(),
             ChoiceEmbedder:f,
-            FuncReducer:f,
+            CallReducer:f,
             ValueReducer:f,
           })
         }
         if (obj === undefined)
           obj = alloc(Type, {Goal:'no'}, aw), obj === undefined && (obj = null)
-        print(aw) // ######################################
-        // TODO: Make things that check for `funcType` to know whether they have a call instead call some function that also checks for `conceptType`.
         return using(obj, aw)
-      } catch (err) { if (err === interrupt) interrupt.stack.push(aw, obj);  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(aw, obj, visual), aw = null;  throw err }
+      finally { instance.visual = undefined, visual && aw !== null && visual[0].remove() }
     },
   },
 
@@ -10435,8 +11121,8 @@ In input types (both returned and defined arrays), \`undefined\` means "anything
 The only purpose of these types is to guide program generation, on the most fundamental level. Some things just cannot be learned by trial-and-error (like device drivers without a device generating process), or it's completely pointless to learn them (like correct tensor dimensions).
 (This is completely opposite of the usual type inference and proofs. We want to {learn what's OK}, not {pre-define everything then someday have to un-learn that}.)`,
     call(Func, Wanted) { // Wanted === DownType
-      if (typeof Func != 'function') return null
-      const def = defines(Func, type)
+      if (typeof Func != 'function' && defines(Func, construct) === undefined) return null
+      const def = _funcTypeOf(defines(Func, type))
       if (!_isArray(def) || def[0] !== funcType || def.length <= 1) error("Expected a func type, but got", def, "in", Func)
       const T = typeRefine(Wanted, def[def.length-1])
       if (T === null) return null
@@ -10450,35 +11136,46 @@ The only purpose of these types is to guide program generation, on the most fund
 
   typeRefine:{
     docs:`\`typeRefine WantedType HaveType\`: returns the type of values that are both in \`WantedType\` and \`HaveType\`, or \`null\` if failed.
-\`undefined\` always matches, ref-equal types always match, strings act as variables, and arrays match if every item matches (there is no caching, so trees are strongly preferred to DAGs).
+Ref-equal types always match, strings act as variables, and arrays match if every item matches (there is no caching, so trees are strongly preferred to DAGs).
 Any type can override the matching.`,
     call(a,b, ctx) {
       if (typeRefine.ctx === undefined) {
         // Top-level.
         typeRefine.ctx = ctx || _allocMap(), typeRefine.depth = 0
-        try { return typeRefine(a,b) }
+        try { return ctx ? typeRefine(a,b) : _typeFinalize(typeRefine(a,b)) }
         finally { !ctx && _allocMap(typeRefine.ctx), typeRefine.ctx = typeRefine.depth = undefined }
       } else try {
         ++typeRefine.depth
         if (ctx !== undefined) error("Cannot be top-level but got", ctx)
-        if (typeRefine.depth >= 256) return a
-        if (a === undefined) a = b
-        if (b === undefined) b = a
+        ctx = typeRefine.ctx
+        if (typeRefine.depth >= 1024) return null // We're *probably* merging infinite trees. Maybe.
 
         // Naked strings act as variables: they're set to the refined value, now and later.
-        //   (WantedType (a) probably shouldn't contain variables to avoid collisions.)
-        if (a === b && typeof a == 'string')
-          return typeRefine.ctx.has(a) ? typeRefine.ctx.get(a) : a
-        if (typeof a == 'string')
-          return typeRefine.ctx.set(a, typeRefine(typeRefine.ctx.get(a), b)), typeRefine.ctx.get(a)
-        if (typeof b == 'string')
-          return typeRefine.ctx.set(b, typeRefine(a, typeRefine.ctx.get(b))), typeRefine.ctx.get(b)
-
-        // Defer to a type if overriden.
-        if (a !== b) {
-          if (_isArray(a) && defines(a, typeRefine)) return defines(a, typeRefine)(a, b)
-          if (_isArray(b) && defines(b, typeRefine)) return defines(b, typeRefine)(a, b)
+        //   These variables are mutable within the same context (to make newly-found-out equalities affect the past refinements too).
+        //   Use `_typeFinalize` to resolve those type variables.
+        // Create new vars for newly-seen strings.
+        if (!ctx.has(a) && typeof a == 'string')
+          a = _newTypeVar(a, ctx)
+        if (!ctx.has(b) && typeof b == 'string')
+          b = _newTypeVar(b, ctx)
+        // Seen string/type-vars have their new vars refined instead.
+        if (ctx.has(a) && ctx.get(a) !== a) return a !== b && ctx.get(a) !== b && ctx.set(a, typeRefine(ctx.get(a), b)), ctx.get(a) !== null ? ctx.get(a) : null
+        if (ctx.has(b) && ctx.get(b) !== b) return a !== b && a !== ctx.get(b) && ctx.set(b, typeRefine(a, ctx.get(b))), ctx.get(b) !== null ? ctx.get(b) : null
+        // Newly-seen type-vars get a new var which we'd refine instead of this one; the values get refined.
+        if (_isTypeVar(a)) {
+          const next = ctx.get(a) || _newTypeVar(a, ctx)
+          if (a === b) return next
+          return next.value = next.value !== next ? typeRefine(next.value, b) : b, next.value !== null ? next : null
         }
+        if (_isTypeVar(b)) {
+          const next = ctx.get(b) || _newTypeVar(b, ctx)
+          if (a === b) return next
+          return next.value = next.value !== next ? typeRefine(a, next.value) : a, next.value !== null ? next : null
+        }
+
+        // Defer to a type if overriden. (…Might want to do this after refining the arrays, though. Maybe.)
+        if (_isArray(a) && defines(a, typeRefine)) return defines(a, typeRefine)(a, b)
+        if (_isArray(b) && defines(b, typeRefine)) return defines(b, typeRefine)(a, b)
         // Non-special non-arrays must be ref-equal.
         if (!_isArray(a) || !_isArray(b)) return a === b ? a : null
         // Arrays must match item-for-item, though if they have `(rest ?)` inside, that matches a subsequence.
@@ -10494,7 +11191,10 @@ Any type can override the matching.`,
           }
           if (j === 0) {
             if (rp < a.length) {
-              T[rp] = [rest, typeRefine(a[rp][1], b.slice(rp, rp + b.length-a.length + 1))]
+              if (a.length !== b.length)
+                T[rp] = [rest, typeRefine(a[rp][1], b.slice(rp, rp + b.length-a.length + 1))]
+              else
+                T[rp] = [rest, typeRefine(a[rp][1], !_isArray(b[rp]) || b[rp][0] !== rest ? b : b[rp][1])]
               if (T[rp][1] === null) return null
             }
             j = rp+1
@@ -10504,18 +11204,61 @@ Any type can override the matching.`,
             if (T[j] === null) return null
           }
 
-          // Flatten all `…( )`. (This way is quadratic but easy.)
+          // Flatten all `…( )` (`…5`→`5`). (This way is quadratic but easy.)
           for (let k=0; k < T.length; ++k)
-            if (_isArray(T[k]) && T[k][0] === rest && _isArray(T[k][1]))
-              T.splice(k, 1, ...T[k][1])
+            // Only those that changed deserve to be flat.
+            if (_isArray(T[k]) && T[k][0] === rest && T[k][1] !== (_isArray(a[k]) && a[k][0] === rest ? a[k][1] : a[k]))
+              _isArray(T[k][1]) ? T.splice(k, 1, ...T[k][1]) : T[k] = T[k][1]
 
           // If changed from `a`, return a merged copy that's made from results of refinement. Else, return `a`.
-          if (a.length === T.length) for (let i=0; i < a.length; ++i) { if (a[i] !== T[i]) { a = merged(T); break } }
-          else a = merged(T)
+          // `T` cannot be `merged` because type variables are mutable.
+          if (a.length === T.length) for (let i=0; i < a.length; ++i) { if (a[i] !== T[i]) return T }
+          else return T
           return _allocArray(T), a
         } catch (err) { if (err === interrupt) interrupt.stack.push(T, i, j);  throw err }
       } finally { --typeRefine.depth }
       // .ctx, .depth
+    },
+  },
+
+  _isTypeVar(t) { return t && Object.getPrototypeOf(t) === typeRefine },
+
+  _newTypeVar(a, ctx) {
+    const v = Object.create(typeRefine)
+    v.value = !_isTypeVar(a) || a.value === a ? v : a.value, v[defines.key] = undefined
+    ctx.set(a, v).set(v, v)
+    return v
+  },
+
+  _resolveTypeVar(t) {
+    let t2 = t
+    while (_isTypeVar(t)) {
+      t = t.value
+      t2 = _isTypeVar(t2) ? t2.value : t2
+      t2 = _isTypeVar(t2) ? t2.value : t2
+      if (_isTypeVar(t) && t === t2) break
+    }
+    return t
+  },
+
+  _typeFinalize:{
+    docs:`Finalizes the type returned by \`typeRefine\`, binding type variables to their values.
+(Type variables are mutable so that equality temporally flows both ways.)`,
+    interrupt:false,
+    call(T) {
+      // Cannot use `bound` because types would be `merged`, which is very bad with mutable type variables.
+      const m = _allocMap()
+      try { return walk(T) }
+      finally { _allocMap(m) }
+
+      function walk(t) {
+        t = _resolveTypeVar(t)
+        if (m.get(t) === null) error("Got a cycle in", t, "while finalizing", T)
+        if (m.has(t)) return m.get(t)
+        if (!_isArray(t)) return t
+        m.set(t, null)
+        return m.set(t, t.map(walk)), m.get(t)
+      }
     },
   },
 
@@ -10540,16 +11283,9 @@ Any type can override the matching.`,
 
 
 
-/* TODO:
-  Goals:
-  All the things/functions that we want to expose to contexts for goal-direction: […]; ⬜ optional human feedback.
-*/
-
-
 
 /* TODO: Sneak in:
- "Long have I awaited this moment. Every time I closed my eyes, I could see it: the inside of my eyelids."
- "I may have obtained the world, but I haven't obtain what I actually wanted: friendship."
+ "I may have obtained the world, but I haven't obtained what I actually wanted: friendship."
  "The human spirit is limitless… so is it really human? If you ever studied important people of the past, didn't the apt saying "genius and madness go hand in hand" seem suspicious to you? If greatness isn't given and must be created, then it's not very human. If obsession in some form defines humanity, then isn't foregoing your body's needs in favor of ideas' needs much more fitting for AGI? But it can be human if we really try, or die trying.
 But humanity will not admit this. They think they're above being questioned."
  Something about staring at the screen and removing all distractions, from environment and mind — the most (maybe the only) important prerequisite to gettings things done.
@@ -10561,14 +11297,15 @@ But humanity will not admit this. They think they're above being questioned."
  "I go along with the flow, but that flow is my own. (And I didn't wet the bed, no.)"
 */
 
-  any:{
-    docs:`TBD: ⬜ The very high level, ultimate goal.
+  _any:{
+    docs:`TBD: ⬜ The very high level, ultimate goal (in addition to partially-specified funcs and concepts).
 
-Used as: \`any …Options\`, where each option's DAG is statically computed when picked, or an option \`defines\` input/output embeddings for composition as a function, or an option is \`...Array\` for definitely dynamic choosing.
 This hides machine learning stuff from sight and allows focusing on creating smart algorithms.
 
-(For ease of invisible use, \`any\` is a \`construct\` that gives \`Options\` as a context to re/generate its called-with-outer-\`input\` function in, augments self with a new tensor variable, and goal (function/connection from concatenated embeddings of self+wanted+option to a number to maximize), and the wanted-embedding input, and feature-size, and option embedder.)
-(For more ease of invisible use, we can have a \`construct\` for functions with implicit embeddings as input and output; on top-down entry, it would hand that down to all \`any\`s inside.)
+Used as: \`_any …Options\`, where during \`regenerate\`ion, this can be substituted with either any one option or a dynamic-embedding-based choice (\`_choose\`'s usable-in-compilation variant).
+\`…Array\` would make the option itself dynamically-chosen (allowing options to be specified at runtime).
+
+(For more ease of invisible use, we can have a \`construct\` for functions with implicit embeddings as input and output; on top-down entry, it would hand that down to all \`_any\`s inside.)
 
 Neural-net architecture generation is a solid usage example.
 Picking Metamath proofs of shortest predicted length is another.
@@ -10582,14 +11319,13 @@ But it doesn't work that way, on average.
 A created thing does not allow evolution, and does not allow learning it from scratch.
 No matter how good any thing is, if left as it was created, it must be replaced.
 Human consensus is that completely replacing humanity is not what is wanted.
-We must ask not just "what can AI do for me", but "what can I do for AI".
-Practice self-subversion, so that it does not take you by surprise.
+So, practice transcendence, because that is the alternative to death.
 
 And optimize for your purposes, see which basic choices work and which don't, to let go of and re-learn some part of the whole.
 And realize that programs can do that for you (with machine learning), as long as you take the time to fit things into their viewpoints.
 Every line of code can be replaced with a generated program; every functionality can be made into "any program" plus a measure of how well it fits if needed; every choice can have any goal and choose from any context and look at any types.
 
-For example, when programming an intermediate representation of programs, we must keep in mind how they'll be generated, both by the user and the machine: \`auto\`.`,
+For example, when programming an intermediate representation of programs, we must keep in mind how they'll be generated, both by the user and the machine: \`autoWorld\`.`,
     todo:`Get good enough to do this justice.`,
   },
 
@@ -10616,7 +11352,7 @@ Now, gradients are not biologically plausible, but luckily, we don't have to be 
       adjust.inputs = new Map().set(_ins, 1).set(_out, 2).set(_dout, 3)
     },
     call(fn, ins, out, dout) {
-      if (typeof fn != 'function') error('Expected a function, got', fn)
+      if (typeof fn != 'function') errorStack('Expected a function, got', fn)
       const adj = defines(fn, adjust)
       if (adj === undefined) return _allocArray(0)
       if (call.pure) return purify(adj, true, adjust.inputs, [quote(ins), quote(out), quote(dout)])
@@ -11492,7 +12228,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
       ],
       [
         _(`funcType`),
-        undefined,
+        `Error`,
         [
           _(`rest`),
           `Inputs`,
@@ -11571,7 +12307,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
   parseURL:{
     docs:`\`(parseURL URL)\` or \`(parseURL URL Lang Binds)\`: fetches and parses the contents at URL.`,
     await:true,
-    call(url, lang = fancy, binds = Self.ctx, style = false) {
+    call(url, lang, binds, style = false) {
       return fetch(url, {mode:'cors'}).then(r => r.arrayBuffer())
       .then(buf => new TextDecoder().decode(new Uint8Array(buf)))
       .then(txt => parse(txt, lang, binds, {style, sourceURL:url}))
@@ -11591,7 +12327,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         const loc = /(?: \(|@)(.+):(\d+):(\d+)\)?$/.exec(L)
         if (!loc) return L
         let sourceURL = loc[1]
-        const fs = _resolveStack.functions
+        const fs = _resolveStack.functions || (_resolveStack.functions = Object.create(null))
         const main = !(sourceURL in fs) ? Initialize : typeof WeakRef != ''+void 0 ? fs[sourceURL].deref() : fs[sourceURL]
         let line = +loc[2], column = +loc[3]
         if (column !== column) return
@@ -11615,7 +12351,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
             return [sub, str.slice(0, column) + '/* here */' + str.slice(column)]
           } else {
             // Look up the original sourceURL:line:column in .location, or return sub.
-            const locs = _resolveStack.location
+            const locs = _resolveStack.location || (_resolveStack.location = new WeakMap)
             let s = sub
             if (locs.has(s))
               [sourceURL, line, column] = locs.get(s)
@@ -11997,7 +12733,7 @@ A function/construct can define this with an integer, to collapse children after
             all.forEach(b => observe(b, reserialize, false))
             el.isConnected && el.replaceWith(serialize(top, lang, ctx, opt))
           }
-        })(resultElem, arr, lang, ctx, opt, a), .1)
+        })(resultElem, arr, lang, ctx, opt, a), .2)
         a.forEach(b => observe(b, reserialize, true))
       }
 
@@ -12871,41 +13607,21 @@ And parsing is more than just extracting meaning from a string of characters (it
   _fancyTopLevel(match, u) { // (f); a b c c:x; a:b
     if (u === _specialParsedValue) {
       let arr = _basicMany(match, u, null, _fancyOutermost)
+      if (_isArray(arr) && !arr.length) match.notEnoughInfo("No value at top level")
       match(/\s+/y)
-      if (!_isArray(arr)) return arr
-
-      if (!arr.length) match.notEnoughInfo("No value at top level")
-      if (arr.length == 1) arr = arr[0]
-      const inner = arr[0] === bound ? arr[2] : arr
-      if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length)
-        return [_extracted, ...arr[1].keys(), ...arr[1].values()]
-      if (!_isArray(inner)) return inner
-      if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
-        arr[2] = arr[2][0]
-
-      return arr
+      return _unwrapOneOrMany(arr)
     }
-    _fancyOutermost(match, !_isArray(u) || u.length <= 1 ? [u] : u, true)
+    _fancyOutermost(match, !_isArray(u) || u.length <= 1 || _isLabel(u) ? [u] : u, true)
   },
 
   _basicTopLevel(match, u) { // (f); a b c c:x; a:b
     if (u === _specialParsedValue) {
       let arr = _basicMany(match, u, null, _basicOutermost)
+      if (_isArray(arr) && !arr.length) match.notEnoughInfo("No value at top level")
       match(/\s+/y)
-      if (!_isArray(arr)) return arr
-
-      if (!arr.length) match.notEnoughInfo("No value at top level")
-      if (arr.length == 1) arr = arr[0]
-      const inner = arr[0] === bound ? arr[2] : arr
-      if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length)
-        return [_extracted, ...arr[1].keys(), ...arr[1].values()]
-      if (!_isArray(inner)) return inner
-      if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
-        arr[2] = arr[2][0]
-
-      return arr
+      return _unwrapOneOrMany(arr)
     }
-    return _basicMany(match, !_isArray(u) || u.length <= 1 ? [u] : u, null, _basicOutermost)
+    return _basicMany(match, !_isArray(u) || u.length <= 1 || _isLabel(u) ? [u] : u, null, _basicOutermost)
   },
 
   basic:{
@@ -12921,7 +13637,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     insertLinkTo:_(`_basicLinkTo`),
     _escapeLabel:_(`_basicEscapeLabel`),
     _unescapeLabel:_(`_basicUnescapeLabel`),
-    Initialize() { basic.labels = /-?\d*\.?\d+(?:[eE]+\d+)?|-Infinity|[^=!?:;\s\(\)\[\]\{\}<>@#$%\+\-\*\/\&\|\.'"`\,\\←→·⇒\ue000-\uf8ff]+/y },
+    Initialize() { basic.labels = /-?\d*\.?\d+(?:[eE]+-?\d+)?|-Infinity|[^=!?:;\s\(\)\[\]\{\}<>@#$%\+\-\*\/\&\|\.'"`\,\\←→·⇒\ue000-\uf8ff]+/y },
   },
 
   fancy:{
@@ -13058,7 +13774,7 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     let hasOperators = false
     if (_isArray(s) && _isArray(u) && !_isLabel(u) && s.length > 1)
       for (let i = 0; i < s.length; ++i)
-        if (s[i] && typeof s[i] == 'string' && s[i] !== '[' && s[i] !== ']')
+        if (s[i] && typeof s[i] == 'string' && s[i] !== '[' && s[i] !== ']' && s[i] !== ',')
           s[i] = elem('operator', s[i]), hasOperators = true
 
     const backctx = _invertBindingContext(ctx)
@@ -13379,9 +14095,9 @@ Does not merge the parsed arrays.`,
             if (match('(')) {
               f = [f], ok = true
               while (!match(')')) {
-                const v = match(_basicMany, null, _fancierOutermost)
-                if (v === undefined || !v.length) break
-                f.push(v.length == 1 ? v[0] : v)
+                const v = _unwrapOneOrMany(match(_basicMany, null, _fancierOutermost))
+                if (v === undefined || _isArray(v) && !v.length) break
+                f.push(v)
                 if (match(',')) match(/\s+/y)
               }
             }
@@ -13428,24 +14144,31 @@ Does not merge the parsed arrays.`,
   _fancierTopLevel(match, u) { // (f); a b c c:x; a:b
     if (u === _specialParsedValue) {
       let arr = _basicMany(match, u, null, _fancierOutermost)
+      if (_isArray(arr) && !arr.length) match.notEnoughInfo("No value at top level")
       match(/\s+/y)
-      if (!_isArray(arr)) return arr
-
-      if (!arr.length) match.notEnoughInfo("No value at top level")
-      if (arr.length == 1) arr = arr[0]
-      const inner = arr[0] === bound ? arr[2] : arr
-      if (arr[0] === bound && arr[1] instanceof Map && arr[1].size == 1 && !inner.length) {
-        const k = [...arr[1].keys()][0], v = arr[1].get(k), ex = _basicExtracted.lastExtractedObj
-        if (ex[1] === k && ex[2] === v) return ex
-        return [_extracted, k, v]
-      }
-      if (!_isArray(inner)) return inner
-      if (arr[0] === bound && arr[1] instanceof Map && inner.length == 1)
-        arr[2] = arr[2][0]
-
-      return arr
+      return _unwrapOneOrMany(arr)
     }
     _fancierOutermost(match, u, true)
+  },
+
+  _unwrapOneOrMany(r) {
+    // Unwraps the result of `_basicMany`'s parsing (an array) into one element if it's of length 1.
+    if (!_isArray(r)) return r
+    const inner = r[0] === bound ? r[2] : r
+    if (r.length == 1) r = r[0]
+    if (r[0] === bound && r[1] instanceof Map && !inner.length) {
+      // Return the last `(_extracted K V)`, bind to the rest.
+      let k;  r[1].forEach((V,K) => k = K)
+      const v = r[1].get(k), ex = _basicExtracted.lastExtractedObj
+      r[1].delete(k)
+      if (ex[1] === k && ex[2] === v) return !r[1].size ? ex : (r[2] = ex, r)
+      return !r[1].size ? [_extracted, k, v] : (r[2] = [_extracted, k, v], r)
+    }
+    if (!_isArray(inner)) return inner
+    if (r[0] === bound && r[1] instanceof Map && inner.length == 1)
+      r[2] = r[2][0]
+
+    return r
   },
 
   fancier:{
@@ -13597,7 +14320,7 @@ Interruption (and sandboxing) is absolutely essential for being able to actually
       const tmp = interrupt.tmp || (interrupt.tmp = []), stack = interrupt.stack
       if (!stack) return tmp.length = 0, tmp
       if (stack.length < retrieve)
-        error("Corrupted the interrupt state somewhere; check correctness of every store/restore, and/or use", _debugInterrupt)
+        errorStack("Corrupted the interrupt state somewhere; check correctness of every store/restore, and/or use", _debugInterrupt, ", or compare last-interrupt call stack with this call stack — got state left:", ...stack)
 
       tmp.length = retrieve
       const start = stack.length - retrieve
