@@ -1,15 +1,28 @@
-We need to go back to our roots as general intelligence, after mastering the means to do that. When going back to a bunch of basic functions, to generate or change programs randomly is a disaster, but the ability to learn (a representation of) consequences of choices changes everything.
+# Conceptual
 
-We will embed composable adjustment into our computations, to allow non-batched deep learning.
+In progress!
 
-We will allow arbitrarily-nested choices to be learned by deep learning.
+A Programming Language used as the fully general world/environment for a machine-learned model that is itself.
 
-We will store learned tensors for 'decentralized' edge AI.
+In short:
 
-We will put choices into wherever they can be put.
+- We have artificialness, generality, and intelligence:
+  - With code, we can look at it and run it. With machine learning, we can learn it.
+- What we don't have are: a working prototype, a GPU of any worth, a team, or external motivation.
 
-We will generate programs with those choices.
+Out long:
 
-We will do and become anything.
+- Model-free deep Q-learning with branching/converging timelines to learn choices shaped as directed acyclic graphs allows goal-direction.
+- Adequately shadowing program re/generation with learned embeddings allows gradient signals to be Turing-complete in behavior, for full flexibility.
+- Putting all functions and objects in a PL into one re-generated memory allows them to be inter-connected however they want to, to learn globally and act locally.
+- What we want is self-supervised learning of arbitrary program (regeneration and) execution, to learn a self-awareness of the PL (of all behavior). In particular, this would cause equivalent programs to have the same embeddings. With that, fine-tuning for particular human uses should be fast and easy.
 
-To master what we have, we will lose and learn as many things as we can manage.
+Difficulties of developing both. Benefits of none (until done).    
+Bugged AND underperforming?    
+Ohhh nooo.
+
+Out very long: we have tutorials in-system, figure it out.
+
+# Installation
+
+Click.
