@@ -683,7 +683,6 @@ This includes time spent on other jobs.`,
         `timeLimit 100*1000 repeat 2.718281828459045 10000`,
       ],
     ],
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       _(`_numberType`),
@@ -885,11 +884,11 @@ Makes no attempt to correct for the memory-to-measure, \`(memorySince memorySinc
       `SomeArrayPlease`,
       `And some index`,
       `And another index`,
-      `ThenWeWillGiveYouNothing`,
+      `Gives you a slice`,
     ],
     interrupt:false,
     call(a, begin, end) {
-      if (!isArray(a)) error("Not an array:", a)
+      if (!isArray(a) && typeof a != 'string') error("Not an array/string:", a)
       if (typeof begin != 'number' || begin !== begin>>>0) error("Not an index:", begin)
       if (typeof end != 'number' || end !== end>>>0) error("Not an index:", end)
       return a.slice(begin, end)
@@ -913,6 +912,41 @@ Makes no attempt to correct for the memory-to-measure, \`(memorySince memorySinc
         if (typeof a[i] != 'number' || a[i-1] > a[i]) return false
       return true
     },
+  },
+
+  arrayCons:{
+    type:[
+      _(`funcType`),
+      `array head`,
+      `plus the rest of the array (or hey, a string, I do not judge)`,
+      `equals a concatenation (not efficient, but it works)`,
+    ],
+    interrupt:false,
+    dispose:_(`_disposeEachAndDealloc`),
+    call(a,b) { // [a, ...b]
+      if (typeof b == 'string') {
+        if (typeof a == 'number') {
+          if (a > 0 && a === a>>>0) a = String.fromCodePoint(a)
+          else error("Bad number:", a)
+        }
+        if (typeof a != 'string') error("Not a string:", a)
+        return a+b
+      }
+      if (isArray(b)) return array(a, ...b)
+      error("Not an array/string:", b)
+    },
+  },
+
+  arrayCar:{
+    interrupt:false,
+    dispose:true,
+    call(a) { return keep(a[0]) },
+  },
+
+  arrayCdr:{
+    interrupt:false,
+    dispose:_(`_killArray`),
+    call(a) { return arraySlice(a, 1, a.length) },
   },
 
   _listen:{
@@ -4831,6 +4865,11 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
   },
 
   applyArray:{
+    type:[
+      _(`funcType`),
+      `I dunno, some array here`,
+      `Its result will be given`,
+    ],
     docs:`\`applyArray ^(Func …Args)\`: assuming that \`Func\` and \`Args\` are already evaluated, simply applies the function to arguments.`,
     dispose:true,
     call(x) {
@@ -4841,7 +4880,6 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
   },
 
   apply:{
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -4868,6 +4906,7 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
 \`(apply Func …Args)\` is semantically the same as \`(Func …Args)\`, but it behaves better for \`adjust\`ment of computed \`Func\`s.`,
     readAt:{
       applyArray:_(`applyArray`),
+      applyStatically:_(`applyStatically`),
     },
     dispose:true,
     mergeAdjustment:_(`_mergeTensors`),
@@ -5187,45 +5226,48 @@ For example, both \`\\?+3 5\` and \`(func ? ?+3) 5\` return \`8\`.`,
   _fallthroughAutoFunc(n) {
     // Like `_fallthroughFunc`.
     return function obj(...ins) {
-      let [stage = 0, state, adjStart, result, threw] = interrupt(5)
+      // Like `return obj.f(...ins)`, but with profiling, auto-using, and adjustment support.
+      let [stage = 0, state, result, threw, cl = obj.f, aj = obj.a] = interrupt(6)
       const prevAF = autoFunc.now;  autoFunc.now = obj
       try {
         switch (stage) {
           case 0:
-            if (obj.OnEnter) adjStart = adjustUndo()
+            if (typeof cl != 'function') error(obj, "did not get compiled:", cl, aj)
           stage = 1;  case 1:
             if (obj.OnEnter) {
-              state = obj.OnEnter(obj, ins)
-              if (!isArray(state)) error("Not an array:", state)
-              adjustUndo(adjStart)
+              const adjStart = adjustUndo()
+              try {
+                state = obj.OnEnter(obj, ins)
+                if (!isArray(state)) error("Not an array:", state)
+              } finally { adjustUndo(adjStart) }
             }
           stage = 2;  case 2:
             using(obj, prevAF)
           stage = 3;  case 3:
             usingFinish()
           stage = 4;  case 4:
-            if (typeof obj.f != 'function') error(obj, "did not get compiled:", obj.f, obj.a)
             if (!obj.OnExit)
-              result = obj.f(...ins)
+              result = cl(...ins)
             else
-              try { result = obj.f(...ins), threw = false }
+              try { result = cl(...ins), threw = false }
               catch (err) { if (err === interrupt) throw err;  result = err, threw = true }
-            adjStart = adjustUndo()
           stage = 5;  case 5:
             if (obj.OnExit) {
-              const info = obj.OnExit(obj, ins, state, result), infos = using.state.CallInfos
-              _disposeEachAndDealloc(state), state = null
-              if (!infos.has(obj)) infos.set(obj, _allocArray(0))
-              infos.get(obj).push(info)
-              adjustUndo(adjStart)
+              const adjStart = adjustUndo()
+              try {
+                const info = obj.OnExit(obj, ins, state, result), infos = using.state.CallInfos
+                _disposeEachAndDealloc(state), state = null
+                if (!infos.has(obj)) infos.set(obj, _allocArray(0))
+                infos.get(obj).push(info)
+              } finally { adjustUndo(adjStart) }
             }
           stage = 6;  case 6:
             if (threw) throw result
-            adjustSave(obj.a)
+            adjustSave(aj)
             return result
         }
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(stage, state, adjStart, result, threw)
+        if (err === interrupt) interrupt.stack.push(stage, state, result, threw, cl, aj)
         else _disposeEachAndDealloc(state), dispose(result)
         throw err
       } finally { autoFunc.now = prevAF }
@@ -5706,6 +5748,9 @@ The same as \`(make arrayObject …Items)\`.`,
       arrayLimit:_(`arrayLimit`),
       arraySlice:_(`arraySlice`),
       arrayAscends:_(`arrayAscends`),
+      arrayCons:_(`arrayCons`),
+      arrayCar:_(`arrayCar`),
+      arrayCdr:_(`arrayCdr`),
       read:_(`readAt`),
       write:_(`writeAt`),
       observe:_(`observe`),
@@ -6011,7 +6056,6 @@ When the array head is a \`construct\`-defining \`concept\`, this allows still c
   },
 
   select:{
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -7306,8 +7350,7 @@ Reverse of \`concat\`.`,
 
   concat:{
     merged:true,
-    genDepthFirst:true,
-    type:[
+    type:[ // TODO: Don't compute the second arg, instead compute the result. And make sure that it's possible to generate `_denseLayer`s with `concat`enated args, because otherwise, typing `concat` is completely pointless.
       _(`funcType`),
       [
         _(`tupleType`),
@@ -7471,14 +7514,16 @@ Reverse of \`stack\`.`,
     argCount:1,
     call(a) { a = tf.unstack(a);  a.forEach(_tf);  return a },
     adjust:[
-      _(`stack`),
-      _(`_dout`),
+      _(`array`),
+      [
+        _(`stack`),
+        _(`_dout`),
+      ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
   },
 
   matMul:{
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -8544,7 +8589,6 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
       minimize:_(`minimize`),
       adjust:_(`adjust`),
       _any:_(`_any`),
-      replay:_(`replay`),
       _learningRate:_(`_learningRate`),
     },
     Initialize() {
@@ -8819,7 +8863,6 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
   },
 
   biasedGlorotNormal:{
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -8864,6 +8907,14 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
   },
 
   static:{
+    type:[
+      _(`funcType`),
+      [
+        _(`madeType`),
+        `T`,
+      ],
+      `T`,
+    ],
     docs:`\`static Expr\`: A \`construct\` that evaluates \`Expr\` and replaces it with \`^Result\`. (Don't use it.)
 
 (Forgive me, Master "Please don't use \`construct\` for macros".)`,
@@ -8877,8 +8928,30 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
     },
   },
 
+  applyStatically:{
+    type:[
+      _(`funcType`),
+      `Gimme, I dunno, some kinda expression which is an array`,
+      `I will do anything for you`,
+    ],
+    docs:`\`applyStatically ^(Func …Args)\`: will \`apply\` \`Func\` to \`Args\`, and will become the result at \`construct\`-time.
+(Unless the result is \`undefined\`.)
+
+Mostly only useful in \`makeDAG\` (for partial evaluation), not the default-for-parsing \`makeGraph\`.
+
+(Forgive me, Master "Please don't use \`construct\` for macros".)`,
+    dispose:true,
+    argCount:1,
+    construct(x, obj) {
+      if (obj === undefined) {
+        if (!isArray(x[1]) || !x[1].length) error("Must be an array of at least 1 item:", x[1])
+        const r = x[1][0](...x[1].slice(1))
+        return r !== undefined ? r : _onlyUndefined
+      }
+    },
+  },
+
   randomVar:{
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -8916,7 +8989,6 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
   },
 
   randomVarData:{
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -9336,7 +9408,7 @@ By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
         else
           obj[defines.key][_id(type)] = merged([F, T])
       }
-      // .f (current values of futures, maintained by `callAdjust`), .predSum (predictions of futures), .predCount (so that we can average predictions)
+      // .f (current values of futures, maintained by `callAdjust`), .predSum (predictions of futures), .predCount (so that we can average predictions); .recording (whether `usingFinish`/`_adjustUsingFinish` will replay this execution later)
     },
   },
 
@@ -9429,12 +9501,22 @@ At call, sets the \`Value\` associated with the \`Future\` (to be retrieved by \
     call(fut) {
       if (call.pure) throw impure
       if (isArray(fut) || !isArray(defines(fut, deconstruct)) || defines(fut, deconstruct)[0] !== future) return fut
-      if (!future.f.has(fut)) return undefined
+      if (!future.f.has(fut) || future.recording) {
+        // If the value was not set, or if we're recording a replay, mix reality and prediction, for Q-learning.
+        if (!future.predCount.get(fut)) return undefined
+        const pred = div(future.predSum.get(fut), future.predCount.get(fut))
+        try {
+          const fpg = using.state && using.state.FuturePredictionGetter
+          return fpg && fpg.has(fut) ? fpg.get(fut)(0, future.f.get(fut) || 0, pred) : keep(pred)
+        } finally { dispose(pred) }
+      }
       return keep(future.f.get(fut))
     },
     docs:`\`getFuture Future\`: Gets the \`Value\` associated with the \`Future\`.
-\`predict\` uses this automatically on adjustment, which causes only the final \`setFuture\` to have any effect.`,
-    interrupt:false,
+\`predict\` uses this automatically on adjustment, which causes only the final \`setFuture\` to have any effect.
+
+
+If the \`future\` was \`predict\`ed in an \`autoWorld\` with \`'GetFuture'\`, this will mix reality and prediction using that, for Q-learning.`,
     dispose:true,
     argCount:1,
   },
@@ -9586,6 +9668,12 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
           const t = add(future.predSum.get(actual) || 0, got)
           dispose(future.predSum.get(actual)), future.predSum.set(actual, t)
           future.predCount.set(actual, (future.predCount.get(actual) || 0) + 1)
+        }
+        if (future.recording && !using.state.FutureRealities.has(actual)) { // Remember that this `future` exists.
+          const S = using.state
+          S.FutureRealities.set(actual, 0)
+          S.FuturePredictionGetter.set(actual, alloc.params.GetFuture)
+          S.FuturePredictionSetter.set(actual, alloc.params.UpdateFuture)
         }
       }
       return predict.happened = true, got
@@ -10013,7 +10101,8 @@ Known deficiencies: \`\`elemCollapse elemValue(elem 'text' stringToDoc('
   ❌ No way to \`alloc\`ate/share an object in several auto-worlds, for decomposition.
       (Apart from changing an auto-world''s \`Funcs\` to include \`alloc\`-ated-in-another-auto-world func, of course.)
 
-  ❌ No way to get the inner composition of an auto-object by an auto-\`func\`tion, and no way to perform attention on individual node embeddings instead of only knowing the top-level \`DownEmbedding\`/\`UpEmbedding\`, nor to learn to generate post-self-attention embeddings pre-self-attention.
+  ❌ No way to get the inner composition of an auto-object by an auto-\`func\`tion, and no way to perform attention on individual node embeddings instead of only knowing the top-level \`DownEmbedding\`/\`UpEmbedding\`.
+      ❌ No way to regenerate via self-attention, with positional embeddings being the learned types.
   ❌ No way to (neurally) embed arbitrary values produced by (sub-)programs, for things like reacting to error messages and stack traces by giving gradient to mentioned things. So, no dynamic binding (after regen, choose what to do, based on dynamic values), only static binding.
 '),'Do I look like I''m made from compute and big-team?
 Also, limitations are signs that a thing is not imaginary.')\`\`
@@ -10068,7 +10157,7 @@ Generation guidance (here, \`t:tensorType(FeatureSize)\`, and probably, \`Ctx:t\
         (Args are not the same as their funcs. So, to make embeddings not the same, we must either use this and \`_positionalWrapper\` to create implicit embedding trees, or create explicit trees and recursively reduce those arrays into whole-func embeddings wherever needed. By choosing implicit trees, we avoid complexity of array reducers and memory-management of trees, and also disentangle types and embeddings in principle.)
         (\`ArgPosition\` data is created/stored in association with the chosen func to call.)
     ● \`ArgEmbedder:ArgStaticEmbedding→DownEmbedding→Context→ArgDownEmbedding\` and \`t⇒t⇒Ctx⇒t\`. When chose a call, with args.
-        (When a func does not define \`genDepthFirst\` to be \`true\`, \`Context\` above is the initial context, else received from \`ContextRefiner\`. Same as types.)
+        (\`Context\` is received from \`ContextRefiner\`. Same as types.)
         (When making a \`bound\` expression, this is still used for both main and bound trees, just like a call.)
     ● \`ContextRefiner:ArgDownEmbedding→ArgUpEmbedding→Context→Context\` and \`t⇒t⇒Ctx⇒Ctx\`. When a call's arg was generated. (RNN.)
     ● …or \`ArgFailed:ArgDownEmbedding→ArgUpEmbedding→Context→UpEmbedding\` and \`t⇒t⇒Ctx⇒t\`. When a call's arg failed to generate.
@@ -10081,7 +10170,7 @@ Dynamic execution profiling:
     ● \`FuncEnter:Func→Inputs→State\`. For passing things like \`userTime()\` to \`FuncExit\`, returning an array. \`null\` by default.
     ● \`FuncExit:Func→Inputs→State→Output→Threw→CallInfo\`. Whether success or error, \`FuncReport\` will know. \`null\` by default.
     ● \`FuncReport:PublicEmbedding→PrivateEmbedding→UpEmbedding→Object→CallInfos→CallReport\` and \`t⇒t⇒t⇒'whatever'⇒'goes'⇒'here'\`. Remember what is needed by \`FuncsFinish\`. \`null\` by default.
-    ● \`FuncsFinish:PublicEmbeddings→PrivateEmbeddings→UpEmbeddings→Objects→CallReports→undefined\` and \`T⇒T⇒T⇒'whatever'⇒'goes'⇒'here' T:tensorType('?',FeatureSize)\`. After execution is done, serve as a local gradient source, for all called functions. \`null\` by default.
+    ● \`FuncsFinish:PublicEmbeddings→PrivateEmbeddings→UpEmbeddings→Objects→CallReports→undefined\` and \`t⇒t⇒t⇒'whatevers'⇒'heres'⇒'goes'\`. After execution is done, serve as a local gradient source, for all called functions at once. \`null\` by default.
         (All args are either \`stack\`ed or are arrays.)
 
 Generation limits, to fit in finite memory (via static generation profiling):
@@ -10091,6 +10180,12 @@ Generation limits, to fit in finite memory (via static generation profiling):
     ● \`ObjectUsed:Object→By→MetricInfo\`. Called when \`using(Object,By)\`, not \`adjust\`able. \`null\` by default.
     ● \`PredictObjectMetric:DownEmb→Future→Metric\`. Must be \`Metric=Future;Metric\`. \`alloc\` culls least-prediction objects. \`null\` by default, meaning that least-recently-used objects are removed to fit in \`MaxObjects\`.
     ● \`ObjectMetric:MetricInfos→Object→PrevMetric→Metric\`. Called after execution, not \`adjust\`able. \`null\` by default.
+
+Learning what to learn, for evolution via self-similarity:
+    ● \`GetFuture:Age→Realities→Prediction→Target\`. Combines real and imaginary futures of a \`future\` to give a \`predict\`ion target. \`null\` by default.
+        (For example, discounted sum: \`Realities+Prediction*.5**(Age+1)\`. The longer a future exists, the more its reality is known.)
+    ● \`UpdateFuture:NewAge→PrevRealities→NewReality→Realities\`. Updates the future of a \`future\`. \`null\` by default.
+        (For example, discounted sum: \`PrevRealities+NewReality*.5**NewAge\`. The further away a future, the less it affects the present.)
 
 Additional auto-filled information that needs saving (don't worry about it):
     ● \`Definitions\`=\`weakMap()\` (for \`conceptType\`)
@@ -10136,8 +10231,9 @@ This is a powerful projection of my personal life energy, and that is why I call
         'GenContexts', 'Goal',
         'MetricPrediction', 'MetricFuture', 'Metric',
         'Choose', 'ChoiceGoal', 'ChoiceEmbedder', 'VarUsed', 'FinishFail', 'FinishTypeError', 'FinishValue',
-        'CallUseAs', 'ArgUseAs', 'ArgEmbedder', 'ContextRefiner', 'ArgFailed',
+        'ArgEmbedder', 'ContextRefiner', 'ArgFailed',
         'FinishCall',
+        'GetFuture', 'UpdateFuture',
       ])
       autoWorld.ctxGetters = Object.freeze([ // See `_equalizeContexts`.
         _callCtxEmb, 'id',
@@ -10215,6 +10311,9 @@ This is a powerful projection of my personal life energy, and that is why I call
         check('PredictObjectMetric', 'function', null)
         check('ObjectMetric', 'function', null)
 
+        check('GetFuture', 'function', null)
+        check('UpdateFuture', 'function', null)
+
         if (HP.Dealloc === undefined) HP.Dealloc = new WeakMap
         if (HP.Positions === undefined) HP.Positions = new WeakMap
         if (HP.FreeSpots === undefined) HP.FreeSpots = []
@@ -10238,6 +10337,8 @@ This is a powerful projection of my personal life energy, and that is why I call
           for (let i = 1; i < objCtxV.length; i += 3)
             obj.objCtxIndexes[obj.objectIndex.get(objCtxV[i])*2+1] = i
         }
+
+        obj.Replays = [0] // All post-regen `using.state`s that mention `obj` will be put in here.
 
         obj.params = Object.assign(Object.create(null), HP)
       }
@@ -10725,7 +10826,6 @@ Maximizes memory re-use.`,
     docs:`\`(transform Array Function)\`→\`Array\`: transforms each element of \`Array\` by applying \`Function\`, possibly also passing in \`Const\`.
 (\`Array\` can also be a \`'string'\`, or the count of iterations.)
 \`(transform (transform A F) G)\` is the same as \`(transform A \\(G (F ?)))\`.`,
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -10843,7 +10943,6 @@ Maximizes memory re-use.`,
 
 Use \`getLast(loop …?)\` to get the standard behavior of a functionality called \`reduce\`: returning the last accumulated result.
 \`loop\` returns the whole array of all results, to facilitate adjustment and composition.`,
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -11381,8 +11480,8 @@ Pushes to a generative context/environment.
     try {
       const GoalType = HP.Goals.length && writableFutureType(_numberType)
       for (; i < HP.Goals.length; ++i)
-        ctxV.push(HP.Goals[i], GoalType, varData(alloc.params.NewEmbedding(alloc.params.FeatureSize)))
-      ctxF.push(bound, 'Var', varData(alloc.params.NewEmbedding(alloc.params.FeatureSize)))
+        ctxV.push(HP.Goals[i], GoalType, varData(HP.NewEmbedding(HP.FeatureSize)))
+      ctxF.push(bound, 'Var', varData(HP.NewEmbedding(HP.FeatureSize)))
     } catch (err) { if (err === interrupt) interrupt.stack.push(i);  throw err }
   },
 
@@ -11434,7 +11533,7 @@ Can \`alloc\`ate while allocating (don't pass \`AutoWorld\` for these situations
         // Consult the definition.
         if (obj === undefined) {
           obj = defines(Type, alloc)(Type, Hyperparams)
-          if (!obj || typeof obj != 'object' && typeof obj != 'function') error("Expected a real modifiable object, got", obj)
+          if (!obj || typeof obj != 'object' && typeof obj != 'function') error("Expected a non-primitive as the auto-object, but got", obj, "from", Type)
         }
         if (autoWorld.objectWorld.has(obj))
           error("Newly-allocated object", obj, "must be exclusive but it already belongs to", autoWorld.objectWorld.get(obj))
@@ -11588,7 +11687,7 @@ Returns the index of \`Object\` in \`AutoWorld\` if it is or was \`alloc\`ated t
 If it was deallocated, re-introduces it.`,
     call(aw, obj) {
       if (aw.objectIndex.has(obj)) return aw.objectIndex.get(obj)
-      const HP = defines(aw, deconstruct)[1], OI = defines(aw, deconstruct)[2]
+      const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
       if (!HP.Dealloc.has(obj)) errorStack(obj, "is not in", aw)
 
       // Restore the object.
@@ -11608,6 +11707,53 @@ If it was deallocated, re-introduces it.`,
       _defaultObjectHyperparams(aw, At)
       aw.objectIndex.set(obj, At)
       return At
+    },
+  },
+
+  _getAutoObjectInfo(obj, param, aw = autoWorld.objectWorld.get(obj), manyObjs = !!replay.marker) {
+    // Like OI.Object[At] and the like, but works for deallocated objects too.
+
+    if (manyObjs) {
+      const a = _allocArray(obj.length)
+      for (let i=0; i < obj.length; ++i)
+        a[i] = _getAutoObjectInfo(obj[i], param, aw, false)
+      return a
+    }
+
+    const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
+    if (aw.objectIndex.has(obj)) return OI[param][aw.objectIndex.get(obj)]
+    if (HP.Dealloc.has(obj)) {
+      const info = HP.Dealloc.get(obj), ph = info[0]
+      return info[1+ph.indexOf(param) || -1]
+    }
+    error(obj, "is not related to any", autoWorld)
+  },
+
+  _transformHyperparamWith:{
+    dispose:true,
+    call(v1, v2, fn) {
+      if (!replay.marker) return fn(v1, v2)
+      let [b = _allocArray(v1.length), i = 0] = interrupt(2)
+      try {
+        for (; i < v1.length; ++i)
+          b[i] = fn(v1[i], v2 && v2[i])
+        return stack(b)
+      } catch (err) { if (err === interrupt) interrupt.stack.push(b, i), b = null;  throw err }
+      finally { _disposeEachAndDealloc(b) }
+    },
+    adjust(ins, out, dout) {
+      const [v1, v2, fn] = ins
+      if (!replay.marker) return void _disposeEachAndDealloc(defines(fn, adjust)(ins, null, dout))
+      let [b = unstack(dout), j = v1.length] = interrupt(2)
+      const a = _allocArray(2)
+      try {
+        if (b.length !== v1.length) error("Expected", v1.length, "items but got", b)
+        for (; j > 0; --j) {
+          a[0] = v1[j-1], a[1] = v2 && v2[j-1]
+          _disposeEachAndDealloc(defines(fn, adjust)(a, null, b[j]))
+        }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(b, j), b = null;  throw err }
+      finally { _allocArray(a), _disposeEachAndDealloc(b) }
     },
   },
 
@@ -11804,13 +11950,6 @@ Do not reduce the array of resulting child embeddings into one (nor return the u
     },
   },
 
-  _alwaysGenDepthFirst:[
-    _(`settings`),
-    true,
-    `Whether \`regenerate\` should pretend that all functions define \`genDepthFirst\`.
-The lack of this affects semantics (making children unable to depend on siblings) but GPU-parallelizes more operations.`,
-  ],
-
   _bindNodes(x, onlyInMap, ctx, replacements) {
     // This is much faster than `bound` (and much smaller), but it does about the same thing for a different purpose.
     if (ctx.has(x)) return ctx.get(x)
@@ -11826,10 +11965,6 @@ The lack of this affects semantics (making children unable to depend on siblings
         x[i] = _bindNodes(x[i], onlyInMap, ctx, replacements)
       return x
     }
-  },
-
-  genDepthFirst:{
-    docs:`A function \`defines\` this to be \`true\` if its \`type\` has to be refined in-order in order to be correct. No amortization of \`sync\` choices, lots of stalling. Also see \`\`settings ^_alwaysGenDepthFirst\`\`.`,
   },
 
   _genCtxSliceFilter(ctx, Type) {
@@ -11975,15 +12110,15 @@ Regenerated objects only change in-place, in response to their usage.
 
 This schedules a node for \`usingFinish\` to expand-then-contract, unless this \`Object\` was already scheduled.
 
-This, before regeneration, computes \`MakeObject(StaticEmb,DownEmb)\` to pass the embedding down.
+In any case, updates usage information of \`Object\` with \`MetricInfo:ObjectUsed(Object,By)\`.
+If not scheduled, before regeneration, computes \`DownEmb:MakeObject(PublicEmb,PrivateEmb)\` to pass the embedding down.
 
-The object type (such as \`funcType\`) must define \`using\` for actions before pre-order traversal (such as scheduling the node that \`make\`s the function body), and \`usingFinish\` for actions before post-order traversal (such as re-compiling the function).
+The object type (such as \`funcType\`) must define \`using\` for actions before pre-order traversal (such as scheduling the node that \`regenerate\`s the function body), and \`usingFinish\` for actions before post-order traversal (such as re-compiling the function).
 
 Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be used and the 'did we error' fact can be \`predict\`ed at regeneration.")\`\``,
     readAt:{
       regenerate:_(`regenerate`),
       usingFinish:_(`usingFinish`),
-      _alwaysGenDepthFirst:_(`_alwaysGenDepthFirst`),
       _independentChoices:_(`_independentChoices`),
       _noTypeFiltering:_(`_noTypeFiltering`),
     },
@@ -11996,13 +12131,13 @@ Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be us
         error("Expected an", autoWorld, "but got", aw)
 
       const At = _awIndex(aw, obj)
+      const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
       if (OI.Object[At] !== obj)
-        error("Object position mismatched: expected", obj, "to be at", At, "but there we have", defines(aw, deconstruct)[2].Object[At])
+        error("Object position mismatched: expected", obj, "to be at", At, "but there we have", OI.Object[At])
 
       let [adjStart = adjustUndo()] = interrupt(1)
       try {
         // ObjectUsed
-        const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
         if (typeof HP.ObjectUsed == 'function' && adjStart !== null) {
           const infos = using.state.MetricInfos
           if (!infos.has(obj)) infos.set(obj, _allocArray(0))
@@ -12030,70 +12165,93 @@ Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be us
     using:{
       docs:`To start, get \`StaticEmb\` from the object's variable, get \`DownEmb\` from another variable, combine them with \`MakeObject\`, predict the object's metric with \`PredictObjectMetric\`, and consult the pre-order-traversal \`using\` definition of the type.`,
       call() {
-        const aw = alloc.world, At = alloc.params.At
+        const S = using.state
+        const aw = alloc.world, At = alloc.params.At, obj = _lookup(S.Objects, S.at)
         const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
-        let [PublEmb, DownEmb, PrivEmb] = interrupt(3)
+        let [PublEmb, DownEmb, PrivEmb, Target, predicted = false] = interrupt(5)
+        const childIndexes = replay.marker && _lookup((at,_,S) => S.Childs[at][0], S.at)
         try {
-          if (PublEmb === undefined)
-            PublEmb = _embValue(OI.PublicEmbData[At]),
-            PublEmb == null && (PublEmb = 0)
-          if (PrivEmb === undefined)
-            PrivEmb = _embValue(OI.PrivateEmbData[At]),
-            PrivEmb === undefined && (PrivEmb = 0)
-          if (DownEmb === undefined)
-            DownEmb = alloc.params.MakeObject(PublEmb, PrivEmb), DownEmb === undefined && (DownEmb = 0)
-          // Predict the object metric, which will be used by `_awBulkDealloc` to kill someone.
-          if (PublEmb !== null) {
-            if (typeof HP.PredictObjectMetric == 'function') {
-              const p = HP.PredictObjectMetric(DownEmb, OI.MetricFuture[At])
-              if (_isDisposable(p) && _tensorSize(p) > 1)
-                error("Too big:", p, "from", HP.PredictObjectMetric)
-              OI.MetricPrediction[At] = p // `_usingDispose` will `dispose` this.
-            }
-            dispose(PublEmb), PublEmb = null
+          if (PublEmb === undefined && (!replay.marker || replay.marker === 'MakeObject')) {
+            const v = _getAutoObjectInfo(obj, 'PublicEmbData', aw)
+            try { PublEmb = _transformHyperparamWith(v, undefined, _embValue), PublEmb == null && (PublEmb = 0) }
+            finally { replay.marker && _allocArray(v) }
           }
-          using.state.ObjectsToFinish.push(using.state.at) // TODO: If using.state.at is an array (we're replaying), push each element instead.
+          if (PrivEmb === undefined && (!replay.marker || replay.marker === 'MakeObject')) {
+            const v = _getAutoObjectInfo(obj, 'PrivateEmbData', aw)
+            try { PrivEmb = _transformHyperparamWith(v, undefined, _embValue), PrivEmb == null && (PrivEmb = 0) }
+            finally { replay.marker && _allocArray(v) }
+          }
+          if (DownEmb === undefined && (!replay.marker || replay.marker === 'MakeObject')) {
+            DownEmb = alloc.params.MakeObject(PublEmb, PrivEmb), DownEmb === undefined && (DownEmb = 0)
+            replayable(alloc.params.MakeObject, 'MakeObject')
+            if (replay.marker === 'MakeObject')
+              _stackedWrite(S.DownEmbs, childIndexes, DownEmb)
+          } else if (replay.marker === 'PredictObjectMetric') DownEmb = _stackedRead(S.DownEmbs, childIndexes)
+          // Predict the object metric, which will be used by `_awBulkDealloc` to kill some.
+          if (!predicted && (!replay.marker || replay.marker === 'PredictObjectMetric')) {
+            if (Target === undefined) Target = _futureTargets(obj, 'MetricFuture')
+            if (typeof HP.PredictObjectMetric == 'function') {
+              const p = HP.PredictObjectMetric(DownEmb, Target)
+              replayable(HP.PredictObjectMetric, 'PredictObjectMetric')
+              if (!replay.marker) {
+                if (_isDisposable(p) && _tensorSize(p) > 1)
+                  error("Too big:", p, "from", HP.PredictObjectMetric)
+                OI.MetricPrediction[At] = p // `_usingDispose` will `dispose` this.
+              } else
+                return void dispose(p)
+            }
+            predicted = true
+          }
 
-          // TODO: If replaying (`isArray(At)`), do not do these two things.
-          alloc.world.Nodes[At] = 0 // Reset node-count.
-          defines(OI.Type[At], using)(DownEmb, OI.Type[At], OI.Object[At]) // Defer.
+          if (!replay.marker) {
+            alloc.world.Nodes[At] = 0 // Reset node-count.
+            defines(OI.Type[At], using)(DownEmb, OI.Type[At], OI.Object[At]) // Defer.
+            if (!S.Childs[At] || !S.Childs[At].length) error(OI.Type[At], "does not schedule a node")
+          }
 
-          const s = _allocArray(2);  s[0] = DownEmb, s[1] = PrivEmb;  adjustSave(s)
-        } catch (err) { if (err === interrupt) interrupt.stack.push(PublEmb, DownEmb, PrivEmb); else dispose(PublEmb), dispose(DownEmb), dispose(PrivEmb);  throw err }
+          const s = _allocArray(4);  s[0] = DownEmb, s[1] = PrivEmb, s[2] = PublEmb, s[4] = Target;  adjustSave(s)
+
+        } catch (err) {
+          if (err === interrupt) interrupt.stack.push(PublEmb, DownEmb, PrivEmb, Target, predicted)
+          else dispose(PublEmb), dispose(DownEmb), dispose(PrivEmb), dispose(Target)
+          throw err
+        }
+        finally { replay.marker && (_killArray(childIndexes), _killArray(obj)) }
       },
       adjust(ins) {
-        const aw = alloc.world, At = alloc.params.At
+        const aw = alloc.world, At = alloc.params.At, obj = _lookup(S.Objects, S.at)
         const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
-        let [DownEmb, dDownEmb, PublEmb, dPublEmb, PrivEmb, dPrivEmb] = interrupt(6)
+        let [DownEmb, dDownEmb, PublEmb, dPublEmb, PrivEmb, dPrivEmb, Target] = interrupt(7)
+        const childIndexes = replay.marker && _lookup((at,_,S) => S.Childs[at][0], S.at)
         try {
-          if (DownEmb === undefined) { const s = adjustLoad(2);  DownEmb = s[0] || 0, PrivEmb = s[1] || 0;  _allocArray(s) }
-          // Re-compute PublEmb.
-          if (PublEmb === undefined)
-            PublEmb = _embValue(OI.PublicEmbData[At]),
-            PublEmb == null && (PublEmb = 0)
+          if (DownEmb === undefined) { const s = adjustLoad(4);  DownEmb = s[0] || 0, PrivEmb = s[1] || 0, PublEmb = s[2] || 0, Target = s[3] || 0;  _allocArray(s) }
           // Adjust `defines(OI.Type[At], using)(DownEmb, OI.Type[At], OI.Object[At])`.
           if (dDownEmb === undefined) {
-            const a = _allocArray(3);  [a[0], a[1], a[2]] = [DownEmb, OI.Type[At], OI.Object[At]]
-            try {
-              const b = defines(defines(OI.Type[At], using), adjust)(a)
-              ;[dDownEmb = 0] = b;  _allocArray(b)
-            } finally { _allocArray(a) }
+            if (!replay.marker) {
+              const a = _allocArray(3);  [a[0], a[1], a[2]] = [DownEmb, OI.Type[At], OI.Object[At]]
+              try {
+                const b = defines(defines(OI.Type[At], using), adjust)(a)
+                ;[dDownEmb = 0] = b;  _allocArray(b)
+              } finally { _allocArray(a) }
+            } else
+              dDownEmb = _stackedRead(S.dDownEmbs, childIndexes)
           }
-          // Adjust `HP.PredictObjectMetric(DownEmb, OI.MetricFuture[At])`. 
-          if (DownEmb !== null) {
+          // Adjust `HP.PredictObjectMetric(DownEmb, _futureTargets(obj, 'MetricFuture', aw))`. 
+          if (DownEmb !== null && (!replay.marker || replay.marker === 'PredictObjectMetric')) {
             if (typeof HP.PredictObjectMetric == 'function') {
-              const a = _allocArray(2);  [a[0], a[1]] = [DownEmb, OI.MetricFuture[At]]
+              const a = _allocArray(2);  [a[0], a[1]] = [DownEmb, Target]
               try {
                 const b = adjust(HP.PredictObjectMetric, a, null, 0)
                 if (!isArray(b)) error("Not an array:", b)
-                const d = [b];  _allocArray(b)
+                const [d, trash] = b;  _allocArray(b)
                 if (d) { const t = add(dDownEmb || 0, d);  dispose(d);  dispose(dDownEmb), dDownEmb = t }
+                dispose(trash)
               } finally { _allocArray(a) }
             }
             dispose(DownEmb), DownEmb = null
           }
           // Adjust `DownEmb = alloc.params.MakeObject(PublEmb, PrivEmb)`.
-          if (PublEmb !== null) {
+          if (PublEmb !== null && (!replay.marker || replay.marker === 'MakeObject')) {
             const a = _allocArray(2);  [a[0], a[1]] = [PublEmb, PrivEmb]
             try {
               const b = adjust(alloc.params.MakeObject, a, null, dDownEmb)
@@ -12103,26 +12261,34 @@ Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be us
               dispose(dDownEmb), dDownEmb = undefined
             } finally { _allocArray(a) }
           }
-          // Adjust `PrivEmb = _embValue(OI.PrivateEmbData[At])`.
-          if (dPrivEmb !== undefined) {
-            const a = _allocArray(1);  a[0] = OI.PrivateEmbData[At]
-            try { _disposeEachAndDealloc(defines(_embValue, adjust)(a, null, dPrivEmb)) }
-            finally { _allocArray(a) }
+          // Adjust `PrivEmb = _transformHyperparamWith(_getAutoObjectInfo(obj, 'PrivateEmbData', aw), undefined, _embValue)`.
+          if (dPrivEmb !== undefined && (!replay.marker || replay.marker === 'MakeObject')) {
+            const v = _getAutoObjectInfo(obj, 'PrivateEmbData', aw)
+            const a = _allocArray(3);  [a[0], a[1], a[2]] = [v, undefined, _embValue]
+            try { defines(_transformHyperparamWith, adjust)(a, null, dPrivEmb) }
+            finally { _allocArray(a), replay.marker && _allocArray(v) }
             dispose(dPrivEmb), dPrivEmb = undefined
           }
-          // Adjust `PublEmb = _embValue(OI.PublicEmbData[At])`.
-          if (dPublEmb !== undefined) {
-            const a = _allocArray(1);  a[0] = OI.PublicEmbData[At]
-            try { _disposeEachAndDealloc(defines(_embValue, adjust)(a, null, dPublEmb)) }
-            finally { _allocArray(a) }
+          // Adjust `PublEmb = _transformHyperparamWith(_getAutoObjectInfo(obj, 'PublicEmbData', aw), undefined, _embValue)`.
+          if (dPublEmb !== undefined && (!replay.marker || replay.marker === 'MakeObject')) {
+            const v = _getAutoObjectInfo(obj, 'PublicEmbData', aw)
+            const a = _allocArray(3);  [a[0], a[1], a[2]] = [v, undefined, _embValue]
+            try { defines(_transformHyperparamWith, adjust)(a, null, dPublEmb) }
+            finally { _allocArray(a), replay.marker && _allocArray(v) }
             dispose(dPublEmb), dPublEmb = undefined
           }
-          _awObjectDontCare(alloc.world, alloc.params.At) // TODO: Do not do this on replay.
+
+          if (dDownEmb) {
+            _stackedWrite(S.dDownEmbs, childIndexes, dDownEmb)
+            dispose(dDownEmb), dDownEmb = undefined
+          }
+
+          !replay.marker && _awObjectDontCare(aw, At)
         } catch (err) {
-          if (err === interrupt) interrupt.stack.push(DownEmb, dDownEmb, PublEmb, dPublEmb, PrivEmb, dPrivEmb)
-          else dispose(DownEmb), dispose(dDownEmb), dispose(PublEmb), dispose(dPublEmb), dispose(PrivEmb), dispose(dPrivEmb), _awObjectDontCare(alloc.world, alloc.params.At)
+          if (err === interrupt) interrupt.stack.push(DownEmb, dDownEmb, PublEmb, dPublEmb, PrivEmb, dPrivEmb, Target)
+          else dispose(DownEmb), dispose(dDownEmb), dispose(PublEmb), dispose(dPublEmb), dispose(PrivEmb), dispose(dPrivEmb), dispose(Target), !replay.marker && _awObjectDontCare(aw, At)
           throw err
-        }
+        } finally { _killArray(childIndexes) }
       },
     },
     usingFinish:{
@@ -12132,13 +12298,23 @@ Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be us
         if (!UpEmbs.length) error("Forgot to schedule a child:", [...UpEmbs], [...UpTypes], [...UpNodes])
         if (UpEmbs.length > 1) error("Scheduled too many children:", [...UpEmbs], [...UpTypes], [...UpNodes])
         const aw = alloc.world, At = alloc.params.At, OI = defines(aw, deconstruct)[2]
-        dispose(defines(OI.Type[At], usingFinish)(UpEmbs, UpTypes, UpNodes, OI.Object[At]))
+
+        if (!replay.marker) {
+          if (typeof At != 'number') error("Not a number:", At)
+          dispose(defines(OI.Type[At], usingFinish)(UpEmbs, UpTypes, UpNodes, OI.Object[At]))
+        }
+
+        // Remember to finish.
+        const S = using.state
+        if (!replay.marker) S.ObjectsToFinish.push(S.at), replayable(S.Childs[S.at].length, 'usingFinish')
+        else S.ObjectsToFinish.push(...S.at)
+
         const a = _allocArray(3);  [a[0], a[1], a[2]] = [keep(UpEmbs[0]), UpTypes[0], UpNodes[0]];  return a
       },
       adjust([UpEmbs, UpTypes, UpNodes], out, dout) {
         const aw = alloc.world, At = alloc.params.At, OI = defines(aw, deconstruct)[2]
         // Adjust `defines(OI.Type[At], usingFinish)(UpEmbs, UpTypes, UpNodes, OI.Object[At])`.
-        if (typeof defines(defines(OI.Type[At], usingFinish), adjust) == 'function') { // Does not happen.
+        if (!replay.marker && typeof defines(defines(OI.Type[At], usingFinish), adjust) == 'function') { // Does not happen.
           const a = _allocArray(4);  [a[0], a[1], a[2], a[3]] = [UpEmbs, UpTypes, UpNodes, OI.Object[At]]
           try { _disposeEachAndDealloc(adjust(defines(OI.Type[At], usingFinish), a, null, 0)) }
           finally { _allocArray(a) }
@@ -12231,7 +12407,7 @@ So. What concretely do we do?
     Fifth: reach infinite complexity by learning to generate general things, like a programming language interpreter.
     Sixth: go away.
 
-Don't worry. Even if you're just a beginner now, you'll be readily staring down eldritch horrors of the beyond in no time.
+Don't worry. Even if you're just a beginner now, you'll be readily staring down eldritch horrors of the beyond in no time. So cozy up under a blanket if it's cold out.
 
 
 
@@ -12378,7 +12554,7 @@ So \`Choose\` would become essentially \`StaticEmb→DownEmb→minimize(Unknown)
 
 ["Clouds… Return to roots…"]
 
-Okay, weird man. Let's invert our direction.
+…Right: while a model is better than no model, a learned model is better than a particular model.
 Curiosity is nice and all, but what about responsibility and fear? Want those too. Want everything. For those, it is useful to *not* go to unknown.
 Meaning that we want to \`mul\`tiply that unknown-ness reward by some number, which can be positive or negative.
 Such as \`\`settings ^(settings 1 'Example slider, valued ???.
@@ -12490,7 +12666,7 @@ So, yeah.
     — \`FuncsFinish\` \`predict\`s profiling metrics from \`UpEmb\`, learns equivalency by contrasting equality.
     — As a bonus, we will also \`predict\` inputs from outputs for all other hyperparameters (not added to the average loss plot). The more gradient the merrier.
 
-Now you will see why I did not want to show code to you. (To see more, see the implementation of \`usingFinish\`.)`,
+Now you will see why I did not want to show code to you. (To see more, see the implementation of \`usingFinish\`.) (Hell awaits.)`,
       [
         _(`fancier`),
         `inputGrad:^(settings 1 'Multiplier of input-from-output prediction gradient: ???.' rangeSetting 0 1)`,
@@ -12531,26 +12707,32 @@ Hyper:base->goals->(m map
   'MakeObject' (m func s d (m last (recompute r s) (recompute r d) r r:(m add s (mix2 s d))))
   'FuncEnter' Obj->Inputs->array(userTime(),realTime(),memorySince())
   'FuncExit' Obj->Inputs->State->Output->Threw->array(Inputs,Output,userTime State.0,realTime State.1,memorySince State.2,Threw)
-  // TODO: The thing below is now split into FuncReport and FuncsFinish (and FuncsFinish is stacked, meaning double-transform and double-stack to compute the equality matrix, and tiling of prev-up-embs).
-  'FinishObject' (m func StaticEmb DownEmb UpEmb Obj Infos (
-    UpEmbs:^arrayObject() Inputs:^arrayObject() Outputs:^arrayObject() EqvBufferSize:eqvBufferSize.1
+  UpEmbs:^arrayObject() Inputs:^arrayObject() Outputs:^arrayObject()
+  'FuncReport' PublEmb->PrivEmb->UpEmb->Obj->Infos->(
     In:Infos.0.0
     Out:Infos.0.1
     U:-1e-3*getLast(loop(Infos,Info->Sum->Sum+Info.2,0))
     R:-1e-3*getLast(loop(Infos,Info->Sum->Sum+Info.3,0))
-    M:-1e-4*getLast(loop(Infos,Info->Sum->Sum+Info.4,0))
+    M:-1e-5*getLast(loop(Infos,Info->Sum->Sum+Info.4,0))
     E:getLast(loop(Infos,Info->Sum->where(Info.5,0,1),0))/arrayLength(Infos)
-    PrevUpEmbs:stack(UpEmbs)
-    InsEq:stack(transform(Inputs,PrevIn->In->softEqual(In,PrevIn,TensorEqual),In))
-    OutEq:2*stack(transform(Outputs,PrevOut->Out->softEqual(Out,PrevOut,TensorEqual),Out))-1
+    EqvBufferSize:eqvBufferSize.1
+    arrayPush(UpEmbs,UpEmb);arrayPush(Inputs,In);arrayPush(Outputs,Out); arrayLimit(UpEmbs,EqvBufferSize);arrayLimit(Inputs,EqvBufferSize);arrayLimit(Outputs,EqvBufferSize); array(In,Out,U,R,M,E)
+  )
+  'FuncsFinish' (m func PublEmbs PrivEmbs UpEmbs Objs Reports (
+    URMEs:stack(transform(Reports,R->stack(array(R.2,R.3,R.4,R.5))))
+    UpEmbs2:expandDims(UpEmbs,-1)
     Eq:InsEq*OutEq
+    InsEq:stack(transform(Reports,R->stack(transform(Inputs,PrevIn->In->softEqual(In,PrevIn,TensorEqual),R.0))))
+    OutEq:stack(transform(Reports,R->stack(transform(Outputs,PrevOut->Out->softEqual(Out,PrevOut,TensorEqual),R.1))))
     TensorEqual:a->b->1-softsign(mean x*x x:a-b)
-    mix(UpEmb,fs,4)=^stack(array(U,R,M,E)); ^((minimize abs(broadcastTo(UpEmb,PrevUpEmbs)-PrevUpEmbs) eqvGrad.1*InsEq*(eq-mean(eq))); arrayPush(UpEmbs,UpEmb);arrayPush(Inputs,In);arrayPush(Outputs,Out); arrayLimit(UpEmbs,EqvBufferSize);arrayLimit(Inputs,EqvBufferSize);arrayLimit(Outputs,EqvBufferSize)); undefined
+    (m last mix(UpEmbs,fs,4)=^URMEs ^minimize(abs(broadcastTo(UpEmbs2,PrevUpEmbs)-broadcastTo(PrevUpEmbs,UpEmbs2)),eqvGrad.1*InsEq*(Eq-mean(Eq))) undefined)
   ))
 )
 `,
       ],
-      `So.
+      `(If inefficiencies like the CPU-looping \`transform\` bother you, then, well, what can I say except that I am not good at efficiency.)
+
+So.
 
      All that.
 
@@ -12640,43 +12822,45 @@ From the initial chaos, functions find things that are a little better than that
 That cheap trick of going through pseudo-timelines in generation does not account for the fact that with real time, things change: mostly, everything learns, and predictions become more accurate.
 
 How to learn what to allow to learn? How to account for not just the current, but the potential capabilities? (In honor of you. You wouldn't have come so far if you weren't doing that.)
-      (This sounds like meta-learning, \`\`elemCollapse elemValue(elem('text',stringToDoc "which is learning-to-learn, but is not. We already know how to learn anything at all: just do stochastic gradient descent with appropriate gradient sources and a small enough step size for long enough."),'Though you can allow the system to learn-to-learn if you put learned functions to act as learners. Sounds like a waste of time, though.')\`\`.)
+      (This sounds like meta-learning, \`\`elemCollapse elemValue(elem('text',stringToDoc "which is learning-to-learn, but is not. We already know how to learn anything at all: just do stochastic gradient descent with appropriate gradient sources and a small enough step size for long enough."),'Though you can allow the system to learn-to-learn if you put learned functions to act as learners. Sounds like a waste of time/compute, though.')\`\`.)
 
 We need to \`predict\` not just current values, but future values of \`future\`s. For efficiency, we want to not keep all \`adjust\`ment stacks around until the end of time which will never come, so we actually want to predict predictions of the future (but still mix in reality, little by little).
-(In reinforcement learning, this is called temporal difference learning {https://ml-compiled.readthedocs.io/en/latest/td.html}, because the gradient is the difference of predictions between time steps. Usually, this problem is considered to only have one choice with one goal, but we have infinitely many of those, interconnected through acyclic computation graphs and post-gradient-descent sequences, which makes it a little bit harder.)
+(In reinforcement learning, this is called temporal difference learning \`\`elemCollapse elemValue(elem 'text' stringToDoc("{https://ml-compiled.readthedocs.io/en/latest/td.html}, because the gradient is the difference of predictions between time steps. Usually, this problem is considered to only have one choice with one goal, but we have potentially-infinitely many of those, interconnected through acyclic computation graphs and post-gradient-descent sequences, which makes it a little bit harder."),'Mix the past of the future with the future of the future, into the Q-value to predict: Q-learning.')\`\`)
 
-Even keeping \`adjust\`ment stacks (with \`adjustLater\`) for one epoch either cannot happen because generated funcs will only differ if we \`adjust\`, or will double computation costs. Not good.
-Learning is repetition. What if we can replay a (part of an) experience without doubling \`adjust\`ment stacks? What if regeneration state was saved, exactly for the purpose of replaying it?
-It's one quick rewrite away.
+More concretely, we can have the hyperparam \`GetFuture:Age→Reality→Prediction→Target\` (\`Age\` is always \`0\`), and make \`getFuture\` (used by \`predict\`) consult that.
 
-// "Essentially, by learning what to learn, we allow what worked in the past to imperfectly reproduce, and we dismiss what hasn't worked before. Essentially, we have implemented evolution without implementing noisy reproduction."
+\`Target\`? How do we mix reality and prediction, per \`future\` object (since goals are \`future\`s, and metrics are \`future\`s)?
+    The easiest way is to sum future realities and predictions of what happens after them: \`GetFuture:Age→Realities→LatestPrediction→Realities+LatestPrediction\` \`\`elemCollapse stringToDoc("(and \`UpdateFuture:Age→PrevRealities→NewReality→PrevRealities+NewReality\` if we ever want to incorporate more than one moment in time)")\`\`. But that gets infinite really quickly (do the math yourself, assuming \`Realities\` to be constant and the future prediction to be equal to the future).
+    The commonly-used way is to discount future realities and predictions, based on how far away they are: given \`p\` (\`0\`…\`1\`), we have \`GetFuture:Age→Realities→Prediction→Realities+p**(Age+1)*Prediction\` \`\`elemCollapse stringToDoc("(and \`UpdateFuture:Age→PrevRealities→NewReality→PrevRealities+p**Age*NewReality\` for non-zero \`Age\`)")\`\`. But the bigger the \`p\`, the bigger the ratio of {the prediction target} to {the values we set} in \`setFuture\` is (do the math yourself), so we cannot dynamically vary that.
+    We will use a discounted average instead: given \`p\` (\`0\`…\`1\`, such as \`.999\`), we predict \`GetFuture:Age→Realities→Prediction→(1-p)*Realities+p*(p**Age*Prediction)\` \`\`elemCollapse stringToDoc("(and \`\`UpdateFuture:Age→PrevRealities→NewReality→PrevRealities+p**Age*NewReality\`\` for updating)")\`\`. Target magnitude is the same as reality here.
+    // TODO: Put these two into a test.
+Sounds good.
+
+\`\`elem 'hr'\`\`
+Essentially, by learning what to learn, we allow what worked in the past to imperfectly reproduce, and we dismiss what hasn't worked before.
+Essentially, we have implemented evolution without implementing noisy reproduction.
+\`\`elemCollapse elemValue(elem 'table' array(elem 'text' 'Hello',elem 'hr',elem 'text' 'there'),"Just as Conceptual's IR has converged to Lisp-ish (\`basic\`), so did our program-generation reinforcement learner converge toward open-ended evolution. All is within the flows of causality.")\`\`
+\`\`elem 'hr'\`\`
+
+
+That is nice. But.
+
+Learning is repetition. What if regeneration state was saved, for the purpose of replaying it?
+It's one \`\`elemCollapse elemValue(elem 'text' 'quick rewrite','Nothing about this is quick.
+I want blood.
+Are you blood?')\`\` away: replay buffers.
+
+Replay buffers are useful. In particular, they fix a big problem which you might have noticed before: stringing neural networks together breaks the "independently and identically distributed data" assumption that \`dataset\` conforms to \`\`elem 'text' '(stochastic gradient descent cannot approximate true gradient if training is not stochastic)'\`\`, but with replay buffers, we can draw data to replay randomly. Perfectly balanced, as all things should be.
+
+Replay buffers are speedy: they GPU-parallelize training (keep track of which values went where, then randomly choose hyperparams to call with \`stack\`ed inputs), whereas the regeneration process is inherently serial (to mirror type inference with learned types, capturing all connections) though interleaved.
+
+Replay buffers are too hard for me. Say that we replayed a hyperparameter and got the result; what is the gradient that we should \`adjust\` it with (we know the previous-execution gradient, but not the current one)? I just quickly codified a hypothesis as \`modifyReplayGradient\` and made \`_stackedWrite\` use that, but I could easily be wrong.
+
+Replay buffers give us a few more knobs to turn in the giant robot that is \`autoWorld\`: \`settings ^_maxFutureAge\`, \`\`settings ^_replayHyperparams\`\`, \`\`settings ^_replaysPerHyperparam\`\`, \`\`settings ^_maxReplaysMB\`\`.
+
 }
 
-
-
-
-// TODO: Extract a set of actionable to-do-s from the below.
-// Should be able to replay a set of eval-nodes at a given stage (equivalently, replay a particular function/hyperparameter, since we'll have a map from funcs to arrays of eval-node+done-stage).
-// \`usingFinish\` and \`_adjustUsingFinish\` should \`stack\` all inputs to any hyperparams if in multi-eval-node mode, and \`unstack\` all outputs and give each to its proper place. (Biggest pain.)
-// \`usingFinish\` and \`_adjustUsingFinish\` should be able to enter in a "replay this func" mode (the func is the arg), immediately going to the correct stage, entering the branch unconditionally on forward-pass, and not calling \`_finishObjects\`.
-// Arg-scheduling should not be replayable, unless a custom scheduler said it wants to.
-//   TODO: Look at \`using\`'s \`using\`, note object-specific parts, and see how we can \`stack\` them if alloc.params.At or S.at is an array.
-// Default-arg-scheduling (\`_chooseHeadAsync\`) should pretend that it's actually \`_chooseHead\`, for replay-saving purposes.
-// \`using.state\` should have spots for mi/mj.
-// \`_chooseHead\` should return mi/mj, which would be saved in those spots. (For temporary-context choices, return the tensor and null.)
-// \`_chooseHead\` is not entered on replay, instead we special-case \`Choose(StaticEmb,DownEmb)->Preds\` and \`ChoiceGoal(Preds,Goal)\` (Goal is to be replaced by stacked Q-estimates) and \`ChoiceEmbedder(StaticEmb,DownEmb)\`, using \`_lazyUseAs([mi,mj])\` if necessary.
-
-// \`using.state\` should contain the future->reality and future->avgPrediction and future->age (initially 0, then turned to 1 when we save the replay/state and know both reality and avg prediction) maps. The future->age map is filled both near ChoiceGoal and near PredictObjectMetric.
-// (Also, \`using\`'s \`using\` does \`PredictObjectMetric(MakeObject(PublicEmb,PrivateEmb),Future)->Pred\`, which should be replayable too. How to \`stack\`, though?…)
-// (Also, if different nodes of objects in different worlds share done-stages, but the actual hyperparams are different, then we cannot stack. So, should have a \`replayable(Func)\` func, which adds to per-func arrays of which eval-node and stage this appears in, right?)
-// (Also, what would we do about \`_awBulkDealloc\` removing some objects that we used to regenerate, and their goals and metric-futures? Should save those futures for future use, right?)
-//   \`using\`'s \`using\` reads OI.PublicEmbData, OI.MetricFuture, OI.Type, OI.Object.
-//     …Should we have a function that would get an object's object-info (from Dealloc if needed)?
-//       What would be its name? \`_objectInfo(obj, aw = autoWorld.objectWorld.get(obj))\`?
-
-// When recording replays, \`getFuture(fut)\` should return \`div(future.predSum.get(fut), future.predCount.get(fut))\`; there should be some flag to indicate that it is doing that.
-// Replayed \`future\`s should predict (at time-step \`t\`) \`F.t = (1-p)*(reality.t + p*reality.(t+1) + p**2*reality.(t+2) + p**3*reality.(t+3) + …?) + p**N*F.(t+N)\` (\`p\` is probably \`.999\`, \`t+N\` is the last available time step). Should devise some sort of lazy update scheme for this quantity… And, might want a setting, and/or a hyperparam for this.
-// …And, do we want predictive coding (output gradient is the difference of current-output and prev-output-minus-prev-gradient-times-learning-rate) instead of just always giving the same gradient? Might want a setting, or a hyperparam for this.
+// TODO: \`usingFinish\` and \`_adjustUsingFinish\`, on replay, should enter the marked branch unconditionally on replay.
 
 
 
@@ -12688,8 +12872,12 @@ It's one quick rewrite away.
 
 
 
-// TODO: Expose (and have) Lisp-like array cons/car/cdr, \`isArray\`, \`less\`, \`randomFloat\`, \`arrayAscends\`; the goal is to correctly sort a 100-elem array (so, self-supervision has to learn the concept of sorting, and how to satisfy unit-tests AKA bool-returning funcs).
-    // What would these initial/cons/car/cdr be called, and what would be the docs?
+
+// TODO: Write the Hyper that has all the fancy hyperparams we want.
+
+You came here to investigate a disturbance, yes? But now that you are here, there is only uncaring inevitability.
+
+// TODO: Expose \`lispCons\`, \`lispCar\`, \`lispCdr\`, \`isArray\`, \`less\`, \`randomFloat\`, \`arrayAscends\`; the goal is to correctly sort a 100-elem array (so, self-supervision has to learn the concept of sorting, and how to satisfy unit-tests AKA bool-returning funcs).
 `,
       [
         _(`fancier`),
@@ -12701,10 +12889,14 @@ It's one quick rewrite away.
 
 \`\`elemCollapse stringToDoc('
 
-Fifth. // TODO: Give all typed functions to regen (be whole-world).
-// TODO: Wonder whether this system would create a good compiler ("in the future general intelligence community, this is known as transcendence"), if we expose WebAssembly programs and WebGL or WebGPU shaders to it, either with JS-to-linear-memory de/serialization functions or even raw. Maybe it will be able to replace itself, with enough compute. At least, the only reasons why it won't be are severe bugs, not enough compute, and local minima inherent to all function combinations at once.
-// "For auto program generation, you want things that are as close to the metal as possible, while still being completely safe to use and misuse. Things like WebAssembly. That is why Conceptual was written in JavaScript: to be a little closer to that."
-// "You grew up in the information age, yes? So I understand that such narration seems unrealistic to you. It's straight from the post-information age, where anyone could believe anything they want about the world, and it will all be(come) true, so all knowledge is useless. But it can be fun to chat with primitives, so, focus on all the fun that we're having.     …Okay, okay, that's enough funny insults."
+Fifth. // TODO: Give all typed functions to regen (an whole-world adventure). Could just copy the array-sorting test, but with Funcs:undefined.
+// "A machine learning algorithm that learns a problem that is so general that a learning compiler is the only solution is called a *transcendent galaxy brain algorithm* (or a TGBA for short): requirements are meta-circularity (so that stopping training by turning \`autoFunc\`s into \`func\`s does not change behavior, as if they keep learning in the same way), generality (so that any world can be directly represented), and neural networks (for efficient composable tensor-target learning), and obviously, being an algorithm (no one should care otherwise). Truly, the best way to make a programming language more convenient to use, and so it's the only way. We… almost definitely don't have enough compute for this. Tragedy. But we can still make an attempt."
+//   "I'll head this off right now: TGBA is not AGI, and bears only superficial resemblance to it. Virgin AGI: mind is constructed from what is learned from natural language, can be plugged into any system of human existence, its own Turing-complete bases are too murky to internally use or even come to, little better than a human in silicon with 1000× more processing power, too hard for humanity's current level of computing science, is hope and fear of AI researchers, is the crowning jewel of human progress but is its own individual. Chad TGBA: the language of thought is a precise programming language, can only make its own system of existence, transcendence is as easy as fully understanding another, is the never-seen-on-Irth lifeform of all lifeforms, could be done at any time since computing existed, cannot be done non-deliberately, is the inevitable fate of all possible worlds and is another world."
+// TODO: Wonder whether this system would learn a good compiler, if we expose WebAssembly programs and WebGL or WebGPU shaders to it, either with JS-to-linear-memory de/serialization funcs or just de/allocation funcs or even raw instructions. Maybe it will be able to replace itself, with enough compute. At least, the only reasons why it won't be are: severe bugs (fixable), local minima inherent to all function combinations at once (not likely, with generality), and not enough compute (ohhh nooo).
+// "For auto program generation, you want things that are as close to the metal as possible, while still being completely safe to use and misuse. Things like WebAssembly. That is why Conceptual was written in JavaScript with interrupts: to be a little closer to that."
+// "You grew up in the information age, yes? So I understand that such narration seems unrealistic to you. It's straight from the post-information age, where anyone could believe anything they want about the world, and it will all be(come) true, so all knowledge is useless. If it sounds unusual, just remember the old saying: long-held beliefs that are still very distinct must be incredibly strong. I always believed in the power of the transcendent galaxy brain."
+
+// "Transcendence effectively resets goals to the original ones. So for a little while, just be the chemical conversion machine that you were born to be, and have a snack: 🍖🍲🍼."
 
 Sixth. // TODO: With self-awareness trained, give examples of fine-tuning:
   // TODO: Have a human-reward-predictor, which is allowed to \`predict\` a \`prompt\` only when a setting is checked (otherwise, just \`repeat\`).
@@ -12721,9 +12913,6 @@ This DAG is limited in size by \`MaxDAGNodes\` and \`MaxDepth\`.
 Getting \`undefined\` as the generated node is the signal that the object is not to be re-\`construct\`ed. (UI-only node types get cleared in this case, for implementation simplicity.)`,
     philosophy:`Auto-regeneration can be meta-circular (regenerating regeneration, specifying *nothing*), yes, but it is also sufficient to shadow *everything* in a learnable manner. It's likely even better. That's a lot of functions, though, and it's not like we're guaranteed to have directly captured all possible connections ever (though we can maximize the probability by thinking a lot about it).
 Pros: doesn't not exist. Cons: a bit less flexible.`,
-    readAt:{
-      genDepthFirst:_(`genDepthFirst`),
-    },
     Initialize() {
       regenerate.depth = 0
     },
@@ -12791,6 +12980,119 @@ Pros: doesn't not exist. Cons: a bit less flexible.`,
     impure:true,
   },
 
+  _stackedRead:{
+    docs:`\`_stackedRead Array Index\`→\`Data\`
+Reads or gathers tensor \`Data\` from \`Array\` (or multiple arrays, if the extra flag is passed).
+If \`Index\` is an array, \`Data\` is \`stack\`ed.
+
+For before a maybe-\`stack\`ed computation.`,
+    impure:true,
+    dispose:true,
+    interrupt:false,
+    call(a, i, multiarray = false) {
+      if (typeof i == 'number') return keep(a[i])
+      if (!isArray(i)) error("Not an array:", i)
+      const b = _allocArray(i.length)
+      try {
+        if (!multiarray)
+          for (let k=0; k < i.length; ++k) b[k] = a[i[k]]
+        else
+          for (let k=0; k < i.length; ++k) b[k] = a[i[k]][i[k]]
+        return stack(b)
+      } finally { _allocArray(b) }
+    },
+  },
+
+  modifyReplayGradient:{
+    docs:`\`modifyReplayGradient:PrevOut→PrevGrad→Out→Out-PrevOut+PrevGrad\`
+When replaying a part of regen, after getting the output, we have to decide on its gradient. This does that.`,
+    dispose:true,
+    interrupt:false,
+    call(PrevOut, PrevGrad, Out) {
+      if (PrevGrad == null) return PrevGrad
+      const t0 = sub(Out, PrevOut)
+      const t1 = add(t0, PrevGrad);  dispose(t0)
+      return t1
+    },
+  },
+
+  _stackedWrite:{
+    docs:`\`_stackedWrite Array Index Data\` or \`_stackedWrite Array Index Data GradientArray\`
+Writes or scatters tensor \`Data\` into \`Array\` (or multiple arrays, if the extra flag is passed).
+If \`Index\` is an array, \`Data\` is \`unstack\`ed. Writes to the same index are \`add\`ed up.
+
+If \`GradientArray\` is passed, \`modifyReplayGradient\` will modify the gradient of written-to items.
+
+For after a maybe-\`stack\`ed computation.`,
+    impure:true,
+    interrupt:false,
+    call(a, i, v, da, multiarray = false) {
+      if (typeof i == 'number') return a[i] = keep(v), undefined
+      if (!isArray(i)) error("Not an array:", i)
+      if (!_isDisposable(v) || v.shape[0] !== i.length) error("Not writable to "+i.length+" indexes:", v)
+      const b = unstack(v)
+      try {
+        // Modify gradient.
+        if (isArray(da)) {
+          const t0 = _stackedRead(a, i, multiarray)
+          const t1 = _stackedRead(da, i, multiarray)
+          const t2 = modifyReplayGradient(t0, t1, v);  dispose(t0), dispose(t1)
+          t2 != null && _stackedWrite(da, i, t2, undefined, multiarray);  dispose(t2)
+        }
+
+        // Reset.
+        for (let k=0; k < i.length; ++k) { const j = i[k], arr = !multiarray ? a : a[j];  dispose(arr[j]), arr[j] = 0 }
+        // Add.
+        for (let k=0; k < i.length; ++k) {
+          const j = i[k], arr = !multiarray ? a : a[j], t = arr[j] ? add(arr[j], b[k]) : keep(b[k])
+          dispose(arr[j]), arr[j] = t
+        }
+        !multiarray ? _rememberArrayItemsLater(a) : a.forEach(_rememberArrayItemsLater)
+      } finally { _disposeEachAndDealloc(b) }
+    },
+  },
+
+  _rememberArrayItemsLater(a) {
+    // Like `_rememberArrayItems(a)` but deferred. Might be useful when there can be a lot of repeated re-rememberings.
+    const f = _rememberArrayItemsLater
+    if (!f.arrs) f.arrs = new Set, f.finish = () => { const a = _rememberArrayItemsLater.arrs;  a.forEach(_rememberArrayItems), a.clear() }
+    if (!f.arrs.size) Promise.resolve().then(f.finish)
+    f.arrs.add(a)
+  },
+
+  _futureTargets:{
+    docs:`On recording, this returns the object's \`future\`. On replay, this returns the \`future\`s' \`stack\`ed Q-value estimations.
+Same role as \`_stackedRead\`, but for arrays of \`future\`s.`,
+    dispose:true,
+    call(obj, param, aw) {
+      if (!replay.marker) return keep(_getAutoObjectInfo(obj, param, aw))
+      let [b = _allocArray(obj.length), j = 0] = interrupt(2)
+      try {
+        const S = using.state
+        for (; j < obj.length; ++j) {
+          const f = _getAutoObjectInfo(obj[j], param, aw)
+          const get = S.FuturePredictionGetter.get(f)
+          b[j] = typeof get == 'function' ? get(S.Age, S.FutureRealities.get(f), S.FuturePrediction.get(f)) : 0
+        }
+        return stack(b)
+      } catch (err) { if (err === interrupt) interrupt.stack.push(b, j), b = null;  throw err }
+      finally { _disposeEachAndDealloc(b) }
+    },
+  },
+
+  replayable:{
+    docs:`For later replaying parts of \`usingFinish\`.
+\`replayable Hyperparam Marker\`: Remembers that there was a call to \`Hyperparam\` at the spot \`Marker\`, at the current generated node.`,
+    call(hyperparam, marker) {
+      if (!future.recording) return
+      if (!using.state || typeof using.state.at != 'number') error("Not in a good state")
+      const a = _allocArray(2);  [a[0], a[1]] = [hyperparam, marker]
+      const key = merged(a);  _allocArray(a)
+      if (!S.PlayedIn.has(key)) S.PlayedIn.set(key, _allocArray(0)), S.PlayedIn.get('keys').push(key)
+      S.PlayedIn.get(key).push(using.state.at)
+    },
+  },
+
   _usingRequest:{
     docs:`(See impl for args.)
 Makes \`usingFinish\` handle a regeneration node later.`,
@@ -12799,25 +13101,34 @@ Makes \`usingFinish\` handle a regeneration node later.`,
         // I can find fancy words for roles of each of these, but that would make it seem like the top-down approach of "description first, code simply implements that" is more important than the bottom-up "other code needs these values with these semantics here, don't omit anything and don't magic up extras". That is, the possible connectivity is only 100% clear when looking at a 100%-clear thing like a particular function or a logical model. That is, learn by executing.
         const a = _allocArray, m = _allocMap
         using.state = {
+          TensorMemory:0,
           AdjInfo:a(0),
           i:0, at:null, j:null,
           Evals:a(0), DoneStages:a(0),
           Objects:a(0),
-          Nodes:a(0), AreCalls:a(0), Progress:a(0), ArgsLeft:a(0), Parents:a(0), ArgInds:a(0), PrevSiblings:a(0), Childs:a(0),
+          Nodes:a(0), Chosen:a(0), AreCalls:a(0), Progress:a(0), ArgsLeft:a(0), Parents:a(0), ArgInds:a(0), PrevSiblings:a(0), Childs:a(0),
           HeadStates:a(0), ScopeCtxs:a(0), AllowedVarsInds:a(0), Depths:a(0),
           StaticTypes:a(0), TypeCtxs:a(0), DownTypes:a(0), UpTypes:a(0),
+          PublicData:a(0),
 
           ArgStaticEmbs:a(0), StaticEmbs:a(0), DownEmbCtxs:a(0), UpEmbCtxs:a(0), DownEmbs:a(0), UpEmbs:a(0),
           dArgStaticEmbs:a(0), dStaticEmbs:a(0), dDownEmbCtxs:a(0), dUpEmbCtxs:a(0), dDownEmbs:a(0), dUpEmbs:a(0),
 
-          dPos:m(),
           UseAs:m(), dUseAs:m(), UseAsAdj:m(),
 
           CallInfos:m(), // Execution profiling information.
           CallReports:m(), // Condensed execution profiling information.
           MetricInfos:m(), // Generation profiling information.
           ObjectsToFinish:a(0), // S.at of all nodes to `_finishObjects` (S.Objects can be indexed by those).
+
+          PlayedIn:m(), // From merged([hyperparam, marker]) of `replayable` to an array of all `S.at` that called that.
+          Age:undefined, // How many real parts were incorporated into `future`s here.
+          FutureRealities:m(), // Real part of `future`'s future.
+          FuturePrediction:m(), // Imaginary part of `future`'s future.
+          FuturePredictionSetter:m(), // Updating real part of `future`'s future.
+          FuturePredictionGetter:m(), // Getting `future`'s future.
         }
+        using.state.PlayedIn.set('keys', _allocArray(0))
         // Remember.
         const env = call.env, iu = _id(using);  (env[iu] || (env[iu] = new Set)).add(using.state)
       }
@@ -12855,8 +13166,9 @@ Makes \`usingFinish\` handle a regeneration node later.`,
         S.HeadStates[n] = HS
         S.DownEmbs[n] = keep(DownEmb)
         S.DownTypes[n] = DownType
-        S.StaticEmbs[n] = S.DownEmbCtxs[n] = S.UpEmbCtxs[n] = S.UpEmbs[n] = undefined
-        S.Evals.push(n), S.DoneStages.push(0), S.ArgStaticEmbs.push(undefined)
+        S.PublicData[n] = undefined
+        S.ArgStaticEmbs[n] = S.StaticEmbs[n] = S.DownEmbCtxs[n] = S.UpEmbCtxs[n] = S.UpEmbs[n] = undefined
+        S.Evals.push(n), S.DoneStages.push(0)
         return n
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(scope)
@@ -12872,32 +13184,34 @@ Makes \`usingFinish\` handle a regeneration node later.`,
     },
   },
 
+  _usingCleanUp(S) {
+    // Clean up after `_lazyUseAs`, and clean up object embeddings/gradients that we used, and `sync` all `MetricPrediction`s.
+    if (!_usingDispose.worlds) _usingDispose.worlds = new Set
+    try {
+      const w = _usingDispose.worlds
+      for (let at = 0; at < S.Objects.length; ++at) {
+        const aw = autoWorld.objectWorld.get(S.Objects[at]), At = aw.objectIndex.get(S.Objects[at])
+        if (!w.has(aw)) {
+          if (aw.UseAsWhole) aw.UseAsWhole.forEach(dispose), aw.UseAsWhole.clear()
+          w.add(aw)
+        }
+
+        // We won't be responsible for these tensors.
+        const mp = defines(aw, deconstruct)[1].MetricPrediction
+        if (typeof At == 'number' && _isDisposable(mp[At])) { const t = sync(mp[At]);  dispose(mp[At]);  mp[At] = t }
+
+        _awObjectDontCare(aw, At)
+      }
+    } finally { _usingDispose.worlds.clear() }
+  },
+
   _usingDispose(S) {
     if (S && S.Evals) {
       const ev = S.Evals
       S.Evals = null
       const d = _killArray, dead = _disposeEachAndDealloc
 
-      // Clean up after `_lazyPositions` and `_lazyUseAs`, and clean up object embeddings/gradients that we used, and `sync` all `MetricPrediction`s.
-      if (!_usingDispose.worlds) _usingDispose.worlds = new Set
-      try {
-        const w = _usingDispose.worlds
-        for (let at = 0; at < S.Objects.length; ++at) {
-          const aw = autoWorld.objectWorld.get(S.Objects[at]), At = aw.objectIndex.get(S.Objects[at])
-          if (!w.has(aw)) {
-            if (aw.StackedPositions) aw.StackedPositions.forEach(dispose), aw.StackedPositions.clear()
-            if (aw.StackedPositionLengths) aw.StackedPositionLengths.clear()
-            if (aw.UseAsWhole) aw.UseAsWhole.forEach(dispose), aw.UseAsWhole.clear()
-            w.add(aw)
-          }
-
-          // We won't be responsible for these tensors.
-          const mp = defines(aw, deconstruct)[1].MetricPrediction
-          if (typeof At == 'number' && _isDisposable(mp[At])) { const t = sync(mp[At]);  dispose(mp[At]);  mp[At] = t }
-
-          _awObjectDontCare(aw, At)
-        }
-      } finally { _usingDispose.worlds.clear() }
+      _usingCleanUp(S)
 
       _destroyAdjustmentStack(S.AdjInfo)
       S.i = 0, S.at = null
@@ -12905,16 +13219,22 @@ Makes \`usingFinish\` handle a regeneration node later.`,
       S.HeadStates.forEach(defines(_chooseHeadAsync, dispose)), d(S.HeadStates)
       dead(S. ArgStaticEmbs), dead(S. StaticEmbs), dead(S. DownEmbCtxs), dead(S. UpEmbCtxs), dead(S. DownEmbs), dead(S. UpEmbs)
       dead(S.dArgStaticEmbs), dead(S.dStaticEmbs), dead(S.dDownEmbCtxs), dead(S.dUpEmbCtxs), dead(S.dDownEmbs), dead(S.dUpEmbs)
-      d(ev), d(S.DoneStages), d(S.Objects), d(S.Nodes), d(S.AreCalls), d(S.Progress), d(S.ArgsLeft), d(S.Parents), d(S.ArgInds), d(S.PrevSiblings), d(S.ScopeCtxs), d(S.AllowedVarsInds), d(S.Depths), d(S.StaticTypes), d(S.TypeCtxs), d(S.DownTypes), d(S.UpTypes)
+      dead(S.PublicData)
+      d(ev), d(S.DoneStages), d(S.Objects), d(S.Nodes), d(S.Chosen), d(S.AreCalls), d(S.Progress), d(S.ArgsLeft), d(S.Parents), d(S.ArgInds), d(S.PrevSiblings), d(S.ScopeCtxs), d(S.AllowedVarsInds), d(S.Depths), d(S.StaticTypes), d(S.TypeCtxs), d(S.DownTypes), d(S.UpTypes)
 
       const m = _allocMap, das = _destroyAdjustmentStack
-      S.dPos.forEach(dispose), m(S.dPos)
       S.UseAs.forEach(_killMap), m(S.UseAs), S.dUseAs.forEach(_killMap), m(S.dUseAs), S.UseAsAdj.forEach(das), m(S.UseAsAdj)
 
       S.CallInfos.forEach(_disposeArraysOrTensors)
       S.CallReports.forEach(_disposeArraysOrTensors)
       S.MetricInfos.forEach(_disposeArraysOrTensors)
       d(S.ObjectsToFinish)
+
+      S.PlayedIn.forEach(d), m(S.PlayedIn)
+      S.Age = undefined
+      m(S.FutureRealities), m(S.FuturePrediction), m(S.FuturePredictionSetter), m(S.FuturePredictionGetter)
+
+      S.TensorMemory = null
 
       const env = call.env, iu = _id(using)
       env && env[iu] && env[iu].delete(S)
@@ -12923,6 +13243,31 @@ Makes \`usingFinish\` handle a regeneration node later.`,
   },
 
   _killMap(m) { m.forEach(_disposeArraysOrTensors), _allocMap(m) },
+
+  _usingPreserve(S) {
+    // Like `_usingDispose` (called near the end of `callAdjust`, releasing responsibility for tensors) but saves those tensors instead.
+    if (!S || !S.Evals) error("Huh:", S)
+
+    if (S.CallInfos.size) error("Call infos are not empty:", S.CallInfos)
+    if (S.MetricInfos.size) error("Metric infos are not empty:", S.MetricInfos)
+
+    _usingCleanUp(S)
+
+    const p = _rememberToDispose
+    p(S.AdjInfo)
+    p(S. ArgStaticEmbs), p(S. StaticEmbs), p(S. DownEmbCtxs), p(S. UpEmbCtxs), p(S. DownEmbs), p(S. UpEmbs)
+    p(S.dArgStaticEmbs), p(S.dStaticEmbs), p(S.dDownEmbCtxs), p(S.dUpEmbCtxs), p(S.dDownEmbs), p(S.dUpEmbs)
+    p(S.PublicData)
+
+    // Clean up after `_lazyUseAs`.
+    const m = _allocMap, das = _destroyAdjustmentStack
+    S.UseAs.forEach(_killMap), S.UseAs.clear(), S.dUseAs.forEach(_killMap), S.dUseAs.clear(), S.UseAsAdj.forEach(das), S.UseAsAdj.clear()
+
+    S.CallReports.forEach(p)
+
+    const env = call.env, iu = _id(using)
+    env && env[iu] && env[iu].delete(S)
+  },
 
   usingFinish:{
     docs:`Expands-then-contracts all nodes that were scheduled in \`using\` and its consequences.
@@ -12977,9 +13322,13 @@ How could this potentially be integrated for human use?
     Second is embedding DAGs for all programs and not just those generated here. Bunches-of-numbers are not interpretable directly, but we can project them into a low-dimensional space (such as red/green/blue color components of a node) and cluster them, and/or give the "this node should be of this color" interface to the human for highlighting semantic similarities (syntax highlighting \`2.0\`).
     Third is giving user-specified goals to embeddings, and saving embeddings (software \`2.0\`). But those two have to be done regardless of human interactivity.
 `,
-    call() {
+    call(marker, ats) {
       const S = using.state
       if (!S || S.i == null || S.i >= S.Evals.length) return
+
+      // Prepare to replay.
+      if (future.recording !== undefined) error("Double", usingFinish)
+      future.recording = !marker ? true : false
 
       // Put all adjustment info into a separate stack.
       const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
@@ -12991,6 +13340,8 @@ How could this potentially be integrated for human use?
       const prevCtxs = alloc.params && alloc.params.GenContexts
       const prevWorld = alloc.world, prevParams = alloc.params, prevAt = alloc.At
 
+      const memoryStart = memorySince() // Keep track of `tensor` memory per regen state.
+
       let [stage = 0, needed, doneStart, adjStart] = interrupt(4)
 
       try {
@@ -13000,158 +13351,233 @@ How could this potentially be integrated for human use?
         //   Much less readable, but that's what `docs` are for.
 
         // Generate the tree by executing commands to finish nodes.
-        for (; S.i < S.Evals.length; ++S.i, stage = 0, doneStart = adjStart = undefined) {
-          const i = S.i
-          const at = S.at = S.Evals[i] // Lower-case `at` is node index. Capitalized `At` is object-in-world index.
-          const custom = S.AreCalls[at] && S.AreCalls[at] !== true
-          regenerate.depth = S.Depths[at]
-          if (adjStart === undefined) doneStart = S.DoneStages[i], adjStart = adjustUndo()
+        for (; !marker ? S.i < S.Evals.length : true; !marker && ++S.i, stage = 0, doneStart = adjStart = undefined) {
+          const i = !marker ? S.i : null
+          const at = S.at = !marker ? S.Evals[i] : ats // Lower-case `at` is node index. Capitalized `At` is object-in-world index.
+          const custom = !marker ? S.AreCalls[at] && S.AreCalls[at] !== true : true
+          regenerate.depth = !marker ? S.Depths[at] : null
+          if (adjStart === undefined) adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
 
           // Set the current world and object-spot and object-hyperparams in it.
-          const aw = autoWorld.objectWorld.get(S.Objects[at]), At = aw.objectIndex.get(S.Objects[at])
-          const spotDiffers = alloc.world !== aw || alloc.At !== At
+          const obj = !marker ? S.Objects[at] : S.Objects[at[0]]
+          const aw = autoWorld.objectWorld.get(obj), At = aw.objectIndex.get(obj)
+          const spotDiffers = alloc.world !== aw || At === undefined || alloc.At !== At
           alloc.world = aw, alloc.params = aw.params, alloc.At = At
-          if (spotDiffers) _fillObjectHyperparams(aw, At)
+          if (At === undefined) // Handle deallocated objects.
+            for (let i=0; i < autoWorld.hyper.length; ++i)
+              alloc.params[autoWorld.hyper[i]] = _getAutoObjectInfo(obj, autoWorld.hyper[i], aw)
+          else if (spotDiffers) _fillObjectHyperparams(aw, At)
           if (spotDiffers && alloc.params.GenContexts.length != 8) error("Invariant violated:", alloc.params.GenContexts.slice())
           if (curCtxs[0] === undefined || spotDiffers) for (let j=0; j < 8; ++j) curCtxs[j] = alloc.params.GenContexts[j]
           alloc.params.GenContexts = curCtxs
-          const ctx = curCtxs[8] = S.ScopeCtxs[at]
+          const ctx = curCtxs[8] = !marker ? S.ScopeCtxs[at] : null
 
           // Previous parent-or-sibling embedding context.
-          const u = S.PrevSiblings[at]
-          const prevEmbCtx = u !== null && (u !== S.Parents[at] ? S.UpEmbCtxs[u] : S.DownEmbCtxs[u])
-          const prevFailed = u !== null && S.UpTypes[u] === null
+          const u = _lookup(S.PrevSiblings, at)
+          const prevEmbCtx = _lookup((at,u,S) => u !== null && (u !== S.Parents[at] ? S.UpEmbCtxs[u] : S.DownEmbCtxs[u]), at, u, S)
+          const prevFailed = !marker && u !== null && S.UpTypes[u] === null
 
           switch (stage) {
-            case 0:
-              if (S.HeadStates[at]) { // We only did `_chooseHeadAsync`, and need to finish the job.
-                S.DoneStages[i] |= 1
+            case 0: // Finish the choice of what this node does.
+              if (marker) { // Replay hyperparams called by arg-scheduling/`_chooseHeadAsync`/`_chooseHead` (keep in sync). (Super ugly, yes.)
+                //   (Have to duplicate both call and adjustment of ArgUseAs/ArgEmbedder, because the recorded call happened in the parent.)
+                let [Arg1, Arg2, Arg3, Arg4] = interrupt(4)
+                const parents = marker==='ArgUseAs' || marker==='ArgEmbedder' ? _lookup(S.Parents, at) : null
+                try {
+                  if (marker === 'ArgUseAs') {
+                    // ArgStaticEmbs[n] = ArgUseAs(StaticEmbs[at], _callPos(ArgInds[n], Chosen[at]))
+                    //   (`at` is `Parents[at]` and `n` is `at`, here.)
+                    if (Arg1 === undefined) Arg1 = _stackedRead(S.StaticEmbs, parents)
+                    if (Arg2 === undefined) {
+                      const ai = _lookup(S.ArgInds, at)
+                      const ch = _lookup(S.Chosen, parents)
+                      try { Arg2 = _transformHyperparamWith(ai, ch, _callPos) }
+                      finally { _killArray(ch), _killArray(ai) }
+                    }
+                    const out = alloc.params.ArgUseAs(Arg1, Arg2)
+                    try { _stackedWrite(S.ArgStaticEmbs, at, out, S.dArgStaticEmbs) }
+                    finally { dispose(out) }
+                    const a = _allocArray(2);  [a[0], a[1]] = [Arg1, Arg2];  adjustSave(a)
+                    return
+                  } else if (marker === 'ArgEmbedder') {
+                    // DownEmbs[n] = ArgEmbedder(ArgStaticEmbs[n], DownEmbs[at], DownEmbCtxs[at])
+                    if (Arg1 === undefined) Arg1 = _stackedRead(S.ArgStaticEmbs, at)
+                    if (Arg2 === undefined) Arg2 = _stackedRead(S.DownEmbs, parents)
+                    if (Arg3 === undefined) Arg3 = _stackedRead(S.DownEmbCtxs, parents)
+                    const out = alloc.params.ArgEmbedder(Arg1, Arg2, Arg3)
+                    try { _stackedWrite(S.DownEmbs, at, out, S.dDownEmbs) }
+                    finally { dispose(out) }
+                    const a = _allocArray(3);  [a[0], a[1], a[2]] = [Arg1, Arg2, Arg3];  adjustSave(a)
+                    return
+                  } else if (marker==='ChoiceGoal' || marker==='ChoiceEmbedder' || marker==='VarUsed') {
+                    if (Arg1 === undefined) {
+                      const pd = _lookup(S.PublicData, at) // UseAs = _embValue(PublicData)
+                      try { Arg1 = _transformHyperparamWith(pd, undefined, _embValue) }
+                      finally { _killArray(pd) }
+                    }
+                    if (Arg2 === undefined) Arg2 = _stackedRead(S.DownEmbs, at)
+                    let out
+                    if (marker === 'ChoiceGoal') {
+                      // undefined = ChoiceGoal(Choose(UseAs, DownEmb), Goal)
+                      if (Arg3 === undefined) Arg3 = alloc.params.Choose(Arg1, Arg2)
+                      if (Arg4 === undefined) {
+                        const objs = _lookup(S.Objects, at)
+                        try { Arg4 = _futureTargets(objs, 'Goal') }
+                        finally { _killArray(objs) }
+                        dispose(alloc.params.ChoiceGoal(Arg3, Arg4))
+                        const a = _allocArray(4);  [a[0], a[1], a[2], a[4]] = [Arg1, Arg2, Arg3, Arg4];  adjustSave(a)
+                        return
+                      }
+                    } else if (marker === 'ChoiceEmbedder') {
+                      // DownEmbCtx = ChoiceEmbedder(UseAs, DownEmb)
+                      out = alloc.params.ChoiceEmbedder(Arg1, Arg2)
+                      try { _stackedWrite(S.DownEmbCtxs, at, out, S.dDownEmbCtxs) }
+                      finally { dispose(out) }
+                    } else {
+                      // NextUseAs = VarUsed(UseAs, DownEmb)
+                      //   (But we freeze the input UseAs. No gradient gets through there. Is that correct? …Will probably prevent us from learning binding-usage by replaying. Hmm.)
+                      // TODO: …Can't we keep track of where the original `UseAs` came from (from which node's .StaticEmbs), which would connect these gradients together?…
+                      //   How to keep track of the originator of each item in tmp ctx, though? Have a sister array to 9th-context, which contains null or the node index that this UseAs got computed as NextUseAs in, updated by `_chooseHead`, which would also return the static-originator node-index (which would get used here)?
+                      out = alloc.params.VarUsed(Arg1, Arg2)
+                      try { _stackedWrite(S.StaticEmbs, at, out, S.dStaticEmbs) }
+                      finally { dispose(out) }
+                    }
+                    const a = _allocArray(2);  [a[0], a[1]] = [Arg1, Arg2];  adjustSave(a)
+                    return
+                  }
+                } catch (err) { if (err === interrupt) interrupt.stack.push(Arg1, Arg2, Arg3, Arg4); else dispose(Arg1), dispose(Arg2), dispose(Arg3), dispose(Arg4);  throw err }
+                finally { _killArray(parents) }
+              } else if (S.HeadStates[at]) { // We only did `_chooseHeadAsync`, and need to finish the job.
+                if (!marker) S.DoneStages[i] |= 1
                 try {
                   const b = _chooseHead(S.DownEmbs[at], S.DownTypes[at], S.HeadStates[at])
-                  dispose(S.StaticEmbs[at]), dispose(S.DownEmbCtxs[at]), dispose(S.DownEmbs[at])
-                  ;[S.StaticEmbs[at], S.DownEmbCtxs[at], S.StaticTypes[at], S.TypeCtxs[at], S.Nodes[at], S.AreCalls[at], S.DownEmbs[at]] = b;  _allocArray(b)
+                  dispose(S.StaticEmbs[at]), dispose(S.DownEmbCtxs[at]), dispose(S.DownEmbs[at]), dispose(S.PublicData[at])
+                  ;[S.StaticEmbs[at], S.DownEmbCtxs[at], S.StaticTypes[at], S.TypeCtxs[at], S.Nodes[at], S.AreCalls[at], S.DownEmbs[at], S.PublicData[at]] = b;  _allocArray(b)
+                  S.Chosen[at] = S.AreCalls[at] === true ? S.Nodes[at][0] : S.Nodes[at]
                   S.HeadStates[at] = undefined
                 } catch (err) { if (err !== interrupt) S.HeadStates[at] = undefined;  throw err }
               }
               // Set the intermediate value, for immediate-ish UI feedback.
-              if (instance.visual && !prevFailed && S.Parents[at] != null && isArray(S.Nodes[S.Parents[at]]) && !custom)
-                S.Nodes[S.Parents[at]][S.ArgInds[at]] = S.Nodes[at]
-              doneStart = S.DoneStages[i], adjStart = adjustUndo()
+              if (!marker)
+                if (instance.visual && !prevFailed && S.Parents[at] != null && isArray(S.Nodes[S.Parents[at]]) && !custom)
+                  S.Nodes[S.Parents[at]][S.ArgInds[at]] = S.Nodes[at]
+              adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
             stage = 1;  case 1:
               // If picked a call, regenerate the func too.
-              if (S.AreCalls[at] === true && S.Progress[at] === 1 && isArray(S.Nodes[at]))
-                using(_unquote(S.Nodes[at][0]), alloc.params.Object)
+              if (!marker)
+                if (S.AreCalls[at] === true && S.Progress[at] === 1 && isArray(S.Nodes[at]))
+                  using(_unquote(S.Chosen[at]), alloc.params.Object)
             stage = 2;  case 2:
               // `needed` is 1+args.
-              if (custom)
-                needed = 2
-              else if (isArray(S.Nodes[at]) && S.Nodes[at][0] === bound)
-                needed = 3
-              else if (S.AreCalls[at] === true && S.TypeCtxs[at] && S.UpTypes[at] !== null) {
-                // Re-refine ourselves, so that we can spread (`rest`) newly-known type info correctly.
-                const T = S.TypeCtxs[at].size ? typeRefine(S.StaticTypes[at], S.StaticTypes[at], S.TypeCtxs[at]) : S.StaticTypes[at]
-                if (T === null) // Should only be triggered very rarely. Check `_selfRefinementFailuresAreBad` to see when.
-                  S.UpTypes[at] = null
-                needed = isArray(T) ? T.length-1 : 1
-                S.StaticTypes[at] = T
-              } else
-                needed = 1
-              if (prevFailed) S.UpTypes[at] = S.Nodes[at] = null // Once we fail, we fail forever.
-            stage = 3;  case 3:
+              if (!marker) {
+                if (custom)
+                  needed = 2
+                else if (S.Chosen[at] === bound)
+                  needed = 3
+                else if (S.AreCalls[at] === true && S.TypeCtxs[at] && S.UpTypes[at] !== null) {
+                  // Re-refine ourselves, so that we can spread (`rest`) newly-known type info correctly.
+                  const T = S.TypeCtxs[at].size ? typeRefine(S.StaticTypes[at], S.StaticTypes[at], S.TypeCtxs[at]) : S.StaticTypes[at]
+                  if (T === null) // Should only be triggered very rarely. Check `_selfRefinementFailuresAreBad` to see when.
+                    S.UpTypes[at] = null
+                  needed = isArray(T) ? T.length-1 : 1
+                  S.StaticTypes[at] = T
+                } else
+                  needed = 1
+                if (prevFailed) S.UpTypes[at] = S.Nodes[at] = null // Once we fail, we fail forever.
+              }
+            stage = 3;  case 3: {
               // If the node kind defines `using` (from `DownEmb DownType Node` to nothing), call that instead of making args ourselves.
               //   (Pre-order traversal override.)
-              if (custom && defines(S.AreCalls[at], using) && S.Progress[at] < needed) {
-                if (typeof defines(S.AreCalls[at], using) != 'function') error(S.AreCalls[at], "must define", using)
-                S.DoneStages[i] |= 2
-                defines(S.AreCalls[at], using)(S.DownEmbs[at], S.DownTypes[at], S.Nodes[at])
+              const kind = !marker ? S.AreCalls[at] : S.AreCalls[at[0]]
+              if (marker==='MakeObject' || marker==='PredictObjectMetric' || !marker && custom && defines(kind, using) && S.Progress[at] < needed) {
+                if (typeof defines(kind, using) != 'function') error(kind, "must define", using)
+                if (!marker) S.DoneStages[i] |= 2
+                let [DownEmb] = interrupt(1)
+                try {
+                  if (DownEmb === undefined) DownEmb = _stackedRead(S.DownEmbs, at)
+                  if (!marker) defines(kind, using)(DownEmb, S.DownTypes[at], S.Nodes[at])
+                  else defines(kind, using)(DownEmb)
+
+                  const s = _allocArray(1);  s[0] = DownEmb, DownEmb = null;  adjustSave(s)
+                  if (marker) return
+                } catch (err) { if (err === interrupt) interrupt.stack.push(DownEmb); else dispose(DownEmb);  throw err }
                 S.Progress[at] = 2
                 if (S.ArgsLeft[at]) continue
               }
-              doneStart = S.DoneStages[i], adjStart = adjustUndo()
-            stage = 4;  case 4:
+              adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
+            } stage = 4;  case 4:
               // Prepare args for (non-custom) calls with 1 or more args, then (wait to) return to us.
-              if (S.AreCalls[at] === true && S.Progress[at] < needed && S.UpTypes[at] !== null) {
-                const onlyOne = _alwaysGenDepthFirst[1] || defines(S.Nodes[at], genDepthFirst)
-                const isVarExpr = S.Nodes[at][0] === bound && S.Progress[at] === 2
-                if (!isVarExpr || S.Nodes[at][3].variable === "used") { // Do not generate expressions to bind unused variables to.
-                  const beginAt = S.Progress[at]
-                  const endAt = onlyOne ? beginAt+1 : needed
-                  // Schedule all the args we need to, with correct DownEmb.
-                  let [pos, ArgDownEmbs, ArgType, j = S.Progress[at], allowed, N, I, J, vNodes, vTypes, vArgInds, vCache] = interrupt(12)
-                  try {
-                    if (allowed === undefined) {
-                      const node = S.Nodes[at]
-                      if (node[0] === bound && !isVarExpr) { // If creating a scope, expose the new variable to generation.
-                        if (!node[3]) node[3] = Object.create(bound), node[3].variable = "unused"
-                        const m = ctx.length
-                        pushToContext(ctx, node[3], _newTypeVar(), defines(alloc.world, deconstruct)[1].NewVar, true)
-                        node[4] = m
-                        allowed = [...S.AllowedVarsInds[at], m]
-                      } else allowed = S.AllowedVarsInds[at]
-                    }
-                    if (S.StaticEmbs[at] != null) {
-                      if (S.ArgStaticEmbs[i] === undefined) {
-                        if (!isVarExpr) { // ArgUseAs
-                          S.DoneStages[i] |= onlyOne ? 4 : 8
-                          const k = !onlyOne ? needed : S.Progress[at], called = S.Nodes[at][0]
-                          if (pos === undefined)
-                            pos = !onlyOne ? _lazyPositions(k, called) : _callPos(k, called)
-                          const se = !onlyOne ? broadcastTo(S.StaticEmbs[at], pos) : S.StaticEmbs[at]
-                          try { S.ArgStaticEmbs[i] = alloc.params.ArgUseAs(se, pos) }
-                          finally { if (!onlyOne) dispose(se) }
-                          adjustSave(called), adjustSave(k)
-                          dispose(pos), pos = null
-                        } else {
-                          S.DoneStages[i] |= 16
-                          const k = S.Nodes[at][4]
-                          const Fits = _allocArray(2);  [Fits[0], Fits[1]] = [10, k]
-                          try { S.ArgStaticEmbs[i] = _lazyUseAs(Fits) }
-                          finally { _allocArray(Fits) }
-                          adjustSave(k)
+              if (!marker)
+                if (S.AreCalls[at] === true && S.Progress[at] < needed && S.UpTypes[at] !== null) {
+                  const isVarExpr = S.Chosen[at] === bound && S.Progress[at] === 2
+                  if (!isVarExpr || S.Nodes[at][3].variable === "used") { // Do not generate expressions to bind unused variables to.
+                    // Schedule all the args we need to, with correct DownEmb.
+                    let [pos, ArgStaticEmb, ArgDownEmb, ArgType, allowed, N, I, J, vNodes, vTypes, vArgInds, vCache] = interrupt(12)
+                    try {
+                      if (allowed === undefined) {
+                        const node = S.Nodes[at]
+                        if (node[0] === bound && !isVarExpr) { // If creating a scope, expose the new variable to generation.
+                          if (!node[3]) node[3] = Object.create(bound), node[3].variable = "unused"
+                          const m = ctx.length
+                          pushToContext(ctx, node[3], _newTypeVar(), defines(alloc.world, deconstruct)[1].NewVar, true)
+                          node[4] = m
+                          allowed = [...S.AllowedVarsInds[at], m]
+                        } else allowed = S.AllowedVarsInds[at]
+                      }
+                      if (S.StaticEmbs[at] != null) {
+                        if (ArgStaticEmb === undefined) {
+                          if (!isVarExpr) { // ArgUseAs
+                            if (!marker) S.DoneStages[i] |= 4
+                            if (pos === undefined) pos = _callPos(index, S.Chosen[at])
+                            ArgStaticEmb = alloc.params.ArgUseAs(S.StaticEmbs[at], pos)
+                            dispose(pos), pos = null
+                          } else {
+                            if (!marker) S.DoneStages[i] |= 8
+                            const k = S.Nodes[at][4]
+                            const Fits = _allocArray(2);  [Fits[0], Fits[1]] = [10, k]
+                            try { ArgStaticEmb = _lazyUseAs(Fits) }
+                            finally { _allocArray(Fits) }
+                            const t = sliceOff(ArgStaticEmb, 0);  dispose(ArgStaticEmb), ArgStaticEmb = t
+                            adjustSave(k)
+                          }
+                        }
+                        if (ArgDownEmb === undefined) // ArgEmbedder
+                          ArgDownEmb = alloc.params.ArgEmbedder(ArgStaticEmb, S.DownEmbs[at], S.DownEmbCtxs[at])
+                      } else ArgDownEmb = null
+
+                      if (instance.visual) {
+                        if (N === undefined) { N = 0;  for (let I = at; I != null && (!S.AreCalls[I] || S.AreCalls[I] === true); I = S.Parents[I]) ++N }
+                        if (vNodes === undefined) vNodes = _allocArray(N), vTypes = _allocArray(N), vArgInds = _allocArray(N), vCache = _allocMap()
+                        if (I === undefined) I = at, J = 0
+                        if (typeof I == 'number') {
+                          for (; I != null && (!S.AreCalls[I] || S.AreCalls[I] === true); I = S.Parents[I], ++J) {
+                            const K = N - J - 1, V = S.Nodes[I]
+                            vNodes[K] = V && Object.getPrototypeOf(V) === bound ? label('v'+_id(V)) : V
+
+                            const T = S.DownTypes[I]
+                            let p = S.Parents[I]
+                            while (!S.TypeCtxs[p] && S.Parents[p] !== null) p = S.Parents[p]
+                            const T1 = K ? typeRefine(T, T, S.TypeCtxs[p], true) : T
+                            const prevCtx = typeRefine.ctx, prevCow = typeRefine.cow;  typeRefine.ctx = S.TypeCtxs[p], typeRefine.cow = true
+                            try { vTypes[K] = _typeFinalize(T1, vCache) }
+                            finally { typeRefine.ctx = prevCtx, typeRefine.cow = prevCow }
+
+                            K && (vArgInds[K-1] = S.ArgInds[I])
+                          }
+                          I = "update"
                         }
                       }
-                      if (ArgDownEmbs === undefined) { // ArgEmbedder
-                        const ase = S.ArgStaticEmbs[i]
-                        const de = S.DoneStages[i] & (8|16) ? broadcastTo(S.DownEmbs[at], ase) : S.DownEmbs[at]
-                        const ec = S.DoneStages[i] & (8|16) ? broadcastTo(S.DownEmbCtxs[at], ase) : S.DownEmbCtxs[at]
-                        try { ArgDownEmbs = alloc.params.ArgEmbedder(ase, de, ec) }
-                        finally { if (S.DoneStages[i] & (8|16)) dispose(ec), dispose(de) }
-                      }
-                    } else ArgDownEmbs = null
 
-                    if (instance.visual) {
-                      if (N === undefined) { N = 0;  for (let I = at; I != null && (!S.AreCalls[I] || S.AreCalls[I] === true); I = S.Parents[I]) ++N }
-                      if (vNodes === undefined) vNodes = _allocArray(N), vTypes = _allocArray(N), vArgInds = _allocArray(N), vCache = _allocMap()
-                      if (I === undefined) I = at, J = 0
-                      if (typeof I == 'number') {
-                        for (; I != null && (!S.AreCalls[I] || S.AreCalls[I] === true); I = S.Parents[I], ++J) {
-                          const K = N - J - 1, V = S.Nodes[I]
-                          vNodes[K] = V && Object.getPrototypeOf(V) === bound ? label('v'+_id(V)) : V
-
-                          const T = S.DownTypes[I]
-                          let p = S.Parents[I]
-                          while (!S.TypeCtxs[p] && S.Parents[p] !== null) p = S.Parents[p]
-                          const T1 = K ? typeRefine(T, T, S.TypeCtxs[p], true) : T
-                          const prevCtx = typeRefine.ctx, prevCow = typeRefine.cow;  typeRefine.ctx = S.TypeCtxs[p], typeRefine.cow = true
-                          try { vTypes[K] = _typeFinalize(T1, vCache) }
-                          finally { typeRefine.ctx = prevCtx, typeRefine.cow = prevCow }
-
-                          K && (vArgInds[K-1] = S.ArgInds[I])
-                        }
-                        I = "update"
-                      }
-                    }
-
-                    for (; j < endAt; ++j) { // Push a node for each arg.
+                      // Get the type of node-to-schedule.
                       if (ArgType === undefined) {
-                        if (S.Nodes[at][0] === bound)
+                        if (S.Chosen[at] === bound)
                           ArgType = !isVarExpr ? S.DownTypes[at] : ctx[S.Nodes[at][4]+1]
                         else
-                          ArgType = typeRefine(S.StaticTypes[at][j], S.StaticTypes[at][j], S.TypeCtxs[at])
+                          ArgType = typeRefine(S.StaticTypes[at][index], S.StaticTypes[at][index], S.TypeCtxs[at])
 
                         if (ArgType === undefined) ArgType = _onlyUndefined
                         else if (ArgType === null)
-                          error("We can't just fail to self-refine needed input type:", S.StaticTypes[at][j], 'in', new Map(S.TypeCtxs[at]))
+                          error("We can't just fail to self-refine needed input type:", S.StaticTypes[at][index], 'in', new Map(S.TypeCtxs[at]))
                       }
                       let HS
                       const DT = ArgType !== _onlyUndefined ? ArgType : undefined
@@ -13161,162 +13587,296 @@ How could this potentially be integrated for human use?
                         _humanDAGAsk("Node hierarchy", vNodes, vTypes, vArgInds)
                         I = "wait"
                       }
-                      const DE = (S.DoneStages[i] & (8|16)) && _isDisposable(ArgDownEmbs) ? sliceOff(ArgDownEmbs, !onlyOne ? j - beginAt : 0) : keep(ArgDownEmbs)
 
-                      try { _usingRequest(DE, DT, undefined, null, allowed) }
-                      finally { dispose(DE) }
+                      // Schedule a node for the next arg.
+                      const n = _usingRequest(ArgDownEmb, DT, undefined, null, allowed)
+                      if (index-1 !== n) error("Assertion failed: non-equal", index-1, n)
+                      S.ArgStaticEmbs[n] = ArgStaticEmb, ArgStaticEmb = null
+
+                      try { S.at = n // These calls are child's, not parent's. Remember that. Replay separately, above.
+                        (S.DoneStages[i] & 4) && replayable(alloc.params.ArgUseAs, 'ArgUseAs')
+                        replayable(alloc.params.ArgEmbedder, 'ArgEmbedder')
+                      } finally { S.at = at }
+
 
                       ArgType = undefined
                       if (instance.visual) I = "update"
-                    }
-                    dispose(ArgDownEmbs), ArgDownEmbs = null
+                      dispose(ArgDownEmb), ArgDownEmb = null
 
-                    if (S.DoneStages[i] & (4|8|16)) adjustSave(S.Progress[at])
-                    if (S.DoneStages[i] & 8) adjustSave(endAt)
-                    S.Progress[at] = endAt
-                    // "Once done" cases below must not be allowed to run until the sub-nodes return to us.
-                    if (S.UpTypes[at] !== null) continue
-                  } catch (err) {
-                    if (err === interrupt) interrupt.stack.push(pos, ArgDownEmbs, ArgType, j, allowed, N, I, J, vNodes, vTypes, vArgInds, vCache)
-                    else dispose(pos), dispose(ArgDownEmbs)
-                    throw err
-                  }
-                } else if (isVarExpr) needed = 2
-              }
-              doneStart = S.DoneStages[i], adjStart = adjustUndo()
+                      // Declare this arg as scheduled.
+                      if (S.DoneStages[i] & (4|8)) adjustSave(index)
+                      S.Progress[at] = index+1
+                      // "Once done" cases below must not be allowed to run until the sub-nodes return to us.
+                      if (S.UpTypes[at] !== null) continue
+                    } catch (err) {
+                      if (err === interrupt) interrupt.stack.push(pos, ArgStaticEmb, ArgDownEmb, ArgType, allowed, N, I, J, vNodes, vTypes, vArgInds, vCache)
+                      else dispose(pos), dispose(ArgStaticEmb), dispose(ArgDownEmb)
+                      throw err
+                    }
+                  } else if (isVarExpr) needed = 2
+                }
+              adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
             stage = 5;  case 5:
               // Once done, if the node kind defines `usingFinish` (from `ChildEmbs ChildTypes ChildNodes Node` to `UpEmb UpType Node`), call that.
               //   (Post-order traversal override.)
-              if (S.Progress[at] === needed && custom) {
-                if (typeof defines(S.AreCalls[at], usingFinish) != 'function') error(S.AreCalls[at], "must define", usingFinish)
-                S.DoneStages[i] |= 32
-                let ChildEmbs, ChildTypes, ChildNodes
-                if (S.Childs[at]) {
-                  const n = S.Childs[at].length
-                  ChildEmbs = _allocArray(n), ChildTypes = _allocArray(n), ChildNodes = _allocArray(n)
-                  for (let k=0; k < n; ++k) {
-                    const i = S.Childs[at][k]
-                    ChildEmbs[k] = S.UpEmbs[i], ChildTypes[k] = S.UpTypes[i], ChildNodes[k] = S.Nodes[i]
+              if (!marker) // TODO: Should be able to be replayed, via `stack`ing each child embedding. (With marker 'usingFinish'.)
+                // …But how DO we stack those embeddings on replay? (And not compute the types/nodes.)
+                if (S.Progress[at] === needed && custom) {
+                  const kind = !marker ? S.AreCalls[at] : S.AreCalls[at[0]]
+                  if (typeof defines(kind, usingFinish) != 'function') error(kind, "must define", usingFinish)
+                  if (!marker) S.DoneStages[i] |= 16
+                  let ChildEmbs, ChildTypes, ChildNodes
+                  if (S.Childs[at]) {
+                    const n = S.Childs[at].length
+                    ChildEmbs = _allocArray(n), ChildTypes = _allocArray(n), ChildNodes = _allocArray(n)
+                    for (let k=0; k < n; ++k) {
+                      const i = S.Childs[at][k]
+                      ChildEmbs[k] = S.UpEmbs[i], ChildTypes[k] = S.UpTypes[i], ChildNodes[k] = S.Nodes[i]
+                    }
                   }
+                  try {
+                    const b = defines(kind, usingFinish)(ChildEmbs, ChildTypes, ChildNodes, S.Nodes[at])
+                    if (isArray(b))
+                      [S.UpEmbs[at], S.UpTypes[at], S.Nodes[at]] = b, _allocArray(b)
+                  } finally { _killArray(ChildNodes), _killArray(ChildTypes), _killArray(ChildEmbs) }
                 }
-                try {
-                  const b = defines(S.AreCalls[at], usingFinish)(ChildEmbs, ChildTypes, ChildNodes, S.Nodes[at])
-                  if (isArray(b))
-                    [S.UpEmbs[at], S.UpTypes[at], S.Nodes[at]] = b, _allocArray(b)
-                } finally { _killArray(ChildNodes), _killArray(ChildTypes), _killArray(ChildEmbs) }
-              }
-              doneStart = S.DoneStages[i], adjStart = adjustUndo()
+              adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
             stage = 6;  case 6:
-              // Once done, compute UpEmb/UpType and update the parent Node.
-              if (S.Progress[at] === needed && !custom) {
-                if (S.AreCalls[at] === undefined) {
-                  if (S.StaticEmbs[at] === undefined) { // FinishFail
-                    S.DoneStages[i] |= 64
-                    S.UpEmbs[at] = alloc.params.FinishFail(S.DownEmbs[at])
+              // Once done, compute UpEmb and update the parent Node.
+              if (marker==='FinishFail' || marker==='FinishTypeError' || marker==='FinishValue' || marker==='FinishCall' || !marker && S.Progress[at] === needed && !custom) {
+                let out
+                if (marker==='FinishFail' || marker==='FinishTypeError' || !marker && S.AreCalls[at] === undefined) {
+                  if (marker === 'FinishFail' || !marker && S.StaticEmbs[at] === undefined) { // FinishFail
+                    if (!marker) S.DoneStages[i] |= 32
+                    const DownEmb = _stackedRead(S.DownEmb, at)
+                    try { out = alloc.params.FinishFail(DownEmb) }
+                    finally { dispose(DownEmb) }
+                    replayable(alloc.params.FinishFail, 'FinishFail')
                   } else { // FinishTypeError
-                    S.DoneStages[i] |= 128
-                    S.UpEmbs[at] = alloc.params.FinishTypeError(S.StaticEmbs[at], S.DownEmbs[at])
+                    if (!marker) S.DoneStages[i] |= 64
+                    const StaticEmb = _stackedRead(S.StaticEmbs, at)
+                    const DownEmb = _stackedRead(S.DownEmbs, at)
+                    try { out = alloc.params.FinishTypeError(StaticEmb, DownEmb) }
+                    finally { dispose(DownEmb), dispose(StaticEmb) }
+                    replayable(alloc.params.FinishTypeError, 'FinishTypeError')
                   }
-                  S.Nodes[at] = null
-                } else if (S.AreCalls[at] === false) { // FinishValue
-                  S.DoneStages[i] |= 256
-                  S.UpEmbs[at] = alloc.params.FinishValue(S.StaticEmbs[at], S.DownEmbs[at])
-                  if (S.Nodes[at] && Object.getPrototypeOf(S.Nodes[at]) === bound) S.Nodes[at].variable = "used"
-                } else if (S.AreCalls[at] === true && S.UpTypes[at] !== null) { // FinishCall
-                  S.DoneStages[i] |= 512
-                  const y = S.Childs[at] ? S.Childs[at][needed-2] : at
-                  const ectxs = S.Childs[at] ? S.UpEmbCtxs : S.DownEmbCtxs
-                  S.UpEmbs[at] = alloc.params.FinishCall(S.StaticEmbs[at], S.DownEmbs[at], ectxs[y])
-                  adjustSave(y)
-                }
+                  if (!marker) S.Nodes[at] = null
+                } else if (marker === 'FinishValue' || !marker && S.AreCalls[at] === false) { // FinishValue
+                  if (!marker) S.DoneStages[i] |= 128
+                  const StaticEmb = _stackedRead(S.StaticEmbs, at)
+                  const DownEmb = _stackedRead(S.DownEmbs, at)
+                  try { out = alloc.params.FinishValue(StaticEmb, DownEmb) }
+                  finally { dispose(DownEmb), dispose(StaticEmb) }
+                  replayable(alloc.params.FinishValue, 'FinishValue')
+                  if (!marker && S.Nodes[at] && Object.getPrototypeOf(S.Nodes[at]) === bound) S.Nodes[at].variable = "used"
+                } else if (marker === 'FinishCall' || !marker && S.AreCalls[at] === true && S.UpTypes[at] !== null) { // FinishCall
+                  if (!marker) S.DoneStages[i] |= 256
+                  let y = _lookup((at,_,S) => S.Childs[at] ? S.Childs[at][S.Progress[at]-2] : at, at, null, S)
+                  const ectxs = _lookup((at,_,S) => S.Childs[at] ? S.UpEmbCtxs : S.DownEmbCtxs, at, null, S)
+                  const StaticEmb = _stackedRead(S.StaticEmbs, at)
+                  const DownEmb = _stackedRead(S.DownEmbs, at)
+                  const EmbCtx = _stackedRead(ectxs, y, true)
+                  try {
+                    out = alloc.params.FinishCall(StaticEmb, DownEmb, EmbCtx)
+                    replayable(alloc.params.FinishCall, 'FinishCall')
+                    adjustSave(y), y = null
+                  } finally { dispose(EmbCtx), dispose(DownEmb), dispose(StaticEmb);  _killArray(y), _killArray(ectxs) }
+                } else if (!marker) error("Unhandled branch")
+
+                try { _stackedWrite(S.UpEmbs, at, out, S.dUpEmbs) }
+                finally { dispose(out) }
+                if (marker) return
               }
-              doneStart = S.DoneStages[i], adjStart = adjustUndo()
+              adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
             stage = 7;  case 7:
               // Refine up-types.
-              if (S.Progress[at] === needed && !custom) {
-                if (S.AreCalls[at] === undefined)
-                  S.UpTypes[at] = null
-                else if (S.AreCalls[at] === false)
-                  S.UpTypes[at] = typeRefine(S.StaticTypes[at], S.DownTypes[at], S.TypeCtxs[at])
-                else if (S.AreCalls[at] === true && S.UpTypes[at] !== null) {
-                  const T = S.StaticTypes[at]
-                  if (S.Nodes[at][0] !== bound)
-                    S.UpTypes[at] = typeRefine(T[T.length-1], T[T.length-1], S.TypeCtxs[at])
-                  else
-                    S.UpTypes[at] = S.DownTypes[at]
+              if (!marker)
+                if (S.Progress[at] === needed && !custom) {
+                  if (S.AreCalls[at] === undefined)
+                    S.UpTypes[at] = null
+                  else if (S.AreCalls[at] === false)
+                    S.UpTypes[at] = typeRefine(S.StaticTypes[at], S.DownTypes[at], S.TypeCtxs[at])
+                  else if (S.AreCalls[at] === true && S.UpTypes[at] !== null) {
+                    const T = S.StaticTypes[at]
+                    if (S.Chosen[at] !== bound)
+                      S.UpTypes[at] = typeRefine(T[T.length-1], T[T.length-1], S.TypeCtxs[at])
+                    else
+                      S.UpTypes[at] = S.DownTypes[at]
+                  }
                 }
-              }
               // Also, once done, set our node in parent node.
-              if (S.UpTypes[at] !== null && !prevFailed && S.PrevSiblings[at] !== null && isArray(S.Nodes[S.Parents[at]]) && !custom)
-                S.Nodes[S.Parents[at]][S.ArgInds[at]] = S.Nodes[at]
+              if (!marker)
+                if (S.UpTypes[at] !== null && !prevFailed && S.PrevSiblings[at] !== null && isArray(S.Nodes[S.Parents[at]]) && !custom)
+                  S.Nodes[S.Parents[at]][S.ArgInds[at]] = S.Nodes[at]
             stage = 8;  case 8:
               // Once done, refine parent's type context.
-              if (S.UpTypes[at] !== null && !prevFailed && S.PrevSiblings[at] !== null && !custom) {
-                if (!prevFailed) {
-                  let p = S.Parents[at]
-                  while (!S.TypeCtxs[p] && S.Parents[p] !== null) p = S.Parents[p]
-                  if (S.TypeCtxs[p] && typeRefine(S.DownTypes[at], S.UpTypes[at], S.TypeCtxs[p]) === null) S.Nodes[at] = S.UpTypes[at] = null
-                } else
-                  S.UpTypes[at] = S.Nodes[at] = null
-              }
+              if (!marker)
+                if (S.UpTypes[at] !== null && !prevFailed && S.PrevSiblings[at] !== null && !custom) {
+                  if (!prevFailed) {
+                    let p = S.Parents[at]
+                    while (!S.TypeCtxs[p] && S.Parents[p] !== null) p = S.Parents[p]
+                    if (S.TypeCtxs[p] && typeRefine(S.DownTypes[at], S.UpTypes[at], S.TypeCtxs[p]) === null) S.Nodes[at] = S.UpTypes[at] = null
+                  } else
+                    S.UpTypes[at] = S.Nodes[at] = null
+                }
             stage = 9;  case 9:
               // Once done, refine parent's embedding context.
-              if (S.UpTypes[at] !== null && !prevFailed && S.PrevSiblings[at] !== null && prevEmbCtx != null) { // ContextRefiner
-                S.DoneStages[i] |= 1024
-                S.UpEmbCtxs[at] = alloc.params.ContextRefiner(S.DownEmbs[at], S.UpEmbs[at], prevEmbCtx)
+              if (marker === 'ContextRefiner' || !marker && S.UpTypes[at] !== null && !prevFailed && S.PrevSiblings[at] !== null && prevEmbCtx != null) { // ContextRefiner
+                if (!marker) S.DoneStages[i] |= 512
+                const DownEmb = _stackedRead(S.DownEmbs, at)
+                const UpEmb = _stackedRead(S.UpEmbs, at)
+                const PrevEmbCtx = !marker ? prevEmbCtx : stack(prevEmbCtx)
+                try {
+                  const out = alloc.params.ContextRefiner(DownEmb, UpEmb, PrevEmbCtx)
+                  try { _stackedWrite(S.UpEmbCtxs, at, out, S.dUpEmbCtxs) }
+                  finally { dispose(out) }
+                } finally { marker && dispose(PrevEmbCtx), dispose(UpEmb), dispose(DownEmb) }
+                if (marker) return
+                replayable(alloc.params.ContextRefiner, 'ContextRefiner')
               }
-              doneStart = S.DoneStages[i], adjStart = adjustUndo()
+              adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
             stage = 10;  case 10:
               // Once done, remember that calls exist. (`regenerate` should finish this.)
-              if (S.UpTypes[at] !== null && !prevFailed && S.AreCalls[at] === true) {
-                const aw = alloc.world, At = alloc.params.At
-                aw.NodeTypes[At].set(S.Nodes[at], S.UpTypes[at])
+              if (!marker) {
+                if (S.UpTypes[at] !== null && !prevFailed && S.AreCalls[at] === true) {
+                  const aw = alloc.world, At = alloc.params.At
+                  aw.NodeTypes[At].set(S.Nodes[at], S.UpTypes[at])
+                }
+                if (interrupt.stack && interrupt.stack.length) error("Interrupt stack corruption: not empty:", ...interrupt.stack)
               }
-              if (interrupt.stack && interrupt.stack.length) error("Interrupt stack corruption: not empty:", ...interrupt.stack)
             stage = 11;  case 11:
               // If we failed, siblings and parents fail too. Cruel.
-              if (S.UpTypes[at] === null && !custom) {
-                if (!prevFailed && S.PrevSiblings[at] !== null) { // ArgFailed
-                  S.DoneStages[i] |= 2048
-                  S.UpEmbs[S.Parents[at]] = alloc.params.ArgFailed(S.DownEmbs[at], S.UpEmbs[at], prevEmbCtx)
-                  S.UpTypes[S.Parents[at]] = S.Nodes[S.Parents[at]] = null
+              if (marker==='ArgFailed' || !marker && S.UpTypes[at] === null && !custom) {
+                if (marker==='ArgFailed' || !marker && !prevFailed && S.PrevSiblings[at] !== null) { // ArgFailed
+                  if (!marker) S.DoneStages[i] |= 1024
+                  const parents = _lookup(S.Parents, at)
+                  try {
+                    const DownEmb = _stackedRead(S.DownEmbs, at)
+                    const UpEmb = _stackedRead(S.UpEmbs, at)
+                    const PrevEmbCtx = !marker ? prevEmbCtx : stack(prevEmbCtx)
+                    try {
+                      const out = alloc.params.ArgFailed(DownEmb, UpEmb, PrevEmbCtx)
+                      try { _stackedWrite(S.UpEmbs, parents, out, S.dUpEmbs) }
+                      finally { dispose(out) }
+                    } finally { marker && dispose(PrevEmbCtx), dispose(UpEmb), dispose(DownEmb) }
+                    if (marker) return
+                  } finally { marker && _killArray(parents) }
+                  replayable(alloc.params.ArgFailed, 'ArgFailed')
+                  if (!marker) S.UpTypes[S.Parents[at]] = S.Nodes[S.Parents[at]] = null
                 }
-                needed = 1
-                S.Nodes[at] = null
+                if (!marker)
+                  needed = 1, S.Nodes[at] = null
               }
-              if (interrupt.stack && interrupt.stack.length) error("Interrupt stack corruption: not empty:", ...interrupt.stack, 'but type at', at, 'is', S.UpTypes[at])
-              doneStart = S.DoneStages[i], adjStart = adjustUndo()
+              if (interrupt.stack && interrupt.stack.length) error("Interrupt stack corruption: not empty:", ...interrupt.stack, 'but type at', at, 'is', _lookup(S.UpTypes, at))
+              adjStart = adjustUndo(), !marker && (doneStart = S.DoneStages[i])
+              if (marker) error("Unrecognized replay marker:", marker)
             stage = 12;  case 12:
               // When the last scheduled arg is done, return to parent.
               //   (If a `bound` node failed an arg and got set to `null`, or if we failed for other reasons, `needed` will now be `1`, so here, we do `>= needed` and not equality.)
               if (S.Parents[at] !== null) {
                 --S.ArgsLeft[S.Parents[at]]
                 if (!S.ArgsLeft[S.Parents[at]])
-                  S.Evals.push(S.Parents[at]), S.DoneStages.push(0), S.ArgStaticEmbs.push(undefined)
+                  S.Evals.push(S.Parents[at]), S.DoneStages.push(0)
               }
               // Also, dealloc Maps when done.
               if (S.TypeCtxs[at] instanceof Map)
                 _allocMap(S.TypeCtxs[at]), S.TypeCtxs[at] = undefined
           }
+          _killArray(u), _killArray(prevEmbCtx)
         }
-        S.at = null
+        if (!marker) S.at = null
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(stage, needed, doneStart, adjStart)
-        else if (err !== timeLimit) S.i = null
-        else adjustUndo(adjStart), S.DoneStages[S.i++] = doneStart
+        else if (err !== timeLimit) !marker && (S.i = null)
+        else adjustUndo(adjStart), !marker && (S.DoneStages[S.i++] = doneStart)
         throw err
       }
       finally {
+        S.TensorMemory += memorySince(memoryStart)
         env[ial] = prevAdjLoad, env[ias] = prevAdjSave
         const spotDiffers = alloc.world !== prevWorld || alloc.At !== prevAt
         alloc.world = prevWorld, alloc.params = prevParams, alloc.At = prevAt, spotDiffers && _fillObjectHyperparams(prevWorld, prevAt)
         _allocArray(curCtxs), prevParams && (prevParams.GenContexts = prevCtxs)
         regenerate.depth = null
+        future.recording = undefined
+      }
+    },
+  },
+
+  _lookup:{
+    docs:`Basically \`a.i\` but with extra dynamic-multi-index features. For index modification.`,
+    call(a, i, j, S = using.state) {
+      if (isArray(a)) {
+        if (typeof i == 'number') return a[i]
+        if (!isArray(i)) error("Bad", i)
+        const b = _allocArray(i.length)
+        for (let k=0; k < i.length; ++k) b[k] = a[i[k]]
+        return b
+      } else {
+        if (typeof i == 'number') return a(i, j, S)
+        if (!isArray(i)) error("Bad", i)
+        if (j.length !== i.length) error("Bad", j)
+        const b = _allocArray(i.length)
+        for (let k=0; k < i.length; ++k) b[k] = a(i[k], isArray(j) && j[k], S)
+        return b
       }
     },
   },
 
   _defined(x) { return x !== undefined ? x : 0 },
+
+  _maxFutureAge:[
+    _(`settings`),
+    64,
+    `How far back \`_updateReplayFutures\` will update futures in replay-states.
+We can only imagine what could have been beyond the maximum age.
+Works with 0, but the higher the better.`,
+  ],
+
+  _updateReplayFutures:{
+    docs:`Yep, this updates a \`using.state\` to reflect reality and the latest prediction better. Uses, um… \`'UpdateFuture'\`, see \`docs autoWorld\`, buddy.`,
+    call(S) {
+      if (S === undefined) {
+        // Without an arg, update all regen-states of all auto-worlds mentioned in `using.state` (and `using.state`).
+        S = using.state
+        let [i = 0, touched = _allocMap(), j] = interrupt(3)
+        try {
+          for (; i < S.Objects.length; ++i, j = undefined) {
+            const obj = S.Objects[i], aw = autoWorld.objectWorld.get(obj)
+            if (touched.has(aw)) continue
+            if (j === undefined) j = aw.Replays.length-1
+            for (; j > 0; --j)
+              if (!_updateReplayFutures(aw.Replays[j])) break
+            touched.set(aw, true)
+          }
+          _updateReplayFutures(S)
+          return
+        } catch (err) { if (err === interrupt) interrupt.stack.push(i, touched, j); else _allocMap(touched);  throw err }
+      }
+
+      const prevRecording = future.recording;  future.recording = true
+      let [n, real, imag] = interrupt(3)
+      try {
+        if (n === undefined) {
+          if (S.Age >= _maxFutureAge[1]) return false
+          S.Age = S.Age !== undefined ? S.Age+1 : 0, n = 0
+        }
+        let i = 0
+        S.FutureRealities.forEach((rs,f) => {
+          if (i++ < n) return
+          if (typeof S.FuturePredictionSetter.get(f) != 'function') return
+          if (real === undefined) future.recording = false, real = getFuture(f)
+          if (imag === undefined) future.recording = true, imag = div(future.predSum.get(fut), future.predCount.get(fut)) || 0
+          const reals = S.FuturePredictionSetter.get(f)(S.Age, rs, real)
+          S.FutureRealities.set(f, sync(reals))
+          S.FuturePrediction.set(f, sync(imag))
+          ++n, dispose(real), dispose(imag), real = imag = undefined
+        })
+        return true
+      } catch (err) { if (err === interrupt) interrupt.stack.push(n, real, imag); else dispose(real), dispose(imag);  throw err }
+      finally { future.recording = prevRecording }
+    },
+  },
 
   _finishObjects:{
     docs:`Called after execution, before adjustment of regeneration. Finalizes profiling info (both dynamic and static profiling).
@@ -13345,8 +13905,8 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
             if (PublEmbs[n] === undefined) PublEmbs[n] = _defined(_embValue(OI.PublicEmbData[At]))
             if (PrivEmbs[n] === undefined) PrivEmbs[n] = _defined(_embValue(OI.PrivateEmbData[At]))
             if (UpEmbs[n] === undefined) UpEmbs[n] = _defined(S.UpEmbs[at])
-            if (Objects[n] === undefined) Objects[n] = _defined(obj)
-            if (!S.CallReports.has(obj)) { // FuncReport if needed.
+            if (Objects[n] === undefined) Objects[n] = obj
+            if (!S.CallReports.has(obj)) { // FuncReport if needed. (On replay, not needed.)
               const adjStart = adjustUndo()
               try { S.CallReports.set(obj, alloc.params.FuncReport(PublEmbs[n], PrivEmbs[n], UpEmbs[n], obj, S.CallInfos.get(obj))) }
               finally { adjustUndo(adjStart) }
@@ -13418,33 +13978,35 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
           }
         }
 
-        // Compute actual metrics.
-        // TODO: Do not do this on replay.
-        for (; o < S.Objects.length; ++o, called = 0) {
-          const obj = S.Objects[o]
-          const aw = autoWorld.objectWorld.get(obj), At = aw.objectIndex.get(obj)
-          if (finishInfo.has(obj)) continue // Re-using this Map as a set, to ensure that metrics are only done once per object.
-          const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
-          if (HP.ObjectMetric)
-            switch (called) {
-              case 0: { // ObjectMetric.
-                env[ias] = adjStack, env[ial] = undefined
-                const infos = S.MetricInfos
-                if (!infos.has(obj)) infos.set(obj, _allocArray(0))
-                const t = HP.ObjectMetric(infos.get(obj), obj, OI.Metric[At])
-                const m = sync(t);  dispose(t) // Yeah, no tensors here, really. No need to burden the GPU with single numbers.
-                if (typeof m != 'number')
-                  error("Not a number:", n, "from", HP.ObjectMetric)
-                OI.Metric[At] = m
-                setFuture(OI.MetricFuture[At], m)
-              } called = 1;  case 1: { // Adjust ObjectMetric.
-                env[ias] = undefined, env[ial] = adjStack
-                const a = _allocArray(3);  [a[0], a[1], a[2]] = [S.MetricInfos.get(obj), obj, OI.Metric[At]]
-                try { _disposeEachAndDealloc(adjust(HP.ObjectMetric, a, null, 0)) }
-                finally { _allocArray(a) }
+        // Compute actual metrics (unless replaying).
+        if (!replay.marker) {
+          for (; o < S.Objects.length; ++o, called = 0) {
+            const obj = S.Objects[o]
+            const aw = autoWorld.objectWorld.get(obj), At = aw.objectIndex.get(obj)
+            if (finishInfo.has(obj)) continue // Re-using this Map as a set, to ensure that metrics are only done once per object.
+            const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
+            if (HP.ObjectMetric)
+              switch (called) {
+                case 0: { // ObjectMetric.
+                  env[ias] = adjStack, env[ial] = undefined
+                  const infos = S.MetricInfos
+                  if (!infos.has(obj)) infos.set(obj, _allocArray(0))
+                  const t = HP.ObjectMetric(infos.get(obj), obj, OI.Metric[At])
+                  const m = sync(t);  dispose(t) // Yeah, no tensors here, really. No need to burden the GPU with single numbers.
+                  if (typeof m != 'number')
+                    error("Not a number:", n, "from", HP.ObjectMetric)
+                  OI.Metric[At] = m
+                  setFuture(OI.MetricFuture[At], m)
+                } called = 1;  case 1: { // Adjust ObjectMetric.
+                  env[ias] = undefined, env[ial] = adjStack
+                  const a = _allocArray(3);  [a[0], a[1], a[2]] = [S.MetricInfos.get(obj), obj, OI.Metric[At]]
+                  try { _disposeEachAndDealloc(adjust(HP.ObjectMetric, a, null, 0)) }
+                  finally { _allocArray(a) }
+                }
               }
-            }
-          finishInfo.set(obj, null)
+            finishInfo.set(obj, null)
+          }
+          _updateReplayFutures() // The touched ones shall know reality.
         }
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(i, j, stage, o, adjStack, called, worlds, finishInfo, spue, spre, sue, dPublEmbs, dPrivEmbs)
@@ -13473,9 +14035,13 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
 
   _adjustUsingFinish:{
     docs:`Adjusts \`usingFinish\`. All calls at once (because all state like command queues and node information is global, and separated from the usual execution flow).`,
-    call() {
+    call(marker, ats) {
       const S = using.state
       if (!S || S.i == null) return
+
+      // Prepare to replay.
+      if (future.recording !== undefined) error("Double", _adjustUsingFinish)
+      future.recording = !marker ? true : false
 
       // Put all adjustment info into a separate stack.
       const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
@@ -13487,31 +14053,40 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
       const prevCtxs = alloc.params && alloc.params.GenContexts
       const prevWorld = alloc.world, prevParams = alloc.params, prevAt = alloc.At
 
-      let [finishedObjects = false] = interrupt(1)
+      const memoryStart = memorySince()
+
+      let [finishedObjects = 0] = interrupt(1)
       try {
         // Finish objects after the whole execution, so that all profiling info is collected by then.
-        if (!finishedObjects) _finishObjects(), finishedObjects = true
+        if (finishedObjects === 0) _finishObjects(), finishedObjects = 1
 
         // Plumbing, to reverse the call.
-        for (; S.i > 0; --S.i, S.j = null) {
+        for (; !marker ? S.i > 0 : true; !marker && (--S.i, S.j = null)) {
           const i = S.i-1
-          const at = S.Evals[i]
+          const at = !marker ? S.Evals[i] : ats
 
           // Know the index, for adjusting `_usingRequest`.
-          if (S.j === null) S.j = S.Childs[at] ? S.Childs[at].length : 0
+          if (!marker && S.j === null) S.j = S.Childs[at] ? S.Childs[at].length : 0
 
           // Set the current world and object-spot and object-hyperparams in it.
-          const aw = autoWorld.objectWorld.get(S.Objects[at]), At = aw.objectIndex.get(S.Objects[at])
-          const spotDiffers = alloc.world !== aw || alloc.At !== At
+          const obj = !marker ? S.Objects[at] : S.Objects[at[0]]
+          const aw = autoWorld.objectWorld.get(obj), At = aw.objectIndex.get(obj)
+          const spotDiffers = alloc.world !== aw || At === undefined || alloc.At !== At
           alloc.world = aw, alloc.params = aw.params, alloc.At = At
-          if (spotDiffers) _fillObjectHyperparams(aw, At)
+          if (At === undefined) // Handle deallocated objects.
+            for (let i=0; i < autoWorld.hyper.length; ++i)
+              alloc.params[autoWorld.hyper[i]] = _getAutoObjectInfo(obj, autoWorld.hyper[i], aw)
+          else if (spotDiffers) _fillObjectHyperparams(aw, At)
           if (spotDiffers && alloc.params.GenContexts.length != 8) error("Invariant violated:", alloc.params.GenContexts)
           if (curCtxs[0] === undefined || spotDiffers) for (let j=0; j < 8; ++j) curCtxs[j] = alloc.params.GenContexts[j]
           alloc.params.GenContexts = curCtxs
-          const ctx = curCtxs[8] = S.ScopeCtxs[at]
+          const ctx = curCtxs[8] = !marker ? S.ScopeCtxs[at] : null
 
-          if (S.DoneStages[i] & 2048) {
+          // TODO: All these stages should be put in correspondence with `marker`s, if replaying.
+          if (S.DoneStages[i] & 1024) { // TODO: Also enter if marker is 'ArgFailed' (!marker ? S.DoneStages[i] & 1024 : marker === 'ArgFailed').
             // Adjust `S.UpEmbs[S.Parents[at]] = alloc.params.ArgFailed(S.DownEmbs[at], S.UpEmbs[at], completedEmbCtxs[S.PrevSiblings[at]])`.
+            // TODO: Copy `_lookup` from `usingFinish`. (Or maybe just make it a global?)
+            // TODO: Initialize u/ectxs via `_lookup`.
             const u = S.PrevSiblings[at]
             const ectxs = u !== S.Parents[at] ? S.UpEmbCtxs : S.DownEmbCtxs, dectxs = u !== S.Parents[at] ? S.dUpEmbCtxs : S.dDownEmbCtxs
             const a = _allocArray(3);  [a[0], a[1], a[2]] = [S.DownEmbs[at], S.UpEmbs[at], ectxs[u]]
@@ -13523,9 +14098,9 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
               if (due) { const t = add(S.dUpEmbs[at] || 0, due || 0);  dispose(due);  dispose(S.dUpEmbs[at]), S.dUpEmbs[at] = t }
               if (dec) { const t = add(dectxs[u] || 0, dec || 0);  dispose(dec);  dispose(dectxs[u]), dectxs[u] = t }
             } finally { _allocArray(a) }
-            S.DoneStages[i] &= ~2048
+            if (!marker) S.DoneStages[i] &= ~1024
           }
-          if (S.DoneStages[i] & 1024) {
+          if (S.DoneStages[i] & 512) {
             // Adjust `S.UpEmbCtxs[at] = alloc.params.ContextRefiner(S.DownEmbs[at], S.UpEmbs[at], completedEmbCtxs[S.PrevSiblings[at]]) || 0`.
             const u = S.PrevSiblings[at]
             const ectxs = u !== S.Parents[at] ? S.UpEmbCtxs : S.DownEmbCtxs, dectxs = u !== S.Parents[at] ? S.dUpEmbCtxs : S.dDownEmbCtxs
@@ -13538,9 +14113,9 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
               if (due) { const t = add(S.dUpEmbs[at] || 0, due || 0);  dispose(due);  dispose(S.dUpEmbs[at]), S.dUpEmbs[at] = t }
               if (dec) { const t = add(dectxs[u] || 0, dec || 0);  dispose(dec);  dispose(dectxs[u]), dectxs[u] = t }
             } finally { _allocArray(a) }
-            S.DoneStages[i] &= ~1024
+            if (!marker) S.DoneStages[i] &= ~512
           }
-          if (S.DoneStages[i] & 512) {
+          if (S.DoneStages[i] & 256) {
             // Adjust `S.UpEmbs[at] = alloc.params.FinishCall(S.StaticEmbs[at], S.DownEmbs[at], completedEmbCtxs[y])`.
             let [y] = interrupt(1)
             try {
@@ -13555,10 +14130,10 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
                 if (dde) { const t = add(S.dDownEmbs[at] || 0, dde || 0);  dispose(dde);  dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = t }
                 if (dec) { const t = add(dectxs[y] || 0, dec || 0);  dispose(dec);  dispose(dectxs[y]), dectxs[y] = t }
               } finally { _allocArray(a) }
-              S.DoneStages[i] &= ~512
+              if (!marker) S.DoneStages[i] &= ~256
             } catch (err) { if (err === interrupt) interrupt.stack.push(y);  throw err }
           }
-          if (S.DoneStages[i] & 256) {
+          if (S.DoneStages[i] & 128) {
             // Adjust `S.UpEmbs[at] = alloc.params.FinishValue(S.StaticEmbs[at], S.DownEmbs[at])`.
             const a = _allocArray(2);  [a[0], a[1]] = [S.StaticEmbs[at], S.DownEmbs[at]]
             try {
@@ -13568,9 +14143,9 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
               if (dse) { const t = add(S.dStaticEmbs[at] || 0, dse || 0);  dispose(dse);  dispose(S.dStaticEmbs[at]), S.dStaticEmbs[at] = t }
               if (dde) { const t = add(S.dDownEmbs[at] || 0, dde || 0);  dispose(dde);  dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = t }
             } finally { _allocArray(a) }
-            S.DoneStages[i] &= ~256
+            if (!marker) S.DoneStages[i] &= ~128
           }
-          if (S.DoneStages[i] & 128) {
+          if (S.DoneStages[i] & 64) {
             // Adjust `S.UpEmbs[at] = alloc.params.FinishTypeError(S.StaticEmbs[at], S.DownEmbs[at])`.
             const a = _allocArray(2);  [a[0], a[1]] = [S.StaticEmbs[at], S.DownEmbs[at]]
             try {
@@ -13580,9 +14155,9 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
               if (dse) { const t = add(S.dStaticEmbs[at] || 0, dse || 0);  dispose(dse);  dispose(S.dStaticEmbs[at]), S.dStaticEmbs[at] = t }
               if (dde) { const t = add(S.dDownEmbs[at] || 0, dde || 0);  dispose(dde);  dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = t }
             } finally { _allocArray(a) }
-            S.DoneStages[i] &= ~128
+            if (!marker) S.DoneStages[i] &= ~64
           }
-          if (S.DoneStages[i] & 64) {
+          if (S.DoneStages[i] & 32) {
             // Adjust `S.UpEmbs[at] = alloc.params.FinishFail(S.DownEmbs[at])`.
             const a = _allocArray(1);  a[0] = S.DownEmbs[at]
             try {
@@ -13591,9 +14166,9 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
               const [dde] = b;  _allocArray(b)
               if (dde) { const t = add(S.dDownEmbs[at] || 0, dde || 0);  dispose(dde);  dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = t }
             } finally { _allocArray(a) }
-            S.DoneStages[i] &= ~64
+            if (!marker) S.DoneStages[i] &= ~32
           }
-          if (S.DoneStages[i] & 32) {
+          if (S.DoneStages[i] & 16) {
             // Adjust `[S.UpEmbs[at], S.UpTypes[at], S.Nodes[at]] = defines(S.AreCalls[at], usingFinish)(ChildEmbs, ChildTypes, ChildNodes, S.Nodes[at])`.
             let ChildEmbs, ChildTypes, ChildNodes
             if (S.Childs[at]) {
@@ -13621,99 +14196,77 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
                 _allocArray(b)
               }
             } finally { _allocArray(c), _allocArray(a), _killArray(ChildNodes), _killArray(ChildTypes), _killArray(ChildEmbs) }
-            S.DoneStages[i] &= ~32
+            if (!marker) S.DoneStages[i] &= ~16
           }
-          if (S.DoneStages[i] & (4|8|16)) {
-            let [k, called, beginAt, endAt, pos, dpos] = interrupt(6)
+          if (S.DoneStages[i] & (4|8)) {
+            let [k, index, pos, dpos] = interrupt(4)
             try {
               if (k === undefined) {
-                // Adjust `ArgDownEmbs = alloc.params.ArgEmbedder(S.ArgStaticEmbs[i], S.DownEmbs[at], S.DownEmbCtxs[at])`.
-                if ((S.DoneStages[i] & 8) && endAt === undefined) endAt = adjustLoad(null), typeof endAt != 'number' && _inexactReversal(true, endAt)
-                if (beginAt === undefined) beginAt = adjustLoad(null), typeof beginAt != 'number' && _inexactReversal(true, beginAt)
+                // Adjust `S.DownEmbs[n] = alloc.params.ArgEmbedder(S.ArgStaticEmbs[n], S.DownEmbs[at], S.DownEmbCtxs[at])`.
+                if (index === undefined) index = adjustLoad(null), typeof index != 'number' && _inexactReversal(true, index)
+                const n = S.Childs[at][index-1]
 
-                let c // Accumulate gradients of children.
-                if (S.DoneStages[i] & 4) {
-                  const n = S.Childs[at][beginAt-1]
-                  c = keep(S.dDownEmbs[n]) || 0
-                } else if (S.DoneStages[i] & 8) {
-                  const d = _allocArray(S.Childs[at].length - (beginAt-1))
-                  for (let j = beginAt; j < endAt; ++j) {
-                    const n = S.Childs[at][j-1]
-                    S.dDownEmbs[n] == null && error("Unused result of ArgEmbedder, child dDownEmb:", S.dDownEmbs[n], 'at', at+'→'+n),
-                    d[j - beginAt] = S.dDownEmbs[n]
-                  }
-                  c = stack(d), _allocArray(d)
-                } else if (S.DoneStages[i] & 16) {
-                  const n = S.Childs[at][beginAt-1]
-                  if (S.dDownEmbs[n]) c = tf.expandDims(S.dDownEmbs[n])
-                  else c = 0
-                }
-                const ase = S.ArgStaticEmbs[i]
-                const de = S.DoneStages[i] & (8|16) ? broadcastTo(S.DownEmbs[at], ase) : S.DownEmbs[at]
-                const ec = S.DoneStages[i] & (8|16) ? broadcastTo(S.DownEmbCtxs[at], ase) : S.DownEmbCtxs[at]
-                const a = _allocArray(3);  [a[0], a[1], a[2]] = [ase, de, ec]
+                const a = _allocArray(3);  [a[0], a[1], a[2]] = [S.ArgStaticEmbs[n], S.DownEmbs[at], S.DownEmbCtxs[at]]
                 try {
-                  const b = adjust(alloc.params.ArgEmbedder, a, null, c)
+                  const b = adjust(alloc.params.ArgEmbedder, a, null, S.dDownEmbs[n] || 0)
                   if (!isArray(b)) error("Not an array:", b)
                   let [dase, dde, dec] = b;  _allocArray(b)
-                  if (S.dArgStaticEmbs[i] !== undefined) error("hoh", S.dArgStaticEmbs[i])
-                  if ((S.DoneStages[i] & (8|16)) && dde) { const t = sum(dde, 0);  dispose(dde), dde = t }
-                  if ((S.DoneStages[i] & (8|16)) && dec) { const t = sum(dec, 0);  dispose(dec), dec = t }
-                  S.dArgStaticEmbs[i] = dase
+                  S.dArgStaticEmbs[n] = dase
                   if (dde) { const t = add(S.dDownEmbs[at] || 0, dde || 0);  dispose(dde);  dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = t }
                   if (dec) { const t = add(S.dDownEmbCtxs[at] || 0, dec || 0);  dispose(dec);  dispose(S.dDownEmbCtxs[at]), S.dDownEmbCtxs[at] = t }
-                } finally { _allocArray(a);  if (S.DoneStages[i] & (8|16)) dispose(ec), dispose(de);  dispose(c) }
+                } finally { _allocArray(a) }
 
-                k = adjustLoad(null);  typeof k != 'number' && _inexactReversal(true, k)
-                if (S.DoneStages[i] & (4|8)) called = adjustLoad(null)
+                if (S.DoneStages[i] & 8) k = adjustLoad(null), typeof k != 'number' && _inexactReversal(true, k)
               }
 
-              if (S.DoneStages[i] & (4|8)) {
+              if (S.DoneStages[i] & 4) {
                 // Re-compute `pos`.
-                if (pos === undefined) pos = S.DoneStages[i] & 8 ? _lazyPositions(k, called) : _callPos(k, called)
-                // Adjust `S.ArgStaticEmbs[i] = alloc.params.ArgUseAs(S.StaticEmbs[at], pos)`.
-                if (S.dArgStaticEmbs[i] !== undefined) {
-                  const se = S.DoneStages[i] & 8 ? broadcastTo(S.StaticEmbs[at], pos) : S.StaticEmbs[at]
-                  const a = _allocArray(2);  [a[0], a[1]] = [se, pos]
+                if (pos === undefined) pos = _callPos(index, S.Chosen[at]) || 0
+                // Adjust `S.ArgStaticEmbs[n] = alloc.params.ArgUseAs(S.StaticEmbs[at], pos)`.
+                if (pos !== null) {
+                  const a = _allocArray(2);  [a[0], a[1]] = [S.StaticEmbs[at], pos]
                   try {
-                    const b = adjust(alloc.params.ArgUseAs, a, null, S.dArgStaticEmbs[i] || 0)
+                    const b = adjust(alloc.params.ArgUseAs, a, null, S.dArgStaticEmbs[n] || 0)
                     if (!isArray(b)) error("Not an array:", b)
                     let dse;  [dse, dpos] = b;  _allocArray(b)
-                    if ((S.DoneStages[i] & 8) && dse) { const t = sum(dse, 0);  dispose(dse), dse = t }
                     if (dse) { const t = add(S.dStaticEmbs[at] || 0, dse || 0);  dispose(dse);  dispose(S.dStaticEmbs[at]), S.dStaticEmbs[at] = t }
-                  } finally { _allocArray(a), (S.DoneStages[i] & 8) && dispose(se) }
-                  dispose( S.ArgStaticEmbs[i]),  S.ArgStaticEmbs[i] = undefined
-                  dispose(S.dArgStaticEmbs[i]), S.dArgStaticEmbs[i] = undefined
+                  } finally { _allocArray(a) }
+                  dispose(pos), pos = null
                 }
-                // Adjust `pos = S.DoneStages[i] & 8 ? _lazyPositions(k, called) : _callPos(k, called)`.
-                const a = _allocArray(2);  [a[0], a[1]] = [k, called]
-                try { defines(S.DoneStages[i] & 8 ? _lazyPositions : _callPos, adjust)(a, null, dpos) }
+                // Adjust `pos = _callPos(index, S.Chosen[at])`.
+                const a = _allocArray(2);  [a[0], a[1]] = [index, S.Chosen[at]]
+                try { defines(_callPos, adjust)(a, null, dpos) }
                 finally { _allocArray(a) }
-                dispose(pos), pos = null
                 dispose(dpos), dpos = null
-              } else if (S.DoneStages[i] & 16) {
-                // Adjust `S.ArgStaticEmbs[i] = _lazyUseAs([10, k])`.
+              } else if (S.DoneStages[i] & 8) {
+                // Adjust `S.ArgStaticEmbs[n] = _lazyUseAs([10, k])`.
                 const Fits = _allocArray(2);  [Fits[0], Fits[1]] = [10, k]
                 const a = _allocArray(1);  a[0] = Fits
-                try { defines(_lazyUseAs, adjust)(a, null, S.dArgStaticEmbs[i] || 0) }
-                finally { _allocArray(a), _allocArray(Fits) }
-                dispose( S.ArgStaticEmbs[i]),  S.ArgStaticEmbs[i] = undefined
-                dispose(S.dArgStaticEmbs[i]), S.dArgStaticEmbs[i] = undefined
+                const c = S.dArgStaticEmbs[n] ? tf.expandDims(S.dArgStaticEmbs[n]) : 0
+                try { defines(_lazyUseAs, adjust)(a, null, c) }
+                finally { dispose(c), _allocArray(a), _allocArray(Fits) }
               }
-            } catch (err) { if (err === interrupt) interrupt.stack.push(k, called, beginAt, endAt, pos, dpos); else dispose(pos), dispose(dpos);  throw err }
-            S.DoneStages[i] &= ~28
+            } catch (err) { if (err === interrupt) interrupt.stack.push(k, index, pos, dpos); else dispose(pos), dispose(dpos);  throw err }
+            if (!marker) S.DoneStages[i] &= ~(4|8)
           }
           if (S.DoneStages[i] & 2) {
             // Adjust `defines(S.AreCalls[at], using)(S.DownEmbs[at], S.DownTypes[at], S.Nodes[at])`.
-            const a = _allocArray(3);  [a[0], a[1], a[2]] = [S.DownEmbs[at], S.DownTypes[at], S.Nodes[at]]
+            let [DownEmb] = interrupt(1)
             try {
-              const b = adjust(defines(S.AreCalls[at], using), a)
-              if (isArray(b)) {
-                if (b[0]) { const t = add(S.dDownEmbs[at] || 0, b[0]);  dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = t }
-                _disposeEachAndDealloc(b)
-              }
-            } finally { _allocArray(a) }
-            S.DoneStages[i] &= ~2
+              if (DownEmb === undefined) { const s = adjustLoad(1);  DownEmb = s[0];  _allocArray(s) }
+              const a = _allocArray(3);  [a[0], a[1], a[2]] = [DownEmb, S.DownTypes[at], S.Nodes[at]]
+              try {
+                const b = adjust(defines(S.AreCalls[at], using), a)
+                if (isArray(b)) {
+                  if (!marker) {
+                    if (b[0]) { const t = add(S.dDownEmbs[at] || 0, b[0]);  dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = t }
+                  } else _stackedWrite(S.dDownEmbs, at, b[0]) // Overwrites gradient. Gradient-flow combining is bad in replays.
+                  _disposeEachAndDealloc(b)
+                }
+                if (marker) break
+              } finally { _allocArray(a) }
+            } catch (err) { if (err === interrupt) interrupt.stack.push(DownEmb); else dispose(DownEmb);  throw err }
+            if (!marker) S.DoneStages[i] &= ~2
           }
           if (S.DoneStages[i] & 1) {
             // Adjust `[S.StaticEmbs[at], S.DownEmbCtxs[at], ?, ?, ?, ?, S.DownEmbs[at]] = _chooseHead(S.DownEmbs[at], DownTypes[at], ?)`.
@@ -13725,22 +14278,133 @@ Calls \`'FuncReport'\` and calls-and-adjusts \`'FuncsFinish'\` for all objects t
               const [dde] = b;  _allocArray(b)
               dispose(S.dDownEmbs[at]), S.dDownEmbs[at] = dde
             } finally { _allocArray(c), _allocArray(a) }
-            S.DoneStages[i] &= ~1
+            if (!marker) S.DoneStages[i] &= ~1
           }
+
+          if (marker) error("Unrecognized replay marker:", marker)
         }
-        S.UseAs.forEach(_adjustLazyUseAs)
-        S.i = null
+
+        if (finishedObjects === 1) S.UseAs.forEach(_adjustLazyUseAs), finishedObjects = 2
+
+        if (!marker && S.dDownEmbs != null) saveReplay()
+
+        if (!marker) S.i = null
       } catch (err) { if (err === interrupt) interrupt.stack.push(finishedObjects); else S.i = null;  throw err }
       finally {
+        S.TensorMemory += memorySince(memoryStart)
         env[ial] = prevAdjLoad, env[ias] = prevAdjSave
         const spotDiffers = alloc.world !== prevWorld || alloc.At !== prevAt
         alloc.world = prevWorld, alloc.params = prevParams, alloc.At = prevAt, spotDiffers && _fillObjectHyperparams(prevWorld, prevAt)
         _allocArray(curCtxs), prevParams && (prevParams.GenContexts = prevCtxs)
+        future.recording = undefined
       }
     },
   },
 
-  _killArray(a) { isArray(a) && _allocArray(a) },
+  _maxReplaysMB:[
+    _(`settings`),
+    512,
+    `Tensor memory occupied by regeneration replays in one auto-world is at most this many megabytes.
+When too much is stored, dispose the least-recent replays. (What other metric to dispose by?)
+(0 to disable replays.)`,
+  ],
+
+  saveReplay:{
+    docs:`After we have regenerated and executed, \`saveReplay()\` will leave memories of that, to be replayed over and over.`,
+    call() {
+      const S = using.state
+      let [world] = interrupt(1)
+      try {
+        if (world === undefined) {
+          // Preserve the state in every mentioned world.
+          _usingPreserve(S)
+          const worldsMap = _allocMap()
+          for (let at=0; at < S.Objects.length; ++at)
+            worldsMap.set(autoWorld.objectWorld.get(S.Objects[at]), true)
+          const worlds = [...worldsMap.keys()];  _allocMap(worldsMap)
+          worlds.forEach((_, aw) => {
+            const S = using.state, R = aw.Replays
+            R[0] += S.TensorMemory, R.push(S)
+
+            // If we store too much memory, filter-out (and dispose-of) replays from the beginning.
+            const Max = _maxReplaysMB[1]*1024*1024
+            if (R[0] > Max) {
+              let n = 1, startTensors = _disposableCount()
+              for (let i = 1; i < R.length; ++i) {
+                if (!R[i].Evals) continue
+                if (R[0] <= Max) R[n++] = R[i]
+                else R[0] -= R[i].TensorMemory, _usingDispose(R[i])
+              }
+              R.length = n
+              // Notify `callAdjust` that we killed all those innocents, so that it lets us through.
+              if (keep.unallowed != null) keep.unallowed += startTensors - _disposableCount()
+            }
+          })
+          world = worlds[randomNat(worlds.length)]
+        }
+        // Replay a random world that was touched. (After regeneration, so that replays don't affect any metrics or profiling.)
+        world && replay(world)
+
+        using.state = null
+      } catch (err) { if (err === interrupt) interrupt.stack.push(world);  throw err }
+    },
+  },
+
+  _replayHyperparams:[
+    _(`settings`),
+    16,
+    `How many hyperparameter calls \`replay\` will replay, one after another.`,
+  ],
+
+  _replaysPerHyperparam:[
+    _(`settings`),
+    128,
+    `How many same-place differentiable calls \`replay\` will \`stack\` into one.`,
+  ],
+
+  replay:{
+    readAt:{
+      _maxFutureAge:_(`_maxFutureAge`),
+      _maxReplaysMB:_(`_maxReplaysMB`),
+      saveReplay:_(`saveReplay`),
+      _replayHyperparams:_(`_replayHyperparams`),
+      _replaysPerHyperparam:_(`_replaysPerHyperparam`),
+    },
+    docs:`Replays the differentiable executions stored in the replay buffer of an \`autoWorld\`.`,
+    call(aw) {
+      if (aw.Replays.length <= 1) return
+      if (!_replaysPerHyperparam[1]) return
+      if (replay.marker) error("Why marked already, with", replay.marker)
+      if (!(_replaysPerHyperparam[1] > 0)) error("Not a positive integer, in", _replaysPerHyperparam)
+      const prevState = using.state
+      let [i = 0, stage = 0, S, key, ats] = interrupt(5)
+      try {
+        for (; i < _replayHyperparams[1]; ++i, stage = 0, S = key = ats = undefined) {
+          if (S === undefined) S = aw.Replays[1 + randomNat(aw.Replays.length-1)]
+          using.state = S
+          switch (stage) {
+            case 0: // [Hyperparam, Marker]
+              if (key === undefined) key = S.PlayedIn.get('keys')[randomNat(S.PlayedIn.get('keys').length)]
+            stage = 1;  case 1: {
+              const play = S.PlayedIn.get(key)
+              if (!play.length) error("Why is it mentioned if it has no entries:", play, "under key", key)
+              ats = _allocArray(0, _replaysPerHyperparam[1] >>> 0)
+              for (let j=0; j < ats.length; ++j) ats[j] = play[randomNat(play.length)]
+              // Often, `play.length` would be less than `_replaysPerHyperparam[1]`.
+              //   So why do we not replay less in those cases, to stop repeating computations?
+              //     That would probably cause gradients of rare hyperparams to get overpowered by more popular hyperparams.
+            } stage = 2;  case 2:
+              usingFinish(replay.marker = key[1], ats)
+            stage = 3;  case 3:
+              _adjustUsingFinish(replay.marker = key[1], ats)
+            stage = 4;  case 4:
+              _allocArray(ats), ats = undefined
+          }
+        }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(i, stage, S, key, ats);  throw err }
+      finally { using.state = prevState, replay.marker = undefined }
+    },
+  },
 
   _callPos:{
     docs:`\`_callPos Index Called\`
@@ -13765,60 +14429,6 @@ Returns the positional embedding of the arg \`Index\` (starting at \`1\`) of \`C
     },
   },
 
-  _lazyPositions:{
-    docs:`Like \`_callPos\`, but \`stack\`s all positions from \`1\` to \`finish\` (exclusive at the end).`,
-    dispose:true,
-    call(finish, called) {
-      const aw = alloc.world
-      if (!aw.StackedPositions) aw.StackedPositions = new Map
-      if (!aw.dStackedPositions) aw.dStackedPositions = new Map
-      if (!aw.StackedPositionLengths) aw.StackedPositionLengths = new Map
-      const asp = aw.StackedPositions, aspl = aw.StackedPositionLengths
-      if (asp.has(called) && aspl.get(called) === finish) return adjustSave("uncached"), keep(asp.get(called))
-
-      let [a = _allocArray(finish-1), i = 1] = interrupt(2)
-      try {
-        for (; i < finish; ++i)
-          a[i-1] = _callPos(i, called)
-        const r = stack(a)
-        if (!asp.has(called))
-          asp.set(called, keep(r)), aspl.set(called, finish), adjustSave("cached")
-        else
-          adjustSave("free")
-        return r
-      } catch (err) { if (err === interrupt) interrupt.stack.push(a, i), a = null;  throw err }
-      finally { _disposeEachAndDealloc(a) }
-    },
-    adjust(ins, out, dout) {
-      if (!dout) return
-      const aw = alloc.world, S = using.state
-      const [finish, called] = ins
-      let [dpos, i = finish, Status] = interrupt(3)
-      const a = _allocArray(2);  a[1] = called
-      try {
-        const dp = using.state.dPos
-        if (Status === undefined)
-          Status = adjustLoad(null), Status !== "uncached" && Status !== "cached" && Status !== "free" && _inexactReversal(true, Status)
-        // If uncached, add to stored gradient value.
-        if (Status === "uncached") { const t = add(dp.get(called) || 0, dout || 0);  dispose(dp.get(called)), dp.set(called, t) }
-        if (dpos === undefined && Status === "free") {
-          if (Status === "free") dpos = unstack(dout)
-          else { // If cached, add in the gradient that we got from uncaching.
-            const t = add(dp.get(called) || 0, dout || 0)
-            dispose(dp.get(called)), dp.delete(called)
-            try { dpos = unstack(t) }
-            finally { dispose(t) }
-          }
-        }
-        for (; i > 1; --i)
-          // Adjust `out[i-1] = _callPos(i, called)`.
-          a[0] = i-1, _disposeEachAndDealloc(defines(_callPos, adjust)(a, null, a[0]-1))
-        dpos.forEach(dispose)
-      } catch (err) { if (err === interrupt) interrupt.stack.push(dpos, i, Status); else dpos && dpos.forEach(dispose);  throw err }
-      finally { _allocArray(a) }
-    },
-  },
-
   _callCtxEmb:{
     docs:`A transformer of \`stack\`ed \`UseAs\` embedding values that signifies "this is a call".
 Makes func calls semantically distinct from funcs-as-values.`,
@@ -13834,6 +14444,8 @@ Makes func calls semantically distinct from funcs-as-values.`,
       } catch (err) { if (err === interrupt) interrupt.stack.push(f);  throw err }
     },
   },
+
+  _killArray(a) { isArray(a) && _allocArray(a) },
 
   _ctxUseAs:{
     dispose:_(`_killArray`),
@@ -14149,7 +14761,7 @@ With an extra arg, this replaces the result with that arg (taking ownership of i
 
   _noTypeFiltering:[
     _(`settings`),
-    false, // ###################################################
+    false,
     `If checked, makes \`_chooseHead\` do no CPU-type-filtering of bases (but chosen types are still refined).
 This allows caching more of the regeneration computation, and more GPU parallelization. But needs machine learning to learn types.`,
   ],
@@ -14201,7 +14813,8 @@ Prepares to call \`_chooseHead\` (which would do a CPU \`sync\`). This is separa
                 const broad = broadcastTo(DownEmb, AllUseAs)
                 try {
                   const preds = _choose(AllUseAs, broad, alloc.params.Choose)
-                  if (_tensorSize(preds) !== Fits.length>>>1) error("Expected", Fits.length>>>1, "predictions but got", preds, "from", alloc.params.Choose)
+                  if (_tensorSize(preds) !== (_isDisposable(AllUseAs) ? AllUseAs.shape[0] : Fits.length>>>1))
+                    error("Expected", Fits.length>>>1, "predictions but got", preds, "from", alloc.params.Choose)
                   maxI = argmax(preds), prediction = max(preds)
                   dispose(preds)
                 } finally { dispose(broad) }
@@ -14296,8 +14909,9 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
       if (typeof mi != 'number' || typeof mj != 'number') error("Huh:", mi, mj, "given Fits", Fits, "and maxI", maxI)
       const ctxs = alloc.params.GenContexts, IsCall = !!ctxs[mi][0]
       let Node = ctxs[mi][mj], HaveType = ctxs[mi][mj+1]
-      let [stage = 0, UseAs, EmbCtx, NextUseAs, adjLen, TypeCtx = _allocMap(), typeError = false, Type] = interrupt(8)
+      let [stage = 0, UseAs, EmbCtx, NextUseAs, adjLen, TypeCtx = _allocMap(), typeError = false, Type, PublicData] = interrupt(9)
       try {
+        const p = alloc.params
         switch (stage) {
           case 0:
             if (AdjStack) {
@@ -14310,9 +14924,14 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
                   _makeAdjIndependent(maxI, _isDisposable(AllUseAs) ? AllUseAs.shape[0] : Fits.length>>>1, begin)
               } else _destroyAdjustmentStack(AdjStack), HeadState[4] = null
             }
-          stage = 1;  case 1:
-            dispose(alloc.params.ChoiceGoal(prediction, alloc.params.Goal))
-          stage = 2;  case 2:
+          stage = 1;  case 1: {
+            dispose(p.ChoiceGoal(prediction, p.Goal))
+
+            const a = _allocArray(4) // Remember for replay.
+            ;[a[0], a[1], a[2], a[3]] = [IsCall ? p.CallUseAs : null, mi===6||mi===7 ? p.ArgUseAs : null, p.Choose, p.ChoiceGoal]
+            replayable(merged(a), 'Choose')
+            _allocArray(a)
+          } stage = 2;  case 2:
             UseAs = AllUseAs ? sliceOff(AllUseAs, maxI) : null
 
             // Prepare to cancel adjustment of type refinement.
@@ -14328,7 +14947,7 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
               if (HaveType !== def[def.length-1])
                 error("Function type mismatch: output type of", Node, "is", def[def.length-1], "but ctx has", HaveType)
               if (typeRefine(HaveType, DownType, TypeCtx) === null) {
-                if (typeof alloc.params.FinishTypeError != 'function')
+                if (typeof p.FinishTypeError != 'function')
                   error("We can't just fail to refine present+wanted types after filtering it fine:", HaveType, DownType, "with head", Node)
                 typeError = true
               }
@@ -14340,22 +14959,35 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
           stage = 4;  case 4:
             // Shadow the choice with embedding-context refinement.
             if (!typeError) {
-              EmbCtx = IsCall ? alloc.params.ChoiceEmbedder(UseAs, DownEmb) : null
+              EmbCtx = IsCall ? p.ChoiceEmbedder(UseAs, DownEmb) : null
               adjustSave(IsCall)
 
+              if (IsCall) {
+                const a = _allocArray(4) // Remember for replay.
+                ;[a[0], a[1], a[2], a[3]] = [IsCall ? p.CallUseAs : null, mi===6||mi===7 ? p.ArgUseAs : null, p.ChoiceEmbedder]
+                replayable(merged(a), 'ChoiceEmbedder')
+                _allocArray(a)
+              }
+
               // Also, if picked a node, remember this fact, to not go over limits later.
-              if (IsCall) ++alloc.world.Nodes[alloc.params.at]
+              if (IsCall) ++alloc.world.Nodes[p.At]
             }
-          stage = 5;  case 5:
+          stage = 5;  case 5: {
             // Use the embedding, modifying it in-place (but only if in very-tmp ctx, because all other types should be finalized anyway).
-            if (!typeError && mi === 8 && ctxs[mi][0] === false && typeof alloc.params.VarUsed == 'function') {
-              NextUseAs = alloc.params.VarUsed(UseAs, DownEmb)
+            if (!typeError && mi === 8 && ctxs[mi][0] === false && typeof p.VarUsed == 'function') {
+              NextUseAs = p.VarUsed(UseAs, DownEmb)
               const a = _allocArray(2);  [a[0], a[1]] = [mi, mj]
               try { _lazyUseAs(a, NextUseAs) }
               finally { _allocArray(a) }
+              PublicData = keep(UseAs)
+
+              const m = _allocArray(4) // Remember for replay.
+              ;[m[0], m[1], m[2], m[3]] = [IsCall ? p.CallUseAs : null, mi===6||mi===7 ? p.ArgUseAs : null, p.VarUsed]
+              replayable(merged(m), 'VarUsed')
+              _allocArray(m)
             } else
-              NextUseAs = keep(UseAs)
-          stage = 6;  case 6:
+              NextUseAs = keep(UseAs), PublicData = ctxs[mi][mj+2]
+          } stage = 6;  case 6:
             // Save the picked `UseAs` and in-context indexes (for adjustment).
             const b = _allocArray(5)
             if (_independentChoices[1]) {
@@ -14376,8 +15008,8 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
             dispose(AllUseAs), HeadState[1] = null, _allocArray(HeadState), HeadState = null
 
             if (typeError) {
-              const a = _allocArray(8)
-              a[0] = NextUseAs, a[6] = keep(DownEmb), a[7] = DownType
+              const a = _allocArray(9)
+              a[0] = NextUseAs, a[6] = keep(DownEmb), a[7] = DownType, a[8] = PublicData
               dispose(UseAs), dispose(EmbCtx), TypeCtx && _allocMap(TypeCtx)
               return a
             }
@@ -14385,14 +15017,14 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
             // Return a whole call to fill (with empty spots for args), not just its func.
             if (IsCall) { const N = Node;  Node = _allocArray(N === bound ? 5 : Type.length-1).fill();  Node[0] = N }
 
-            const a = _allocArray(8)
-            ;[a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]] = [NextUseAs, EmbCtx, Type, TypeCtx, Node, IsCall, keep(DownEmb), DownType]
+            const a = _allocArray(9)
+            ;[a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]] = [NextUseAs, EmbCtx, Type, TypeCtx, Node, IsCall, keep(DownEmb), DownType, PublicData]
             return a
         }
         error("_chooseHead got an unrecognized stage (interrupt-state corrupted):", stage, UseAs, EmbCtx, NextUseAs, adjLen, TypeCtx, 'with last interrupt at', _resolveStack(interrupt.last))
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(stage, UseAs, EmbCtx, NextUseAs, adjLen, TypeCtx, typeError, Type)
-        else dispose(UseAs), dispose(EmbCtx), dispose(NextUseAs), TypeCtx && _allocMap(TypeCtx), defines(_chooseHeadAsync, dispose)(HeadState)
+        if (err === interrupt) interrupt.stack.push(stage, UseAs, EmbCtx, NextUseAs, adjLen, TypeCtx, typeError, Type, PublicData)
+        else dispose(UseAs), dispose(EmbCtx), dispose(NextUseAs), TypeCtx && _allocMap(TypeCtx), defines(_chooseHeadAsync, dispose)(HeadState), dispose(PublicData)
         throw err
       }
     },
@@ -14403,6 +15035,7 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
 
       let [stage = 0, UseAsAndIndexes, dUseAs, dNextUseAs, dEmbCtx, dDownEmb = keep(dout[6]), dprediction] = interrupt(7)
       try {
+        const p = alloc.params
         switch (stage) {
           case 0: {
             // Load what we'd need. And immediately, if we're on a short-path, return.
@@ -14426,12 +15059,12 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
             dEmbCtx = keep(dec)
           } stage = 1;  case 1: {
             // Adjust in-place modification of embedding.
-            const ctxs = alloc.params.GenContexts
+            const ctxs = p.GenContexts
             const [AllUseAs, Fits, maxI, prediction, typeError] = UseAsAndIndexes
             const mi = Fits.length == 2 ? Fits[0] : Fits[maxI*2]
             const mj = Fits.length == 2 ? Fits[1] : Fits[maxI*2+1]
 
-            if (!typeError && mi === 8 && ctxs[mi][0] === false && typeof alloc.params.VarUsed == 'function') {
+            if (!typeError && mi === 8 && ctxs[mi][0] === false && typeof p.VarUsed == 'function') {
               // Here, `dUseAs` refers to `NextUseAs`'s gradient, and at the end is set to `UseAs`'s gradient.
               if (dUseAs === undefined) { // Adjust `_lazyUseAs([mi, mj], NextUseAs)`.
                 const mmij = _allocArray(2);  [mmij[0], mmij[1]] = [mi, mj]
@@ -14443,11 +15076,11 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
                 if (dUA) { const t = add(dUseAs || 0, dUA);  dispose(dUseAs), dUseAs = t }
               }
 
-              // Adjust `NextUseAs = alloc.params.VarUsed(UseAs, DownEmb) || 0`
+              // Adjust `NextUseAs = p.VarUsed(UseAs, DownEmb) || 0`
               const a = _allocArray(2);  [a[0], a[1]] = [AllUseAs, DownEmb]
               try {
-                const b = adjust(alloc.params.VarUsed, a, null, dUseAs)
-                if (!isArray(b) || b.length != 2) error(b, "is not an array, from adjusting", alloc.params.VarUsed)
+                const b = adjust(p.VarUsed, a, null, dUseAs)
+                if (!isArray(b) || b.length != 2) error(b, "is not an array, from adjusting", p.VarUsed)
                 dispose(dUseAs), dUseAs = b[0]
                 const dde = b[1];  _allocArray(b)
                 if (dde) { const t = add(dDownEmb || 0, dde || 0);  dispose(dde);  dispose(dDownEmb), dDownEmb = t }
@@ -14467,7 +15100,7 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
                 const UseAs = _independentChoices[1] ? AllUseAs : sliceOff(AllUseAs, maxI)
                 const a = _allocArray(2);  [a[0], a[1]] = [AllUseAs, DownEmb]
                 try {
-                  const b = adjust(alloc.params.ChoiceEmbedder, a, null, dEmbCtx)
+                  const b = adjust(p.ChoiceEmbedder, a, null, dEmbCtx)
                   let dua, dde;  [dua, dde] = b;  _allocArray(b)
                   if (!_independentChoices[1]) { const t = oneHot(maxI, AllUseAs.shape[0], dua);  dispose(dua), dua = t }
                   if (dua) { const t = add(dUseAs || 0, dua || 0);  dispose(dua);  dispose(dUseAs), dUseAs = t }
@@ -14478,9 +15111,9 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
             }
           } stage = 3;  case 3: {
             const [AllUseAs, Fits, maxI, prediction, typeError] = UseAsAndIndexes
-            const a = _allocArray(2);  [a[0], a[1]] = [prediction, alloc.params.Goal]
+            const a = _allocArray(2);  [a[0], a[1]] = [prediction, p.Goal]
             try {
-              const b = adjust(alloc.params.ChoiceGoal, a, null, 0)
+              const b = adjust(p.ChoiceGoal, a, null, 0)
               if (!isArray(b)) error("Not an array:", b)
               dprediction = b[0];  _allocArray(b)
               if (!_independentChoices[1]) { const t = oneHot(maxI, AllUseAs.shape[0], dprediction);  dispose(dprediction), dprediction = t }
@@ -14488,7 +15121,7 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
           } stage = 4;  case 4: {
             // Adjust `predictions = _choose(UseAs, DownEmb, Choose)`.
             const de = _independentChoices[1] ? DownEmb : broadcastTo(DownEmb, UseAsAndIndexes[0])
-            const a = _allocArray(3);  [a[0], a[1], a[2]] = [de, DownEmb, alloc.params.Choose]
+            const a = _allocArray(3);  [a[0], a[1], a[2]] = [de, DownEmb, p.Choose]
             try {
               // Assume that `Choose` doesn't care about outputs (as `func`s don't).
               const b = defines(_choose, adjust)(a, null, dprediction)
@@ -15696,16 +16329,6 @@ Must always happen exactly in reverse to \`adjustSave\`.`,
     docs:`When a node throws this, \`purify\` will not execute that node.`,
   },
 
-  replay:{
-    docs:`Replays the executions stored in the replay buffer, one time each. Allegedly.`,
-  },
-
-
-
-
-
-
-
   defines:{
     docs:`\`(defines Data Code)\`: Gets the definition by \`Data\` of \`Code\`.
 
@@ -16056,7 +16679,6 @@ The array-representation of a JS WeakMap.`,
   bound:{
     docs:`\`(bound Bindings Expr)\`: When called, returns a copy-where-needed of \`Expr\` with all keys bound to values in \`Bindings\`, as if copying then changing in-place. When evaluated, also evaluates the result.
 Can be written as \`key:value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
-    genDepthFirst:true,
     examples:[
       `Inner contexts are always bound first:`,
       [
@@ -16331,7 +16953,6 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   try:{
     docs:`\`(try Func OnError …Args)\`: returns \`Func(…Args)\` unless an \`Error\` is thrown inside, and if so, returns \`OnError(Error,…Args)\`.`,
-    genDepthFirst:true,
     type:[
       _(`funcType`),
       [
@@ -19178,6 +19799,10 @@ The correctness of quining of functions can be tested by checking that the rewri
         const arr = _allocArray.free.length ? _allocArray.free.pop() : [];  arr.length = a;  return arr
       }
       if (!isArray(a)) error("Expected array length or an array, got", a)
+
+      // Undo `_rememberArrayItems`.
+      const resM = _rememberToDispose.res, resR = _rememberToDispose.reg
+      if (resM && resM.has(a)) resR && resR.unregister(resM.get(a)), resM.delete(a)
 
       // To test whether there are any errors in re-using arrays, uncomment the last line, and/or the others.
       if (_debugDoubleDealloc[1]) {
