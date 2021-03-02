@@ -1,0 +1,96 @@
+`consCell(cw,i)` and `consGoal(cw,i)`: entries into a `consWorld`.
+
+`allocate(cw, car, preGoalFunc, goalFunc)→cell`: allocates a cons-cell in the given `consWorld and with the given goal-value-returning function. Put `cell` through `use`.
+`goalFunc` at the end takes only what `preGoalFunc` returned at the beginning. `preGoalFunc` takes nothing. Example: `allocate(cw, func, userTime, userTime)`.
+(More precisely, this overrides a free goal and returns any cell with it. The more user-specified a `consWorld` is, the less potential for growth it has.)
+
+`use(cell)→object`: `construct`s the `allocate`d cons-cell if needed, and returns the `construct`ed object.
+
+
+
+==================================
+`consWorld(Hyperparams,CellInfos)`
+A place where cons-cells learn to interconnect into executable programs however they like.
+
+A cons-cell is two pointers, one to the head of the array (car), one to the rest of it (cdr): the smallest unit of programs. (Unlike Lisp, this is no-syntax, so bindings such as `a*a a:x/2` will already be `bound`.)
+
+At every littlest place of the program, both what it is and what it wants are learned (assuming that `setGoal` is in `Base`), so executing learned cons-cells unrolls open-ended evolution.
+
+Too benign and non-specific to underlie general intelligence, right? The only way to know is to find out.
+
+
+
+`Hyperparams` (user-specified):
+    ❀ `Cells`: how many cons-cells to make. `1000` by default.
+    ❀ `Goals`: how many distinct maximization objectives to make. `100` by default.
+        (Each goal affects the same count of cells.)
+        (Each is exposed to generation, for `setGoal`.)
+        (User's allocation (`cons`) will override one goal for the user's purposes.)
+    ❀ `Base`: the array of things that cons-cells can refer to.
+
+    ❀ `Choose:WhichPointer→ConsEmbedding→OptionEmbedding→State→GoalPrediction`, typed `n⇒t⇒t⇒t⇒n n:tensorType(?,?,1) t:tensorType(?,?,FeatureSize)`: the neural compiler.
+        The `max` prediction for each pointer is chosen. To use a different policy, set all others to, like, `-9000`.
+        `WhichPointer` is, per-element, either `1` for car or `-1` for cdr.
+        `concat` inputs with appropriate sizes specified, then do a neural network from that.
+        (At the first `use` of a cell in `callAdjust`, cells will be regenerated via one GPU-parallelized `Choose` call, then turned into a graph of arrays, then `construct`ed if changed.)
+        (`Choose` can connect every cell to any cell (or any base thing), which would mean `2·N·N` `matMul`s, which would make this non-scalable. But we can linearize this by exploiting temporal coherence of programs.)
+    ❀ `PrevOptions`: how big the "last-picked-options here" buffer is. `16` by default.
+    ❀ `RandomOptions`: how many random options to provide to each pointer, for exploration. `16` by default.
+
+  Construction cache (for speed, and to not re-train constructed variables):
+    ❀ `MaxCachedConstructs`, per-cell. `3` by default.
+
+  Gradient descent (learn anything, numerically):
+    ❀ `FeatureSize`: the size of numeric descriptions of what each thing is. `128` by default.
+    ❀ `NewEmbedding:Sizes→Embedding`: creates those numeric descriptions. `truncatedNormal` by default.
+    ❀ `Optimizer:VarData→Embedding` typed `varData(sz)⇒tensorType(…sz) sz:'Sizes'`: gets the data's current value, `adjust`able. `varSGD` by default.
+
+  Q-learning (care about future values of goals, and make others care):
+    ❀ `Goal:Age→GoalPrediction→Reality→FuturePrediction→ConsEmbedding→ChoiceMetric`, typed `n⇒n⇒n⇒n⇒t⇒n n:tensorType(?,1) t:tensorType(?,FeatureSize)`: what `Choose` will get gradient from.
+        Simplest example: `Age→Pred→Real→Fut→E→Pred=Real`.
+        Or, discounted average: `Age→Pred→Real→Fut→E→(1-p)*Real+p*Fut*p**Age p:.999`.
+        (Initially, `Age` is `0`, and `FuturePrediction` is the same as `GoalPrediction`.)
+        (We train `2·Cells` DQN agents at the same time, which all exploit each other and compete for attention of the generated program.)
+    ❀ `MinReality`: for `clip`ping in `setGoal`. Also used if the set-to value is not a number. `-5` by default.
+    ❀ `MaxReality`: for `setGoal`. To reduce useless-to-others reward-hacking, a cell's own goal cannot be picked. `5` by default.
+    ❀ `UpdateReplay:NewAge→PrevReality→CurrentValue→Reality`, typed `n⇒n⇒n⇒n n:tensorType(1)` but `stack`ed: incorporates more future reality into the `Goal`, for more accuracy on replay. `null` by default.
+    ❀ `MaxUpdateAge`: the updating does take time, and so, it can be limited. `256` by default.
+
+  Replay buffers (make gradient-descent stochastic):
+    ❀ `MaxReplayedChoices`: how many previous choices to store in total (not per-cell), in a ring buffer. `1000000` by default.
+    ❀ `ChoicesReplayedPerExecution`: choices replayed per execution. `10000` by default.
+    ❀ `ReplayChoice:ReplayedChoiceCount→Index`: picks the choice to replay. `randomNat` by default.
+        All choices are sorted by their latest `ChoiceMetric` in ascending order.
+        Each call can pull in many choices, for a total of at least `ChoicesReplayedPerExecution`.
+
+  State (for meta-learning):
+    ❀ `SequenceState:ConsEmbedding→CarEmbedding→CdrEmbedding→PrevState→State` typed `t⇒t⇒t⇒t⇒t t:tensorType(?,FeatureSize)`: updates hidden cell `State`. `null` by default.
+        (`Choose`, `Goal`, and `SequenceState` are the most important hyperparams of `consWorld`.)
+    ❀ `ReplaySequenceLength`: how many consecutive choices to include per each `ReplayChoice`. `0` by default (so, `SequenceState` is not learned).
+        (If non-`0`, each `ReplayChoice` also pulls in its car/cdr counterpart.)
+
+
+
+`CellInfos` (filled automatically, do not worry):
+    ✿ `genCtxs`: `(Cells Goals Base)`. Each cell is a `consCell`, each goal is a `consGoal`; the base is copied.
+    ✿ `ctxEmbs`: three `stack`ed `varData` objects that contain embeddings of `genCtxs`.
+    ✿ `consGoals`: `Cells`-length array of goal indexes.
+
+  Filled by `allocate`:
+    ✿ `customBefore`: `Goals`-length array of `null`s or `func`s that will prepare state for calling `customGoals` later.
+    ✿ `customGoals`: `Goals`-length array of `null`s or `func`s that will override goal values.
+    ✿ `customCars`: `Cells`-length array of `null`s or pre-decided car pointers.
+    ✿ `allocated`: an array of indexes of `allocate`d cells.
+
+  Regeneration:
+    ✿ `prevPicked`: `Cells`-length array of `1+2*PrevOptions`-length arrays: ring buffers of unique indices (with the 0th element being the next-write index), interleaving car then cdr. Uniformly-randomly initialized.
+        (Each index is coded as `1e9*CtxIndex+InCtxIndex`, so 8th global is `2000000007`.)
+    ✿ `constructions`: `Cells`-length array of `MaxCachedConstructs*2`-length arrays: caches from pre-`construct` array graphs to post-`construct` object graphs. The first entry is the most recent one.
+        (To regenerate: after `Choose` has determined all car/cdr connections (between-array and in-array links), all no-cdr-links cells (and all allocated cells) will create arrays until the first cycle, then (unless a `softEqual`-array-graph construct is in cache) `construct` in pre-order graph traversal starting from `allocated`, then `construct` in post-order. Other cells will be `null`, and so will error-on-`construct` cells.)
+
+  Replay:
+    ✿ `replays`: `(WriteAt …? (PrevState (…? CarIndex CdrIndex …?) Age Reality Future) …?)`. Classic RL: contains state, action, and reward.
+    ✿ `choiceMetrics`: an `f32` array of `ChoiceMetric`s in `replays`.
+        (`ChoiceMetric` is requested and written-to-here asynchronously. So these may not match exactly.)
+    ✿ `sortedChoices`: an `i32` array of indices (coded to be in the order that they appear in `Replays`) sorted by ascending `ChoiceMetrics`.
+        (Regeneration first requests `Choose` to run on GPU, then sorts this, then `sync`s `argmax(GoalPrediction)` and `max(GoalPrediction)`, then compiles everything. It uses an `i32` array of considered indices, one per each choice and per each option in it, coded as `where(car,i,-1-i) i:1e9*CtxIndex+InCtxIndex`, which the `argmax` indexes into.)

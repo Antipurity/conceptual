@@ -19,6 +19,7 @@ Out long: we introduce and implement TGBA.
 - We give each auto-function its own things to learn, for scalability: minimizing contrastive inequivalency loss, and predicting profiling information such as call duration, and optionally its own goal. This self-awareness improves sample efficiency.
 - Memory and compute are finite, so we learn what to allow to learn via measuring popularity, and Q-learning what all goals and metrics will become post-gradient-descent (culling least-prediction auto-functions when there are too many). This results in open-ended evolution, with self-similarity serving as the noisy-reproduction mechanism of good auto-functions.
 - This should make programs that can do anything well (interpreters/compilers) to be the most popular ones, so in theory, if we train an auto-world for long enough, we can stop training but still have the auto-world keep learning as if nothing happened, which is good for performance. Transcendence is hard, tho. Haven't made it.
+- From an attempt, a much simpler architecture has most recently presented itself (neurally compiling mutable-goal cons-cells), without PL-specific feature engineering but able to contain all that. To be done.
 
 Difficulties of developing both PL and ML. Benefits of none (until done).    
 Throwing AND underperforming?    
