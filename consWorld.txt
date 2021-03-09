@@ -3,8 +3,11 @@
 `allocate(cw, car, preGoalFunc, goalFunc)→cell`: allocates a cons-cell in the given `consWorld and with the given goal-value-returning function. Put `cell` through `use`.
 `goalFunc` at the end takes only what `preGoalFunc` returned at the beginning. `preGoalFunc` takes nothing. Example: `allocate(cw, func, userTime, userTime)`.
 (More precisely, this overrides a free goal and returns any cell with it. The more user-specified a `consWorld` is, the less potential for growth it has.)
+(`car` must be in the `consWorld`'s `Base`.)
 
 `use(cell)→object`: `construct`s the `allocate`d cons-cell if needed, and returns the `construct`ed object.
+
+`setGoal(cg,v)`: like `setFuture` but for `consGoal`s.
 
 
 
@@ -72,9 +75,9 @@ Too benign and non-specific to underlie general intelligence, right? The only wa
 
 
 `CellInfos` (filled automatically, do not worry):
-    ✿ `genCtxs`: `(Cells Goals Base)`. Each cell is a `consCell`, each goal is a `consGoal`; the base is copied.
-    ✿ `ctxEmbs`: three `stack`ed `varData` objects that contain embeddings of `genCtxs`.
-    ✿ `consGoals`: `Cells`-length array of goal indexes.
+    ✿ `genCtx`: `(…Cells …Goals …Base)`. `consCell`s, then `consGoal`s, then a copy of `Base`.
+    ✿ `ctxEmb`: `stack`ed `varData` object that contains embeddings of all in `genCtx`.
+    ✿ `consGoals`: `Cells`-length array of goal indices, such as `(0 0 1 1 2 2)`.
 
   Filled by `allocate`:
     ✿ `customBefore`: `Goals`-length array of `null`s or `func`s that will prepare state for calling `customGoals` later.
@@ -83,14 +86,13 @@ Too benign and non-specific to underlie general intelligence, right? The only wa
     ✿ `allocated`: an array of indexes of `allocate`d cells.
 
   Regeneration:
-    ✿ `prevPicked`: `Cells`-length array of `1+2*PrevOptions`-length arrays: ring buffers of unique indices (with the 0th element being the next-write index), interleaving car then cdr. Uniformly-randomly initialized.
-        (Each index is coded as `1e9*CtxIndex+InCtxIndex`, so 8th global is `2000000007`.)
+    ✿ `prevPicked`: `Cells`-length array of `1+2*PrevOptions`-length arrays: ring buffers of unique indices in `genCtx` (with the 0th item being the next-write index), interleaving car then cdr. Uniformly-randomly initialized.
     ✿ `constructions`: `Cells`-length array of `MaxCachedConstructs*2`-length arrays: caches from pre-`construct` array graphs to post-`construct` object graphs. The first entry is the most recent one.
         (To regenerate: after `Choose` has determined all car/cdr connections (between-array and in-array links), all no-cdr-links cells (and all allocated cells) will create arrays until the first cycle, then (unless a `softEqual`-array-graph construct is in cache) `construct` in pre-order graph traversal starting from `allocated`, then `construct` in post-order. Other cells will be `null`, and so will error-on-`construct` cells.)
 
   Replay:
     ✿ `replays`: `(WriteAt …? (PrevState (…? CarIndex CdrIndex …?) Age Reality Future) …?)`. Classic RL: contains state, action, and reward.
     ✿ `choiceMetrics`: an `f32` array of `ChoiceMetric`s in `replays`.
-        (`ChoiceMetric` is requested and written-to-here asynchronously. So these may not match exactly.)
-    ✿ `sortedChoices`: an `i32` array of indices (coded to be in the order that they appear in `Replays`) sorted by ascending `ChoiceMetrics`.
-        (Regeneration first requests `Choose` to run on GPU, then sorts this, then `sync`s `argmax(GoalPrediction)` and `max(GoalPrediction)`, then compiles everything. It uses an `i32` array of considered indices, one per each choice and per each option in it, coded as `where(car,i,-1-i) i:1e9*CtxIndex+InCtxIndex`, which the `argmax` indexes into.)
+        (`ChoiceMetric` is requested and written-to-here asynchronously. So these may not match exactly, but will match soon enough.)
+    ✿ `sortedChoices`: an `i32` array of indices (coded to be in the order that they appear in `replays`) sorted by ascending `ChoiceMetrics`.
+        (Regeneration first requests `Choose` to run on GPU, then sorts this (why let the CPU idle), then `sync`s `argmax(GoalPrediction)` and `max(GoalPrediction)`, then compiles everything. It uses an `i32` array of considered indices, one per each choice and per each option in it, coded as `where(car,i,-1-i)` where `i` indexes `genCtx`, which the `argmax` indexes into.)
