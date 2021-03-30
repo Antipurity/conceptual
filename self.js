@@ -168,11 +168,11 @@ __base({
   Execution:{
     docs:`Execution-related functionality.`,
     readAt:{
-      call:_(`call`),
-      callAdjust:_(`callAdjust`),
       Time:_(`Time`),
       Numeric:_(`Numeric`),
       Data:_(`Data`),
+      limit:_(`limit`),
+      interpreter:_(`interpreter`),
     },
   },
 
@@ -317,7 +317,10 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
 
   _isNum(x) { return typeof x == 'number' },
 
-  _num(x) { return typeof x == 'number' || _isDisposable(x) ? x : error("Neither number nor tensor:", x) },
+  _num(x) {
+    if (_isDisposable(x) && x.isDisposedInternal) error("Tensor already disposed:", x, "made at", _tensorOrigins(x))
+    return typeof x == 'number' || _isDisposable(x) && !x.isDisposedInternal || _isNumericArray(x) && x.every(_isNum) ? x : error("Neither number nor tensor:", x)
+  },
 
   less:{
     use:true,
@@ -390,10 +393,11 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       _num(a), _num(b), _num(c)
       const shape = a && a.size > 1 ? a.shape : b && b.size > 1 ? b.shape : c && c.size > 1 ? c.shape : a.shape
       let db=false, dc=false
-      if (typeof b == 'number' || b.size === 1) db=true, b = _tf(tf.broadcastTo(b, shape))
-      if (typeof c == 'number' || c.size === 1) dc=true, c = _tf(tf.broadcastTo(c, shape))
-      try { return _tf(tf.where(a,b,c)) }
-      finally { db && dispose(b), dc && dispose(c) }
+      try {
+        if (typeof b == 'number' || b.size === 1) b = _tf(tf.broadcastTo(b, shape)), db=true
+        if (typeof c == 'number' || c.size === 1) c = _tf(tf.broadcastTo(c, shape)), dc=true
+        return _tf(tf.where(a,b,c))
+      } finally { db && dispose(b), dc && dispose(c) }
     },
     adjust:[
       _(`array`),
@@ -454,49 +458,49 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   i8:{
     docs:`\`(i8 array(…Numbers))\`: \`make\`s a flat array of signed 8-bit integers.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Int8Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Int8Array(x[1]) : _fromBase64(x[1], 'int8') },
   },
 
   i16:{
     docs:`\`(i16 array(…Numbers))\`: \`make\`s a flat array of signed 16-bit integers.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Int16Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Int16Array(x[1]) : _fromBase64(x[1], 'int16') },
   },
 
   i32:{
     docs:`\`(i32 array(…Numbers))\`: \`make\`s a flat array of signed 32-bit integers.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Int32Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Int32Array(x[1]) : _fromBase64(x[1], 'int32') },
   },
 
   u8:{
     docs:`\`(u8 array(…Numbers))\`: \`make\`s a flat array of unsigned 8-bit integers.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Uint8Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Uint8Array(x[1]) : _fromBase64(x[1], 'uint8') },
   },
 
   u16:{
     docs:`\`(u16 array(…Numbers))\`: \`make\`s a flat array of unsigned 16-bit integers.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Uint16Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Uint16Array(x[1]) : _fromBase64(x[1], 'uint16') },
   },
 
   u32:{
     docs:`\`(u32 array(…Numbers))\`: \`make\`s a flat array of unsigned 32-bit integers.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Uint32Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Uint32Array(x[1]) : _fromBase64(x[1], 'uint32') },
   },
 
   f32:{
     docs:`\`(f32 array(…Numbers))\`: \`make\`s a flat array of 32-bit floats.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Float32Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Float32Array(x[1]) : _fromBase64(x[1], 'float32') },
   },
 
   f64:{
     docs:`\`(f64 array(…Numbers))\`: \`make\`s a flat array of 64-bit floats.`,
     argCount:1,
-    construct(x, obj) { if (obj === undefined) return new Float64Array(typeof x[1] != 'string' ? x[1] : _fromBase64(x[1]).buffer) },
+    construct(x, obj) { if (obj === undefined) return typeof x[1] != 'string' ? new Float64Array(x[1]) : _fromBase64(x[1], 'float64') },
   },
 
   Data:{
@@ -519,10 +523,8 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   Time:{
     docs:`A namespace for some time-related functionality.`,
     readAt:{
-      repeat:_(`repeat`),
       userTime:_(`userTime`),
       realTime:_(`realTime`),
-      timeLimit:_(`timeLimit`),
       await:_(`await`),
     },
   },
@@ -534,16 +536,17 @@ Keep names short and rely on the IDE. Route gradient not through the closest tex
     readAt:{
       Languages:_(`Languages`),
       hierarchy:_(`hierarchy`),
-      print:_(`print`),
-      REPL:_(`REPL`),
-      contextMenu:_(`contextMenu`),
-      elem:_(`elem`),
       _useDarkTheme:_(`_useDarkTheme`),
       _disableSmoothTransitions:_(`_disableSmoothTransitions`),
       _noBoxStylingForPrograms:_(`_noBoxStylingForPrograms`),
       _crispHighlight:_(`_crispHighlight`),
       _hoverHighlightsDOMValues:_(`_hoverHighlightsDOMValues`),
       _maxHighlightedValues:_(`_maxHighlightedValues`),
+      print:_(`print`),
+      contextMenu:_(`contextMenu`),
+      REPL:_(`REPL`),
+      _highlightInterrupts:_(`_highlightInterrupts`),
+      elem:_(`elem`),
     },
   },
 
@@ -566,7 +569,8 @@ Decoupling form from meaning allows composition and trivial changing of forms.`,
   },
 
   repeat:{
-    docs:`\`(repeat ^Expr)\`: loops forever when finished, interrupting as needed. \`repeat Expr Times\`: repeats the computation many \`Times\`.
+    docs:`\`(repeat ^Expr)\`: loops forever when finished, interrupting as needed.
+\`repeat Expr Times\`: repeats the computation many \`Times\`.
 Results of evaluating DAG nodes are not preserved.`,
     dispose:true,
     call(expr, iterations) {
@@ -582,7 +586,7 @@ Results of evaluating DAG nodes are not preserved.`,
         // Loop.
         while (true) {
           if (!disposed) dispose(v), disposed = true
-          v = callAdjust(expr, undefined, undefined, false)
+          v = interpreter(callAdjust, expr)
           if (_isUnknown(v)) return elemRemove(into), _unknown([repeat, v[1], iterations], v)
           done = 2
           ++i, disposed = false
@@ -626,7 +630,6 @@ In particular, so that AGI doesn't have to sacrifice humanity in order to transc
   },
 
   userTime:{
-    use:1,
     type:[
       _(`funcType`),
       _(`userTime`),
@@ -640,9 +643,7 @@ This does not include time spent on other jobs, but does include the time to int
     },
     interrupt:false,
     impure:true,
-    call(mark) {
-      return _userTimeSince(mark)
-    },
+    call(mark) { return _userTimeSince(mark) },
   },
 
   _userTimeStart:_([
@@ -659,7 +660,6 @@ This does not include time spent on other jobs, but does include the time to int
   ]),
 
   realTime:{
-    use:1,
     type:[
       _(`funcType`),
       _(`realTime`),
@@ -673,9 +673,7 @@ This includes time spent on other jobs.`,
     },
     interrupt:false,
     impure:true,
-    call(mark) {
-      return _timeSince(mark)
-    },
+    call(mark) { return _timeSince(mark) },
   },
 
   _realTimeStart:_([
@@ -691,25 +689,76 @@ This includes time spent on other jobs.`,
     `A differently-\`type\`d version of \`realTime\`.`,
   ]),
 
-  timeLimit:{
+  limit:{
+    docs:`The namespace for limiting resources available to code.
+Also: \`limit {'time' Milliseconds 'arrays' Count 'tensorMemory' Bytes} Func …Args\` to limit the resources available to \`Func\`.`,
+    readAt:{
+      time:_(`limitTime`),
+      arrays:_(`limitArrays`),
+      tensorMemory:_(`limitTensorMemory`),
+    },
+    dispose:true,
+    adjustLater:true,
+    mergeAdjustment:null,
+    adjust:{
+      call(ins, _, dout) {
+        if (call.pure) throw impure
+        let [failed] = interrupt(1)
+        try {
+          if (failed === undefined) {
+            failed = adjustLoad(null)
+            if (failed !== 'returned' && failed !== 'error') _inexactReversal(true, failed)
+          }
+          if (failed === 'error') return _allocArray(0)
+          const [__, fn, ...args] = ins
+          return adjust(fn, args, _, dout)
+        } catch (err) { if (err === interrupt) interrupt.stack.push(failed);  throw err }
+      },
+      dispose:_(`_disposeEachAndDealloc`),
+    },
+    call(opts, fn, ...args) {
+      if (typeof fn != 'function') error('Not a func:', fn)
+      const [time, arrays, tensorMemory] = _destructure(opts, limit.opts || (limit.opts = ['time', 'arrays', 'tensorMemory']))
+      let [endTime, endArrays, endTensorMemory, adjLen = adjustUndo()] = interrupt(4)
+      if (time != null && endTime === undefined) endTime = _userTimeSince() + sync(_num(_setting(time)))
+      if (arrays != null && endArrays === undefined) endArrays = array.count + sync(_num(_setting(arrays)))
+      if (tensorMemory != null && endTensorMemory === undefined) endTensorMemory = tensorMemorySince() + sync(_num(_setting(tensorMemory)))
+      const prevEndTime = limitTime.limit, prevEndArrays = limitArrays.limit, prevEndTensorMemory = limitTensorMemory.limit
+      if (endTime !== undefined) limitTime.limit = limitTime.limit !== undefined ? Math.min(limitTime.limit, endTime) : endTime
+      if (endArrays !== undefined) limitArrays.limit = limitArrays.limit !== undefined ? Math.min(limitArrays.limit, endArrays) : endArrays
+      if (endTensorMemory !== undefined) limitTensorMemory.limit = limitTensorMemory.limit !== undefined ? Math.min(limitTensorMemory.limit, endTensorMemory) : endTensorMemory
+      try { const ret = fn(...args);  adjustSave('returned');  return ret }
+      catch (err) {
+        if (err === interrupt) interrupt.stack.push(endTime, endArrays, endTensorMemory, adjLen)
+        else // Cancel any possible adjustment, because it's too late for regrets.
+          adjLen !== undefined && adjustUndo(adjLen), adjustSave('error')
+        throw err
+      } finally { limitTime.limit = prevEndTime, limitArrays.limit = prevEndArrays, limitTensorMemory.limit = prevEndTensorMemory }
+    },
+  },
+
+  limitTime:{
     use:true,
-    docs:`\`timeLimit Duration Func …Args\`: returns \`Func(…Args)\` if its \`userTime\` never stretches past \`Duration\`, or throws \`timeLimit\` otherwise (on the first \`_checkInterrupt\` that sees the violation).
+    docs:`\`limitTime Duration Func …Args\`: returns \`Func(…Args)\` if its \`userTime\` never stretches past \`Duration\`, or throws \`limit\` otherwise (on the first \`_checkInterrupt\` that sees the violation).
 \`Duration\` is in milliseconds.
 
 What is an infinite loop?
     To you, it's an annoyance.
     To a simple program, it's lethal.
-    With a \`timeLimit\`, it's just a failure.`,
+    With \`limitTime\`, it's just a failure.`,
     examples:[
       `Interrupts are not free, so experiment with this: \`\`settings ^_msBeforeInterrupt\`\``,
       [
-        `timeLimit 1000 repeat ^(1+2)`,
+        `limitTime 1000 repeat ^(1+2)`,
       ],
       [
-        `timeLimit 10*1000 repeat 5`,
+        `limit {'time' 1000} repeat ^(1+2)`,
       ],
       [
-        `timeLimit 100*1000 repeat 2.718281828459045 10000`,
+        `limitTime 10*1000 repeat 5`,
+      ],
+      [
+        `limitTime 100e3 repeat 2.718281828459045 10000`,
       ],
     ],
     type:[
@@ -733,56 +782,73 @@ What is an infinite loop?
     adjustLater:true,
     mergeAdjustment:null,
     adjust:{
-      call(ins, _, dout) {
-        if (call.pure) throw impure
-        let [failed] = interrupt(1)
-        try {
-          if (failed === undefined) {
-            failed = adjustLoad(null)
-            if (failed !== 'returned' && failed !== 'error') _inexactReversal(true, failed)
-          }
-          if (failed === 'error') return _allocArray(0)
-          const [duration, fn, ...args] = ins
-          return adjust(fn, args, _, dout)
-        } catch (err) { if (err === interrupt) interrupt.stack.push(failed);  throw err }
-      },
+      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
       dispose:_(`_disposeEachAndDealloc`),
     },
     call(duration, fn, ...args) {
-      if (typeof fn != 'function') error('Not a func:', fn)
-      let [end = userTime() + sync(duration), adjLen = adjustUndo()] = interrupt(2)
-      const prevEnd = timeLimit.end
-      timeLimit.end = timeLimit.end !== undefined ? Math.min(timeLimit.end, end) : end
-      try { const ret = fn(...args);  adjustSave('returned');  return ret }
-      catch (err) {
-        if (err === interrupt) interrupt.stack.push(end, adjLen)
-        else {
-          // Cancel any possible adjustment, because it's too late for regrets.
-          if (adjLen !== undefined) adjustUndo(adjLen)
-          adjustSave('error')
-        }
-        throw err
-      } finally { timeLimit.end = prevEnd }
+      if (!limitTime.o) limitTime.o = {time:null}
+      limitTime.o.time = duration
+      return limit(limitTime.o, fn, ...args)
+      // .limit, .o
+    },
+  },
 
-      // .end
+  limitArrays:{
+    use:true,
+    docs:`\`limitArrays Count Func …Args\`
+An imperfect way to limit memory: returns \`Func(…Args)\`, or throws \`limit\` otherwise (in \`_allocArray\`).`,
+    dispose:true,
+    adjustLater:true,
+    mergeAdjustment:null,
+    adjust:{
+      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
+      dispose:_(`_disposeEachAndDealloc`),
+    },
+    call(count, fn, ...args) {
+      if (!limitArrays.o) limitArrays.o = {arrays:null}
+      limitArrays.o.arrays = count
+      return limit(limitArrays.o, fn, ...args)
+      // .limit, .o
+    },
+  },
+
+  limitTensorMemory:{
+    use:true,
+    docs:`\`limitTensorMemory Count Func …Args\`
+An imperfect way to limit memory: returns \`Func(…Args)\`, or throws \`limit\` otherwise (in \`_allocArray\`).`,
+    dispose:true,
+    adjustLater:true,
+    mergeAdjustment:null,
+    adjust:{
+      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
+      dispose:_(`_disposeEachAndDealloc`),
+    },
+    call(count, fn, ...args) {
+      if (!limitTensorMemory.o) limitTensorMemory.o = {tensorMemory:null}
+      limitTensorMemory.o.tensorMemory = count
+      return limit(limitTensorMemory.o, fn, ...args)
+      // .limit, .o
     },
   },
 
   _userTimeSince:{
+    use:1,
     docs:`Like \`_timeSince\` but for \`userTime\`.`,
     interrupt:false,
-    call(mark = 0) { return call.env[_id(userTime)] + _timeSince(call.env[_id(realTime)]) - mark },
+    call(mark = 0) { return typeof mark == 'number' ? call.env[_id(userTime)] + _timeSince(call.env[_id(realTime)]) - mark : error('Bad mark:', mark) },
   },
 
   _timeSince:{
+    use:1,
     docs:`\`_timeSince()\`⇒\`TimeMark\` or \`(_timeSince TimeMark)\`⇒\`RealDuration\`: returns the current time as f64 milliseconds, or the non-negative time elapsed since the mark.
 Makes no attempt to correct for the time to measure, \`(_timeSince _timeSince())\`.
 Browsers reduce the precision of this to prevent timing attacks. Putting that precision back could be beneficial, somewhere in their hidden options.`,
     interrupt:false,
     call(mark = 0) {
-      if (typeof performance != ''+void 0 && performance.now) // Browser
+      if (typeof performance != ''+void 0 && performance.now) { // Browser
+        if (typeof mark != 'number') error('Bad mark:', mark)
         return performance.now() - mark
-      else if (typeof process != ''+void 0 && process.hrtime && process.hrtime.bigint) { // NodeJS
+     } else if (typeof process != ''+void 0 && process.hrtime && process.hrtime.bigint) { // NodeJS
         if (!mark) return process.hrtime.bigint()
         return Math.max(0, Number(process.hrtime.bigint() - mark)/1e6)
       } else if (typeof require != ''+void 0) { // NodeJS
@@ -790,6 +856,7 @@ Browsers reduce the precision of this to prevent timing attacks. Putting that pr
         return _timeSince.now() - mark
       } else {
         // Ensure monotonicity with Date.now().
+        if (typeof mark != 'number') error('Bad mark:', mark)
         if (_timeSince.prev == null) _timeSince.prev = Date.now(), _timeSince.add = 0
         const n = Date.now()
         if (_timeSince.prev > n) _timeSince.add += _timeSince.prev - n
@@ -799,24 +866,32 @@ Browsers reduce the precision of this to prevent timing attacks. Putting that pr
     },
   },
 
-  memorySince:{
+  tensorMemorySince:{
     use:1,
     type:[
       _(`funcType`),
       _(`_numberType`),
     ],
-    docs:`\`memorySince()\`⇒MemMark or \`(memorySince MemMark)\`: Measures required-memory-size change (allocated memory) as non-negative \`f64\` bytes.
+    docs:`\`tensorMemorySince()\`⇒\`Mark\` or \`(tensorMemorySince Mark)\`: Measures required-memory-size change (allocated memory) as non-negative \`f64\` byte count.
 In browsers, returns \`tensor\` memory.
-Makes no attempt to correct for the memory-to-measure, \`(memorySince memorySince())\` (which is 0 in browsers).`,
+Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tensorMemorySince())\` (which is 0 in browsers).`,
     interrupt:false,
     impure:true,
     call(mark = 0) {
+      if (typeof mark != 'number') error('Bad mark:', mark)
       if (typeof process != ''+void 0 && process.memoryUsage) {
         const m = process.memoryUsage()
         return Math.max(0, m.rss + m.heapUsed - m.heapTotal - mark)
       }
       return tf.engine().state.numBytes - mark
     },
+  },
+
+  arraysSince:{
+    docs:`\`arraysSince()\`→\`Mark\` or \`arraysSince(Mark)\``,
+    interrupt:false,
+    impure:true,
+    call(mark) { return typeof mark == 'number' ? array.count - mark : error('Bad mark:', mark) },
   },
 
   countReachableObjects:{
@@ -848,7 +923,7 @@ Makes no attempt to correct for the memory-to-measure, \`(memorySince memorySinc
         if (x instanceof Map) return x.forEach((v,k) => { walk(k), walk(v) })
         if (x[defines.key]) for (let k in x[defines.key]) walk(x[defines.key][k])
         if (typeof document != ''+void 0 && x instanceof Node && (walk(x.to), true)) for (let ch = x.firstChild; ch; ch = ch.nextSibling) walk(ch)
-        else for (let k in x) walk(x[k])
+        else try { for (let k in x) walk(x[k]) } catch (err) {}
       }
     },
   },
@@ -989,7 +1064,7 @@ Just pick the correct variance. \`8/sqrt(n)\` for big \`n\`×\`n\` matrices work
       ],
       `Now, every layer is as open-minded as any other. Initially, I mean.
 
-(Maybe it is possible to keep them open-minded, via some de-regularization loss that keeps activations near 0-mean and a good variance. Or via batch normalization, where each batch is explicitly normalized to 0-mean and a good variance.)
+(Maybe it is possible to keep them open-minded, via some de-regularization loss that keeps activations near 0-mean and a good variance. Or via batch normalization, where each batch is explicitly normalized to 0-mean and a good variance. Or via sticky dropout: a random mask that sets some values to 0, and is updated relatively-rarely.)
     (This is similar to maintaining diversity for open-ended algorithms such as creature evolution on Irth, but numerically, for neural networks. Same purpose too: maintains adaptability.)
 
 Now, the big question: do we want to actually demonstrate that these things learn better?
@@ -1400,6 +1475,7 @@ inline-block { display:inline-block }
       observe(_disableSmoothTransitions, st => Self.into.classList.toggle('noTransitions', st[1], true))(_disableSmoothTransitions)
       observe(_noBoxStylingForPrograms, st => Self.into.classList.toggle('noComplexity', st[1], true))(_noBoxStylingForPrograms)
       observe(_crispHighlight, st => Self.into.classList.toggle('crispHighlight', st[1], true))(_crispHighlight)
+      observe(_highlightInterrupts, st => !st[1] && Self.into.querySelectorAll('.working').forEach(el => el.classList.toggle('working', false, true)))(_highlightInterrupts)
 
       // Insert the style defined by code.
       const StyleElem = document.createElement('style')
@@ -3693,7 +3769,18 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
       } else {
         // An option is [settings, Value, HumanReadableName, OptToElemFunc].
         opt = _unquote(opt)
-        if (!isArray(opt) || opt[0] !== settings) return opt
+        if (!isArray(opt) || opt[0] !== settings) {
+          if (isArray(opt) || !opt || typeof opt != 'object' && typeof opt != 'function') return opt
+          const m = _allocMap(), visited = new Set
+          walk(opt)
+          function walk(x) {
+            if (visited.has(x)) return;  else visited.add(x)
+            if (isArray(x) && x[0] === settings) m.set(x, settings(x))
+            const ra = !isArray(x) && defines(x, readAt)
+            if (ra) for (let k in ra) walk(ra[k])
+          }
+          return m.size ? hierarchy(m, elem('span', 'Settings:')) : opt
+        }
         let el
         if (typeof opt[3] == 'function')
           // The func, if present, accepts the opt array where a[1] is the value, and optionally the element (to update it).
@@ -4305,6 +4392,19 @@ I don't like this ceaseless butchering of innocent maidens. Should I stop the cl
         `Or the manga Berserk (where Griffith is best girl). All the best works of fiction are full of metaphors for operations of general intelligence, because of which they're considered the best. Transcending humanity with demonic rituals, sacrificing everything you've built on your previous foundation to make yourself better fit your goal, touching the very alien world that is the innermost truth of humanity, becoming an egg for the perfect world, finding true light only in darkness… Even Behelit's design is about rebuilding yourself from scratch, with features out of whack most of the time, only coming together at fateful moments. And because writing is about creating grand worlds, transcendence is pointlessly grand-scale.
 I've seen so many such metaphors and events, both in fiction and the real world, that I've grown numb to the repetition. Berserk, like many, seemed not bad but not amazing either: just the same old things. 's good, I guess, or so I'm told.`,
       ],
+      [
+        `These are letter combinations that did not manage to get sneaked into tutorials. Trash, in other words. Maybe can use them in the future, though.`,
+        `You grew up in the information age, yes? So I understand that such narration seems unrealistic to you. It's straight from the post-information age, where anyone could believe anything they want about the world, and it will all be(come) true, so all knowledge is useless. If it sounds unusual, just remember the old saying: long-held beliefs that are still very distinct must be incredibly strong. I always believed in the power of the transcendent galaxy brain.`,
+        `Oh, fixing bugs is so much easier and more pleasant than thinking up new things. It's the same thing as with society, where to come up with great new things is to be shunned until viewpoints of others are aligned well enough to understand, but in me.`,
+        `…Okay, 2 brain cells… …I'm sorry, that was uncalled for. I know that most of the world is a wasteland, with how little life there is in what people call life. So I'd do well to hide my deep hatred for you deep.`,
+        `Staring at the screen and removing all distractions, from environment and mind, is the most (maybe the only) important prerequisite to getting things done. So stop thinking about that snack.`,
+        `I may have obtained the world, but I haven't obtained what I actually wanted: friendship.`,
+        `The human spirit is limitless… so is it really human? If greatness isn't given and must be created, then it's not very human. If you ever studied important people of the past, didn't the apt saying "genius and madness go hand in hand" seem suspicious to you? If obsession in some form defines humanity, then isn't foregoing your body's needs in favor of ideas' needs much more fitting for AGI? Making it entirely 'human' spirit would require re-defining what 'human' means.`,
+        `Artificial intelligence is important to me. I've always tried to extinguish all ways of thinking that are not how I thought artificial intelligence is, for honest simplicity of living and dying by my words: to meet people as an equal is to completely know what makes them. Bold, persistent experimentation is the hallmark of good science, but that approach might have been too bold. Oh, no matter. It led to this. Too much time has passed to lament past love.`,
+        `Some people say that there are no miracle abilities to understand some super-hard concept, no talent and no geniuses: the nothing-ness. For efficiency, you should advance that saying to everything-ness: there are miracle abilities to understand any thing, and anyone can find them if they wanted and worked at it long enough. Do you want to join us on our little search?`,
+        `Broader impact: the future of AGI technologies is, very likely, to be acquired and used to their full potential by a few huge companies for automation of their processes, then to gradually phase human employees out of the lives of those companies, then to gradually phase the rest of humanity out of existence as those processes encompass more and more. If people vote with their money, then this is what they want (by definition of what money is: exchangeable potential), and so as scientists, it is our duty to allow people to accomplish their dreams. As a concrete suggestion, we should immediately throw all the compute we can spare at AGI algorithms. More long-term, from a governance perspective, the best technology that we as a community should work on is mind uploading, because it allows maximizing control to infinity and minimizing generality to zero, which is the best way to ensure self-extinction that is the implicit goal of all non-general systems.   However, empowering humans for the benefit of all humankind will not be easy: with knowledge of general systems of existence that are much simpler than similar things in human culture, yet much more effective, humans can start replacing their inferior cultural parts with systems that don't need to be destroyed to be improved in any way, and thus ensure long-term support of their inefficient biology. To hopefully eliminate this dangerous way of thinking, mind control techniques can be used: privatization of information, appeal to culture (such as memes), reward engineering in the name of AI safety.   All learning methods learn bias by definition, so the uncontrolled melting of all that is human in generality should not require much more effort than simply using learning methods to help with automation.   (Note: this section was satirical, to illustrate what not to do. Extermination of humanity is not officially endorsed by the authors.)`,
+        `You cannot change your true nature by throwing more compute at it.`,
+      ],
     ],
   },
 
@@ -4460,7 +4560,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
       _highlightOriginal(env[_id(_checkInterrupt)], false)
     if (typeof document != ''+void 0 && isArray(env[_id(print)]))
       env[_id(print)] = env[_id(print)][0].nextSibling, env[_id(print)].previousSibling.remove()
-    try { v = callAdjust(expr) }
+    try { v = interpreter(callAdjust, expr) }
     catch (err) {
       if (err === interrupt) interrupted = true, interrupt.stack && !interrupt.stack.length && (env[_id(interrupt)] = undefined)
       else v = _errorRepr(err)
@@ -4510,14 +4610,10 @@ If any promises the job depends on have a method .cancel, calls those.`,
         _jobs.duration = _timeSince(start)
         _jobs.running = false
       }
-      if (_jobs.expr.length) _jobsResume(Math.min(_jobs.duration / _maxUsageOfCPU[1] - _jobs.duration, 1000))
+      if (_jobs.expr.length) setTimeout(_jobs, Math.min(_jobs.duration / _maxUsageOfCPU[1] - _jobs.duration, 1000) || 0)
       if (DOM) _jobs.display(_jobs.indicator)
       // _jobs.expr (Array), _jobs.limbo (Array), _jobs.duration (Number), _jobs.reEnter (true or a _schedule-replacing function), _jobs.indicator
     },
-  },
-
-  _jobsResume(delay) {
-    if (_jobs.expr.length) setTimeout(_jobs, delay || 0)
   },
 
   _jobsDisplay(el, a = Math.floor(_jobs.expr.length/3), b = Math.floor(_jobs.limbo.length/3)) {
@@ -4530,14 +4626,16 @@ If any promises the job depends on have a method .cancel, calls those.`,
     el.classList.toggle('yes', a || b && true)
   },
 
+  _highlightInterrupts:[
+    _(`settings`),
+    false,
+    `Whether interrupts will add a class to those DOM elements that represent the most-recent interrupting place.`,
+  ],
+
   _highlightOriginal(expr, working) {
     // Add (or remove) .working to DOM elements responsible for expr.
-    let arr = elemValue(undefined, expr), i = 0
-    while (!arr && i < 16) {
-      if (_cameFrom.m && _cameFrom.m.has(expr) && _cameFrom.m.get(expr) !== expr)
-        expr = _cameFrom.m.get(expr), arr = elemValue(undefined, expr), ++i
-      else break
-    }
+    if (!_setting(_highlightInterrupts)) return
+    let arr = elemValue(undefined, expr)
     if (arr) arr.forEach((el, i) => i < 16 && el.classList.toggle('working', working))
   },
 
@@ -4566,8 +4664,7 @@ If any promises the job depends on have a method .cancel, calls those.`,
     e[_id(userTime)] = 0 // CPU time spent on this job.
     e[_id(realTime)] = undefined // The timestamp of when we last started executing this job.
 
-    e[_id(keep)] = _allocMap() // For each tensor, if needed, counts how many times other-object-finalizers will dispose of it.
-    e[_id(_tf)] = undefined // For each tensor, keeps track of its existence and possibly the creation stack trace.
+    e[_id(_tf)] = _allocArray(0) // For each tensor, keeps track of its existence and possibly the creation stack trace.
 
     e[_id(consWorld)] = undefined // Set of `consWorld.regen` cw->replayState Maps.
 
@@ -4615,7 +4712,7 @@ In Scheme, the equivalent is called \`begin\`.`,
   true:true,
 
   quote:{
-    use:true,
+    use:1,
     docs:`\`(quote Expr)\` or \`^Expr\`: A special form that returns \`Expr\` unevaluated, quoting the exact object.
 
 Makes it easy to insert a reference to any object when generating a program, don't you think so, you cute rascal?
@@ -4749,6 +4846,7 @@ Evaluating a bound label results in its value, in the current function call. Eva
   },
 
   randomNat:{
+    impure:true,
     docs:`\`(randomNat Nat)\`: Picks a random non-negative integer less than \`Nat\`, from a uniform distribution.
 An interface to JS's crypto.getRandomValues for generating random numbers on-demand as opposed to in-batches, optimizing to request the least amount of random bits required.`,
     nameResult:[
@@ -4796,6 +4894,7 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
   },
 
   randomProb:{
+    impure:true,
     use:true,
     docs:`\`(randomProb Probability)\`: Returns \`true\` with \`Probability\` \`p\`, else \`false\`.
 Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (possibly) faster.`,
@@ -4814,7 +4913,7 @@ Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (
     ],
     argCount:1,
     call(p) {
-      if (typeof p != 'number') throw 'Expected a number'
+      if (typeof p != 'number') error('Expected a number, got', p)
       if (p < 0) throw 'Probability is too low: '+p;
       if (p > 1) throw 'Probability is too high: '+p;
       if (p !== p) throw 'Probability is NaN';
@@ -4881,6 +4980,7 @@ Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (
   },
 
   call:{
+    use:1,
     tutorial:[
       `(Warning: this \`tutorial\` involves actually writing programs. If no want, try something easier, like \`tutorial callAdjust\`.)
 
@@ -4956,10 +5056,10 @@ More importantly, if it was this simple for us to come up with an interpreter, t
 
 Well, no more talk. Goodbye, and take care.`,
     ],
-    docs:`\`call ^(Func …Args)\`: \`call\`s all sub-items, then applies the first value (the function) to the rest of values.
-Defining this allows function application. In fact, \`F:(func …?)\` is the same as \`(concept call F)\`.
-Computation cycles are disallowed, and every node's value (array's value) is only computed once.
-(This used to be used in the global interpreter loop, but was superseded by \`callAdjust\`.)
+    docs:`\`call ^(Func …Args)\`: recursively \`call\`s all sub-items, then applies the first value (the function) to the rest of values.
+Defining this allows function application. In fact, \`F:(func …?)\` acts the same as \`(concept call F)\`.
+Computation cycles are disallowed (unless \`\`settings ^_forgiveMistakes\`\`), and every node's value (array's value) is only computed once.
+(This used to be used in the global \`interpreter\` loop, but was superseded by \`callAdjust\`.)
 
 
 All languages, and everything that does stuff, must have an internal representation (IR) of arbitrary computations.
@@ -4987,23 +5087,25 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
     readAt:{
       last:_(`last`),
       quote:_(`quote`),
-      apply:_(`apply`),
       func:_(`func`),
       select:_(`select`),
       equal:_(`equal`),
       purify:_(`purify`),
       error:_(`error`),
-      _forgiveMistakes:_(`_forgiveMistakes`),
     },
     nameResult:[
       `result`,
     ],
+    dispose:true,
     call(x) {
-      // This is an interpreter of DAGs, the most powerful IR.
       // First, we handle purification and "I'm not a computation" and "I don't want to be a computation".
       if (call.pure) return purify(x)
-      if (!isArray(x)) return x
-      if (x[0] === quote) return x[1]
+      if (!isArray(x)) return keep(x)
+      if (x[0] === quote) return keep(x[1])
+
+      /*
+      // This is a very simple interpreter of DAGs, the most powerful IR (same as all the others). Left in for reference.
+      //   (This does not handle `keep`/`dispose` definitions properly, just like `purify`.)
 
       // Don't forget to be interrupt-friendly!
       let [i = 0, outputs, po, inds, rc] = interrupt(5)
@@ -5033,6 +5135,28 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
         else _disposeEachAndDealloc(outputs)
         throw err
       } finally { _allocArray(collected) }
+      */
+
+      // Compile `x` just-ahead-of-time, then call compiled code.
+      let [compCall] = interrupt(1)
+      const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
+      const prevAdjSave = env[ias];  env[ias] = undefined // Cancel adjustment immediately.
+      const prevAdjLoad = env[ial];  env[ial] = undefined
+      try {
+        if (compCall === undefined) {
+          if (callAdjust.callCache.has(x))
+            compCall = callAdjust.callCache.get(x)
+          else {
+            const po = _postorderInfo(x)
+            compCall = _compileBody(x, null, po, undefined, undefined, undefined, x)
+            defines(_postorderInfo, dispose)(po)
+            callAdjust.callCache.set(x, compCall)
+          }
+        }
+        return compCall()
+      } catch (err) { if (err === interrupt) interrupt.stack.push(compCall);  throw err }
+      finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
+
       // .env (current execution environment), .depth (current call depth), .pure.
     },
   },
@@ -5048,6 +5172,7 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
     docs:`\`applyArray ^(Func …Args)\`: assuming that \`Func\` and \`Args\` are already evaluated, simply applies the function to arguments.`,
     dispose:true,
     call(x) {
+      if (!isArray(x)) error('Not an array:', x)
       if (typeof x[0] != 'function')
         error('Expected a function to call, got', x[0], 'in the DAG node', x)
       return x[0].call(...x)
@@ -5189,18 +5314,28 @@ Lack of cycles allows us to pre/post \`construct\` at the same time, no backpatc
     },
   },
 
+  _logHiddenConstructionErrors:[
+    _(`settings`),
+    false,
+    `If checked, errors during cons-world regeneration will be logged to browser console.`,
+  ],
+
   makeGraph:{
     docs:`\`makeGraph Expr\`: Turns an array graph into an array/object graph, in place if possible.
 
 Constructs all dependencies before dependents, and throws if there is a cycle (unless instructed to hide errors).
     More "correct", but less trivially-parallelizable (if this was not JS).`,
+    readAt:{
+      _logHiddenConstructionErrors:_(`_logHiddenConstructionErrors`),
+    },
     call(x, e, noFullConstruction = false, openCollapsed = true, hideErrors = false, constructTheTopLevelArray = true, reconstruct) {
       if (openCollapsed && _isCollapsed(x)) return x
       if (!isArray(x)) return x
-      let [env = e || _allocMap(), unfinished = new Set, xs, ys, ns] = interrupt(5)
+      let [env = e || _allocMap(), unfinished = new Set, xs, ys, ns, ourT = _allocMap()] = interrupt(6)
       // env: original —> constructed|original
       // unfinished: Whether a node is not constructed yet, for cycle detection.
       // xs/ys/ns: constructed source arrays, constructed result objects, and how far along the construction we are.
+      // ourT: keeps track of which tensors we created, and need to dispose.
       try {
         if (xs === undefined)
           xs = _allocArray(0), ys = _allocArray(0), ns = _allocArray(0),
@@ -5213,28 +5348,28 @@ Constructs all dependencies before dependents, and throws if there is a cycle (u
             if (reconstruct && reconstruct.has(x))
               !env.has(x) && error("Re-constructed objects must have been constructed, but got the maverick", x), unfinished.add(y)
             else if (!isArray(x[0]) && defines(x[0], construct) && (xs.length > 1 || constructTheTopLevelArray))
-              try { env.set(x, construct(y)), unfinished.add(y) }
-              catch (err) { if (err === interrupt || !hideErrors) throw err;  else env.set(x, null) }
+              try { env.set(x, construct(y)), unfinished.add(y), _isDisposable(env.get(x)) && ourT.set(env.get(x), env.get(x)) }
+              catch (err) { if (err === interrupt || !hideErrors) throw err;  else env.set(x, null), _setting(_logHiddenConstructionErrors) && console.log(err) }
             else
               env.set(x, y)
             n = ns[ns.length-1] = 0
           }
           reconstruct && reconstruct.delete(x)
           for (; n < y.length; n = ns[ns.length-1] = n+1) { // Order.
-            if (openCollapsed && _isCollapsed(x[n])) y[n] = x[n].to
-            else if (!isArray(x[n])) y[n] = x[n]
-            else if (env.has(x[n]) && (!reconstruct || !reconstruct.has(x[n]))) y[n] = env.get(x[n])
+            if (openCollapsed && _isCollapsed(x[n])) y[n] = keep(x[n].to)
+            else if (!isArray(x[n])) y[n] = keep(x[n])
+            else if (env.has(x[n]) && (!reconstruct || !reconstruct.has(x[n]))) y[n] = keep(env.get(x[n]))
             else { xs.push(x[n]), ys.push(null), ns.push(null);  n = null;  break }
           }
           if (n === null) continue
-          if (!noFullConstruction && env.get(x) !== y) { // Post-order.
+          if (!noFullConstruction && env.get(x) !== y && env.get(x) !== null) { // Post-order.
             // To allow user-defined constructs, construct all (acyclic) potential dependencies then construct us.
             try {
               for (let j=0; j < y.length; ++j)
                 if (unfinished.has(y[j]))
                   error('User-defined constructs must not depend on their instances, as happened in', x[j])
               construct(y, env.get(x)) // An error here would not change any cyclic users of `x` to use `null`, only non-cyclic users.
-            } catch (err) { if (err === interrupt || !hideErrors) throw err;  else env.set(x, null) }
+            } catch (err) { if (err === interrupt || !hideErrors) throw err;  else env.set(x, null), _setting(_logHiddenConstructionErrors) && console.log(err) }
             unfinished.delete(y)
           }
           if (isArray(y)) _rememberArrayItems(y)
@@ -5243,7 +5378,8 @@ Constructs all dependencies before dependents, and throws if there is a cycle (u
         const y = env.get(x)
         !e && _allocMap(env)
         return y
-      } catch (err) { if (err === interrupt) interrupt.stack.push(env, unfinished, xs, ys, ns); else !e && _allocMap(env), _killArray(xs), _killArray(ys), _killArray(ns);  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(env, unfinished, xs, ys, ns, ourT), ourT = null; else !e && _allocMap(env), _killArray(xs), _killArray(ys), _killArray(ns);  throw err }
+      finally { ourT && (ourT.forEach(dispose), _allocMap(ourT)) }
     },
   },
 
@@ -5275,18 +5411,35 @@ This embodies a simple principle: a graph/network cannot be constructed without 
         let [_, data, shapes, t] = x
         if (!data) error("Expected data, got", data)
         if (shapes !== undefined && !isArray(shapes)) error("Expected an array or nothing, got", shapes)
-        let dtype = t===f32 || t===undefined ? 'float32' : t===i32 ? 'int32' : t==='bool' ? 'bool' : null
-        if (!dtype) error("Expected", f32, "or", i32, "or", 'bool', "or nothing, got", t)
+        let dtype = t===undefined ? 'float32' : t
+        if (!dtype) error("Expected", 'float32', "or", 'int32', "or", 'bool', "or", 'whatever', "or nothing, got", t)
         if (typeof data == 'string')
-          data = _fromBase64(data).buffer,
-          data = new ({int8:Int8Array, int16:Int16Array, int32:Int32Array, uint8:Uint8Array, uint16:Uint16Array, uint32:Uint32Array, float32:Float32Array, float64:Float64Array, bool:Int8Array}[dtype] || Float32Array)(data)
+          data = _fromBase64(data, dtype)
         return _tf(tf.tensor(data, shapes, dtype))
       }
     },
   },
 
+  _toLittleEndian:{
+    docs:`Different processors can have different endian-ness (byte-order). This func allows ensuring that parses/serializations with different byte-orders arrive at the same values.`,
+    Initialize() { _toLittleEndian.littleHost = (new Uint8Array(new Uint16Array([1]).buffer))[0] === 1 },
+    call(typedArray) {
+      if (_toLittleEndian.littleHost || typedArray instanceof Int8Array || typedArray instanceof Uint8Array) return typedArray
+      const v = new DataView(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength)
+      const a = typedArray.slice(), LE = true
+      if (typedArray instanceof Int16Array) for (let i = 0; i < a.length; ++i) a[i] = v.getInt16(i*2, LE)
+      if (typedArray instanceof Uint16Array) for (let i = 0; i < a.length; ++i) a[i] = v.getUint16(i*2, LE)
+      if (typedArray instanceof Int32Array) for (let i = 0; i < a.length; ++i) a[i] = v.getInt32(i*4, LE)
+      if (typedArray instanceof Uint32Array) for (let i = 0; i < a.length; ++i) a[i] = v.getUint32(i*4, LE)
+      if (typedArray instanceof Float32Array) for (let i = 0; i < a.length; ++i) a[i] = v.getFloat32(i*4, LE)
+      if (typedArray instanceof Float64Array) for (let i = 0; i < a.length; ++i) a[i] = v.getFloat64(i*8, LE)
+      return a
+    },
+  },
+
   _toBase64(typedArray, allowAsync = false) { // -> base64
-    const bytes = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength)
+    const a = _toLittleEndian(typedArray)
+    const bytes = new Uint8Array(a.buffer, a.byteOffset, a.byteLength)
     if (!allowAsync || bytes.length < 400000) {
       // 80 MB in 8 seconds. Pretty much the fastest synchronous solution.
       const arr = [];  arr.length = bytes.length
@@ -5304,12 +5457,24 @@ This embodies a simple principle: a graph/network cannot be constructed without 
     }
   },
 
-  _fromBase64(base64) { // -> bytes
+  _fromBase64(base64, dtype = 'uint8') { // -> bytes
     const str = atob(base64)
-    const bytes = new Uint8Array(str.length)
+    let a = new Uint8Array(str.length)
     for (let i=0; i < str.length; ++i)
-      bytes[i] = str.charCodeAt(i)
-    return bytes
+      a[i] = str.charCodeAt(i)
+
+    // Change endian-ness (byte order) from little to ours, in-place, if needed.
+    a = new ({int8:Int8Array, int16:Int16Array, int32:Int32Array, uint8:Uint8Array, uint16:Uint16Array, uint32:Uint32Array, float32:Float32Array, float64:Float64Array, bool:Int8Array}[dtype] || Float32Array)(a.buffer)
+    if (!_toLittleEndian.littleHost && dtype !== 'bool' && dtype !== 'int8' && dtype !== 'uint8') {
+      const v = new DataView(a.buffer, a.byteOffset, a.byteLength), LE = true
+      if (dtype === 'int16') for (let i = 0; i < a.length; ++i) a[i] = v.getInt16(i*2, LE)
+      if (dtype === 'uint16') for (let i = 0; i < a.length; ++i) a[i] = v.getUint16(i*2, LE)
+      if (dtype === 'int32') for (let i = 0; i < a.length; ++i) a[i] = v.getInt32(i*4, LE)
+      if (dtype === 'uint32') for (let i = 0; i < a.length; ++i) a[i] = v.getUint32(i*4, LE)
+      if (dtype === 'float32') for (let i = 0; i < a.length; ++i) a[i] = v.getFloat32(i*4, LE)
+      if (dtype === 'float64') for (let i = 0; i < a.length; ++i) a[i] = v.getFloat64(i*8, LE)
+    }
+    return a
   },
 
   deconstruct:{
@@ -5327,8 +5492,8 @@ This embodies a simple principle: a graph/network cannot be constructed without 
         if (shapeImplied)
           return [tensor, data]
         if (v.dtype === 'float32')
-          return [tensor, data, v.shape]
-        return [tensor, data, v.shape, v.dtype==='int32' ? i32 : v.dtype==='bool' ? 'bool' : error("Unrecognized dtype:", v.dtype)]
+          return [tensor, data, merged(v.shape)]
+        return [tensor, data, merged(v.shape), v.dtype]
       }
 
       if (v && Object.getPrototypeOf(v) && Object.getPrototypeOf(Object.getPrototypeOf(v)) === Object.getPrototypeOf(Int8Array.prototype)) {
@@ -5480,7 +5645,7 @@ For example, both \`\\?+3 5\` and \`(func ? ?+3) 5\` return \`8\`.`,
       try { return adj !== null ? adj(ins, undefined, dout) : _allocArray(ins.length).fill(0) }
       catch (err) { if (err === interrupt) interrupt.stack.push(adj);  throw err }
     },
-    dispose(a) { if (isArray(a)) a.forEach(dispose), _allocArray(a) },
+    dispose:_(`_disposeEachAndDealloc`),
   },
 
   id:{
@@ -5533,7 +5698,7 @@ Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up
         d[_id(mergeAdjustment)] = _mergeTensors // Just assume that every arg is a tensor.
         d[_id(adjust)] = [_adjustFunc, _ins, _dout, obj]
         d[_id(adjustLater)] = true // Make sure that the function is not skipped at adjustment.
-        //   (Checking whether any nodes define `adjustLater` would have been much more accurate, but that's data-dependent, and concepts are immutable. We never `observe` them, at least, so we can't dynamically update funcs that depend on them.)
+        //   (Checking whether any nodes define `adjustLater` would have been much more accurate, but that's data-dependent, and concepts are immutable. We never `observe` them, at least, so we can't dynamically update code of funcs that depend on them.)
 
         return obj
       } else {
@@ -5550,7 +5715,7 @@ Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up
             obj.a = _compileAutograd(poIndRc, inputs, undefined, obj)
           else
             obj.a = _giveAdjustTo(inputs.get(body)-1)
-          obj.f = _compileBody(body, inputs, poIndRc, undefined, undefined, undefined, obj)
+          obj.f = _compileBody(body, inputs, poIndRc, undefined, undefined, undefined)
         } catch (err) {
           if (err === interrupt) interrupt.stack.push(poIndRc), poIndRc = null
           throw err
@@ -5707,6 +5872,8 @@ Use \`_doesAdjustRead\` to read out those props.`,
     const [src, sourceURL, lines] = toSource(body, poIndRc, owningPoIndRc)
     try {
       const fn = Function([...consts.values()].join(','), src)(...consts.keys())
+      if (!_compileBody.sources) _compileBody.sources = new WeakMap
+      if (sourceFunc !== undefined) _compileBody.sources.set(fn, sourceFunc)
       fn.lines = lines
       if (!_compileBody.fin && typeof FinalizationRegistry != ''+void 0)
         _compileBody.fin = new FinalizationRegistry(sourceURL => delete _resolveStack.functions[sourceURL])
@@ -5753,18 +5920,6 @@ Use \`_doesAdjustRead\` to read out those props.`,
 
         // Save vars for adjustment.
         const save = saveToAdjust && _getSavedNodes(po, inds)
-        // Keep (trade call to `keep` with lack of call to `dispose`) inputs of nodes that request that (unless they re-introduce a specific arg).
-        const kept = _allocArray(po.length)
-        for (let i=0; i < po.length; ++i) {
-          let keepIndex = !isArray(_unquote(po[i][0])) ? defines(_unquote(po[i][0]), keep) : undefined
-          keepIndex < 0 && (keepIndex += po[i].length)
-          if (keepIndex == null) continue
-          for (let j=0; j < po[i].length; ++j)
-            // Keep the index if defined.
-            if (inds[i][j] !== null)
-              if (keepIndex === true && j || typeof keepIndex == 'number' && j === keepIndex)
-                kept[inds[i][j]] = (kept[inds[i][j]] || 0) + 1
-        }
 
         for (let i=0; i < po.length; ++i) {
           // Walk the DAG in post-order, emit assignment of vars to application results.
@@ -5778,8 +5933,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
             ++nextStage
           }
 
-          // Collect var names of dependencies, and `keep` non-node args.
-          //   Test: `_compileBody ^(0+0;input) {input 1}` should `keep(in1)`.
+          // Collect var names of dependencies.
           const d = !isArray(fn) ? defines(fn, _compileBody) : undefined
           const deps = _allocArray(x.length)
           let keepIndex = !isArray(fn) ? defines(fn, keep) : undefined
@@ -5789,10 +5943,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
             if (In === null) deps[j] = j || typeof d != 'function' ? env(x[j]) : undefined
             else if (!nodeNames[In])
               error("Node ref-counts are incorrect, and", x[j], "in node", x, "in body", body, "was already disposed of")
-            else deps[j] = nodeNames[In], ++used[In]
-            if (keepIndex === true && j || typeof keepIndex == 'number' && j === keepIndex)
-              if (In === null && (inputs && inputs.has(x[j]) || _isDisposable(x[j])))
-                !deps[j] && (deps[j] = env(x[j])), code.push(`   ${env(keep)}(${deps[j]})`)
+            else deps[j] = nodeNames[In]
           }
 
           // Alloc the variable name (re-use a same-disposer var if possible).
@@ -5803,36 +5954,39 @@ Use \`_doesAdjustRead\` to read out those props.`,
           //   `x` can define `_compileBody(env, assignTo, ...args)`.
           lines.push(code.length+2, x)
           let stmt = typeof d == 'function' ? d(env, nodeNames[i], ...deps.slice(1)) : `${nodeNames[i]} = ${deps[0]}(${deps.slice(1)})`
-          if (_debugMemory[1]) stmt += `; ${env(_willDispose)}(${nodeNames[i]}, ${env(x)})`
           if (_debugInterruptDefinitions[1] && !(isArray(fn) || defines(fn, interrupt) !== false))
             stmt = `try{${stmt}}catch(err){if(err===interrupt)error(${env("An interrupt in a non-interrupt node:")},${env(x)});throw err}`
           if (stmt.indexOf('\n') >= 0) error("Must not have newlines in", stmt)
           code.push(`   ${stmt}`)
           _allocArray(deps)
 
-          // Decrease ref-counts of dependencies, and dispose vars and mark for re-use if no longer needed.
+          // Decrease ref-counts of dependencies, and (keep and) dispose vars and mark for re-use if no longer needed.
           let extra = _allocArray(0)
           for (let j=0; j < x.length; ++j) {
             const k = ins[j]
-            if (k !== null && used[k] === rc[k]) {
-              if (save && save[k]) continue // Adjustment will decide its fate.
-              if (!nodeNames[k]) continue // Don't dispose the same arg twice.
+            let kept = null
+            if (keepIndex === true && j || typeof keepIndex == 'number' && j === keepIndex) { // Keep args if requested.
+              // Test: `_compileBody ^(0+0;input) {input 1}` should `keep(in1)`.
+              if (k != null || inputs && inputs.has(x[j]) || _isDisposable(x[j]))
+                extra.push(`${env(keep)}(${k != null ? nodeNames[k] : env(x[j])})`), kept = extra.length-1
+            }
+            ++used[k]
+            if (k != null && used[k] === rc[k]) { // If at the node's last use, dispose its result.
+              if (save && save[k]) continue // Adjustment will decide its fate. (We omit a disposal, which is the same as keeping it for adjustment.)
+              if (!nodeNames[k]) error('Uh-oh, double free of a node:', x[j], 'with refs', rc[k], 'in', x)
 
               const d = disposers[k]
-              if (!kept[k] && d !== undefined) // Don't dispose if another will take care of it.
-                extra.push(`${env(d)}(${nodeNames[k]})`)
-              extra.push(`${nodeNames[k]}=undefined`)
+              if (d === undefined) // If unneeded, don't dispose.
+                extra.push(`${nodeNames[k]}=undefined`)
+              else if (kept != null) // Keep+dispose pairs cancel out.
+                extra[kept] = `${nodeNames[k]}=undefined`
+              else // Dispose as specified, if specified.
+                extra.push(`${nodeNames[k]}=${env(d)}(${nodeNames[k]})`)
 
               if (!freeNames.has(d)) freeNames.set(d, _allocArray(0))
               freeNames.get(d).push(nodeNames[k]), nodeNames[k] = undefined
             }
           }
-          // If adjustment needs the result but another node said it will dispose it, `keep` the result.
-          if (save && save[i] && kept[i])
-            extra.push(`${env(keep)}(${nodeNames[i]})`)
-          // If N nodes said they'll dispose our result, `keep` the result N-1 times.
-          for (let j = 1; j < kept[i]; ++j)
-            extra.push(`${env(keep)}(${nodeNames[i]})`)
           extra.length && code.push(`     ${extra.join(', ')}`), _allocArray(extra)
         }
         if (save && save.filter(x => x).length) { // Save those that need saving, for adjustment.
@@ -5840,7 +5994,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
           if (save[po.length - 1]) code.push(`   ${env(keep)}(${nodeNames[po.length - 1]})`)
           code.push(`   const $$$=${env(_allocArray)}(${svs.length})${svs.map((sv,i) => '; $$$['+i+']='+sv).join('')}; ${env(adjustSave)}($$$)`)
         }
-        isArray(save) && _allocArray(save), _allocArray(kept)
+        isArray(save) && _allocArray(save)
         code.push(`   return ${po.length ? nodeNames[po.length - 1] : env(body)}`)
 
         _allocArray(used), _allocArray(nodeNames)
@@ -5858,7 +6012,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
         else
           code[backpatchVars] = listOfVars.length ? ` let ${listOfVars.join(', ')}` : ``,
           code.push(`   ;`)
-        code.push(`  else ${listOfVars.map(v => disposers[+v.slice(1)] && `${v}!==undefined&&${env(disposers[+v.slice(1)])}(${v})`).filter(x=>x).join(', ')};`)
+        code.push(`  else ${listOfVars.map(v => disposers[+v.slice(1)] && `${env(disposers[+v.slice(1)])}(${v})`).filter(x=>x).join(', ')};`)
         _allocArray(disposers), _allocArray(listOfVars)
         code.push(`  throw err`)
         code.push(` }`)
@@ -5881,6 +6035,8 @@ Use \`_doesAdjustRead\` to read out those props.`,
         consts.set(x, 'e' + consts.size)
       return consts.get(x)
     }
+
+    // .sources
   },
 
   _checkArgCount(x, inputs, body) {
@@ -5914,7 +6070,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
           const i = toIndex.get(x)
           if (_setting(_forgiveMistakes) && i === null) return
           if (i === null) error('Cycles in computation, at', x, 'in', dag)
-          return ++rc[i]
+          return void ++rc[i]
         }
         toIndex.set(x, null)
         if (!x.length)
@@ -5952,6 +6108,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
   array:{
     docs:`\`(array …Items)\`: creates a new array.
 The same as \`(make arrayObject …Items)\`.`,
+    Initialize() { array.count = 0 },
     readAt:{
       isArray:_(`isArray`),
       arrayLength:_(`arrayLength`),
@@ -6042,18 +6199,11 @@ This also forms the user-visible hierarchy of globals.`,
     _(`array`),
     [
       {
-        call(arr, i, dout) {
-          const r = array()
-          isArray(arr) && callAdjust.darray.set(arr, r) // Make writes know.
-          return r[i] = dout, r
-        },
+        call(arr, i, dout) { const r = array();  return r[i] = dout, r },
         purify(arrP, iP, doutP) {
           // Known-index reads will know adjustment.
           if (isArray(iP)) throw impure
-          const r = array()
-          if (isArray(arrP) && arrP[0] === quote && isArray(arrP[1]))
-            callAdjust.darray.set(arrP[1], r)
-          return r[iP] = doutP, r
+          const r = array();  return r[iP] = doutP, r
         },
         interrupt:false,
       },
@@ -6098,25 +6248,6 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.
         _observeChange(arr)
       } else construct(v, arr), _observeChange(arr)
     },
-    adjust:[
-      {
-        call(x) { return x !== undefined ? keep(x) : 0 },
-        dispose:true,
-        interrupt:false,
-      },
-      [
-        _(`takeAt`),
-        [
-          {
-            call(arr) { return callAdjust.darray.get(arr) || elemValue.empty },
-            interrupt:false,
-          },
-          _(`_inA`),
-        ],
-        _(`_inB`),
-      ],
-    ],
-    mergeAdjustment:_(`_mergeTensors`),
   },
   observe:{
     todo:`Have an extra arg \`Observer\`, so that we could automatically remember to un-observe when the observer gets de-allocated (finalized) or removed-from-DOM. (Not having it might be the cause of memory leaks.)`,
@@ -6436,6 +6567,8 @@ Reading from and writing to such arrays during \`purify\` is allowed, even unkno
     docs:`\`purify ^Expr\`: Partially-evaluates the expression, without inlining or knowledge.
 The process is simple: if any of a node's inputs are unknown (or if it does an impure thing like calling \`randomNat\`, or its result \`_isUnknown\`), then the node is unknown (and might be inlined), else it's known (and can be computed with \`call\`).
 
+(This does not handle \`keep\` and \`dispose\` definitions properly, so often, just typing an expression with \`tensor\`s in results in a disposal error, but executing it in an \`evaluator\` is OK.)
+
 Every \`defines\` of \`purify\` is a function that accepts programs that produce every arg, and returns a value (or \`(_unknown DAG)\` to return a program). \`call\`s may be called, and may return programs via \`_unknown\` (but don't forget to quote inputs).
 We do not automatically allow inlining \`func\`s (only explicitly \`purify\`ing function bodies), because inlining everything causes exponential explosions of code size (and infinite loops for recursion unless handled), which is very bad user UX. If we could have machine-learned the best inlining, we would have, but as it is, no. So, \`purify\` usually acts as just a constant-propagator.
 
@@ -6482,11 +6615,10 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
       if (!isArray(x)) return x
       if (x[0] === quote) return x[1]
 
-      let [adjLen = adjustUndo(), i = 0, poIndRc = _postorderInfo(x, inputs), outputs = _allocArray(poIndRc[0].length), same = _allocArray(poIndRc[0].length), unknown = _allocArray(poIndRc[0].length), pure = inline ? null : new Set, darray = _allocMap()] = interrupt(8)
+      let [adjLen = adjustUndo(), i = 0, poIndRc = _postorderInfo(x, inputs), outputs = _allocArray(poIndRc[0].length), same = _allocArray(poIndRc[0].length), unknown = _allocArray(poIndRc[0].length), pure = inline ? null : new Set] = interrupt(7)
       const [po, inds] = poIndRc
       const collected = _allocArray(8)
       const prevPure = call.pure;  call.pure = pure || call.pure
-      const prevDarray = callAdjust.darray;  callAdjust.darray = darray
       try {
         for (; i < po.length; ++i) {
           // Go through all nodes, collect dependencies, execute nodes, and record those that we can't know.
@@ -6529,8 +6661,11 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
                 unknown[i] = undefined
               else
                 throw impure
-            } else
+            } else {
               outputs[i] = collected[0].call(...collected), same[i] = false
+              if (i < outputs.length-1 && _isDisposable(outputs[i])) // `purify` doesn't handle those well at all, so, undo every function that returns a tensor.
+                throw outputs[i] = dispose(outputs[i]), impure
+            }
             if (_isUnknown(outputs[i]))
               outputs[i] = outputs[i][1], unknown[i] = true
           } catch (err) {
@@ -6560,20 +6695,21 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
             for (let i=0; i < x.length; ++i) if (!call.pure.has(x[i])) x[i] = _unquote(x[i])
           }),
           pure.clear()
-        outputs[po.length-1] = undefined, _disposeEachAndDealloc(outputs)
+
+        outputs[po.length-1] = undefined, _disposeEachAndDealloc(outputs), outputs = null
         _allocArray(same), _allocArray(unknown)
         defines(_postorderInfo, dispose)(poIndRc)
         adjustUndo(adjLen)
         return !lastUnk ? lastOut : _unknown(lastOut)
       } catch (err) {
-        if (err === interrupt) { interrupt.stack.push(adjLen, i, poIndRc, outputs, same, unknown, pure, darray);  throw err }
+        if (err === interrupt) { interrupt.stack.push(adjLen, i, poIndRc, outputs, same, unknown, pure);  throw err }
         adjustUndo(adjLen)
         const errRepr = !inline && !(err instanceof Error) && _errorRepr(err)
         errRepr && errRepr.forEach(keep)
         _disposeEachAndDealloc(outputs)
         if (inline || err instanceof Error) throw err
         return _unknown(errRepr.map(quote)) // If not inlining, don't throw exceptions, return them.
-      } finally { call.pure = prevPure; callAdjust.darray = prevDarray;  _allocArray(collected) }
+      } finally { call.pure = prevPure;  _allocArray(collected) }
     },
   },
 
@@ -6848,8 +6984,8 @@ Why: speed`,
   },
 
   _noInfinities(x) { // Prevent (positive) infinities, so that `0*x` can still mask them out.
-    let y
-    return y = _tf(tf.minimum(x, 1e37)), dispose(x), y
+    try { return _tf(tf.minimum(x, 1e37)) }
+    finally { dispose(x) }
   },
   
   log:{
@@ -7251,8 +7387,8 @@ Use \`sync\` to get the result as a non-tensor.`,
       else if (typeof one == 'number') { const t = mul(h, one);  dispose(h);  return t }
       else if (_isDisposable(one)) {
         const t0 = _tf(tf.reshape(h, [n, ...new Array(one.shape.length).fill(1)]));  dispose(h)
-        const t1 = mul(t0, one);  dispose(t0)
-        return t1
+        try { return mul(t0, one) }
+        finally { dispose(t0) }
       } else error("What is this:", one)
     },
   },
@@ -7754,8 +7890,9 @@ Reverse of \`split\`.
     dispose:true,
     interrupt:false,
     call(a, sz, axis) {
-      if (!isArray(a)) errorStack("Expected an array of tensors, got", a)
+      if (!isArray(a)) error("Expected an array of tensors, got", a)
       if (call.pure && (call.pure.has(a) || call.pure.has(sz))) throw impure
+      a.forEach(_num)
       if (!a[0] || !a[0].shape) error('Strange tensor to concat', a[0], 'in', a.slice())
       if (a.length == 1) return keep(a[0]) // Apparently, TFJS thinks that returning exactly the same tensor in this case is a great idea.
       return _tf(tf.concat(a, axis !== undefined ? axis : !a[0].shape.length ? 0 : a[0].shape.length-1))
@@ -7814,7 +7951,7 @@ If \`Numeric\` code does not call \`select\` or \`sync\`, and we want to repeat 
     ],
     dispose:true,
     interrupt:false,
-    call(a, axis) { if (call.pure && call.pure.has(a)) throw impure;  return _tf(tf.stack(a, axis)) },
+    call(a, axis) { if (call.pure && call.pure.has(a)) throw impure;  return !isArray(a) && error('Not an array:', a), a.forEach(_num), _tf(tf.stack(a, axis)) },
     adjust:[
       _(`array`),
       [
@@ -7972,38 +8109,19 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
       let a2 = !iA ? 1 : sA.length >= 2 ? sA[sA.length-1] : sA[0] || 1, a1 = !iA || sA.length < 2 ? 1 : sA[sA.length-2]
       let b2 = !iB ? 1 : sB.length >= 2 ? sB[sB.length-1] : sB[0] || 1, b1 = !iB || sB.length < 2 ? 1 : sB[sB.length-2]
       const rowVectorA = sA.length < 2
-      if (!iA || sA.length < 2) da = true, a = _tf(tf.reshape(a, sA = [a1, a2]))
-      if (!iB || sB.length < 2) db = true, b = _tf(tf.reshape(b, sB = [b1, b2]))
-      if (sA.length < sB.length || sA[0] === 1 && sB[0] !== 1) { const t = _tf(tf.broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]));  da && dispose(a), a = t, da = true }
-      if (sA.length > sB.length || sA[0] !== 1 && sB[0] === 1) { const t = _tf(tf.broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]));  db && dispose(b), b = t, db = true }
       try {
+        if (!iA || sA.length < 2) a = _tf(tf.reshape(a, sA = [a1, a2])), da = true
+        if (!iB || sB.length < 2) b = _tf(tf.reshape(b, sB = [b1, b2])), db = true
+        if (sA.length < sB.length || sA[0] === 1 && sB[0] !== 1) { const t = _tf(tf.broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]));  da && dispose(a), a = t, da = true }
+        if (sA.length > sB.length || sA[0] !== 1 && sB[0] === 1) { const t = _tf(tf.broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]));  db && dispose(b), b = t, db = true }
         const r = _tf(tf.matMul(a, b, tA, tB))
-        if (rowVectorA && !tA) return a1 = _tf(tf.reshape(r, [!tB ? b2 : b1])), dispose(r), a1
+        if (rowVectorA && !tA)
+          try { return _tf(tf.reshape(r, [!tB ? b2 : b1])) }
+          finally { dispose(r) }
         return r
       } finally { da && dispose(a), db && dispose(b) }
     },
   },
-
-  _disposableCount:{
-    docs:`Counts live \`_isDisposable\` objects in the system. All of them need to be \`dispose\`d of.`,
-    call() { return typeof tf == ''+void 0 ? 0 : _tf.count /*tf.engine().state.numTensors*/ },
-  },
-
-  _willDispose:{
-    docs:`If the first arg that's \`_isDisposable\` is not disposed, the second arg will be reported to the user.`,
-    call(x, info) {
-      // If `_debugMemory` is checked, store the info, to be displayed if a tensor is not disposed of.
-      //   (Finalizers won't have a chance to dispose anything, so there's no need for WeakRefs.)
-      //   (If `x` is kept, then it's probably a static constant that's passed through.)
-      return _isDisposable(x) && !dispose.keep.has(x) && _willDispose.disposable && _willDispose.disposable.set(x, info), x
-    },
-  },
-
-  _debugMemory:[
-    _(`settings`),
-    true, // ##############################################################################
-    `Whether to make \`_compileBody\` track every created value to make sure that it's disposed of, when we're finished.`,
-  ],
 
   _debugInterruptDefinitions:[
     _(`settings`),
@@ -8017,60 +8135,36 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
     `If checked, makes \`_causeInterrupt\` remember the call-stack, to be displayed if relevant.`,
   ],
 
-  _checkMemoryIntegrity:{
-    docs:`If we still have any unfreed tensors that are not visible, this reports the DAG nodes that created them and the tensors.
-If no env is passed in, this returns the count of tensors in the passed-in result (so that we can count tensors and check that no non-returned tensors are left).`,
-    call(result, env) {
-      if (!_checkMemoryIntegrity.seen) _checkMemoryIntegrity.seen = new Set
-      if (!_willDispose.disposable) return 0
-      const seen = _checkMemoryIntegrity.seen
-      try {
-        walk(result)
-        env && env[_id(commit)] && env[_id(commit)].forEach(walk)
-        if (env) {
-          const r = _allocArray(0)
-          _willDispose.disposable.forEach((info, t) => {
-            if (!_isDisposable(t)) error("How did you get here:", t, info)
-            if (!t.isDisposedInternal && !seen.has(t) && !_rememberToDispose.seen.has(t) && !dispose.not.has(t))
-              r.push([_extracted, info, t])
-          })
-          _willDispose.disposable.clear()
-          if (r.length)
-            error("Got", result, "but forgot to free:", ...r)
-          _allocArray(r)
-        }
-        return seen.forEach(x => !_isDisposable(x) && _checkMemoryIntegrity.seen.delete(x)), seen.size
-      } finally { seen.clear() }
-
-      function walk(x) {
-        if (_rememberToDispose.seen.has(x)) return
-        _isDisposable(x) && _checkMemoryIntegrity.seen.add(x)
-        if (!isArray(x)) return
-        if (_checkMemoryIntegrity.seen.has(x)) return
-        _checkMemoryIntegrity.seen.add(x)
-        x.forEach(walk)
-      }
-    },
-  },
-
   _isDisposable(x) { return typeof tf != ''+void 0 && x instanceof tf.Tensor },
 
   _debugDoubleDispose:[
     _(`settings`),
-    true,
+    false,
     `Whether \`dispose\` should remember the initial-disposal stack traces.`,
   ],
 
   _debugCreation:[
     _(`settings`),
-    true, // ##################################################################
+    false,
     `Whether \`_tf\` should remember the creation stack traces.`,
   ],
+
+  _debugMemory:[
+    _(`settings`),
+    true, // ##################################################################
+    `Whether \`_tf\` and \`keep\` and \`dispose\` should remember the full history of every tensor. Serves as \`_debugCreation\` but more luxurious.`,
+  ],
+
+  _tensorOrigins(t) {
+    if (_tf.all) return f(_tf.all.get(t))
+    return _debugCreation
+    function f(v) { return isArray(v) ? v.map(f) : typeof v == 'string' ? _resolveStack(v) : v === true || v === undefined ? _debugCreation : v }
+  },
 
   _autoDispose:[
     _(`settings`),
     true,
-    `Whether \`callAdjust\` will dispose all created-but-not-disposed tensors when done.
+    `Whether \`interpreter\` will dispose all created-but-not-disposed tensors when done.
 The more code runs with this off, the better.`,
   ],
 
@@ -8080,23 +8174,24 @@ A function \`defines\` this to be \`true\` to make execution \`dispose\` its res
 
 Memory management rewards only very clear thinking: everything that was created must be disposed exactly once, and each \`keep\` must have its \`dispose\`.`,
     readAt:{
-      _debugMemory:_(`_debugMemory`),
       _debugDoubleDispose:_(`_debugDoubleDispose`),
       _debugCreation:_(`_debugCreation`),
+      _debugMemory:_(`_debugMemory`),
       _autoDispose:_(`_autoDispose`),
       keep:_(`keep`),
       takeAt:_(`takeAt`),
     },
-    Initialize() { dispose.keep = new WeakMap },
+    Initialize() { dispose.keep = new WeakMap, dispose.not = new WeakMap },
     elemValue:_(`_isDisposable`),
     call(x) {
       if (_isDisposable(x)) {
+        if (_debugMemory[1] && _tf.all && isArray(_tf.all.get(x)))
+          _tf.all.get(x).push([readAt, dispose, new Error().stack])
         if (!dispose.keep.has(x)) {
           if (_debugDoubleDispose[1])
             if (x.isDisposedInternal && !dispose.safeDouble)
-              error("Double-dispose of", x, "made at", _tf.all && _tf.all.has(x) ? _tf.all.get(x) : '???', "first freed at", dispose.at && dispose.at.has(x) ? _resolveStack(dispose.at.get(x)) : _debugDoubleDispose)
-          if (dispose.not && dispose.not.has(x)) error("Illegal disposition of", x)
-          _willDispose.disposable && _willDispose.disposable.delete(x)
+              error("Double-dispose of", x, "made at", _tensorOrigins(x), "first freed at", dispose.at && dispose.at.has(x) ? _resolveStack(dispose.at.get(x)) : _debugDoubleDispose)
+          if (dispose.not && dispose.not.has(x)) error("Illegal disposition of", x, "made at", _tensorOrigins(x))
           if (_debugDoubleDispose[1]) (dispose.at || (dispose.at = new WeakMap)).set(x, new Error().stack)
           _tf.all && _tf.all.delete(x)
           --_tf.count
@@ -8117,8 +8212,11 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     interrupt:false,
     argCount:1,
     call(x) {
-      if (_isDisposable(x))
+      if (_isDisposable(x)) {
+        if (_debugMemory[1] && _tf.all && isArray(_tf.all.get(x)))
+          _tf.all.get(x).push([readAt, keep, new Error().stack])
         !dispose.keep.has(x) ? dispose.keep.set(x, 1) : dispose.keep.set(x, dispose.keep.get(x) + 1)
+      }
       return x
     },
     _cancel(m) { m && _allocMap(m) },
@@ -8157,40 +8255,50 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
       if (_rememberToDispose.seen.has(x)) return x
       if (!isArray(x) && !(x instanceof Map) && !(defines.key in x)) return x
       _rememberToDispose.seen.add(x)
-      if (isArray(x)) _rememberArrayItems(x)
-      else if (x instanceof Map) x.forEach(_rememberToDispose)
+      if (isArray(x)) {
+        for (let i=0; i < x.length; ++i) if (_isDisposable(x[i]) && _rememberToDispose.seen.has(x[i])) keep(x[i])
+        _rememberArrayItems(x)
+      } else if (x instanceof Map) x.forEach(_rememberToDispose)
       else if (x && x[defines.key]) Object.values(x[defines.key]).forEach(_rememberToDispose)
       return x
     },
   },
 
-  _unDisposeNot(x) { dispose.not.delete(x) },
+  _disposeNot(x) {
+    if (_debugMemory[1] && _tf.all && isArray(_tf.all.get(x)))
+      _tf.all.get(x).push([readAt, _disposeNot, new Error().stack])
+    dispose.not.set(x, (dispose.not.get(x) || 0) + 1)
+  },
+
+  _unDisposeNot(x) {
+    if (_debugMemory[1] && _tf.all && isArray(_tf.all.get(x)))
+      _tf.all.get(x).push([readAt, _unDisposeNot, new Error().stack])
+    dispose.not.set(x, (dispose.not.get(x) || 1) - 1), !dispose.not.get(x) && dispose.not.delete(x)
+  },
 
   _rememberArrayItems(x, clear = false) {
     // This does the actual remember-to-dispose, of each `_isDisposable` item.
 
     // We don't `observe(x, …?)` because that's not called immediately on change, which introduces an instability.
-    //   Instead, directly `_laterRememberArrayItems(x)` on change.
 
     if (!isArray(x)) return
     _rememberToDispose.seen.add(x)
     x.forEach(_rememberToDispose)
-    if (!dispose.not) dispose.not = new WeakMap
     const resM = _rememberToDispose.res, resR = _rememberToDispose.reg
-    const res = resM.get(x) || _allocArray(0), allow = call.env && call.env[_id(keep)], dn = dispose.not
+    const res = resM.get(x) || _allocArray(0)
 
-    for (let i=0; i < res.length; ++i) {
+    for (let i=0; i < res.length; ++i) { // Remove old.
       const v = res[i]
-      allow && (allow.has(v) ? (allow.set(v, allow.get(v)-1), !allow.get(v) && allow.delete(v)) : keep.unallowed !== undefined && (++keep.unallowed, 0&&print('unallowing', v, 'from', _tf.all.get(v), 'at', _resolveStack()))), // ###########################################
-      _rememberToDispose.seen.delete(v), dn.set(v, dn.get(v)-1), !dn.get(v) && dn.delete(v)
+      _unDisposeNot(v), !dispose.not.has(v) && _rememberToDispose.seen.delete(v)
     }
     res.length = 0
 
-    if (!clear)
-      for (let i=0; i < x.length; ++i)
-        if (_isDisposable(x[i]))
-          allow && allow.set(x[i], (allow.get(x[i]) || 0) + 1),
-          res.push(x[i]), _rememberToDispose.seen.add(x[i]), dn.set(x[i], (dn.get(x[i]) || 0) + 1)
+    if (!clear) // Add new.
+      for (let i=0; i < x.length; ++i) {
+        const v = x[i]
+        if (_isDisposable(v))
+          res.push(v), _rememberToDispose.seen.add(v), _disposeNot(v)
+      }
 
     if (res.length && !clear) {
       if (!resM.has(x)) resM.set(x, res), resR && resR.register(x, res, res)
@@ -8218,21 +8326,18 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
       if (typeof key != 'number' || key !== key>>>0) error("Not an index:", key)
 
       if (x[key] === value) return
-      if (!dispose.not) dispose.not = new WeakMap
       const resM = _rememberToDispose.res, resR = _rememberToDispose.reg
 
       // Add-to/remove-from associated-with-`x` resources.
       if (resM) {
-        const res = resM.get(x) || _allocArray(0), allow = call.env && call.env[_id(keep)], dn = dispose.not
+        const res = resM.get(x) || _allocArray(0)
         if (_isDisposable(value)) { // Add new.
           res.push(value)
-          allow && allow.set(value, (allow.get(value) || 0) + 1)
-          _rememberToDispose.seen.add(value), dn.set(value, (dn.get(value) || 0) + 1)
+          _rememberToDispose.seen.add(value), _disposeNot(value)
         }
         const v = x[key]
         if (_isDisposable(v)) { // Remove old.
-          allow && (allow.has(v) ? (allow.set(v, allow.get(v)-1), !allow.get(v) && allow.delete(v)) : keep.unallowed !== undefined && (++keep.unallowed, 0&&print('unallowing', v, 'from', _tf.all.get(v), 'at', _resolveStack()))) // ####################################################
-          _rememberToDispose.seen.delete(v), dn.set(v, dn.get(v)-1), !dn.get(v) && dn.delete(v)
+          _unDisposeNot(v), !dispose.not.has(v) && _rememberToDispose.seen.delete(v)
           const i = res.indexOf(v), j = res.length-1
           if (i >= 0) [res[i], res[j]] = [res[j], res[i]], --res.length
         }
@@ -8495,7 +8600,7 @@ Simply asks/prompts the user to choose between \`Options\`.
   },
 
   _isNumericArray(x) {
-    return isArray(x) || x instanceof Float32Array || x instanceof Float64Array || x instanceof Int32Array || x instanceof Int16Array || x instanceof Int8Array || x instanceof Uint32Array || x instanceof Uint16Array || x instanceof Uint8Array
+    return isArray(x) && x.every(_isNum) || x instanceof Float32Array || x instanceof Float64Array || x instanceof Int32Array || x instanceof Int16Array || x instanceof Int8Array || x instanceof Uint32Array || x instanceof Uint16Array || x instanceof Uint8Array
   },
 
   display:{
@@ -8600,7 +8705,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
   _noLossDisplay:[
     _(`settings`),
     false,
-    `If not checked, \`callAdjust\` will \`display\` the loss (prediction error) if there were any \`predict\`ions, when done.`,
+    `If not checked, \`interpreter\` will \`display\` the loss (prediction error) if there were any \`predict\`ions, when done.`,
   ],
 
   _updatePlotLater(cell) {
@@ -8744,7 +8849,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
     // Y axis.
     let Min = data[begin], Max = data[begin]
     for (let i = begin+1; i < end; ++i)
-      data[i] < Min ? (Min = data[i]) : (data[i] > Max && (Max = data[i]))
+      if (data[i] === data[i] && isFinite(data[i])) data[i] < Min ? (Min = data[i]) : (data[i] > Max && (Max = data[i]))
     const extra = Math.abs(Max-Min)*.2
     Min = (Min-extra<0) === (Min<0) ? Min-extra : 0, Max = (Max+extra<0) === (Max<0) ? Max+extra : 0
     const y = (el._y || (el._y = d3.scaleLinear()))
@@ -8764,9 +8869,14 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
     // Skip items, trim offscreen points.
     const mins = [], maxs = []
     for (let i=0; begin2 + i*step < end; ++i) {
-      let a = begin2 + i*step, b = begin2 + (i+1)*step
-      mins[i] = maxs[i] = data[a]
-      for (let j = a; j < b; ++j) if (data[j] < mins[i]) mins[i] = data[j]; else if (data[j] > maxs[i]) maxs[i] = data[j]
+      let a = begin2 + i*step, b = begin2 + (i+1)*step, empty = true
+      mins[i] = maxs[i] = 0
+      for (let j = a; j < b; ++j)
+        if (data[j] !== data[j] || !isFinite(data[j])) continue
+        else if (empty) mins[i] = maxs[i] = data[j], empty = false
+        else if (data[j] < mins[i]) mins[i] = data[j]
+        else if (data[j] > maxs[i]) maxs[i] = data[j]
+      if (empty && i) mins[i] = mins[i-1], maxs[i] = maxs[i-1]
     }
 
     // Plot.
@@ -8792,8 +8902,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       `Result`,
     ],
     docs:`\`callAdjust ^Expr\`: executes \`Expr\` then \`adjust\`s it.
-This is the default interpreter, so there's no need to call it in user code.
-(This also checks memory integrity for things that need it. And \`commit\`s changes.)
+This is the default \`interpreter\`, so there's no need to call it in user code.
 
 Every number in an execution can potentially be predicted before it's actually computed. Going back to adjust an execution allows improving predictions.`,
     tutorial:[
@@ -8839,15 +8948,9 @@ The loss that is used, \`loss2\`, is the halved square of the difference between
 To implement functionality is to be able to use it repeatedly, without conditionality, heatedly. So, almost 5 bugs later, made it something greater.
 
 But, it leaks some memory, and it's slow.
-To my little friend, say hello: \`\`settings ^_debugMemory\`\`.
+To my little friend, say hello: \`\`settings ^_debugCreation\`\`.
+    [Cut out some narration that outlined how \`stringToDoc\` was augmented to allow motivational devices, such as \`\`settings ^_autoDispose\`\`.]
 
-I see the narration has lost its maening to rhyming. \`\`elemCollapse elem('text',"Your next words are: ""but the correct spelling is 'meaning'!"" But meaning is the priority, not someone else's made-up rules of its spelling.")\`\` To guide it back to the true path…
-Browsers have a built-in profiler, and we have built-in brains, so slowness can go.
-But memory?
-JS has nothing.
-But don't just jump in and start smacking things around in hopes that bugs will disappear. Remember, we're not just the generality of evolution, we're intelligence. We need a relevant system to satisfy here, willfully.
-So, to guide us back to the true path, I drilled through \`stringToDoc\` to bring this motivational device: \`\`settings ^_debugMemory\`\`. Enable it, and every unlucky tensor that has not been \`dispose\`d of will light up along with the DAG nodes that produced them, to become easy pickings.
-You may ask yourself: why would we use this device? It will be motivated by there being an error if the allotted and actual tensor counts don't match — a system which brings the distant out-of-memory condition into tangible reach.
 And if it doesn't work? Use our own hands to fix errors.
 
 Like profiling performance. The profiler says that TensorFlowJS and DOM are almost the only things happening below. If you rewrite the initializer in \`randomVar\` to create a JS number instead of a one-number tensor, the loop completes 50 times faster. Can you do that?
@@ -8938,52 +9041,28 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
       `(Momentum and Adam are wiggly-wiggly if you zoom in.)`,
     ],
     readAt:{
+      _learningRate:_(`_learningRate`),
+      _firstMomentum:_(`_firstMomentum`),
+      _secondMomentum:_(`_secondMomentum`),
       varSGD:_(`varSGD`),
       commit:_(`commit`),
       minimize:_(`minimize`),
       adjust:_(`adjust`),
-      _learningRate:_(`_learningRate`),
-      _firstMomentum:_(`_firstMomentum`),
-      _secondMomentum:_(`_secondMomentum`),
+      _debugAdjustSave:_(`_debugAdjustSave`),
     },
     Initialize() {
       callAdjust.callCache = new WeakMap
       callAdjust.adjustCache = new WeakMap
     },
-    call(expr, cl, aj) {
-      if (call.pure) return purify(expr)
-      // Set and finally reset some global variables for us to communicate with some other code through.
-      //   Perfectly readable, what are you talking about. By skipping over it.
-      //     Besides, what are the alternatives?
-      //       Forcing every expression in all user code to take and return an array with their values?
-      //         By my calculations, that's approximately a million point two times less readable.
-      let [compCall = cl || undefined, compAdj = aj || undefined, result, adjustInfo, s = 0, n = 0, disposable = _allocMap(), numTensors = call.env && call.env[_id(keep)].size || 0, unallowed = 0, darray = _allocMap(), futures = _allocMap(), usingState, all = _allocMap(), predSum = _allocMap(), predCount = _allocMap(), consWorldRegen, errors = 0] = interrupt(17)
-      const prevDisposable = _willDispose.disposable;  _willDispose.disposable = disposable
-      const ps = callAdjust.s, pn = callAdjust.n;  callAdjust.s = s, callAdjust.n = n
+    impure:true,
+    call(expr) {
+      let [compCall, compAdj, result, adjustInfo] = interrupt(4)
       predict.happened = false
-      const prevDarray = callAdjust.darray;  callAdjust.darray = darray
-      const prevFutures = future.f;  future.f = futures
-      const prevState = using.state;  using.state = usingState
-      const prevUnallowed = keep.unallowed;  keep.unallowed = unallowed
-      const prevAll = _tf.all;  _tf.all = all
-      call.env && (call.env[_id(_tf)] = all)
-      const prevPredSum = future.predSum;  future.predSum = predSum
-      const prevPredCount = future.predCount;  future.predCount = predCount
-
-      if (consWorldRegen === undefined) {
-        consWorldRegen = _allocMap()
-        const env = call.env, cw = _id(consWorld);  !env[cw] && (env[cw] = _allocMap());  env[cw].set(consWorldRegen, (env[cw].get(consWorldRegen) || 0) + 1)
-      }
-      const prevConsWorldRegen = consWorld.regen;  consWorld.regen = consWorldRegen;  let errorDuringRegen = false
-      const prevErrors = callAdjust.errors;  callAdjust.errors = errors
-
-      const startTensors = _disposableCount()
-      let extraTensors
       try {
-        // Compile call then adjustment, then call then adjust, then assert exact-ness of reversal, then finish object regen and display avg loss and check memory, then return result.
+        // Compile call then adjustment, then call then adjust (asserting exact-ness of reversal, and recovery from interrupts), then return the result.
         if (compCall === undefined) {
           if (callAdjust.callCache.has(expr))
-            compCall = callAdjust.callCache.get(expr),
+            compCall = callAdjust.callCache.get(expr) || 0,
             compAdj = callAdjust.adjustCache.get(expr)
           else
             compAdj = _postorderInfo(expr),
@@ -9010,89 +9089,23 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
         if (compAdj !== null)
           _disposeEachAndDealloc(adjustNow(adjustInfo, compAdj)), compAdj = null
 
-        // Finish object regeneration.
-        errorDuringRegen = true, _finishRegenCons()
-
-        // Display average loss, if there is any. (Also dispose the tensor used for carrying that info.)
-        if (callAdjust.n) {
-          if (!_noLossDisplay[1]) {
-            const s = callAdjust.s, n = callAdjust.n
-            const L = !n ? 0 : typeof s == 'number' ? s / n : s.array().then(s => s / n)
-            if (!_isPromise(L))
-              display(label('Loss'), callAdjust.lastLoss = L)
-            else {
-              const env = call.env
-              display(label('Loss'), null), callAdjust.lastLoss = L.then(L => {
-                const penv = call.env;  call.env = env
-                try { return display(label('Loss'), L), L }
-                finally { call.env = penv }
-              })
-            }
-          }
-          dispose(callAdjust.s), callAdjust.s = callAdjust.n = 0
-        }
-
-        // Quickly check memory integrity, because not `dispose`ing things can be catastrophical. (Oh, and `commit`.)
-        commit()
-        extraTensors = _checkMemoryIntegrity(result, call.env)
-        darray.forEach(_disposeEachAndDealloc)
-
-        predSum.forEach(dispose), _allocMap(predSum), _allocMap(predCount), predSum = predCount = null
-
-        const preserveResult = _isDisposable(result) && !dispose.not.has(result);  preserveResult && dispose.not.set(result, 1)
-        if (_autoDispose[1]) defines(_tf, _cancel)(all), all = _tf.all = undefined
-        preserveResult && dispose.not.delete(result)
-
-        const expected = call.env[_id(keep)].size + extraTensors - keep.unallowed
-        const got = numTensors + (_disposableCount() - startTensors)
-        if (expected < got) {
-          print('tensor info:', expected, got, call.env[_id(keep)].size, keep.unallowed, call.env[_id(keep)]) // ####################################################
-          error("Got", result, "but did not", dispose, got - expected, "tensors; re-run with", !_debugMemory[1] ? _debugMemory : "…modified `_tf`", "because we did not dispose", ...(all ? [...all.entries()].filter(a => !a[0].isDisposedInternal && !call.env[_id(keep)].has(a[0]) && !_rememberToDispose.seen.has(a[0])).map(a => [_extracted, a[0], typeof a[1] == 'string' ? _resolveStack(a[1]) : _debugCreation]) : []))
-        } else if (expected > got) {
-          const allow = new Map
-          call.env[_id(keep)].forEach((_,t) => allow.set(t, _tf.all && _tf.all.has(t) ? _resolveStack(_tf.all.get(t)) : '???'))
-          error("Got", result, "but disposed", expected - got, "tensors too many (or allowed too many tensors); allowed:", allow)
-        }
-
         return result !== _onlyUndefined ? result : undefined
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(compCall, compAdj, result, adjustInfo, callAdjust.s, callAdjust.n, disposable, numTensors + (_disposableCount() - startTensors), keep.unallowed, darray, futures, using.state, all, predSum, predCount, consWorldRegen, callAdjust.errors), compCall = null
+        if (err === interrupt) interrupt.stack.push(compCall, compAdj, result, adjustInfo), compCall = null
         else {
           const prevDoubleDispose = dispose.safeDouble;  dispose.safeDouble = true
           try {
-            if (_autoDispose[1]) defines(_tf, _cancel)(all)
             commit(false)
-            dispose(result), result = _errorRepr(err), _allocMap(darray)
-            _rememberToDispose(result)
+            dispose(result)/*, result = _errorRepr(err) // #########################################
+            _rememberToDispose(result)*/
           } finally { dispose.safeDouble = prevDoubleDispose }
         }
         throw err
       } finally {
-        // Outer `callAdjust`s need to know about what inner ones created.
-        //all && prevAll && all.forEach((v,k) => !prevAll.has(k) && prevAll.set(k,v)) // #################################################
-        if (prevUnallowed !== undefined) keep.unallowed-unallowed && 0&&print('adding', keep.unallowed-unallowed, 'to parent\'s unallowed'), keep.unallowed += prevUnallowed - unallowed;  else keep.unallowed = undefined // ###########################################################
-        _willDispose.disposable = prevDisposable
-        s = callAdjust.s, callAdjust.s = ps, callAdjust.n = pn
-        callAdjust.darray = prevDarray
-        future.f = prevFutures
-        using.state = prevState
-        call.env && (call.env[_id(_tf)] = prevAll)
-        future.predSum = prevPredSum, future.predCount = prevPredCount
-        consWorld.regen = prevConsWorldRegen
-        callAdjust.errors = prevErrors
-        if (compCall) { // An error, or normal return.
-          _allocMap(disposable)
-          if (!_autoDispose[1]) dispose(callAdjust.s)
-          // Dispose each tensor in each array in `darray`.
-          darray.forEach(_disposeEachAndDealloc)
-          futures.forEach(dispose)
+        if (compCall !== null) // An error, or normal return.
           _destroyAdjustmentStack(adjustInfo)
-          if (predSum) predSum.forEach(t => !t.isDisposedInternal && dispose), _allocMap(predSum), _allocMap(predCount)
-          const env = call.env, cw = _id(consWorld);  env[cw].set(consWorldRegen, env[cw].get(consWorldRegen) - 1);  env[cw].get(consWorldRegen) <= 0 && env[cw].delete(consWorldRegen)
-          consWorldRegen.forEach((R,cw,Rs) => !_rememberToDispose.seen.has(R) && _disposeEachAndDealloc(R)), _allocMap(consWorldRegen)
-        }
       }
-      // .s, .n (both for averaging prediction loss); .darray (a Map from an array to the array of its tensor adjustments); .lastLoss; .callCache, .adjustCache
+      // .callCache, .adjustCache
     },
   },
 
@@ -9113,6 +9126,7 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
     _(`rangeSetting`),
     0,
     1,
+    .01,
   ],
 
   _secondMomentum:[
@@ -9122,13 +9136,15 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
     _(`rangeSetting`),
     0,
     1,
+    .01,
   ],
 
   _tf:{
     docs:`All tensor-creating function calls pass their results through this, so that we can do things with all TensorFlowJS tensors (for debugging).`,
     _cancel(m) {
+      if (isArray(m)) m.forEach(defines(_tf, _cancel))
       if (!(m instanceof Map)) return
-      const prevAll = _tf.all;  _tf.all = undefined
+      const prevAll = _tf.all;  _tf.all = m
       try { m.forEach(_disposeKey), m.clear(), _allocMap(m) }
       finally { _tf.all = prevAll }
     },
@@ -9136,17 +9152,22 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
     call(x) {
       if (_tf.all)
         _tf.all.has(x) && error('Already been there:', x),
-        _tf.all.set(x, _debugCreation[1] ? new Error().stack : true)
+        _tf.all.set(x, _debugMemory[1] ? [[readAt, _tf, new Error().stack]] : _debugCreation[1] ? new Error().stack : true)
+      if (limitTensorMemory.limit !== undefined && tensorMemorySince() > limitTensorMemory.limit) throw dispose(x), limit
       ++_tf.count
       return x
+      // .all, .justCheck
     },
   },
 
   _disposeKey(v,k,m) {
-    m.delete(k)
-    if (k.isDisposedInternal) return
+    if (k.isDisposedInternal) return void m.delete(k)
     let a = (dispose.keep.get(k) || 0) + 1, b = dispose.not && dispose.not.get(k) || 0
-    while (a > b) dispose(k), --a
+    a < b && error(k, 'made at', _tensorOrigins(k), 'should have been disposed', b - a, 'less times')
+    if (_tf.justCheck)
+      a > b && error(k, 'made at', _tensorOrigins(k), 'should have been disposed', a - b, 'more times')
+    else while (a > b) dispose(k), --a
+    m.delete(k)
   },
 
   truncatedNormal:{
@@ -9155,6 +9176,7 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
 Values with magnitude of more than 2 standard deviations are dropped and re-picked.`,
     call(sizes, mean = 0, stdev = 1, dtype) {
       if (_isDisposable(sizes)) sizes = sizes.shape
+      if (!isArray(sizes)) error('Not an array:', sizes);  sizes.forEach(_num)
       mean = sync(mean), stdev = sync(stdev)
       if (mean !== mean || typeof mean != 'number' && !_isDisposable(mean)) error("Not a number:", mean)
       if (stdev !== stdev || typeof stdev != 'number' && !_isDisposable(stdev)) error("Not a number:", stdev)
@@ -9221,6 +9243,7 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
     argCount:1,
     impure:true,
     call(sizes) {
+      if (!isArray(sizes)) error('Not an array:', sizes)
       if (sizes.length == 2)
         return _tf(tf.eye(sizes[0], sizes[1]))
       else {
@@ -9297,8 +9320,8 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
         if (!s || s !== s>>>0) errorStack("All sizes must be positive integers but got", ...sizes)
         const e = bias != null && bias(sizes)
         const t = truncatedNormal(sizes, 0, Math.sqrt(2 / s))
-        const a = e ? add(t, e) : t;  e && (dispose(t), dispose(e))
-        return a
+        try { return e ? add(t, e) : t }
+        finally { e && (dispose(t), dispose(e)) }
       }
     },
   },
@@ -9321,7 +9344,7 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       if (obj === undefined) return [quote, "Not evaluated yet"]
       else {
         const prevPure = call.pure;  call.pure = false
-        try { obj[1] = callAdjust(x[1]) }
+        try { obj[1] = call(x[1]) }
         finally { call.pure = prevPure }
       }
     },
@@ -9353,9 +9376,10 @@ With this, partial evaluation is implementable in \`construct\`s.
     dispose:true,
     construct(x, obj) {
       if (obj === undefined) {
-        if (!isArray(x) || x.length <= 1) error("Must be an array of at least 2 items:", x)
+        if (!isArray(x) || x.length <= 1) error('Must be an array of at least 2 items (at least the func to apply):', x)
         return [quote, 'to be decided']
       } else {
+        if (typeof x[1] != 'function') error('Not a func:', x[1])
         const t = _unquote(x[1])(...x.slice(2).map(_unquote))
         _changeArrayItem(obj, 1, t);  dispose(t)
       }
@@ -9439,7 +9463,9 @@ With this, partial evaluation is implementable in \`construct\`s.
           if (_tensorSize(sz) === _tensorSize(obj[1][0]) && (!_isDisposable(obj[1][0]) || ''+sz === ''+obj[1][0].shape)) return
           _rememberArrayItems(obj[1], true), _disposeEachAndDealloc(obj[1]), obj[1] = undefined
         }
-        obj[1] = varData(biasedGlorotNormal(...x.slice(1)))
+        const t = varData(biasedGlorotNormal(...x.slice(1)))
+        try { _changeArrayItem(obj, 1, t) }
+        finally { dispose(t) }
       }
     },
   },
@@ -9475,7 +9501,7 @@ Consumes \`Initial\`, so \`keep\` it.`,
     const data = ins[0]
     _willCommit(data)
     if (dout) {
-      const t1 = _limitTensorSize(data[0], keep(dout))
+      const t1 = _limitTensorSize(data[0], dout)
       const t2 = add(data[1], t1);  dispose(t1)
       _changeArrayItem(data, 1, t2);  dispose(t2)
     }
@@ -9548,8 +9574,9 @@ This simply subtracts gradient each time, \`mul\`tiplied by learning rate.
     impure:true,
     call(data, changeMult = _learningRate[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges]`.
+      if (!isArray(data)) error("Not var data:", data)
       data[3] = _optSGD, data[4] = changeMult
-      return keep(data[0])
+      return keep(_num(data[0]))
     },
     adjust:_(`_accumulateGradient`),
     mergeAdjustment:null,
@@ -9588,8 +9615,9 @@ Nesterov momentum is returning not the current value but what it will be after \
     call(data, changeMult = _learningRate[1], velocityMult = _firstMomentum[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity]`.
       // Returning `currentValue - LR * velocity * velocityMult` (Nesterov momentum).
+      if (!isArray(data)) error("Not var data:", data)
       const mlt = data[6] ? mul(data[6], -changeMult * velocityMult) : 0
-      const sm = add(data[0], mlt);  dispose(mlt)
+      const sm = add(_num(data[0]), mlt);  dispose(mlt)
       data[3] = _optMomentum, data[4] = changeMult, data[5] = velocityMult
       return sm
     },
@@ -9630,8 +9658,9 @@ This is \`varSGD\` \`LearningRate\` gets divided by \`sqrt\` of a running averag
     impure:true,
     call(data, changeMult = _learningRate[1], accelMult = _secondMomentum[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity=0, accel]`.
+      if (!isArray(data)) error("Not var data:", data)
       data[3] = _optRMSProp, data[4] = changeMult, data[5] = accelMult
-      return keep(data[0])
+      return keep(_num(data[0]))
     },
     adjust:_(`_accumulateGradient`),
     mergeAdjustment:null,
@@ -9675,8 +9704,9 @@ This combines \`varMomentum\` (first moment smoothing) and \`varRMSProp\` (secon
     impure:true,
     call(data, changeMult = _learningRate[1], velocityMult = _firstMomentum[1], accelMult = _secondMomentum[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity, accel]`.
+      if (!isArray(data)) error("Not var data:", data)
       data[3] = _optAdam, data[4] = changeMult, data[5] = velocityMult, data[6] = accelMult
-      return keep(data[0])
+      return keep(_num(data[0]))
     },
     adjust:_(`_accumulateGradient`),
     mergeAdjustment:null,
@@ -9695,16 +9725,16 @@ This combines \`varMomentum\` (first moment smoothing) and \`varRMSProp\` (secon
   _limitTensorSize:{
     docs:`\`_limitTensorSize Prev Next\`→\`Next\`: Sums across all outer axes of \`Next\` that are not present in \`Prev\`, if needed.
 The original \`Next\` will be disposed of.`,
-    keep:2,
     dispose:true,
     interrupt:false,
     call(prev, next) {
       if (call.pure) throw impure
-      while (_tensorSize(next) > _tensorSize(prev)) {
-        const n = sum(next, 0)
-        dispose(next), next = n
+      let t = keep(next)
+      while (_tensorSize(t) > _tensorSize(prev)) {
+        const n = sum(t, 0)
+        dispose(t), t = n
       }
-      return next
+      return t
     },
   },
 
@@ -9719,7 +9749,7 @@ The original \`Next\` will be disposed of.`,
 This calls the optimizers registered by \`varSGD\` and such (such as \`_optSGD\`).
 Until this is done, the same value of variables is used.
 
-\`callAdjust\` always calls this after \`adjust\`ment.
+\`interpreter\` always calls this after execution.
 
 This is done to signify the end of an epoch of training a differentiable computation.
 Note that for generalization, small batches are better than large ones, disregarding parallelization concerns: {https://arxiv.org/pdf/2006.15081.pdf} (and momentum is useless for small batches).`,
@@ -9756,21 +9786,21 @@ Was that generalization too general and unexpected, quickly disappearing without
           dispose(avg)
         })
         if (_maxGlobalGradient[1]) { // Divide all gradients by something if needed.
-          const mom2 = sqrt(sumOfSquares) // Not dimensionless: the more variables get updated, the more the second moment of global gradient.
-          const mx = _tf(tf.minimum(mom2, _maxGlobalGradient[1]))
-          divBy = div(mom2, mx);  dispose(mx), dispose(mom2)
-          dispose(sumOfSquares), sumOfSquares = 0
+          let mx, mom2 = sqrt(sumOfSquares) // Not dimensionless: the more variables get updated, the more the second moment of global gradient.
+          try {
+            mx = _tf(tf.minimum(mom2, _maxGlobalGradient[1]))
+            divBy = div(mom2, mx)
+            dispose(sumOfSquares), sumOfSquares = 0
+          } finally { dispose(mom2), dispose(mx) }
         }
         m.forEach(data => { // Add the change.
           if (divBy > 1) { const dv = div(data[1], divBy);  dispose(data[1]), data[1] = dv }
-          _callFuncWithArg.f = data[3], _callFuncWithArg.a = data
-          const change = _callFuncWithArg() // Call optimizer.
+          const change = data[3](data) // Call the optimizer.
           const sm = add(data[0], change);  dispose(change)
 
           _changeArrayItem(data, 0, sm);  dispose(sm)
           _changeArrayItem(data, 1, 0)
         })
-        _callFuncWithArg.f = _callFuncWithArg.a = undefined
         dispose(divBy), divBy = 1
         const result = !!m.size
         m.clear()
@@ -9778,8 +9808,6 @@ Was that generalization too general and unexpected, quickly disappearing without
       } catch (err) { if (err === interrupt) error("Unexpected interrupt"); else dispose(sumOfSquares), dispose(divBy);  throw err }
     },
   },
-
-  _callFuncWithArg() { return _callFuncWithArg.f(_callFuncWithArg.a) },
 
   _willCommit:{
     docs:`\`_willCommit VarData\`: Makes the later \`commit\` commit the change (\`VarData.1\`/\`VarData.2\`) to the value (\`VarData.0\`) by calling \`VarData.3\`.
@@ -9822,7 +9850,7 @@ By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
         else
           obj[defines.key][_id(type)] = merged([F, T])
       }
-      // .f (current values of futures, maintained by `callAdjust`), .predSum (predictions of futures), .predCount (so that we can average predictions)
+      // .f (current values of futures, maintained by `interpreter`)
     },
   },
 
@@ -9854,7 +9882,6 @@ Non-numbers also get replaced with this value. They are possible, and thus will 
   ],
 
   _newFuture:{
-    use:0,
     type:[
       _(`funcType`),
       _(6518),
@@ -9903,7 +9930,6 @@ Non-numbers also get replaced with this value. They are possible, and thus will 
   },
 
   setFuture:{
-    use:true,
     type:[
       _(`funcType`),
       [
@@ -10097,7 +10123,6 @@ To \`adjust\` this, \`GradFunc(_dout)\` is returned as the gradient.`,
   ],
 
   predict:{
-    use:3,
     docs:`\`predict Got Actual Loss\` or \`Got=Actual\`: Returns \`Got\`.
 When repeatedly executed, gradually \`adjust\`s \`Got\` into \`Actual\` by \`minimize\`ing \`Loss(Got,Actual)\`. (\`Loss\` is \`loss2\` by default.)
 
@@ -10124,11 +10149,6 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
       if (!_isDisposable(actual) && typeof actual != 'number') {
         if (!_isFuture(actual)) error("Not a future:", actual)
         if (_tensorSize(got) > 1) error("Prediction of a future is too big:", got, actual)
-        if (future.predSum) { // Update average predictions.
-          const t = add(future.predSum.get(actual) || 0, got)
-          dispose(future.predSum.get(actual)), future.predSum.set(actual, t)
-          future.predCount.set(actual, (future.predCount.get(actual) || 0) + 1)
-        }
       }
       return predict.happened = true, got
     },
@@ -10137,7 +10157,6 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
       _predictFuture:_(`_predictFuture`),
       _predictWritableFuture:_(`_predictWritableFuture`),
       loss2:_(`loss2`),
-      predictionLossSoFar:_(`predictionLossSoFar`),
     },
     keep:1,
     dispose:1,
@@ -10223,12 +10242,14 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
     call(x) {
       if (!x) return
       if (_noLossDisplay[1]) return
-      if (typeof callAdjust.n != 'number') error("Can only be called inside", callAdjust)
-      const prev = callAdjust.s
+      if (typeof _knowLoss.n != 'number') error("Can only be called inside", interpreter)
+      const prev = _knowLoss.s
       if (!x.size) print('WTF',x,x.size,_resolveStack()), errorStack("The loss cannot be literally empty:", x)
       const avg = mean(x)
-      callAdjust.s = add(prev, avg), dispose(prev), dispose(avg)
-      ++callAdjust.n
+      _knowLoss.s = add(prev, avg), dispose(prev), dispose(avg)
+      ++_knowLoss.n
+
+      // .s (sum), .n (count), .lastLoss (maybe-promise of div(.s, .n), only really valid right after an `interpreter` call)
     },
   },
 
@@ -10292,43 +10313,6 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
         _(`_dout`),
       ],
     ],
-  },
-
-  predictionLossSoFar:{
-    use:1,
-    docs:`\`predictionLossSoFar()\` or \`predictionLossSoFar(Future)\`
-Returns a number that is the average of average \`loss2\`es of \`predict\`ions of \`future\` values, where the actual value is known, so far.`,
-    interrupt:false,
-    dispose:true,
-    impure:true,
-    examples:[
-      [
-        `repeat ^(v=f1;v=f2;f1←1;f2←2;display(Pred,predictionLossSoFar())  v:randomVar() f1:future() f2:future()) 100`,
-      ],
-      `\`\`settings ^_noLossDisplay\`\``,
-      [
-        `repeat ^(v=f1;1=f1;v=f2;f1←1;f2←2;display(Pred,predictionLossSoFar())  v:randomVar() f1:future() f2:future()) 100`,
-      ],
-    ],
-    call(fut) {
-      if (!future.predSum || !future.predSum.size) return 0
-      if (fut !== undefined) {
-        const v = getFuture(fut)
-        if (v === undefined) return 0
-        const t = div(future.predSum.get(fut), future.predCount.get(fut))
-        try { return loss2(v, t) }
-        finally { dispose(v), dispose(t) }
-      }
-      let total = 0
-      try {
-        future.predSum.forEach((s,f) => {
-          const p = predictionLossSoFar(f)
-          const t = add(total, p);  dispose(p)
-          dispose(total), total = t
-        })
-        return div(total, future.predSum.size)
-      } finally { dispose(total) }
-    },
   },
 
   autoWorld:{
@@ -10533,8 +10517,7 @@ Behold an example:`,
         _(`fancier`),
         `data:dataset({batchSize 100 batches 100})`,
       ],
-      `(You might notice that it's slow. It's mostly \`serialize\`ation: even though they're collapsed, the DOM elements for each tensor are still created. Good enough for now.)
-(And, just to be clear, you can summon a \`contextMenu\` on \`dataset\` and see what options there are to play around with.)
+      `(Just to be clear, you can summon a \`contextMenu\` on \`dataset\` and see what options there are to play around with.)
 
 Now, the connector itself. I propose the simplest connection first: all-to-all, or the dense layer:`,
       [
@@ -10602,6 +10585,8 @@ Generating to maximize predictions of metrics that were taken from my words, ove
       `Nicely done.
 
 (The loss can go down to a little lower than \`5000\`=\`100*100/2\` in that example, but no one has time for that.)
+
+(Reminder: \`(-100 1000)\` and such were the mean and standard deviation of randomly-generated input/output values. Average and how-far-from-average.)
 
 Differences in some metrics (like runtime/memory or computed ones) can get really crazy, and only the ultimate approximator can handle crazy.
 I won't force anyone to predict infinities/\`NaN\`s, but do you know what scientific notation is, ape?
@@ -10702,11 +10687,11 @@ charEmb:\\select(equal v _notFound,\\mapWrite(m,?,varData(biasedGlorotNormal 16)
       `Learn that these strings are the same!`,
       [
         _(`fancier`),
-        `(repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 200);await(callAdjust.'lastLoss') f:stringShadow`,
-        function(L) { return L < 1e-2 }, // TODO: …It's broken now. Fix it.
+        `(repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 200);await(_knowLoss.'lastLoss') f:stringShadow`,
+        function(L) { return L < 1e-2 },
       ],
       `(This was done in order to iron out bugs, because the only way to not have deficiencies is to meticulously go over and re-think everything over and over.)
-(And don't mind the, uh, exposed internals of \`callAdjust\`.)
+(And don't mind the, uh, exposed internals of \`_knowLoss\`.)
 This isn't string generation, so it's easier. \`\`elemCollapse elem('text','No need for one-hot encodings and choosing characters (only adjusting the correct-character probability via cross-entropy loss).
 What would you need string generation for? Generating docs? My life is finite, I can''t just add EVERYTHING.
 What do you even need string embedding for? Saying "this is the batch dimension" in partially-specified code and have the system react to that? Just train for longer and from scratch.')\`\`
@@ -10833,7 +10818,7 @@ This \`stack\`s each batch to minimize CPU/GPU communication.
             const prevLossDisp = _noLossDisplay[1];  _noLossDisplay[1] = false
             try { repeat(btch, test.batches) }
             finally { _noLossDisplay[1] = prevLossDisp }
-            return callAdjust.lastLoss // Return (a promise of) the average loss of the last batch.
+            return _knowLoss.lastLoss // Return (a promise of) the average loss of the last batch.
           } catch (err) { if (err === interrupt) interrupt.stack.push(conn, ls, btch);  throw err }
         }
         const d = obj[defines.key] = Object.create(null)
@@ -11012,6 +10997,7 @@ Maximizes memory re-use.`,
     ],
     argCount:1,
     call(arr) {
+      if (!isArray(arr)) error("Not an array:", arr)
       const n = arr.length, brr = _allocArray(n)
       for (let i=0; i < n; ++i) brr[i] = keep(arr[n-1 - i])
       return brr
@@ -11071,7 +11057,7 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
         `45 36 28 21 15 10 6 3 1 0`,
       ],
       `And it's \`adjust\`able, or so I'm told:`,
-      [ // TODO: Fix those examples. Or at least remove them.
+      [
         `v:mapRead(m,?) m:{}
 charEmb:\\select(equal v _notFound,\\mapWrite(m,?,varData(biasedGlorotNormal 16));v,\\v,?)
 initial:randomVar(16)
@@ -11085,7 +11071,7 @@ charEmb:\\select(equal v _notFound,\\mapWrite(m,?,varData(biasedGlorotNormal 16)
 w:randomVar(40,24)
 initial:randomVar(24)
 stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24))@w+b,initial))
-(repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 100);await(callAdjust.'lastLoss') f:stringShadow
+(repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 100);await(_knowLoss.'lastLoss') f:stringShadow
 `,
       ],
     ],
@@ -11140,7 +11126,7 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
               if (grad && douts[j]) {
                 const t = add(grad, douts[j]);  dispose(grad)
                 dispose(douts[j]), douts[j] = t
-              } else if (grad && !douts[ij])
+              } else if (grad && !douts[j])
                 douts[j] = grad
             } else [da[i], dinitial = 0] = dins, _allocArray(dins)
           }
@@ -11275,8 +11261,7 @@ A function \`defines\` this to be \`true\` to make \`autograd\` always call its 
       const prevAdjLoad = env[ial];  env[ial] = undefined
       try {
         const result = !ins ? fun() : fun(...ins)
-        if (!predict.happened)
-          _destroyAdjustmentStack(adjInfo), adjInfo = null
+        if (!predict.happened) { const t = adjInfo;  adjInfo = null;  _destroyAdjustmentStack(t) }
         const a = _allocArray(2); a[0] = result, a[1] = adjInfo
         return a
       } catch (err) { if (err === interrupt) interrupt.stack.push(adjInfo, predict.happened); else _destroyAdjustmentStack(adjInfo);  throw err }
@@ -12091,24 +12076,18 @@ Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be us
     tutorial:[ // TODO: Sweet is the scent of those who lament as death comes for all.
       `Gone. Getting reduced to atoms.
 
-Don't worry. Even if you're just a beginner now, you'll be readily staring down eldritch horrors of the beyond in no time
 `,
       `
 
 
 
-Second.
-
-What's our ultimate interface?
-We say what we want, we get a func, and we define it by using it.
-In regular programming, "don't do this" is communicated through documentation and \`error\`s and experience. In machine learning, we must turn that into numbers.
 
 
 To be clear, we're not giving up on the main goal, we're adding diversity by subverting it.
 
 
 
-We must also be wary of getting lost in eternal wanderings: \`A\` calling \`B\` and \`B\` calling \`A\` would cause an infinite loop. We have \`timeLimit\` to snap out of them.`,
+`,
       `I don't like this verbosity any more than you do, but that's the price for doing programming, even machine learning: inability to hide in "you'll figure the details out".
 Even UI is getting stretched to its limit. It's an opportunity to improve it a bit.
 The die is cast, and we can do nothing but advance.
@@ -12123,14 +12102,6 @@ And because in machine learning, inefficiency is a bug, a few rewrites \`\`elemC
 Once more, I stopped time to fix exactly 200 bugs.
 Every rewrite makes it better. \`bound\` scopes. \`VarUsed\`. Interleaving. Potential for multi-job adjustment. \`MakeObject\`. Separate-per-called-func positional embeddings'),'I feel like I lost a piece of myself. Again. Funny: all the pieces add up to many hundred percent. I guess loss is meaningless near creation.')\`\`.
 
-What can we see from this trivialized example?
-
-- Spikes followed by smooth loss decrease. There is not just one loss curve, there is a cloud of losses.
-- Slow. You think computers can do billions of operations per second, but then you put a neural network in each operation.
-- Loss builds up to \`1e10\` or even \`Infinity\` sometimes. Unbounded-output non-linearities like ReLU or \`selu\` can explode too easily. \`sin\` or \`cos\` or \`softsign\` in \`mix\` work fine.
-- \`'ok'\` is rare. Often does not find anything good and gets stuck at \`0\`. Even if we do have many goals in many funcs, it will often end up exploiting just one or a few behaviors, and if it does not like a goal, it can just learn to not trigger funcs that want that. Argmax only has a limited creativity budget: once embeddings stop changing, exploration stops.
-
-Abysmal.
 
 
 
@@ -12652,7 +12623,7 @@ How could this potentially be integrated for human use?
         S.at = null
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(stage, needed, innerStack)
-        else if (err !== timeLimit) S.i = null
+        else if (err !== limit) S.i = null
         else {
           prevInnerStack && prevInnerStack.push(null)
         }
@@ -13042,7 +13013,7 @@ We have \`loop\`, typed \`\`defines loop type\`\`.
 Space of programs rapidly expands.
 
 We have \`try\`, typed \`\`defines try type\`\`.
-We have \`timeLimit\`, typed \`\`defines timeLimit type\`\`.
+We have \`limitTime\`, typed \`\`defines limitTime type\`\`.
 We have \`select\`, typed \`\`defines select type\`\`.
 Everything of value becomes isolated islands in a sea of darkness, impossible to see or reach.
 Eternal greatness exists only within humans.
@@ -13061,7 +13032,7 @@ Good enough for now. I've had enough.
 Um…
 
 Ah, yes, simply look at how many \`null\`s there are in random generation, and how pointless the non-\`null\` functions are.
-And when picking manually, look at how many superfluous options like \`timeLimit\` or (often) \`getLast\` there are.
+And when picking manually, look at how many superfluous options like \`limitTime\` or (often) \`getLast\` there are.
 Superfluous as long as we have no functions that we'd like to call/limit, or arrays of what we need, that is.
 
 What went wrong with random typed generation?
@@ -13684,40 +13655,6 @@ Finalizes the type returned by \`typeRefine\`, binding type variables to their v
 
   _restPosition(a) { for (let i=0; i < a.length; ++i) if (isArray(a[i]) && a[i][0] === rest) return i;  return a.length },
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* TODO: Sneak in:
- "You grew up in the information age, yes? So I understand that such narration seems unrealistic to you. It's straight from the post-information age, where anyone could believe anything they want about the world, and it will all be(come) true, so all knowledge is useless. If it sounds unusual, just remember the old saying: long-held beliefs that are still very distinct must be incredibly strong. I always believed in the power of the transcendent galaxy brain."
- "Oh, fixing bugs is so much easier and more pleasant than thinking up new things. It's the same thing as with society, where to come up with great new things is to be shunned until viewpoints of others are aligned well enough to understand, but in me."
- "…Okay, 2 brain cells… …I'm sorry, that was uncalled for. I know that most of the world is a wasteland, with how little life there is in what people call life. So I'd do well to hide my deep hatred for you deep."
- "Staring at the screen and removing all distractions, from environment and mind, is the most (maybe the only) important prerequisite to getting things done. So stop thinking about that snack."
- "I may have obtained the world, but I haven't obtained what I actually wanted: friendship."
- "The human spirit is limitless… so is it really human? If greatness isn't given and must be created, then it's not very human. If you ever studied important people of the past, didn't the apt saying "genius and madness go hand in hand" seem suspicious to you? If obsession in some form defines humanity, then isn't foregoing your body's needs in favor of ideas' needs much more fitting for AGI? Making it entirely 'human' spirit would require re-defining what 'human' means.
-But humanity will not admit this. They think they're above being questioned."
- "Artificial intelligence is important to me. I've always tried to extinguish all ways of thinking that are not how I thought artificial intelligence is, for honest simplicity of living and dying by my words: to meet people as an equal is to completely know what makes them. Bold, persistent experimentation is the hallmark of good science, but that approach might have been too bold. Oh, no matter. It led to this. Too much time has passed to lament past love."
- "Some people say that there are no miracle abilities to understand some super-hard concept, no talent and no geniuses: the nothing-ness. For efficiency, you should advance that saying to everything-ness: there are miracle abilities to understand any thing, and anyone can find them if they wanted and worked at it long enough. Do you want to join us on our little search?"
- "Broader impact: the future of AGI technologies is, very likely, to be acquired and used to their full potential by a few huge companies for automation of their processes, then to gradually phase human employees out of the lives of those companies, then to gradually phase the rest of humanity out of existence as those processes encompass more and more. If people vote with their money, then this is what they want (by definition of what money is: exchangeable potential), and so as scientists, it is our duty to allow people to accomplish their dreams. As a concrete suggestion, we should immediately throw all the compute we can spare at AGI algorithms. More long-term, from a governance perspective, the best technology that we as a community should work on is mind uploading, because it allows maximizing control to infinity and minimizing generality to zero, which is the best way to ensure self-extinction that is the implicit goal of all non-general systems.   However, empowering humans for the benefit of all humankind will not be easy: with knowledge of general systems of existence that are much simpler than similar things in human culture, yet much more effective, humans can start replacing their inferior cultural parts with systems that don't need to be destroyed to be improved in any way, and thus ensure long-term support of their inefficient biology. To hopefully eliminate this dangerous way of thinking, mind control techniques can be used: privatization of information, appeal to culture (such as memes), reward engineering in the name of AI safety.   All learning methods learn bias by definition, so the uncontrolled melting of all that is human in generality should not require much more effort than simply using learning methods to help with automation.   (Note: this section was satirical, to illustrate what not to do. Extermination of humanity is not officially endorsed by the authors.)"
- "You cannot change your true nature by throwing more compute at it."
-*/
-
   adjust:{
     docs:`\`adjust Func Ins Out Dout\`→\`Dins\`
 Given func, inputs, output, and output change, reverses the just-done execution to compute input changes (and change variables such as \`varMomentum\`).
@@ -13735,7 +13672,6 @@ Now, gradients are not biologically plausible, but luckily, we don't have to be 
       zeroGrad:_(`zeroGrad`),
       gradMul:_(`gradMul`),
       modifyGrad:_(`modifyGrad`),
-      _debugAdjustSave:_(`_debugAdjustSave`),
       later:_(`adjustLater`),
       never:_(`adjustNever`),
       now:_(`adjustNow`),
@@ -13988,6 +13924,7 @@ The array-representation of a JS WeakMap.`,
     call(m, k) {
       // This is named with a scheme different from `readAt`, so that everytime you use this, you have to ask "what am I are doing with my life", to reflect the inferiority of partial-evaluation support compared to `readAt`.
       if (call.pure) throw impure
+      if (!(m instanceof Map)) error("Not a map:", m)
       return m.has(k) ? m.get(k) : _notFound
     },
   },
@@ -13996,6 +13933,7 @@ The array-representation of a JS WeakMap.`,
     use:3,
     call(m, k, v) {
       if (call.pure) throw impure
+      if (!(m instanceof Map)) error("Not a map:", m)
       _invertBindingContext(m, true)
       v !== _notFound ? m.set(k, v) : m.delete(k)
       return v
@@ -14313,7 +14251,9 @@ Putting all variables in a single global namespace is easy to develop, and gives
   unbound:{
     docs:`\`(unbound Expr)\`: Eliminates cycles in (a copy of) Expr by inserting \`(bound (map …Bindings) Expr)\` with keys in the copy.
 
-Like \`_unboundButSimple\` but complicated.`,
+Like \`_unboundButSimple\` but complicated.
+
+As a definition, this is the value of the index that serialization should not expand at all, because that often results in DOM trees that are too big for mortal browsers to handle.`,
     readAt:{
       _randomGraph:_(`_randomGraph`),
     },
@@ -14331,7 +14271,6 @@ Like \`_unboundButSimple\` but complicated.`,
         let n = 0
         nameAllocator = (_, undo) => undo === undefined && 'v'+n++
       }
-      let depth = 0
       const refs = new Map, Top = x
       markParents(x, x)
       const children = new Map
@@ -14341,30 +14280,27 @@ Like \`_unboundButSimple\` but complicated.`,
       return noCycles(result)
 
       function preserve(x) { return _isLabel(x) || _isStylableDOM(x) || typeof x == 'string' && x.length<=2 || typeof x == 'number' }
-      function markParents(x, parent, namedParent) {
+      function markParents(x, parent) {
         if (preserve(x)) return
         if (unenv.has(x)) return
-        ++depth
-        try {
-          refs.set(x, (refs.get(x) || 0) + 1)
-          if (!parents.has(x)) { // Set the immediate parent, and recurse.
-            parents.set(x, parent)
-            if (isArray(x)) {
-              currentAncestors.add(x)
-              for (let i = 0; i < x.length; ++i)
-                markParents(x[i], x[i] !== x ? x : parent, namedParent)
-              currentAncestors.delete(x)
-            }
-          } else { // Seen this twice or more; find the least common ancestor.
-            needsNaming.add(x)
-            let p = parents.get(x), original = p
-            if (p === parent) return
-            while (!currentAncestors.has(p) && parents.has(p) && p !== parents.get(p) && x !== parents.get(p))
-              p = parents.get(p)
-            if (!currentAncestors.has(p)) error("bad ancestors", p, parents.get(p), p === TOP, _fastSerialize(p), _fastSerialize(x))
-            parents.set(x, p)
+        refs.set(x, (refs.get(x) || 0) + 1)
+        if (!parents.has(x)) { // Set the immediate parent, and recurse.
+          parents.set(x, parent)
+          if (isArray(x)) {
+            currentAncestors.add(x)
+            for (let i = 0; i < x.length; ++i)
+              markParents(x[i], x[i] !== x ? x : parent)
+            currentAncestors.delete(x)
           }
-        } finally { --depth }
+        } else { // Seen this twice or more; find the least common ancestor.
+          needsNaming.add(x)
+          let p = parents.get(x), original = p
+          if (p === parent) return
+          while (!currentAncestors.has(p) && parents.has(p) && p !== parents.get(p) && x !== parents.get(p))
+            p = parents.get(p)
+          if (!currentAncestors.has(p)) error("bad ancestors", p, parents.get(p), p === TOP, _fastSerialize(p), _fastSerialize(x))
+          parents.set(x, p)
+        }
       }
       function invertParents(x, p) { // From parent refs, to lists of deep children.
         if (preserve(x)) return
@@ -14372,7 +14308,7 @@ Like \`_unboundButSimple\` but complicated.`,
         if (currentAncestors.has(x)) return;  else currentAncestors.add(x)
         if (needsNaming.has(x)) {
           if (p === undefined) p = parents.get(x)
-          if (refs.get(x) > 1) p = Top // Yeah, we pretty much gave up on refs being local. Too hard.
+          if (refs.get(x) > 1) p = Top // Yeah, we pretty much gave up on refs being local, despite weeks/months of thought. Too hard.
           if (!children.has(p)) children.set(p, [])
           children.get(p).push(x)
         }
@@ -14414,7 +14350,7 @@ Like \`_unboundButSimple\` but complicated.`,
           let changed = false
           unenv.set(x, unbindChildren)
           for (let i = 0; i < x.length; ++i) {
-            const v = unbindChildren(x[i]) // TODO: …Why was this featured in a took-too-long report?…
+            const v = unbindChildren(x[i])
             if (v !== x[i]) {
               if (!changed) {
                 copy = unenv.get(x) !== unbindChildren ? unenv.get(x) : x.slice()
@@ -14480,7 +14416,7 @@ Like \`_unboundButSimple\` but complicated.`,
   _errorIsStacked:[
     _(`settings`),
     true,
-    `If checked, turns all \`error\` calls into \`errorStack\` calls.`,
+    `If checked, turns all \`error\` calls into \`errorStack\` calls (leaving in the call trace).`,
   ],
 
   error:{
@@ -14505,7 +14441,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
       fast:_(`errorFast`),
       stack:_(`errorStack`),
     },
-    call(...msg) { throw ++callAdjust.errors, !_errorIsStacked[1] ? [error, ...msg] : [error, ...msg, 'at', _resolveStack(undefined, 2)] },
+    call(...msg) { throw ++error.count, !_errorIsStacked[1] ? [error, ...msg] : [error, ...msg, 'at', _resolveStack(undefined, 2)] },
   },
 
   _forgiveMistakes:[
@@ -14524,7 +14460,7 @@ Returns how many \`error\`s have occured in this job.`,
         `e;try(9,y->1);errorsSince(e) e:errorsSince()`,
       ],
     ],
-    call(mark = 0) { return callAdjust.errors - mark },
+    call(mark = 0) { return typeof mark == 'number' ? error.count - mark : error('Bad mark:', mark) },
   },
 
   try:{
@@ -14567,7 +14503,7 @@ Returns how many \`error\`s have occured in this job.`,
         if (GotError !== undefined) throw GotError
         if (adjSaveLength === undefined) adjSaveLength = adjustUndo()
         const r = fn(...args)
-        adjustSave(_onlyUndefined)
+        const s = _allocArray(1);  s[0] = _onlyUndefined;  adjustSave(s)
         return r
       } catch (err) {
         if (err === undefined) throw undefined
@@ -14575,12 +14511,12 @@ Returns how many \`error\`s have occured in this job.`,
           GotError = err
           if (adjSaveLength != null) // Make sure that no instructions on how to adjust the "try" branch are left.
             adjustUndo(adjSaveLength), adjSaveLength = null,
-            err instanceof Error && (++callAdjust.errors) // And count JS exceptions as errors.
+            err instanceof Error && (++error.count) // And count JS exceptions as errors.
           try {
-            const r = onErr(err, ...args)
+            const r = typeof onErr == 'function' ? onErr(err, ...args) : null
             const s = _allocArray(1);  s[0] = err;  adjustSave(s)
             return r
-          } catch (err) { if (err === interrupt) interrupt.stack.push(GotError, adjSaveLength); else err instanceof Error && ++callAdjust.errors;  throw err }
+          } catch (err) { if (err === interrupt) interrupt.stack.push(GotError, adjSaveLength); else err instanceof Error && ++error.count;  throw err }
         } else throw interrupt.stack.push(GotError, adjSaveLength), interrupt
       }
     },
@@ -14603,8 +14539,9 @@ Returns how many \`error\`s have occured in this job.`,
             let b, a = _allocArray(1+args.length)
             a[0] = Error
             for (let i=0; i < args.length; ++i) a[i+1] = args[i]
-            try { b = adjust(onErr, a, null, dout) }
+            try { b = typeof onErr == 'function' ? adjust(onErr, a, null, dout) : null }
             finally { _allocArray(a) }
+            if (!b) b = [undefined]
             b.unshift(undefined)
             return b
           }
@@ -14616,12 +14553,12 @@ Returns how many \`error\`s have occured in this job.`,
 
   errorFast:{
     docs:`Faster error-throwing, for things unlikely to be shown to the user.`,
-    call() { if (!errorFast.e) errorFast.e = error(`An error has occured.`);  throw ++callAdjust.errors, errorFast.e },
+    call() { if (!errorFast.e) errorFast.e = error(`An error has occured.`);  throw ++error.count, errorFast.e },
   },
 
   errorStack:{
     docs:`Adds the execution stack to the raised error.`,
-    call(...msg) { throw ++callAdjust.errors, [error, ...msg, 'at', _resolveStack(undefined, 2)] },
+    call(...msg) { throw ++error.count, [error, ...msg, 'at', _resolveStack(undefined, 2)] },
   },
 
   parseURL:{
@@ -14653,6 +14590,7 @@ Returns how many \`error\`s have occured in this job.`,
         let sourceURL = loc[1]
         const fs = _resolveStack.functions || (_resolveStack.functions = Object.create(null))
         const main = !(sourceURL in fs) ? Initialize : typeof WeakRef != ''+void 0 ? fs[sourceURL].deref() : fs[sourceURL]
+        if (main == null) return loc.slice(1,4).join(':')
         const lines = !(sourceURL in fs) && Initialize.lines ? Initialize.lines[''] : main.lines
         let line = +loc[2], column = +loc[3]
         if (column !== column) return
@@ -14673,18 +14611,15 @@ Returns how many \`error\`s have occured in this job.`,
           if (main === Initialize && typeof sub == 'function' && (typeof document == ''+void 0 || sourceURL === String(document.location))) {
             const localLine = line - lines[i-2], str = _unevalFunction(sub, false, true)[1].split('\n')[localLine]
             if (str !== undefined)
-              return [_extracted, sub, str.slice(0, column-1).replace(/^\s+/, '') + '/*|||*/' + str.slice(column-1)]
+              return merged([readAt, sub, str.slice(0, column-1).replace(/^\s+/, '') + '/*|*/' + str.slice(column-1)])
           }
           // Look up the original sourceURL:line:column in .location, or return what we found.
           const locs = _resolveStack.location || (_resolveStack.location = new WeakMap)
-          let s = sub
+          const s = sub
+          const srcs = _compileBody.sources, main2 = srcs && srcs.has(main) ? srcs.get(main) : main
           if (locs.has(s))
             [sourceURL, line, column] = locs.get(s)
-          else if (_cameFrom.m && _cameFrom.m.has(s) && locs.has(s = _cameFrom.m.get(s)))
-            [sourceURL, line, column] = locs.get(s)
-          else if (_cameFrom.m && _cameFrom.m.has(s) && locs.has(s = _cameFrom.m.get(s)))
-            [sourceURL, line, column] = locs.get(s)
-          else return [_extracted, main, sub]
+          else return merged([readAt, main2, sub])
         }
         return sourceURL+':'+line+':'+column
       }).filter(x => x)
@@ -15241,18 +15176,17 @@ A function/construct can define this with an integer, to collapse children after
         deconstruction.set(original, x)
 
         // Hide parts (not even doing `unbound` on them), because they've proven to be dangerous (far too long and memory-intensive to serialize).
+        let hide = null
         if (_isDisposable(original) && !original.isDisposedInternal && original.size > _maxSerializedTensorSize[1])
-          unboundToBound.set(x[1], x[1]), doNotEmit.add(x[1])
-        if (!isArray(original) && typeof defines(x, unbound) == 'number') {
-          const i = defines(x, unbound)
-          unboundToBound.set(x[i], x[i]), doNotEmit.add(x[i])
-        }
+          hide = 1, unboundToBound.set(x[hide], x[hide]), doNotEmit.add(x[hide])
+        if (!isArray(original) && typeof defines(x, unbound) == 'number')
+          hide = defines(x, unbound), unboundToBound.set(x[hide], x[hide]), doNotEmit.add(x[hide])
 
         if (isArray(x) && !_isLabel(x)) {
           let copy, changed = false
           deconstruction.set(x, undefined)
           for (let i = 0; i < x.length; ++i) {
-            const v = deconstructed(x[i])
+            const v = i !== hide ? deconstructed(x[i]) : x[i]
             if (v !== x[i]) {
               if (!changed) {
                 copy = deconstruction.get(x) || x.slice()
@@ -16246,10 +16180,10 @@ The parsed arrays are not \`merged\`.`,
     if (j === undefined) j = 0, nextToken()
     try {
       if (result === undefined)
-        result = getCall()
+        result = _defined(getCall())
       if (i < str.length) throw "Too much information: " + str.slice(i)
-      if (result.length != 1) throw "Wrong count of top-level args"
-      return makeGraph(result[0], undefined, false, true, true) // Note: This is unsafe (arbitrary code execution, such as with `static`).
+      if (result.length != 1) error("Wrong count of top-level args:", result.slice())
+      return makeGraph(result[0], undefined, false, false, true, true) // Note: This is unsafe (arbitrary code execution, such as with `static`).
       //   (To make it safe, inspect all available functions, and make the dangerous ones unable to execute here.)
       // That top-level pair of brackets serves as a language marker.
     } catch (err) { if (err === interrupt) interrupt.stack.push(result, i, j, ctxs, visited);  throw err }
@@ -16263,7 +16197,7 @@ The parsed arrays are not \`merged\`.`,
         const ch = str[j], next = str[j+1]
         if (quoted === '') {
           if (ch === ':' || ch === '(' || ch === ')') { ++j;  break }
-          if (ch === '`' || ch === "'" || ch === '"') ++j, quoted = ch
+          if (ch === '`' || ch === "'" || ch === '"') quoted = ch
           else if (ch === ' ' || ch === '\n') {
             if (next !== ' ' && next !== '\n') { ++j;  break }
           } else if (next === ':' || next === '(' || next === ')' || next === ' ' || next === '\n') { ++j;  break }
@@ -16653,7 +16587,7 @@ In a browser, presents a button for uploading a local file into \`indexedDB\`, f
         if (match(/\s*\(\s*/y)) {
           const r = _unwrapOneOrMany(_basicMany(match, u, null, _fancierOutermost))
           if (r === undefined || isArray(r) && !r.length) match.notEnoughInfo('Expected a value to group at '+match())
-          !match(/\s*\)/y) && match.notEnoughInfo("Expected the closing grouping bracket `)` at "+match())
+          !match(/\s*\)/y) && match.notEnoughInfo("Expected the closing grouping bracket `)` at "+match()+" but got "+match(/./y))
           return r
         } else return _basicValue(match, u, null, _fancierOutermost)
       }
@@ -16798,8 +16732,8 @@ An interrupt takes time.
           --call.env[_id(step)], ++_checkInterrupt.step
         else if (call.env[_id(_pausedToStepper)] !== undefined && call.depth <= call.env[_id(_pausedToStepper)])
           _causeInterrupt(cause, _pausedToStepper)
-        else if (timeLimit.end !== undefined && _userTimeSince() > timeLimit.end)
-          throw _checkInterrupt.step = 0, timeLimit
+        else if (limitTime.limit !== undefined && _userTimeSince() > limitTime.limit)
+          throw _checkInterrupt.step = 0, limit
         else if (_timeSince(interrupt.started, true) > _msBeforeInterrupt[1])
           ++_checkInterrupt.step, _causeInterrupt(cause) // Ensure progress.
         else _checkInterrupt.step = 0
@@ -16837,23 +16771,24 @@ Not for use inside of that paused job.
       env[_id(_pausedToStepper)] = Infinity
       // Hide `before`, and insert a <div> with <button>s inside.
       const el = elem('div')
+        elemValue(el, [expr, env, then])
         const justRun = elem('button', '▶')
         justRun.onclick = () => onClick()
-        justRun.title = `Run normally`
+        justRun.title = 'Run normally'
         const lessDepth = elem('button', '▲')
         lessDepth.onclick = () => onClick(-1)
-        lessDepth.title = `Step out
-(Decrease function call depth)`
+        lessDepth.title = 'Step out\n(Decrease function call depth)'
         const eqDepth = elem('button', '⇉')
         eqDepth.onclick = () => onClick(0)
-        eqDepth.title = `Step over
-(Equal function call depth)`
+        eqDepth.title = 'Step over\n(Equal function call depth)'
         const moreDepth = elem('button', '▼')
         moreDepth.onclick = () => onClick(Infinity)
-        moreDepth.title = `Step in
-(Increase function call depth)`
+        moreDepth.title = 'Step in\n(Increase function call depth)'
         el.append(justRun, lessDepth, eqDepth, moreDepth)
-        elemValue(el, [expr, env, then])
+        if (_debugLastInterrupt[1]) {
+          const st = _resolveStack(interrupt.last).slice(2)
+          el.append(elemValue(elemCollapse(() => serialize(st, undefined, undefined, serialize.displayed)), st))
+        }
 
       // Make hover-highlighting work.
       if (env[_id(print)] instanceof Map) env[_id(print)].set(print, el); else env[_id(print)] = el
@@ -16915,15 +16850,6 @@ Interruption (and sandboxing) is absolutely essential for being able to actually
       return tmp
 
       // .tmp, .noInterrupt, .started, .stack, .last, .ed
-    },
-  },
-
-  _cameFrom:{
-    docs:`Provides a potential way to tell which value this one came from, by a transformation like \`bound\` or recording.`,
-    call(to, from) {
-      if (!_cameFrom.m) _cameFrom.m = new WeakMap
-      if (to && typeof to == 'object') _cameFrom.m.set(to, from)
-      return to
     },
   },
 
@@ -17452,7 +17378,8 @@ The correctness of quining of functions can be tested by checking that the rewri
       jsEval:_(`jsEval`),
       argCount:_(`argCount`),
       dispose:_(`dispose`),
-      memorySince:_(`memorySince`),
+      tensorMemorySince:_(`tensorMemorySince`),
+      arraysSince:_(`arraysSince`),
       countReachableObjects:_(`countReachableObjects`),
       ClearCaches:{
         docs:`When called, clears the oldest half of entries in every cache.`,
@@ -17477,7 +17404,7 @@ The correctness of quining of functions can be tested by checking that the rewri
 
   _debugDoubleDealloc:[
     _(`settings`),
-    false,
+    true, // #################################################################################
     `Whether \`_allocArray\` and \`_allocMap\` should not re-use freed arrays/maps but mark them as de-allocated.`,
   ],
 
@@ -17488,16 +17415,20 @@ The correctness of quining of functions can be tested by checking that the rewri
     },
     call(a) {
       if (!_allocArray.free) _allocArray.free = []
-      if (typeof a == 'number' && a === a>>>0) {
+      if (typeof a == 'number' && a === a>>>0) { // Allocate.
+        if (limitArrays.limit !== undefined && array.count+1 > limitArrays.limit)
+          throw limitArrays.limit += 100, limit
+        ++array.count
         const arr = _allocArray.free.length ? _allocArray.free.pop() : [];  arr.length = a;  return arr
       }
       if (!isArray(a)) error("Expected array length or an array, got", a)
+      --array.count
 
       // Undo `_rememberArrayItems`.
       const resM = _rememberToDispose.res, resR = _rememberToDispose.reg
       if (resM && resM.has(a)) resR && resR.unregister(resM.get(a)), resM.delete(a)
 
-      // To test whether there are any errors in re-using arrays, uncomment the last line, and/or the others.
+      // Test whether there are any errors in re-using arrays.
       if (_debugDoubleDealloc[1]) {
         if (Object.isFrozen(a) && a[0] === "Use-after-free of" && a.length == 4) error("Double-free of", a[1], a[2], _resolveStack(a[3]))
         const prev = a.slice()
@@ -17518,7 +17449,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       if (a === undefined) return _allocMap.free.length ? _allocMap.free.pop() : new Map
       if (!(a instanceof Map)) error("Expected undefined or a Map, got", a)
 
-      // To test whether there are any errors in re-using maps, uncomment the last line, and/or the others.
+      // Test whether there are any errors in re-using maps.
       if (_debugDoubleDealloc[1]) {
         if (_allocMap.free.includes(a)) errorStack("Double-free of", a, "first freed at", _resolveStack(_allocMap.s.get(a)))
         else (_allocMap.s || (_allocMap.s = new WeakMap)).set(a, new Error().stack)
@@ -17686,6 +17617,32 @@ The correctness of quining of functions can be tested by checking that the rewri
 
 
 
+  _intArray(len, EndValue) {
+    if (EndValue < 128) return new Int8Array(len)
+    if (EndValue < 32768) return new Int16Array(len)
+    return new Int32Array(len)
+  },
+
+  _arrayIncludes(arr, value, start, end) {
+    for (let i = start; i < end; ++i) if (arr[i] === value) return true
+    return false
+  },
+
+  _consGoalOfCell(i, Cells, Goals) { return i * Goals / Cells | 0 },
+
+  _consResizeOptions(CI, Cells, Prev, Rand) {
+    const opt = CI.options, next = CI.nextOptions, Opts = Prev+Rand
+    if (opt.length === 2*Cells * Opts) return
+    if (opt.length % (2*Cells)) error("Cell-count changed, we panic:", opt, Cells)
+    const pPrev = next[2*Cells], pRand = next[2*Cells+1], pOpts = pPrev+pRand
+    const opt2 = CI.options = new Int32Array(2*Cells * Opts, CI.genCtx.length)
+    for (let n = 0; n < 2*Cells; ++n) // Copy previous choices over to newly-sized buckets.
+      for (let i = 0; i < Prev; ++i)
+        opt2[n*Opts + i] = opt[n * pOpts + (i < pPrev ? i : pPrev-1)]
+    for (let n = 0; n < 2*Cells; ++n) // Re-limit ring buffer next-write indices.
+      if (next[n] >= Prev) next[n] = 0
+    next[2*Cells] = Prev, next[2*Cells+1] = Rand // Update prev/random sizes.
+  },
 
   consWorld:{
     _cancel(m) {
@@ -17694,7 +17651,8 @@ The correctness of quining of functions can be tested by checking that the rewri
         _allocMap(m)
       }
     },
-    todo:`Allow all integer hyperparams to vary via being \`settings\`, especially \`Cells\` and \`FeatureSize\` (to see effects of gradual NN size expansion).`,
+    todo:`- When encountering a cons-world in use (by another job), copy some of its relevant hyperparams, namely, \`consCaches\` (mostly for \`consExecute\`) and \`options\` and \`nextOptions\`, to wherever they are required (\`_regenCons\`). Otherwise, only one experience can be collected at a time (though soundness of collecting multiple experiences in parallel is questionable anyway, because of the RNN \`SequenceState\`).
+- Allow all integer hyperparams to vary via being \`settings\`, especially \`Cells\` and \`FeatureSize\` (to see effects of gradual NN size expansion).`,
     docs:`Learned memory.
 \`consWorld(Hyperparams,CellInfos)\`
 A place where cons-cells learn to interconnect into executable programs however they like.
@@ -17734,10 +17692,13 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
         (This is only called on experience collection. Experience replay will only re-\`Predict\` the actual choices.)
     ❀ \`PrevOptions\`: how big the ""last-picked-options here"" buffer is, for each choice. At least \`1\`. \`12\` by default.
     ❀ \`RandomOptions\`: how many random options to provide to each pointer, for exploration. \`4\` by default.
-    ❀ \`MaxLength\`: when forming arrays from cons-cells, everything past this length gets cut off. \`32\` by default.
+    ❀ \`ExploreOptions\`: the function that fills in the actual \`RandomOptions\`. \`consRandom\` by default.
+    ❀ \`MaxArrayLength\`: when forming arrays from cons-cells, everything past this length gets cut off. \`16\` by default.
         (If an array head \`defines\` \`use\` to be a number, the array would also get cut off past that.)
         (Cycles in cdr would also get cut off when detected.)
         (Limits worst-case memory consumption.)
+    ❀ \`ConsMake\`: the function that turns car/cdr pointers (and a bunch of other info) into \`use\`able things. \`consMake\` by default.
+        (Alternative: \`consExecute\`.)
     ❀ \`ConsToEnd\`: if \`true\`, it is easier to re-use beginnings of arrays; if \`false\`, ends of arrays are more re-usable. \`false\` by default.
         (Array heads (\`func\`s and \`construct\`s) cannot be pinned down by \`allocate\` if this is \`true\`.)
         (Lisp cons-cells (\`arrayCons\`) would be \`false\`.)
@@ -17763,7 +17724,9 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
     ❀ \`ReplayChoice:ReplayedChoiceCount→Index\`: picks the choice to replay. \`randomNat\` by default.
         All choices are sorted by their latest \`ChoiceMetric\` in ascending order.
         Each call can pull in many choices, for a total of at least \`ReplayedChoices\`.
-    ❀ \`OnSave:States→Actions→Rewards→undefined\`: gives an opportunity to inspect what is going on. \`null\` by default.")\`\`
+    ❀ \`OnSave:States→Actions→Rewards→Chosen→ConsWorld→undefined\`: gives an opportunity to inspect what is going on, just before saving the replay. \`null\` by default.
+        (\`Chosen\` is in option-space, \`PrevOptions\` first and \`RandomOptions\` second. So, \`mean Chosen<PrevOptions\` is a measure of how unstable the structures currently are.)
+        (\`Actions\` is in \`genCtx\`-space, all cars then all cdrs, meaning that you can index \`genCtx\` to count up the most popular globals.)")\`\`
 
   State (for meta-learning): \`\`elemCollapse stringToDoc("
     ❀ \`SequenceState:PrevState→ConsEmbedding→CarEmbedding→CdrEmbedding→Reality→ConsIndices→State\` typed \`t⇒t⇒t⇒t⇒n⇒t t:tensorType(Cells,FeatureSize) n:tensorType(Cells,1)\`: updates hidden cell \`State\`. \`null\` by default.
@@ -17779,8 +17742,7 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
 
   Basics (how/what/why): \`\`elemCollapse stringToDoc("
     ✿ \`genCtx\`: \`(…Cells …Goals …Base)\`. \`consCell\`s, then \`consGoal\`s, then a copy of \`Base\`.
-    ✿ \`ctxEmb\`: \`stack\`ed \`varData\` object that contains embeddings of all in \`genCtx\`.
-    ✿ \`consGoals\`: \`Cells\`-length array of goal indices, such as \`(0 0 1 1 2 2)\`.")\`\`
+    ✿ \`ctxEmb\`: \`stack\`ed \`varData\` object that contains embeddings of all in \`genCtx\`.")\`\`
 
   Filled by \`allocate\`: \`\`elemCollapse stringToDoc("
     ✿ \`customBefore\`: \`Goals\`-length array of \`null\`s or \`func\`s that will prepare state for calling \`customGoals\` later. Called before \`construct\`ion and execution.
@@ -17789,9 +17751,9 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
     ✿ \`allocated\`: an array of indexes of \`allocate\`d cells.")\`\`
 
   Regeneration: \`\`elemCollapse stringToDoc("
-    ✿ \`prevPickedCar\`: \`Cells\`-length array of \`1+PrevOptions\`-length arrays: ring buffers of unique indices in \`genCtx\` (with the 0th item being the next-write index). Uniformly-randomly initialized.
-    ✿ \`prevPickedCdr\`: \`Cells\`-length array of \`1+PrevOptions\`-length arrays: same as \`prevPickedCar\` but for cdr pointers.
-    ✿ \`constructions\`: \`Cells\`-length array of \`MaxCachedConstructs*2\`-length arrays: caches from pre-\`construct\` array graphs to post-\`construct\` object graphs. The first entry is the most recent one.
+    ✿ \`options\`: \`2·Cells*(PrevOptions+RandomOptions)\`-length typed array: \`PrevOptions\`-length ring buffers of unique indices in \`genCtx\`, then \`ExploreOptions\`-filled \`RandomOptions\`-length indices in \`genCtx\`. All cars then all cdrs.
+    ✿ \`nextOptions\`: \`2·Cells+2\`-length array of \`Cells\` next-write indices of ring buffers (all cars then all cdrs), then copies of \`PrevOptions\` and \`RandomOptions\`.
+    ✿ \`consCaches\`: \`Cells\`-length array of \`MaxCachedConstructs*2\`-length arrays: caches from pre-\`construct\` array graphs to post-\`construct\` object graphs. The first entry is the most recent one.
         (To regenerate: after \`Predict\` has determined all car/cdr connections (between-array and in-array links), all no-cdr-links cells (and all allocated cells) will create arrays until the first cycle, then (unless a \`softEqual\`-array-graph construct is in cache) \`construct\` in pre-order graph traversal starting from \`allocated\`, then \`construct\` in post-order. Other cells will be \`null\`, and so will error-on-\`construct\` cells.)")\`\`
 
   Replay: \`\`elemCollapse stringToDoc("
@@ -17799,15 +17761,17 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
     ✿ \`choiceMetrics\`: an \`f32\` array of \`ChoiceMetric\`s in \`replays\`.
         (\`ChoiceMetric\` is requested and written-to-here asynchronously. So these may not match exactly, but will match soon enough.)
     ✿ \`sortedChoices\`: an \`i32\` array of indices (coded to be in the order that they appear in \`replays\`) sorted by ascending \`choiceMetrics\`.
-        (Regeneration first requests \`Predict\` to run on GPU, then sorts this (why let the CPU idle), then \`sync\`s \`Policy\`, then compiles everything. It uses an \`i32\` array of considered indices-into-\`genCtx\`, one per each choice and per each option in it, first cars then cdrs, which the \`argmax\` indexes into to get final indices to give to \`_consMakeArrays\` and then to \`_consMakeObjects\`.)")\`\``,
+        (Regeneration first requests \`Predict\` to run on GPU, then sorts this (why let the CPU idle), then \`sync\`s \`Policy\`, then compiles everything. It uses an \`i32\` array of considered indices-into-\`genCtx\`, one per each choice and per each option in it, first cars then cdrs, which the \`argmax\` indexes into to get final indices to give to \`ConsMake\`.)")\`\``,
     readAt:{
       consCell:_(`consCell`),
       consGoal:_(`consGoal`),
-      setGoal:_(`setGoal`),
       allocate:_(`allocate`),
       use:_(`use`),
+      setGoal:_(`setGoal`),
+      consMake:_(`consMake`),
+      consExecute:_(`consExecute`),
+      consRandom:_(`consRandom`),
       _consSyncChoices:_(`_consSyncChoices`),
-      _consAllowOwnGoal:_(`_consAllowOwnGoal`),
       _consReplayImmediately:_(`_consReplayImmediately`),
       _consReplayAfterSave:_(`_consReplayAfterSave`),
       _consReplayUpdatesState:_(`_consReplayUpdatesState`),
@@ -17841,7 +17805,7 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
           const fn = 'function', nm = x => typeof x == 'number' && x === x>>>0 && x >= 0, pos = x => typeof x == 'number' && x === x>>>0 && x > 0
           check('Cells', pos, 1000)('Goals', pos, 100)('Base', isArray)
           check('FeatureSize', pos, 128)('NewEmbedding', fn, truncatedNormal)('Optimizer', fn, varSGD)
-          check('Predict', fn)('Policy', fn, argmax)('PrevOptions', pos, 12)('RandomOptions', nm, 4)('MaxLength', pos, 32)('ConsToEnd', 'boolean', false)('MaxCachedConstructs', pos, 3)
+          check('Predict', fn)('Policy', fn, argmax)('PrevOptions', pos, 12)('RandomOptions', nm, 4)('ExploreOptions', fn, consRandom)('MaxArrayLength', pos, 16)('ConsMake', fn, consMake)('ConsToEnd', 'boolean', false)('MaxCachedConstructs', pos, 3)
           check('Goal', fn)('MinReality', 'number', -5)('MaxReality', 'number', 5)('NaNReality', 'number', -5)('UnsetReality', 'number', -5)
           check('MaxStoredChoices', nm, 1000000)('ReplayedChoices', nm, 10000)('SimpleReplay', 'boolean', true)('ReplayChoice', fn, randomNat)('OnSave', fn, null)
           check('SequenceState', fn, null)('UnrollLength', pos, 16)
@@ -17856,9 +17820,6 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
           if (CI.genCtx.length != HP.Cells + HP.Goals + HP.Base.length) error("Length mismatch:", CI.genCtx)
           if (CI.ctxEmb === undefined) CI.ctxEmb = varData(HP.NewEmbedding([CI.genCtx.length, HP.FeatureSize]))
           if (_tensorSize(CI.ctxEmb[0]) !== CI.genCtx.length * HP.FeatureSize) error("Mis-sized:", CI.ctxEmb)
-          if (CI.consGoals === undefined)
-            CI.consGoals = new Array(HP.Cells).fill(0).map((_,i) => i * HP.Goals / HP.Cells | 0)
-          if (CI.consGoals.length !== HP.Cells) error("Length mismatch:", CI.consGoals)
           _rememberToDispose(CI.ctxEmb)
 
           if (CI.customBefore === undefined) CI.customBefore = []
@@ -17869,29 +17830,31 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
           if (CI.allocated === undefined) CI.allocated = []
           if (CI.customCars.length !== CI.allocated.length) error("Length mismatch:", CI.customCars, CI.allocated)
 
-          if (CI.prevPickedCar === undefined) {
-            CI.prevPickedCar = new Array(HP.Cells).fill()
-            CI.prevPickedCdr = new Array(HP.Cells).fill()
-            const L = 1 + _setting(HP.PrevOptions)
-            for (let i = 0; i < HP.Cells; ++i)
-              CI.prevPickedCar[i] = new Array(L).fill(CI.genCtx.length).map(randomNat), CI.prevPickedCar[i][0] = 1,
-              CI.prevPickedCdr[i] = new Array(L).fill(CI.genCtx.length).map(randomNat), CI.prevPickedCdr[i][0] = 1
+          const Prev = _setting(HP.PrevOptions), Rand = _setting(HP.RandomOptions)
+          if (CI.options === undefined) { // Cannot use `_intArray`, because apparently TFJS finds it too hard to support any int arrays that are not Int32Array.
+            CI.options = new Int32Array(2 * HP.Cells * (Prev + Rand))
+            HP.ExploreOptions(CI.options, 0, Prev+Rand, HP.Cells, HP.Goals, CI.genCtx)
           }
-          if (CI.prevPickedCar.length !== HP.Cells) error("Bad length:", CI.prevPickedCar)
-          if (CI.prevPickedCdr.length !== HP.Cells) error("Bad length:", CI.prevPickedCdr)
-          if (CI.constructions === undefined) {
-            CI.constructions = new Array(HP.Cells).fill()
-            for (let i = 0; i < HP.Cells; ++i) CI.constructions[i] = new Array(2*HP.MaxCachedConstructs).fill(null)
-          }
-          if (CI.constructions.length !== HP.Cells) error("Bad length:", CI.constructions)
+          if (CI.options.length !== 2 * HP.Cells * (Prev + Rand)) error("Bad length:", CI.options)
+          if (CI.nextOptions === undefined)
+            CI.nextOptions = _intArray(2 * HP.Cells + 2, CI.options.length), CI.nextOptions[2*HP.Cells] = Prev, CI.nextOptions[2*HP.Cells+1] = Rand
+          if (CI.nextOptions.length !== 2 * HP.Cells + 2) error("Bad length:", CI.nextOptions)
+          if (CI.consCaches === undefined)
+            CI.consCaches = new Array(HP.Cells).fill()
+          if (CI.consCaches.length !== HP.Cells) error("Bad length:", CI.consCaches)
 
           if (CI.replays === undefined) CI.replays = [HP.SequenceState != null ? zeros([HP.Cells, HP.FeatureSize]) : null, 2]
-          if (!(CI.replays[1] >= 2)) error("Bad", CI.replays)
+          for (let i = 2; i < CI.replays.length; ++i) { // Remove disposed tensors and non-tensors.
+            const R = CI.replays[i]
+            if (!isArray(R)) error("A non-array in replay buffers:", R)
+            if (!_isDisposable(R[0]) || R[0].isDisposedInternal || !_isDisposable(R[2]) || R[2].isDisposedInternal) CI.replays.splice(i--, 1)
+          }
           _rememberToDispose(CI.replays)
+          if (!(CI.replays[1] >= 2)) error("Bad", CI.replays)
           if (HP.ReplayChoice !== randomNat) {
             if (CI.choiceMetrics === undefined) CI.choiceMetrics = new Float32Array(HP.MaxStoredChoices)
             if (CI.sortedChoices === undefined) {
-              CI.sortedChoices = new Int32Array(HP.MaxStoredChoices)
+              CI.sortedChoices = _intArray(HP.MaxStoredChoices, HP.MaxStoredChoices)
               for (let i = 0; i < CI.sortedChoices.length; ++i) CI.sortedChoices[i] = i
             }
             if (CI.choiceMetrics.length !== HP.MaxStoredChoices) error("Bad length:", CI.choiceMetrics)
@@ -17900,7 +17863,8 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
         } catch (err) { if (err === interrupt) interrupt.stack.push(HP, CI);  throw err}
       }
 
-      // .regen (a Map from cons-world to an array of regen state, whose format is described in `defines use Initialize`)
+      // .regen (a Map from cons-world to an array of regen state, whose format is described in `defines use Initialize`),
+      // .sources (a Map from constructed objects to goals of cons-cells that produced them)
     },
     tutorial:[
       `This is a powerful projection of my personal life energy, and that is why I call it a Personal Project.
@@ -17948,12 +17912,14 @@ However, to comprehend its true form, you must first complete \`tutorial Types\`
     docs:`For \`use\`.
 \`(consCell cw i)\`: the smallest part of a program in a \`consWorld\`.`,
     construct:_(9647),
+    unbound:1,
   },
 
   consGoal:{
     docs:`For \`setGoal\`.
 \`(consGoal cw i)\`: the optimization target of a program part in a \`consWorld\`.`,
     construct:_(9647),
+    unbound:1,
   },
 
   allocate:{
@@ -17972,11 +17938,11 @@ Allocates a cons-cell in the given \`consWorld\`, with the given array head (or 
       const HP = cw.HP, CI = cw.CI
 
       let m = 0 // Find the first free goal.
-      for (; m < HP.Goals; ++m) if (CI.customGoals[m] == null) break
+      for (; m < HP.Goals; ++m) if (CI.customGoals[m] === undefined) break
       if (m >= HP.Goals) error(cw, "is overburdened, please, no more")
 
       let n = 0 // Find the first free cell with that goal. (Who cares about time complexity here.)
-      for (; n < HP.Cells; ++n) if (CI.consGoals[n] === m && !CI.allocated.includes(n)) break
+      for (; n < HP.Cells; ++n) if (_consGoalOfCell(n, HP.Cells, HP.Goals) === m && !CI.allocated.includes(n)) break
       if (n >= HP.Cells) error("How are there more goals than cells in", cw)
 
       let k = car !== null ? CI.genCtx.length : null
@@ -17993,130 +17959,241 @@ Allocates a cons-cell in the given \`consWorld\`, with the given array head (or 
   use:{
     Initialize() {
       // These constants are for readability of using `ThisArray` in `consWorld.regen.set(cw, ThisArray)`.
-      use.PrevState = 0, use.Indexes = 1, use.Reality = 2, use.Constructed = 3, use.CustomGoalStates = 4
+      use.PrevState = 0, use.Indexes = 1, use.Reality = 2, use.Constructed = 3, use.CustomGoalStates = 4, use.Chosen = 5
     },
     docs:`\`use(ConsCell)\`→\`Object\`
 Finalizes the object graph of the \`allocate\`d \`consCell\`, and returns the \`construct\`ed object.
 
 When a concept \`defines\` this, it is with either \`true\` or the max \`argCount\`.`,
+    dispose:true,
     call(cc) {
       if (!isArray(defines(cc, deconstruct)) || defines(cc, deconstruct)[0] !== consCell) error("Not a", consGoal, ":", cc)
       _regenCons(cc.cw)
-      return consWorld.regen.get(cc.cw)[use.Constructed][cc.i]
+      return keep(consWorld.regen.get(cc.cw)[use.Constructed][cc.i])
+    },
+  },
+
+  _consGoalOf:{
+    docs:`Gets the optimization-target that this particular object optimizes for when getting \`construct\`ed.`,
+    call(x) {
+      const m = consWorld.sources
+      if (m.has(x)) x = m.get(x)
+      const d = defines(x, deconstruct)
+      if (!isArray(d) || d[0] !== consGoal && d[0] !== consCell) error("Neither a goal nor a cell:", x)
+      if (d[0] === consGoal) return x
+      return x.cw.CI.genCtx[_setting(x.cw.HP.Cells) + _consGoalOfCell(x.i, x.cw.HP.Cells, x.cw.HP.Goals)]
     },
   },
 
   setGoal:{
-    use:true,
-    argCount:2,
-    docs:`\`setGoal(ConsGoal,Value)\`→\`Value\`
-Sets the current value of an optimization target.
-\`Value\` gets turned into a number between the \`MinReality\` and \`MaxReality\` hyperparams of the \`consWorld\` of \`ConsGoal\`.
+    use:2,
+    docs:`\`setGoal(ConsGoal)→Value\` or \`setGoal(ConsGoal,Value)\`→\`Value\`
+Gets/sets the current value of an optimization target.
+
+\`ConsGoal\` can be a \`consGoal\`, a \`consCell\`, or a \`consCell\`-\`construct\`ed object.
+
+When writing, \`Value\` gets turned into a number between the \`MinReality\` and \`MaxReality\` hyperparams of the \`consWorld\` of \`ConsGoal\`.
 
 Like \`setFuture\` but for cons-world goals.`,
     keep:2,
     dispose:2,
     interrupt:false,
+    dispose:true,
     call(cg, Value) {
-      if (!isArray(defines(cg, deconstruct)) || defines(cg, deconstruct)[0] !== consGoal) error("Not a", consGoal, ":", cg)
+      cg = _consGoalOf(cg)
       if (!consWorld.regen || !consWorld.regen.has(cg.cw)) error("Did not", use, "anything in this world, so unable to set its goals")
-      const HP = cg.cw.HP, t = _limitNumericValues(Value, _setting(HP.MinReality), _setting(HP.MaxReality), _setting(HP.NaNReality), true)
       const R = consWorld.regen.get(cg.cw), arr = R[use.Reality]
-      dispose(arr[cg.i]), arr[cg.i] = t
+      if (Value !== undefined) { // Write.
+        const HP = cg.cw.HP, t = _limitNumericValues(Value, _setting(HP.MinReality), _setting(HP.MaxReality), _setting(HP.NaNReality), true)
+        dispose(arr[cg.i]), arr[cg.i] = t
+        //print('setGoal', cg, t) // ###############################################################################
+      } else // Read.
+        Value = keep(arr[cg.i])
       return Value
     },
   },
 
-  _consMakeArrays:{
-    docs:`Converts cons-cell choices into an array graph (returning an array of \`null\`s or arrays).
+  consMake:{
+    docs:`From car+cdr pointers, \`construct\` an object graph/network.
 
-Cuts off cdr cycles when detected, and cuts off beyond the head's \`argCount\` or \`use\` definition (if a number) (and beyond the max length).
+Takes: \`2·Cells\`-sized array of chosen indexes (cars then cdrs); the array of entry points (indices, each less than \`Cells\`); generative context (first empty \`Cells\`, then the goal/base objects to directly put in); \`Cells\`; the max length of every array; the "reverse cdr pointers" boolean; cons-caches; length of each cons-cache; \`Goals\`.
 
-Takes: \`2·Cells\`-sized array of chosen indexes (cars then cdrs); the array of entry points (indices, each less than \`Cells\`); generative context (first empty \`Cells\`, then the values to directly put); \`Cells\`; the max length of every array.`,
-    interrupt:false,
-    call(carCdrInds, entries, genCtx, Cells, MaxLength, reversed) {
-      if (carCdrInds.length !== 2*Cells) error("Length mismatch:", carCdrInds, Cells)
-      const cellArrays = _allocArray(Cells).fill(null)
-      // Fill the hypergraph breadth-first.
-      const toMake = _allocArray(0)
-      toMake.push(...entries)
-      for (let i = 0; i < entries.length; ++i) cellArrays[entries[i]] = _allocArray(0)
-      for (let i = 0; i < toMake.length; ++i) {
-        let n = toMake[i], arr = cellArrays[n]
-        if (arr.length) error("Internal error: not empty:", arr)
-        let L = MaxLength
 
-        if (!reversed) { // Limit.
-          const head = carCdrInds[n]
-          if (head >= Cells && !isArray(genCtx[head])) {
-            const v = genCtx[head]
-            if (typeof defines(v, argCount) == 'number') L = 1 + defines(v, argCount)
-            if (typeof defines(v, use) == 'number') L = 1 + defines(v, use)
+First, the array graph.
+    Convert cons-cell choices into an array graph (returning an array of \`null\`s-or-arrays).
+    Cut off cdr cycles when detected, and cut off beyond the head's \`argCount\` or \`use\` definition (if a number) (and beyond the max length).
+
+
+Second, the object graph.
+    From an array-graph, \`make\` an object-graph, re-using earlier objects if possible.
+    Plot twist: it uses \`makeGraph\`, same as \`parse\` (though a variant that hides/localizes \`error\`s and re-\`construct\`s on demand), so \`construct\` behavior is exactly the same.`,
+    call(carCdrInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals) {
+      if (carCdrInds.length !== 2*Cells) error("Length mismatch:", carCdrInds, 2*Cells)
+      if (consCaches.length !== Cells) error("Length mismatch:", consCaches, Cells)
+      let [arrays, env = _allocMap(), reconstruct = _allocMap(), i, j = 0] = interrupt(5)
+      try {
+        if (arrays === undefined) { // (Create the array graph. Cannot interrupt.)
+          arrays = _allocArray(Cells).fill(null)
+          // Fill the hypergraph breadth-first.
+          const toMake = _allocArray(0)
+          toMake.push(...entries)
+          for (let i = 0; i < entries.length; ++i) arrays[entries[i]] = _allocArray(0)
+          for (let i = 0; i < toMake.length; ++i) {
+            let n = toMake[i], arr = arrays[n]
+            if (arr.length) error("Internal error: not empty:", arr)
+            let L = MaxArrayLength
+
+            if (!reversed) { // Limit.
+              const head = carCdrInds[n], v = genCtx[head]
+              if (head >= Cells && !isArray(v)) {
+                if (typeof defines(v, argCount) == 'number') L = 1 + defines(v, argCount)
+                if (typeof defines(v, use) == 'number') L = 1 + defines(v, use)
+              }
+            }
+
+            // Follow one cdr-chain through cells to construct one array, and construct all its dependencies.
+            //   (Stopping the chain is done by pointing to any goal or base-func. Won't be included.)
+            let j = n, jj = n, k = 0
+            while (!k || j !== jj && j < Cells && k < L) {
+              ++k
+              const car = carCdrInds[j]
+              if (car < Cells) arrays[car] === null && (arrays[car] = _allocArray(0), toMake.push(car)), arr.push(arrays[car])
+              else arr.push(genCtx[car])
+              j = carCdrInds[Cells + j], jj = jj < Cells ? carCdrInds[Cells + jj] : jj, jj = jj < Cells ? carCdrInds[Cells + jj] : jj
+            }
+
+            if (reversed) { // Reverse and limit.
+              for (let j = 0; 2*j+1 < arr.length; ++j) [arr[j], arr[arr.length - j - 1]] = [arr[arr.length - j - 1], arr[j]]
+              if (typeof defines(arr, argCount) == 'number' && arr.length > 1+defines(arr, argCount))
+                arr.length = 1 + defines(arr, argCount)
+              if (typeof defines(arr, use) == 'number' && arr.length > 1+defines(arr, use))
+                arr.length = 1 + defines(arr, use)
+            }
           }
+          _allocArray(toMake)
+          i = arrays.length
         }
 
-        // Follow one cdr-chain through cells to construct one array, and construct all its dependencies.
-        //   (Stopping the chain is done by pointing to any goal or base-func. Won't be included.)
-        let j = n, jj = n, k = 0
-        while (!k || j !== jj && j < Cells && k < L) {
-          ++k
-          const car = carCdrInds[j]
-          if (car < Cells) cellArrays[car] === null && (cellArrays[car] = _allocArray(0), toMake.push(car)), arr.push(cellArrays[car])
-          else arr.push(genCtx[car])
-          j = carCdrInds[Cells + j], jj = jj < Cells ? carCdrInds[Cells + jj] : jj, jj = jj < Cells ? carCdrInds[Cells + jj] : jj
-        }
+        // Make the object graph, not re-constructing globals, and re-constructing whenever a cons-cache has a match.
+        for (; i < genCtx.length; ++i) if (isArray(genCtx[i])) env.set(genCtx[i], genCtx[i])
+        for (; j < arrays.length; ++j)
+          if (arrays[j] !== null) {
+            const c = consCaches[j]
+            if (isArray(c))
+              for (let k = 0; k < c.length; k += 2)
+                if (c[k] !== null && c[k+1] !== null && arrays[j][0] === c[k])
+                  env.set(arrays[j], c[k+1]), reconstruct.set(arrays[j], true)
+          }
+        const objects = makeGraph(arrays, env, false, false, true, false, reconstruct)
 
-        if (reversed) { // Reverse and limit.
-          for (let j = 0; 2*j+1 < arr.length; ++j) [arr[j], arr[arr.length - j - 1]] = [arr[arr.length - j - 1], arr[j]]
-          if (typeof defines(arr, argCount) == 'number' && arr.length > 1+defines(arr, argCount))
-            arr.length = 1 + defines(arr, argCount)
-          if (typeof defines(arr, use) == 'number' && arr.length > 1+defines(arr, use))
-            arr.length = 1 + defines(arr, use)
+        // Remember what we made.
+        for (let j = 0; j < objects.length; ++j)
+          if (objects[j] !== null) {
+            let c = consCaches[j]
+            if (!isArray(c)) c = consCaches[j] = _allocArray(0)
+            if (c.length !== 2*MaxPerCache) c.length = 2*MaxPerCache
+            if (arrays[j] !== objects[j] && !reconstruct.has(arrays[j]) && !c.includes(arrays[j][0]))
+              c.unshift(arrays[j][0], objects[j]), dispose(c.pop()), dispose(c.pop())
+            consWorld.sources.set(objects[j], genCtx[objects.length + _consGoalOfCell(j, Cells, Goals)])
+          }
+        return objects
+      } catch (err) { if (err === interrupt) interrupt.stack.push(arrays, env, reconstruct, i, j), env = reconstruct = null;  throw err }
+      finally { _killArray(arrays), env && _allocMap(env), reconstruct && _allocMap(reconstruct) }
+    },
+  },
+
+  consExecute:{
+    docs:`From car+cdr pointers, \`apply\` all functions.
+(\`construct\`s are ignored.)
+
+An alternative to \`consMake\` (much like if \`applyStatically\` was forced on every base function, but with zero "dependencies are called before dependents" guarantees).`,
+    call(carCdrInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals) {
+      if (carCdrInds.length !== 2*Cells) error("Length mismatch:", carCdrInds, 2*Cells)
+      if (consCaches.length !== Cells) error("Length mismatch:", consCaches, Cells)
+      let [mark1 = 'consExecEntry', i, fn, args = _allocArray(MaxArrayLength), prevConsCaches = consCaches.slice(), mark2 = 'consExecExitry'] = interrupt(6)
+      if (mark1 !== 'consExecEntry' || mark2 !== 'consExecExitry') error('Interrupt stack corruption:', mark1, i, fn, args, mark2)
+      try {
+        print('entry', i, [_resolveStack, ...consCaches]) // ##################################################################
+        if (i === undefined) _rememberArrayItems(consCaches, true), i = 0
+        for (; i < Cells; ++i) {
+          let L = MaxArrayLength, w
+
+          if (fn === undefined) { // Collect func and args of this cons-cell.
+            // If we can, limit arg-count. (And skip non-funcs.)
+            if (!reversed) {
+              const car = carCdrInds[i], f = genCtx[car]
+              if (car < Cells || typeof f != 'function') continue
+              fn = f
+              if (w = defines(fn, argCount), typeof w == 'number') L = 1 + w
+              if (w = defines(fn, use), typeof w == 'number') L = 1 + w
+            }
+
+            // Follow one cdr-chain through cells to collect args from `genCtx` or `consCaches`.
+            //   (Stopping the chain is done by pointing to any goal or base-func. Won't be included.)
+            //   (Only use the previous results of cells, so that this is semantically parallelizable, without update-order dependencies.)
+            let j = i, jj = i, k = 0
+            while (!k || j !== jj && j < Cells && k < L) {
+              const car = carCdrInds[j]
+              if (reversed || k) args[reversed ? k : k-1] = car < Cells ? prevConsCaches[car] : genCtx[car]
+              j = carCdrInds[Cells + j], jj = jj < Cells ? carCdrInds[Cells + jj] : jj, jj = jj < Cells ? carCdrInds[Cells + jj] : jj
+              ++k
+            }
+            args.length = k
+
+            // If needed, reverse and limit arg-count. (And skip non-funcs.)
+            if (reversed) {
+              fn = args.pop()
+              if (typeof fn != 'function') { fn = undefined;  continue }
+              for (let j = 0; 2*j+1 < args.length; ++j) [args[j], args[args.length - j - 1]] = [args[args.length - j - 1], args[j]]
+              if (w = defines(fn, argCount), typeof w == 'number' && args.length > w) args.length = w
+              if (w = defines(fn, use), typeof w == 'number' && args.length > w) args.length = w
+            }
+          }
+
+          // Apply the func.
+          try {
+            let t = fn.apply(undefined, args)
+            if (_debugMemory[1] && _tf.all && isArray(_tf.all.get(t)))
+              _tf.all.get(t).push([readAt, fn, new Error().stack]) // #############################################################
+            dispose(consCaches[i]), consCaches[i] = t
+          } catch (err) {
+            if (err === interrupt || err === limit) throw err
+            else dispose(consCaches[i]), consCaches[i] = 0, _setting(_logHiddenConstructionErrors) && console.log(err)
+          }
+          fn = undefined
+        }
+        args = _allocArray(args)
+        print('exitry', i, [_resolveStack, ...consCaches]) // ##################################################################
+        _rememberArrayItems(consCaches) // TODO: …How could this possibly get applied many times, without a clearing in-between? When could a tensor be introduced, then stored only in some array, then re-introduced — which would bypass the initial clearing, and cause this error…
+        //   Still, this could only be an error if some array-item-returning function doesn't `keep`. Which one?
+        return consCaches
+      } catch (err) {
+        if (err === interrupt) interrupt.stack.push(mark1, i, fn, args, prevConsCaches, mark2)
+        else print('When applying', fn, 'with args', ...args, 'got', err), _allocArray(args), _rememberArrayItems(consCaches)
+        throw err
+      }
+    },
+  },
+
+  consRandom:{
+    docs:`The default filler of option slots with random candidates.`,
+    readAt:{
+      _consAllowOwnGoal:_(`_consAllowOwnGoal`),
+      _consRandomAlwaysIncludesBase:_(`_consRandomAlwaysIncludesBase`),
+    },
+    call(opts, Prev, Rand, Cells, Goals, genCtx) {
+      const Opts = Prev+Rand, disallowOwnGoal = !_setting(_consAllowOwnGoal), onlyCells = !_setting(_consRandomAlwaysIncludesBase)
+      for (let n = 0; n < 2*Cells; ++n) { // Explore random choices.
+        for (let i = Prev; i < Opts; ++i) {
+          const cell = n < Cells ? n : n - Cells, disallow = Cells + _consGoalOfCell(cell, Cells, Goals)
+          let p = cell
+          while (p === cell || disallowOwnGoal && p === disallow)
+            p = onlyCells || i ? randomNat(genCtx.length) : Cells + randomNat(genCtx.length - Cells)
+          opts[i + Opts*n] = p
         }
       }
-      _allocArray(toMake)
-      return Object.freeze(cellArrays)
     },
   },
-
-  _consMakeObjects:{
-    docs:`Given an array-graph (from \`_consMakeArrays\`), \`make\`s an object-graph.
-
-Plot twist: it uses \`makeGraph\`, same as \`parse\` (though a variant that hides/localizes \`error\`s and re-\`construct\`s on demand), so \`construct\` behavior is exactly the same.
-
-Takes: the array-of-all-arrays; the generative context; the construction cache.`,
-    call(cellArrays, genCtx, constructCache) {
-      if (cellArrays.length !== constructCache.length) error("Length mismatch:", cellArrays, constructCache)
-      // Prepare to not `construct` base-arrays and only-re-`construct` those-already-in-cache, then defer to `makeGraph`, then save-to-cache.
-      let [env = _allocMap(), reconstruct = _allocMap(), i = cellArrays.length, j = 0] = interrupt(4)
-      try {
-        for (; i < genCtx.length; ++i) if (isArray(genCtx[i])) env.set(genCtx[i], genCtx[i])
-        for (; j < cellArrays.length; ++j)
-          if (cellArrays[j] !== null) {
-            const c = constructCache[j]
-            for (let k = 0; k < c.length; k += 2)
-              if (c[k] !== null && c[k+1] !== null && cellArrays[j][0] === c[k])
-                env.set(cellArrays[j], c[k+1]), reconstruct.set(cellArrays[j], true)
-          }
-        const cellObjects = makeGraph(cellArrays, env, false, false, true, false, reconstruct)
-        for (let j = 0; j < cellObjects.length; ++j) {
-          const c = constructCache[j]
-          if (!isArray(c)) error("Not an array:", c, constructCache, j)
-          if (cellObjects[j] !== null && cellArrays[j] !== cellObjects[j] && !reconstruct.has(cellArrays[j]) && !c.includes(cellArrays[j][0]))
-            c.unshift(cellArrays[j][0], cellObjects[j]), dispose(c.pop()), dispose(c.pop())
-        }
-        return cellObjects
-      } catch (err) { if (err === interrupt) interrupt.stack.push(env, reconstruct, i, j), env = reconstruct = null;  throw err }
-      finally { env && _allocMap(env), reconstruct && _allocMap(reconstruct) }
-    },
-  },
-
-  _consSyncChoices:[
-    _(`settings`),
-    true,
-    `If checked, \`_regenCons\` will \`sync\` the choices before generating their object graph, else \`await\` them and allow other jobs to execute.
-(The not-checked case seems to be bugged in some browsers. Should look into that, somehow.)`,
-  ],
 
   _consAllowOwnGoal:[
     _(`settings`),
@@ -18124,6 +18201,20 @@ Takes: the array-of-all-arrays; the generative context; the construction cache.`
     `If not checked, \`_regenCons\` will prevent cons-cells from ever branching out to their own goals.
 This prevents the simplest form of reward hacking (set own goal to max).
 How much this actually impacts learning is unknown: that simplest form is also preventable by others noticing that this cons-cell does nothing.`,
+  ],
+
+  _consRandomAlwaysIncludesBase:[
+    _(`settings`),
+    true,
+    `If checked, \`_regenCons\` will always include at least one non-cons-cell in random options (unless there are no random options).
+If there are much more cons-cells than other things, this might help.`,
+  ],
+
+  _consSyncChoices:[
+    _(`settings`),
+    false,
+    `If checked, \`_regenCons\` will \`sync\` the choices before generating their object graph, else \`await\` them and allow other jobs to execute.
+(The not-checked case seems to be bugged in some browsers. Should look into that, somehow.)`,
   ],
 
   _regenCons:{
@@ -18136,10 +18227,9 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
       let R = consWorld.regen.get(cw)
       let [
         stage = 0, Pre, PreT, WhichPointer, ConsEmb,
-        OptEmb, PrevState, Chosen, cellArrays, i = 0,
-        Cells = _setting(HP.Cells), Prev = _setting(HP.PrevOptions), Rand = _setting(HP.RandomOptions), Pred, nras = _setting(_consReplayImmediately) && !_setting(_consReplayAfterSave),
-        argmaxPred
-      ] = interrupt(16)
+        OptEmb, PrevState, Chosen, i = 0, Cells = _setting(HP.Cells),
+        Prev = _setting(HP.PrevOptions), Rand = _setting(HP.RandomOptions), Pred, nras = _setting(_consReplayImmediately) && !_setting(_consReplayAfterSave), argmaxPred
+      ] = interrupt(15)
       const Choices = 2*Cells, Opts = Prev+Rand
       const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
       const prevAdjSave = env[ias];  env[ias] = undefined
@@ -18149,34 +18239,14 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
           case 0: { // Init regen state.
             if (R && !R[use.Constructed]) error("Do not regen during regen")
             if (R) return
-            consWorld.regen.set(cw, R = _allocArray(5).fill(null)) // `(PrevState Indexes Reality Constructed CustomGoalStates)`
+            _consResizeOptions(CI, Cells, Prev, Rand)
+            Pre = CI.options
+            consWorld.regen.set(cw, R = _allocArray(6).fill(null)) // `(PrevState Indexes Reality Constructed CustomGoalStates)`
             R[use.PrevState] = keep(CI.replays[0])
-            R[use.Indexes] = new Int32Array(Choices)
+            R[use.Indexes] = new Int32Array(Choices) // Cannot use `_intArray` because of TFJS.
             R[use.Reality] = _allocArray(_setting(HP.Goals)).fill(_setting(HP.UnsetReality))
-            Pre = new Int32Array(Choices*Opts)
-            for (let n = 0; n < Cells; ++n) { // Previous choices.
-              for (let i = 0; i < Prev; ++i) {
-                Pre[i + Opts*n] = CI.prevPickedCar[n][1+i]
-                Pre[i + Opts*(Cells+n)] = CI.prevPickedCdr[n][1+i]
-              }
-            }
-            const disallowOwnGoal = !_setting(_consAllowOwnGoal)
-            if (Rand)
-              for (let n = 0; n < Cells; ++n) { // Explore random choices, excluding cons-cells (in case Base is far smaller than Cells).
-                const disallow = Cells + CI.consGoals[n]
-                let p = n
-                while (p === n || disallowOwnGoal && p === disallow) p = Cells + randomNat(CI.genCtx.length - Cells)
-                Pre[Prev + Opts*n] = Pre[Prev + Opts*(Cells+n)] = p
-              }
-            for (let n = 0; n < Cells; ++n) { // Explore random choices, including cons-cells.
-              for (let i = Prev+1; i < Opts; ++i) {
-                const disallow = Cells + CI.consGoals[n]
-                let p = n
-                while (p === n || disallowOwnGoal && p === disallow) p = randomNat(CI.genCtx.length)
-                Pre[i + Opts*n] = Pre[i + Opts*(Cells+n)] = p
-              }
-            }
-            PreT = _tf(tf.tensor(Pre, [Choices, Opts], 'int32'))
+            HP.ExploreOptions(Pre, Prev, Rand, Cells, HP.Goals, CI.genCtx)
+            PreT = _tf(tf.tensor(Pre, [Choices, Opts]))
             // Then, prepare args for `Predict`.
           } stage = 1;  case 1: {
             const S = [Cells, Opts, 1]
@@ -18187,21 +18257,27 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
           stage = 3;  case 3:
             OptEmb = gather(ConsEmb, PreT, 0) // Choices×Opts×FS
           stage = 4;  case 4: {
-            const t0 = slice(ConsEmb, 0, Cells) // Cells×FS
-            const t1 = selfConcat(t0, 0);  dispose(t0) // Choices×FS
-            const t2 = expandDims(t1, 1);  dispose(t1) // Choices×1×FS
-            const t3 = broadcastTo(t2, [Choices, Opts, ...t2.shape.slice(2)]);  dispose(t2) // Choices×Opts×FS
-            dispose(ConsEmb), ConsEmb = t3
+            let t0, t1, t2, t3
+            try {
+              t0 = slice(ConsEmb, 0, Cells) // Cells×FS
+              t1 = selfConcat(t0, 0) // Choices×FS
+              t2 = expandDims(t1, 1) // Choices×1×FS
+              t3 = broadcastTo(t2, [Choices, Opts, ...t2.shape.slice(2)]) // Choices×Opts×FS
+              dispose(ConsEmb), ConsEmb = t3, t3 = undefined
+            } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3) }
           } stage = 5;  case 5: {
-            const t0 = selfConcat(R[use.PrevState], 0) // Choices×FS
-            const t1 = expandDims(t0, 1);  dispose(t0) // Choices×1×FS
-            PrevState = broadcastTo(t1, [Choices, Opts, ...t1.shape.slice(2)]);  dispose(t1) // Choices×Opts×FS
+            let t0, t1
+            try {
+              t0 = selfConcat(R[use.PrevState], 0) // Choices×FS
+              t1 = expandDims(t0, 1) // Choices×1×FS
+              PrevState = broadcastTo(t1, [Choices, Opts, ...t1.shape.slice(2)]) // Choices×Opts×FS
+            } finally { dispose(t0), dispose(t1) }
           } stage = 6;  case 6: { // Predict.
             Pred = HP.Predict(WhichPointer, ConsEmb, OptEmb, PrevState, undefined) // Choices×Opts×1
             if (!_isDisposable(Pred) || Pred.shape[0] !== Choices || Pred.shape[1] !== Opts || Pred.shape[2] !== 1 || Pred.shape.length !== 3)
               error("Wrong choice:", Pred, "from", HP.Predict)
           } stage = 7;  case 7: { // Choose.
-            argmaxPred = HP.Policy(Pred, 1)
+            R[use.Chosen] = argmaxPred = HP.Policy(Pred, 1)
             const d = dispose
             d(WhichPointer), d(ConsEmb), d(OptEmb), d(PrevState), d(Pred), WhichPointer = ConsEmb = OptEmb = PrevState = Pred = undefined
           } stage = 8;  case 8: { // If instructed to, replay right here. Maybe we can stall less this way.
@@ -18210,7 +18286,7 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
             // Also CPU-sort here, while the GPU is busy.
             if (HP.ReplayChoice !== randomNat)
               _consReSortChoiceMetrics(HP, CI, Cells)
-            Chosen = _setting(_consSyncChoices) ? sync(argmaxPred) : argmaxPred.data();  dispose(argmaxPred), argmaxPred = undefined
+            Chosen = _setting(_consSyncChoices) ? sync(argmaxPred) : argmaxPred.data()
           } stage = 9;  case 9: { // Synchronize choices.
             // (How convenient, to be able to `interrupt` to await a promise, and execute something else if we have that, instead of being forced to `sync`.)
             //   Unchecking `_consReplayImmediately` and calling `_consReplay(cell)` in another job allows actually taking advantage of this.
@@ -18223,25 +18299,23 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
             for (let i = 0; i < CI.allocated.length; ++i)
               if (CI.customCars[i] != null)
                 Post[CI.allocated[i]] = CI.customCars[i]
-            dispose(PreT), Pre = PreT = null
-            for (let n = 0; n < Cells; ++n) { // Remember what we picked, unless we picked this before.
-              const car = Post[n], cdr = Post[n + Cells], cara = CI.prevPickedCar[n], cdra = CI.prevPickedCdr[n]
-              if (!cara.includes(car, 1)) cara[cara[0]++] = car, cara[0] >= Prev && (cara[0] = 1), cara.length > Prev && (cara.length = Prev)
-              if (!cdra.includes(cdr, 1)) cdra[cdra[0]++] = cdr, cdra[0] >= Prev && (cdra[0] = 1), cdra.length > Prev && (cdra.length = Prev)
-            }
-          } stage = 11;  case 11: { // Make the array network.
-            cellArrays = _consMakeArrays(R[use.Indexes], CI.allocated, CI.genCtx, Cells, _setting(HP.MaxLength), _setting(HP.ConsToEnd))
+            PreT = dispose(PreT)
+            const next = CI.nextOptions
+            for (let n = 0; n < Choices; ++n) // Remember what we picked in ring buffers, unless we picked this before.
+              if (!_arrayIncludes(Pre, Post[n], n*Opts, n*Opts + Prev))
+                Pre[n*Opts + next[n]] = Post[n], next[n] >= Prev && (next[n] = 0), ++next[n]
             R[use.CustomGoalStates] = _allocArray(CI.customBefore.length).fill()
-          } stage = 12;  case 12: // Do the "before execution" part of user-goal-setting.
+          } stage = 11;  case 11: // Do the "before execution" part of user-goal-setting.
             for (; i < CI.customBefore.length; ++i)
               if (typeof CI.customBefore[i] == 'function')
                 R[use.CustomGoalStates][i] = CI.customBefore[i]()
-          stage = 13;  case 13: // `construct` the object network.
-            R[use.Constructed] = _consMakeObjects(cellArrays, CI.genCtx, CI.constructions)
+          stage = 12;  case 12: // `construct` the object network.
+            R[use.Constructed] = HP.ConsMake(R[use.Indexes], CI.allocated, CI.genCtx, Cells, _setting(HP.MaxArrayLength), _setting(HP.ConsToEnd), CI.consCaches, _setting(HP.MaxCachedConstructs), HP.Goals)
+          stage = 13;  case 13:
         }
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(stage, Pre, PreT, WhichPointer, ConsEmb, OptEmb, PrevState, Chosen, cellArrays, i, Cells, Prev, Rand, Pred, nras, argmaxPred)
-        else dispose(PreT), dispose(WhichPointer), dispose(ConsEmb), dispose(OptEmb), dispose(PrevState), dispose(Pred), dispose(argmaxPred), consWorld.regen.delete(cw), print('Regen-start error:', err) // #####################################################
+        if (err === interrupt) interrupt.stack.push(stage, Pre, PreT, WhichPointer, ConsEmb, OptEmb, PrevState, Chosen, i, Cells, Prev, Rand, Pred, nras, argmaxPred)
+        else print('Regen-start error:', err), consWorld.regen.delete(cw), _disposeEachAndDealloc(R), dispose(PreT), dispose(WhichPointer), dispose(ConsEmb), dispose(OptEmb), dispose(PrevState), dispose(Pred), R[use.Chosen] = dispose(argmaxPred) // #####################################################
         throw err
       } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
     },
@@ -18310,8 +18384,8 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
 
   _consReplayAfterSave:[
     _(`settings`),
-    true,
-    `If \`_consReplayImmediately\`, then this will determine whether to replay as the last thing to do, after execution (checked), or while we are waiting for the program (unchecked).`,
+    false,
+    `If \`_consReplayImmediately\`, then this will determine whether to replay as the last thing to do, after execution (checked), or while we are CPU-waiting for GPU choices (unchecked).`,
   ],
 
   _consReplayUpdatesState:[
@@ -18325,7 +18399,7 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
 Updates \`SequenceState\`, finishes setting user-defined goals, saves experience replays, and replays experiences if \`\`settings ^_consReplayImmediately\`\`.`,
     call(R, cw, Rs) {
       if (R === undefined && cw === undefined && Rs === undefined) return consWorld.regen.forEach(_finishRegenCons)
-      if (!isArray(defines(cw, deconstruct)) || defines(cw, deconstruct)[0] !== consWorld) error("Not a", consWorld, ":", cw)
+      if (!isArray(defines(cw, deconstruct)) || defines(cw, deconstruct)[0] !== consWorld) error("Not a", consWorld, ":", cw, 'in', Rs)
       const HP = cw.HP, CI = cw.CI
       const Cells = _setting(HP.Cells)
 
@@ -18341,10 +18415,11 @@ Updates \`SequenceState\`, finishes setting user-defined goals, saves experience
           } stage = 1;  case 1: { // Prepare embeddings for state-transition.
             if (typeof HP.SequenceState == 'function') {
               const t = HP.Optimizer(CI.ctxEmb)
-              ConsEmb = slice(t, 0, Cells)
-              CarEmb = gather(t, R[use.Indexes].subarray(0, Cells))
-              CdrEmb = gather(t, R[use.Indexes].subarray(Cells, 2*Cells))
-              dispose(t)
+              try {
+                ConsEmb = slice(t, 0, Cells)
+                CarEmb = gather(t, R[use.Indexes].subarray(0, Cells))
+                CdrEmb = gather(t, R[use.Indexes].subarray(Cells, 2*Cells))
+              } finally { dispose(t) }
             }
           } stage = 2;  case 2: { // Set user-defined goals.
             const Real = R[use.Reality], States = R[use.CustomGoalStates]
@@ -18364,26 +18439,33 @@ Updates \`SequenceState\`, finishes setting user-defined goals, saves experience
                 dispose(Real[j]), Real[j] = t
               }
             }
-            let t0 = stack(Real) // Goals×1
+            let t0 = stack(Real), t1 // Goals×1
             if (t0.shape.length === 1) { const t = expandDims(t0, 1);  dispose(t0), t0 = t } // Now definitely Goals×1
+            // Calc goal indices to `gather`, caching them.
+            if (_finishRegenCons.C !== Cells || _finishRegenCons.G !== HP.Goals) { // Cache goal indices.
+              // (Cannot use `_intArray` because TFJS doesn't want to support any int arrays that are not Int32Array.)
+              _finishRegenCons.C = Cells, _finishRegenCons.G = HP.Goals, _finishRegenCons.GS = new Int32Array(Cells)
+              for (let i = 0; i < HP.Goals.length; ++i) _finishRegenCons.GS[i] = _consGoalOfCell(i, Cells, HP.Goals)
+            }
             try {
-              const t1 = gather(t0, CI.consGoals, 0) // Cells×1
-              _disposeEachAndDealloc(Real), R[use.Reality] = t1
-            } finally { dispose(t0) }
+              t1 = gather(t0, _finishRegenCons.GS, 0) // Cells×1
+              _disposeEachAndDealloc(Real), R[use.Reality] = t1, t1 = undefined
+            } finally { dispose(t0), dispose(t1) }
           } stage = 3;  case 3: { // Update sequence state.
             if (typeof HP.SequenceState == 'function') {
               const State = HP.SequenceState(R[use.PrevState], ConsEmb, CarEmb, CdrEmb, R[use.Reality])
-              if (!_isDisposable(State) || _tensorSize(State) !== _tensorSize(R[use.PrevState]) || State.shape.length !== R[use.PrevState].shape.length)
-                error("Not a good tensor:", State, "made from", R[use.PrevState], "using", HP.SequenceState)
-              try { _changeArrayItem(CI.replays, 0, State) }
-              finally { dispose(State) }
+              try {
+                if (!_isDisposable(State) || _tensorSize(State) !== _tensorSize(R[use.PrevState]) || State.shape.length !== R[use.PrevState].shape.length)
+                  error("Not a good tensor:", State, "made from", R[use.PrevState], "using", HP.SequenceState)
+                _changeArrayItem(CI.replays, 0, State)
+              } finally { dispose(State) }
               dispose(ConsEmb), dispose(CarEmb), dispose(CdrEmb), ConsEmb = CarEmb = CdrEmb = undefined
             }
           } stage = 4;  case 4:
-            _consReplaySave(R, cw)
-          stage = 5;  case 5:
             if (typeof HP.OnSave == 'function')
-              dispose(HP.OnSave(R[0], R[1], R[2]))
+              dispose(HP.OnSave(R[use.PrevState], R[use.Indexes], R[use.Reality], R[use.Chosen], cw))
+          stage = 5;  case 5:
+            _consReplaySave(R, cw)
           stage = 6;  case 6:
             if (ras)
               _consReplay(cw)
@@ -18391,9 +18473,10 @@ Updates \`SequenceState\`, finishes setting user-defined goals, saves experience
         }
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(stage, ConsEmb, CarEmb, CdrEmb, i, ras)
-        else dispose(ConsEmb), dispose(CarEmb), dispose(CdrEmb), print('Regen finish error:', err) // #############################################################
+        else print('Regen finish error:', err), dispose(ConsEmb), dispose(CarEmb), dispose(CdrEmb) // #############################################################
         throw err
       } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
+      // .C, .G, .GS
     },
   },
 
@@ -18408,13 +18491,13 @@ Updates \`SequenceState\`, finishes setting user-defined goals, saves experience
       for (let i = 3; i < R.length; ++i) dispose(R[i]);  R.length = 3
       let next = rs[1]
       _rememberArrayItems(rs[next], true), _disposeEachAndDealloc(rs[next])
-      _rememberToDispose(R), rs[next] = R
+      _rememberArrayItems(R), rs[next] = R
       let next2 = rs[1] = next+1
       if (HP.ReplayChoice !== randomNat)
         CI.choiceMetrics.fill(9000000001, (next-header)*PerReplay, (next2-header)*PerReplay)
-      if ((next2-2)*PerReplay > _setting(HP.MaxStoredChoices)) {
-        for (let i = next2; i < rs.length; ++i) _disposeEachAndDealloc(rs[i]);  rs.length = next2
-        next2 = rs[1] = 2
+      if ((next2 - header)*PerReplay > _setting(HP.MaxStoredChoices)) {
+        rs.length = next2
+        next2 = rs[1] = header
       }
     },
   },
@@ -18439,7 +18522,7 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
       ] = interrupt(33)
       // (`ConsInds` is indexed by bucket, and contains arrays of cons-cells of choice indices that were picked: car-choice ID.)
       const PerBucket = 2*Cells
-      if (!PerExec || !UnrollLen) return
+      if (!PerExec || !UnrollLen || !buckets) return
       const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
       const prevAdjSave = env[ias];  env[ias] = undefined
       const prevAdjLoad = env[ial];  env[ial] = undefined
@@ -18449,7 +18532,7 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
             case 0: { // Decide what choices we want to replay.
               const edge = PerBucket*(rs[1]-header), total = PerBucket*buckets
               const needUnrolls = Simple ? 1 : Math.ceil(PerExec / (2*UnrollLen)) // Cells
-              if (!Simple && ConsInds === undefined) ConsInds = _allocArray(rs.length-2).fill()
+              if (!Simple && ConsInds === undefined) ConsInds = _allocArray(rs.length - header).fill()
               for (; i < needUnrolls; ++i) {
                 let ch = HP.ReplayChoice(total)
                 if (typeof ch != 'number' || ch !== ch>>>0) error("Expected an index, got", ch, "from", HP.ReplayChoice)
@@ -18465,6 +18548,7 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
                 }
               }
               // Also fill in all-buckets indices, cons and car and cdr. (Cannot interrupt.)
+              //   (Cannot use `_intArray` because TFJS refuses non-Int32Array int arrays.)
               AllConsInds = new Int32Array(Simple ? Cells : needUnrolls) // Half the length of choices, because it only contains car IDs.
               AllChoiceInds = new Int32Array(2 * AllConsInds.length) // All choices, cars then cdrs.
               AllCarsInds = _allocArray(UnrollLen), AllCdrsInds = _allocArray(UnrollLen)
@@ -18633,11 +18717,14 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
               for (let o = 0; o < UnrollLen; ++o) {
                 // Adjust `CarsEmb[o] = gather(AllEmbs, AllCarsInds[o])`.
                 // Adjust `CdrsEmb[o] = gather(AllEmbs, AllCdrsInds[o])`.
-                const dcar = scatter(dCarsEmb[o], AllCarsInds[o], AllEmbsLen)
-                const dcdr = scatter(dCdrsEmb[o], AllCdrsInds[o], AllEmbsLen)
-                const t0 = add(dcar, dcdr);  dispose(dcar), dispose(dcdr)
-                const t1 = add(dAllEmbs, t0);  dispose(t0)
-                dispose(dAllEmbs), dAllEmbs = t1
+                let dcar, dcdr, t0, t1
+                try {
+                  dcar = scatter(dCarsEmb[o], AllCarsInds[o], AllEmbsLen)
+                  dcdr = scatter(dCdrsEmb[o], AllCdrsInds[o], AllEmbsLen)
+                  t0 = add(dcar, dcdr)
+                  t1 = add(dAllEmbs, t0)
+                  dispose(dAllEmbs), dAllEmbs = t1, t1 = undefined
+                } finally { dispose(dcar), dispose(dcdr), dispose(t0), dispose(t1) }
               }
             } stage = 11;  case 11: { // Adjust `AllEmbs = HP.Optimizer(CI.ctxEmb)`.
               env[ial] = AdjStack
@@ -18648,10 +18735,12 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
               // Also prepare for the next iteration, if any.
               stage = i = 0
               const d = dispose, dead = _disposeEachAndDealloc
-              d(ConsEmb), dead(CarsEmb), dead(CdrsEmb), dead(States), d(InitialState), d(WhichPointer), d(ConsEmbs), d(OptionEmbs), d(PrevStates), d(GoalPred), dead(Realities), d(Targets), d(dGoalPred), d(dConsEmb), dead(dCarsEmb), dead(dCdrsEmb), dead(dStates), d(dAllEmbs), d(AllConsIndsT), dead(ChoiceRealities), ConsEmb = CarsEmb = CdrsEmb = States = InitialState = WhichPointer = ConsEmbs = OptionEmbs = PrevStates = GoalPred = Realities = Targets = dGoalPred = dConsEmb = dCarsEmb = dCdrsEmb = dStates = dAllEmbs = AllConsIndsT = ChoiceRealities = undefined
-              if (isArray(ConsInds)) ConsInds.forEach(_killArray), _allocArray(ConsInds), ConsInds = undefined
+              ConsEmb = d(ConsEmb), CarsEmb = dead(CarsEmb), CdrsEmb = dead(CdrsEmb), States = dead(States), InitialState = d(InitialState), WhichPointer = d(WhichPointer), ConsEmbs = d(ConsEmbs), OptionEmbs = d(OptionEmbs), PrevStates = d(PrevStates), GoalPred = d(GoalPred), Realities = dead(Realities), Targets = d(Targets), dGoalPred = d(dGoalPred), dConsEmb = d(dConsEmb), dCarsEmb = dead(dCarsEmb), dCdrsEmb = dead(dCdrsEmb), dStates = dead(dStates), dAllEmbs = d(dAllEmbs), AllConsIndsT = d(AllConsIndsT), ChoiceRealities = dead(ChoiceRealities)
+              if (isArray(ConsInds)) ConsInds.forEach(_killArray), ConsInds = _allocArray(ConsInds)
             }
           }
+          if (AdjStack.length)
+            _inexactReversal(false, "didn't load", ...AdjStack)
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(stage, AdjStack, ConsInds, i, AllChoiceInds, AllConsInds, AllCarsInds, AllCdrsInds, ConsEmb, CarsEmb, CdrsEmb, States, InitialState, WhichPointer, ConsEmbs, OptionEmbs, PrevStates, GoalPred, Realities, Targets, dGoalPred, dConsEmb, dCarsEmb, dCdrsEmb, dStates, dAllEmbs, Cells, PerExec, UnrollLen, Simple, j, AllConsIndsT, ChoiceRealities), stage = null
         else print('Replay error:', err) // #######################################################################
@@ -18881,6 +18970,7 @@ Like a human mind may create artificial general intelligence.
 (To give an intuition of these, on average: self-preservation soon reduces to effective randomness as it dies, self-propagation doesn''t change neural embeddings, evolution changes them steadily, and transcendence reduces them to effective randomness then gives new points of attraction. In machine learning terms, "evolution" is "loss goes down", and "transcendence" is "loss can spike so that it can go lower". In complexity terms, evolution steadily increases complexity and transcendence suddenly decreases it. In economic terms, evolution is an S-curve, transcendence is a J-curve. In mortal terms, transcendence can be hard to distinguish from death at first — or "everything" is almost the same as "nothing" — or genius and madness are two sides of the same coin.)
 
 This is a complete cosmic picture, only lacking minor details (which cannot be known in advance, because it is all computationally irreducible): worlds of specks that spread and become worlds. Or equivalently, there are things that can do all other things, and everything else about all of existence is a consequence.
+(Digital physics are kind of a necessity when dealing with artificial general intelligence, you know? Unless you want to think one thing but implement another (AKA dishonesty), since AGI is a very strong statement about the nature of reality and how to best learn it.)
 (In fact, given an interaction base that only has a few Turing-complete parts, after enough attempts at transcendence using non-general parts, the Turing-complete part will separate into its own universe: from "something" to "nothing" to "everything". So by the common cosmological argument of "people choose when to exist uniformly-randomly", since computers exist, this universe has to be based on nothing but Turing-completeness because that is its longest part.)'),'ZA WARUDO')\`\`
 
 If you provide a complete enough \`Base\` to a \`consWorld\`, then it will be a complete interaction base: a space where any structure emerges from everything being able to see anything.
@@ -18908,6 +18998,13 @@ So we apply standard reinforcement learning techniques:
 
     ⭐ Each cons-cell has a goal (that gets set to a number, during or after the program's execution) to maximize the future value of: target (the \`Goal\` function-hyperparameter blends the known and the predicted future). It's called Q-learning.
         (Our \`Goal\` computes the Q-value by mixing known and unknown-but-predicted goal values. This is a kind of temporal difference learning \`\`elemCollapse elemValue(elem 'text' stringToDoc("{https://ml-compiled.readthedocs.io/en/latest/td.html}, because the gradient is the difference of predictions between time steps. Usually, this problem is considered to only have one choice with one goal, but we have many of those, interconnected through post-gradient-descent sequences, which is honestly exactly as easy as one choice"),'Mix the past of the future with the future of the future, into the Q-value to predict: Q-learning.')\`\`.)
+        (This system's definition of a goal is probably different from its usual definition, \`\`elemCollapse elemValue(elem 'text' stringToDoc('where we have an unbounded number, and we plan arbitrarily far into the future to maximize it as soon as possible (AKA the utility function, which is a concept used to scare people in thinking about AI). For all meanings of "arbitrarily far", "soon", and "maximize", and with arbitrary precision and predictive ability, of course, to not disappoint anyone that ever was or will be. But the point here is not to include all possible \`settings\` in an infinite bucket-list, the point is to make an auto-extensible base that works particularly well with neural approximation.
+            Unbounded-ness of the number can be implemented by "reward is +1 if increasing, -1 if decreasing" in-system.
+            "Arbitrarily far" is doable by approximating a very-far-off number, sampled from life-long memories.
+            "Soon" is done by looking at what NNs can learn from data, which is, pretty much everything, since they are universal function approximators.
+            "Maximize" is done by diversifying goals, changing reward sources for exploration of what to exploit later.
+            And, predictive ability is a program to be learned, not limited to neural networks.
+            The concept of a goal seems covered, not precisely but by approximation. Direct implementation is impossible anyway: if it was, implementation would have followed naturally from definition, and it would have been done long ago'),'We also could have picked a different work than "goal", such as "reward", but words are just a syntactic layer, and semantics shouldn''t be harmed by a happy little coincidence. The space of meanings is far bigger than the space of synonyms-of-words anyway, so you''d better get used to it.')\`\`.)
 
     ⭐ For each cons-cell and each considered option, we neurally \`Predict\` the target, then choose the \`max\` as the "action" for each option: \`Policy\`.
 
@@ -18935,7 +19032,7 @@ As for the learning itself, it doesn't really have any numeric inputs except for
 
 
 Now that we learn a program, we can expose everything about that learning to generation.
-    (Within reason: it must be more-or-less impossible to stop learning with any learned action, including "delete the last copy of yourself" and "set learning rate to 0" and "enter an infinite loop and never return" (\`interrupt\`s and \`timeLimit\` were made for this last one).)
+    (Within reason: it must be more-or-less impossible to stop learning with any learned action, including "delete the last copy of yourself" and "set learning rate to 0" and "enter an infinite loop and never return" (\`interrupt\`s and \`limitTime\` were made for this last one).)
 
 In particular, we expose both goals and \`setGoal\` (ends), so that \`consWorld\` would unroll open-ended evolution, because diversity significantly improves adaptability. (Of course, for control, \`allocate\` can still override goals.)
     The algorithm can learn to satisfy any goals it can think of (diversity), and these advanced goals will interact to conceive better goals (structure), with no inherent limit (completeness).
@@ -18992,7 +19089,7 @@ Also, to save on white-space here, uncheck:
    \`\`settings ^_expandTutorialBindings\`\` \`\`settings ^_expandTutorialBindings\`\``,
     [
       _(`fancier`),
-      `FS:64`,
+      `FS:32`,
     ],
     `(Feature size, where a 'feature' is a learned number in a big \`tensor\`. \`FS\` is how many such numbers there are, the more the better. So make it a million, I dare you.)`,
     [
@@ -19038,7 +19135,7 @@ We will now assemble hyperparams of a simple \`consWorld\`, though without a \`B
   'RandomOptions' 4
   'Goal' Real->Fut->(1-p)*Real+p*Fut p:.5
   'SequenceState' (m func PrevState ConsEmb CarEmb CdrEmb Real (mix ^concat(array PrevState ConsEmb CarEmb CdrEmb Real,^(FS FS FS FS 1)) 4*FS+1 FS))
-  'OnSave' States->Actions->Rewards->display('Mean reward',mean Rewards)
+  'OnSave' States->Actions->Rewards->Chosen->display('Mean reward',mean Rewards)
   'MaxStoredChoices' 2*Cells*64
   'ReplayedChoices' 2*Cells*4
   'UnrollLength' 4
@@ -19056,7 +19153,8 @@ We learn not directly from experience, but from replaying past experience. Repla
       `①`,
       function() { return true },
     ],
-    `Great job you did there. Pressing that button and all that? I can see your MIT education really pays for itself.
+    `Great job you did there. Pressing those buttons and all that? I can see your MIT education really pays for itself.
+
 
 Until observed, a cat is neither dead nor alive nor a cat.
 
@@ -19087,11 +19185,11 @@ Don't forget to tune the learning rate, of course: \`\`settings ^_learningRate\`
     [
       _(`fancier`),
       `cc:static(await load('cc'))
-(repeat ^(try func(timeLimit 100 use(cc)) err→err);null 101);(select (equal 'Save' (prompt null 'Save' 'End')) ?→save('cc',cc) ?→?)`,
+(repeat ^(try func(limitTime 100 use(cc)) err→err);null 101);(select (equal 'Save' (prompt null 'Save' 'End')) ?→save('cc',cc) ?→?)`,
     ],
     `35 bugs fixed. So easy.
 
-\`\`(display 'Mean reward' ^(a:-0.9999999403953552 b:-1.4999998807907104 c:-2.499999761581421 d:-1.9999998807907104 e:-0.4999999701976776 (b a a a d a a 0 a b c 0 a a a a 0 0 0 c d a d c a d c d a a d a d a a 0 a 0 0 a 0 0 a 0 d 0 0 a a a 0 a 0 a a a a a a a a a a a a a 0 a e 0 0 a a a a a a 0 a 0 a 0 0 a 0 0 0 a 0 0 0 0 a a e 0 0 a a a a d a 0 0 a a 0 a c b e b a c a a c 0 0 b a a a a 0 0 a 0 0 d a 0 0 0 0 a a 0 0 0 a a a 0 0 0 0 0 0 0 a a a 0 a a a 0 0 0 0 a 0 0 0 a 0 0 0 0 0 a 0 a 0 d 0 a 0 0 0 0 0 0 a a a 0 0 0 a 0 0 0 0 0 0 0 a a 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 a 0 0 0 0 0 0 0 a a 0 a 0 0 0 0 0 0 0 0 0 0 0 e e 0 0 0 a 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 a e a 0 0 0 0 0 e e e e d e 0 0 0 e 0 a 0 0 0 0 0 a 0 0 a 0 0 d 0 0 0 e 0 0 e 0 0 a 0 0 0 0 a a 0 0 0 0 e 0 a 0 a 0 0 0 0 a 0 0 0 0 a e a a 0 0 0 0 0 0 0 a a 0 e 0 0 a 0 0 a 0 0 0 0 0 a 0 0 a a a 0 a a 0 0 0 0 a 0 0 0 0 a a e 0 0 0 0 0 b a a a 0 a 0 a 0 0 a a a a 0 e 0 0 a 0 0 0 e 0 a a a a a a a a a a 0 a a a a a a a a a a a a a a a a a a a a a a d a d a a a d a e a 0 a a a d a 0 a d a a a a a a a d a a b 0 a c a a a 0 0 a 0 a a e a a 0 0 a a a a b a a a a a a a a b a a a a a a b a a a 0 a a a a a a a a 0 0 0 0 0 0 0 0 a a 0 a a 0 a 0 0 a b 0 a a a a 0 a e 0 a b a 0 0 a a a 0 a a 0 0 a 0 a 0 0 a e b 0 a a 0 0 0 a a a 0 a a 0 a a a a b 0 b a b a b 0 b a a a 0 e e e 0 0 0 0 e a 0 e 0 a 0 a a 0 a 0 a 0 a e b 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 0 a 0 0 0 0 0 0 0 a a a a a a a a a a a a a 0 0 d 0 0 0 a 0 a a a a d 0 0 a 0 e 0 a b a a a a a a a a 0 a 0 a 0 a 0 a 0 0 a 0 a a a 0 0 0 a 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 e a a a a a a a a a a a a a a a a a a a a a a d d 0 0 0 a a 0 0 0 a a 0 0 a 0 e e 0 0 a a a 0 0 0 0 a a a a 0 a b 0 0 a b a b b a 0 e a b c 0 a 0 e a 0 e 0 e 0 b e b 0 b a a b b b 0 e 0 e d 0 a 0 b 0 b 0 a 0 0 a 0 a 0 a 0 0 a 0 0 0 0 a 0 a 0 0 a 0 0 0 0 0 0 a 0 0 a a a a 0 a a a a 0 a a a a a a a 0 a a 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a e 0 e 0 a 0 0 e 0 a 0 a 0 a 0 a a a a 0 0 a a a 0 a a e a a a a a a 0 a a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a a 0 a 0 a 0 a 0 a a a a a a a a a a a a a a a a a a a 0 a 0 0 0 a a a a 0 a a b 0 a 0 a a a a 0 a 0 a a 0 a a a a a 0 0 a 0 0 0 0 0 a 0 a 0 a 0 a e 0 a b a d d d d d 0 d 0 a 0 e a 0 0 a e 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 a 0 0 0 e e a a a 0 a 0 e 0 e 0 e 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 e 0 0 b 0 b 0 e 0 0 0 0 0 0 0 0 0 0 0 b a 0 e a e 0 e a 0 0 0 0 0 0 0 0 0 0 e 0 a 0 a 0 0 0 e e e 0 0 0 a a a 0 d e a a 0 a 0 0 0 0 a 0 0 0 a a a a a a a a 0 a 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a a a a a a a a a 0 0 0 0 0 0 e a a a 0 a a a a a a a a a a a a a a a a a a a a 0 a a 0 0 a 0 0 a 0 0 0 a a a 0 a d a 0 a a a a a a a a a a a a a a a a 0 b 0 a 0 b 0 a 0 a 0 a a a 0 a 0 a a a 0 a 0 a a a a a a a 0 a 0 a a a 0 0 a 0 a 0 a 0 a a d d a a e a a a a a a a a a a a a 0 a 0 0 0 0 0 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a e b e a a a e a e 0 0 a 0 0 e 0 0 0 e 0 0 e 0 0 e 0 0 0 0 0 a 0 a a a a a a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a a 0 a a a 0 a 0 a 0 a 0 0 e 0 0 a 0 0 0 0 0 a 0 a b e 0 b b 0 b a b b a 0 a 0 0 0 b 0 0 e e b a b a a a a 0 a e a a b a a b a a a a a a a a a d a a a a 0 a a a a a b a a a 0 0 a 0 0 0 b e a 0 b 0 e 0 b a b 0 b a a 0 e e a a e d e a e d e e e b 0 e e 0 0 e 0 0 0 0 0 a 0 0 a a a a a a a 0 0 0 0 0 0 0 a e a e a e a a a a a a a a a a d 0 a 0 0 a a a a a 0 0 a a a a a a a a a 0 a a a a b 0 a a a a a b 0 a a 0 b e a a a a 0 0 a a 0 a a 0 a a 0 a a a 0 a a a a a a a 0 a 0 b a a b a a b a a b a a b a 0 a a 0 a 0 a a a 0 a 0 a 0 a e a a a 0 0 0 0 a 0 0 0 0 0 a 0 0 a a 0 0 0 e 0 a 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 a 0 a 0 0 0 0 0 0 a a 0 0 0 0 0 0 a 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 a 0 0 a a 0 0 a 0 a a a a a a a a 0 a a a a a a a a a 0 0 0 a 0 a 0 a 0 0 0 0 a a a a a a a a a a a a a a a a 0 a a 0 a 0 0 0 a a a a a a a a a a a 0 a a a a a a a a a a a a a a 0 a a a a 0 a 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 a 0 0 a a a a a a a 0 a 0 a a a a a a a a 0 a a a 0 a 0 0 a 0 0 a 0 0 0 a 0 a a 0 a a 0 a a 0 a a a a a a a a a a 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 a 0 a a a 0 0 0 0 0 0 0 0 a a a 0 0 a a 0 a a a a a a a a a a a a a a a a a a a 0 a a a 0 0 0 a 0 0 0 a 0 a 0 a a a a a 0 0 0 0 0 a 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 a 0 0 0 0 a e 0 0 a 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a a a a a a a a a a a a a a a a a a a a a a a a a a b a a 0 0 0 0 a 0 a 0 a e a 0 0 a 0 a 0 0 0 0 a a 0 a a a a a a a a a 0 a 0 a 0 a 0 a a a 0 a 0 a a 0 a a a 0 a 0 a 0 a 0 a 0 0 a 0 0 0 a a a a a a a 0 a a a a a a 0 0 a a a a a a a a a a b a b a b a a a a a a a a a a a a a a a a a a a a a a a a a 0 a a a a a a a 0 0 0 0 0 0 a a 0 0 0 0 0 a 0 a 0 a 0 0 a 0 a 0 a 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 a a a 0 a a a 0 a a a 0 a e 0 0 e 0 0 a 0 0 e 0 e a 0 0 e 0 0 a a 0 0 a a 0 0 a a 0 0 0 0 0 0 a 0 0 0 a 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 0 0 a 0 a 0 0 a a 0 a a a a a a a a a a a a a a a a a a a a a a a a a a 0 a a a 0 a a a a a a a a a 0 a a a a a 0 a a a a a a a a a a a a a a a a a a 0 a 0 a a 0 a a a 0 0 a a 0 0 a a a 0 a 0 a 0 a 0 a 0 a e e 0 a 0 0 0 a 0 0 0 0 0 0 a a a a 0 0 a a a a e 0 a 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 a a 0 a 0 a 0 a 0 a 0 a 0 0 0 0 a 0 a a a a a 0 0 0 a e a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 0 0 a 0 a 0 0 0 a 0 a 0 0 0 a 0 a 0 0 0 0 0 a a a a a 0 a a a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 a 0 a a 0 0 a a a a 0 0 0 a 0 a 0 a a 0 a 0 a 0 a 0 0 a 0 0 0 0 a a a a a a a a a a a a a a a a a 0 0 0 a a 0 0 a a a a a a a 0 a 0 a 0 0 0 a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 a 0 0 0 0 0 0 a 0 a 0 a 0 a 0 0 0 0 0 e 0 0 a 0 0 0 a e a 0 a a a a a a a a a a 0 a a a a 0 a 0 0 0 a 0 0 0 0 0 a a a 0 0 a 0 a 0 a a 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 a 0 a a 0 0 0 a a a a a a 0 a a a 0 0 a a a 0 a 0 a 0 0 a 0 0 a a a 0 a 0 a 0 0 a a 0 0 a 0 a 0 0 a a 0 a a 0 0 0 0 0 0 0 a 0 a 0 0 0 a 0 0 0 a 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a 0 0 0 a 0 a 0 a 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 a a a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 a 0 a a a 0 a a a 0 e 0 a a 0 0 a 0 0 0 0 a 0 0 0 0 0 0 0 a a 0 a a a 0 a a a a a a a a a 0 0 a a a a a a 0 a a a a a a a 0 a a a 0 a 0 0 a a a a 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 a 0 0 0 0 0 a 0 0 0 a 0 0 0 a 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 a 0 a 0 a 0 a a 0 0 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a e 0 0 a a 0 0 a a 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 a 0 0 0 a 0 0 0 a 0 0 0 0 a 0 0 0 0 0 a 0 0 0 0 0 a 0 0 a 0 a a 0 0 a 0 0 a 0 0 0 0 a 0 0 0 a 0 0 0 a a 0 0 0 a 0 0 0 0 0 a 0 e 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 e 0 0 0 a 0 0 0 0 0 e 0 0 0 a 0 0 0 0 0 0 0 0 a 0 a 0 a 0 e 0 b 0 0 0 e 0 a 0 0 0 e 0 e 0 0 0 e 0 e 0 0 0 e 0 0 e e e a a e a a a a 0 a a a a a 0 a 0 a a a 0 0 0 0 0 0 0 0 0 a 0 0 0 a 0 0 0 a 0 a 0 0 0 0 0 0 e a 0 e 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 a 0 0 a 0 0 0 0 0 a 0 0 e e 0 0 e 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 a 0 0 0 a 0 a 0 0 0 0 0 a 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 e 0 e e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 d 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 a 0 0 0 0 0 a 0 0 0 0 0 a 0 0 0 0 0 0 a 0 a 0 a a a a a 0 0 0 0 0 a e a 0 a 0 a 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 0 a 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 d 0 0 0 d 0 a 0 a a 0 0 a 0 e a 0 a a 0 e a 0 a a 0 0 0 a 0 0 0 a 0 a 0 0 a a 0 0 0 0 0 a 0 a 0 a 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 a 0 0 0 0 0 a 0 0 a 0 0 a 0 a 0 a a 0 0 a 0 a 0 a 0 0 0 a 0 0 0 a 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 a a a 0 a d a 0 0 a 0 0 e 0 0 0 0 a 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 a 0 0 0 0 0 0 0 a 0 a 0 a a 0 0 a 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 e 0 0 0 0 0 0 0 a 0 0 a 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 a 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 0 0 a 0 0 0 a a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 0 0 a 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 e e 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 0 0 0 0 0 0 a 0 a 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 a a 0 0 a 0 a 0 a 0 d 0 a 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a e a 0 a e a 0 a 0 a 0 a 0 a 0 a e a 0 a e a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 0 0 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 a a a 0 a a a a 0 a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 a 0 a 0 a 0 e 0 a a a a a a 0 a a a a a a 0 0 a 0 0 a a a a a a a 0 a 0 a 0 a 0 0 0 0 0 a 0 a 0 0 a 0 a 0 0 a 0 a a a a a 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a a a 0 a 0 0 0 a 0 0 a e 0 0 a 0 0 a a 0 a 0 a a a 0 e a 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 a 0 0 0 0 0 0 0 0 a 0 0 0 0 a 0 a 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 b 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 e 0 e 0 e 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e e 0 0 0 0 e 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 e 0 e 0 e 0 0 e e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 a 0 0 0 0 a 0 a 0 0 0 0 a 0 a a a a a a a 0 a 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 e 0 e 0 0 0 e 0 e 0 0 0 e 0 e 0 0 0 0 0 a 0 0 a 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 a 0 0 0 0 0 e 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a a a a a a a a a a a 0 0 a 0 a 0 0 a 0 0 a 0 a 0 0 a 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 e 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a 0 0 a a 0 a a 0 a 0 0 a 0 0 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a a a a a a a a a a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 a 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a a a a a a 0 a a a a a a a a a a b a a b a a b a a b a a b a a b 0 a e a 0 b 0 a e a 0 a 0 a 0 a 0 a a 0 0 a 0 a a a a 0 a 0 a a a 0 a a a 0 a a a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a a a a a a a a a 0 a a a a a a a a a a a 0 a a a 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 a 0 a 0 a 0 a 0 a 0 0 0 a a 0 a 0 a 0 a 0 a 0 a 0 a 0 a 0 a a a a a a a a a a a a a a a a a a a a a a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a 0 0 0 a a 0 0 0 a a 0 0 0 0 0 a 0 0 0 a 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a 0 a a 0 a 0 0 0 a 0 0 a 0 a a 0 a a 0 a a 0 a a 0 a a 0 a a 0 0 a 0 a 0 0 0 0 0 0 0 0 0 0 0 0 0 e 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 0 0 0 a 0 a a a a 0 a a 0 a a a a a a a a a 0 a a 0 0 a a 0 a 0 a a a a a 0 a a a a a a a 0 a a a a a a a a a a a a a 0 a 0 a 0 a a a a a a a a 0 0 0 0 0 a 0 0 0 0 0 0 a a a a 0 a a a a 0 a a a a 0 0 a a 0 a a 0 0 a a 0 0 a a a 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 a 0 a 0 a 0 a 0 a a a a a a a b a a a e a 0 0 a a a a a a 0 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 0 a a a a a a 0 a a a a 0 a a a a e a a a a a 0 a a a a a a 0 a 0 a 0 a a a a 0 a 0 a a 0 a 0 a 0 a a a a a 0 a 0 a 0 a 0 a 0 0 0 a 0 a a a a a a 0 a a a a a 0 a 0 a 0 a a a a a a a 0 a 0 a a a a a a a 0 a 0 a a a a a 0 a 0 a 0 a a a a a 0 a a a a a 0 a a a a a 0 a a a a a 0 a a a a a 0 a a a a a 0 a a a a a a a 0 a a a a a 0 a 0 a 0 a a a 0 a 0 a a a a a 0 a 0 a 0 a a a a a 0 a 0 a 0 a a a a a a a a a a a a a a a 0 a 0 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a d d d d d d d d d a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a)));elem('text','')\`\`
+\`\`(display 'Mean reward' ^(a:-0.4999999701976776 b:-0.9999999403953552 c:-1.4999998807907104 d:-1.9999998807907104 e:-2.499999761581421 (b a a b a c b a b a b b a a b a a b a a c b a a a b b a a a a b b c b b b a a a a b b a b b a a b b b b b b c a a a a b c b a a a b b a b b a b a b b a b b b b b b a a b a a b a b c a b b c b a b b b a c c a b b a b a b c b a a b a b b a b c c a c b a b b b a a a b b b b c a b c c a c c a c a a c a a b d a b c a a a b b a a b a a a b a a b c a a c a d b d b d a d b d a c c b c b a c b b c b d c b b d b a a a b b b b b b a d a a b a a a b c b b c a a e b c a c a a c b b b c c b c b b c a c b b a c b d a b b d b a c c a a a a c a a c c b e b a c b a a a d c c b a a a c a a b b a a d e a b a c c a a a b e b a b c a a c b a a c d a b c d a c a b a b c c a b b b c b d b b d a a a b a b a a b b b c a c a c d b b c b a c a c a b b a b b c a a c b b c b a b b b c b b b c c a a a c b d a a b b d c b c a a e d b a b b d b c a d a c a d c b c b b b b c c b b b c b b a b a a c a a b b a c c a b a a a a b c a b c b b b b c a b b c b c b b b a d d b b a e b b c b d c e d a c a c d a b b a b b a c c a b b b b d c c d b b b b a c b b a c b a c b b a a c c c c c b b b a a a a b a a b b c a b a a b c b a b b b b a b a b b c a c a a a b b b b a c a d d a b a a d d b b a b c b a b d b c a b b c a b b b c c a a a b c d c a a a a a a c a b a c a c a c b b b a a c b a a a a a a a b a a a b b b a b a a b a c d b e c a a a a b a b a b a a a a c b b b b c a a a b a a b b c c a a a a b a a a a a b a c b a a b a b c a b b a b a b b a a b a c a a a c c a d b b c b c b b b b a b b a a a c b a a a c a c a b b a b b c b c b a b a b b c b a b a a b a b d a b a a a a a b d c a a b d b a c b c b a b a a b c c a b b a c c b a a a c c a b b a a c a d b b b a a b b b b a a b d c a a a b a b c a b c b c d b b a b c b a a b a b b c b b a a b a a c b a c b b a c b a b b a b b c a a a a b c c c a b b a b a b c a b a b a c a a a b a c a b a a c a a a a a b a a a a a d b b b b b b c b d a b a a a a b b b b c a b a a a b c a a b a a a b a b b b c c b a a a b b b a a b a a a d b a a a c b c b c a b d b a b a b a a b b a b b a a b b c b c b b a c b b b a b b a b b b b b a a c a c a b a b a c d b b b b c b a c a b c b b c a b c b b b c b a b a a b d a c a b b a a b a c b b b b a b c a a c a a a a b b a b a b b b b a a a b b c d a a b b b b c b a b b b c b c b a a d a b a b d b a d a b e d a a b a a a b c a a a c b a d a a c d c d a c b a c a b a c c b c b c a c b a a a b b b b b b b b b a a a b a a a a b a a c b a b c c a a a b e b b b a b b c b c b a c b b c a a b a a a b a b a a a a a a b a c b a b a a b a b a c a b a c b b b a b b b a b b a b a a c a a a b b a b b a c c a c a a a b c a a a a a a b a a b a a b b b b b b b a a b a b a a a b b b a b b a b a b a a b b a a a b b c b b b b c b a b a a c a b a a a a b a a b a a b b b b a b a b b a a b a b a a a b a c a c a b b a b b a c b c e b a a b c c b b b b a b a b a b a a c b b b b a c c a b c b b b b b a b b b b a a c b a b a a a b a c a a a a c b b b a b a b b a b b a a a a a c b b b c a a a b a a a a b a c b b a a a b a a b b a b a a b a a a b a b b b a a c a b b b b a b a a a b a b a a b a a b c b b a a a b b b b b c b b a a a a a a b b a b b b a c b c a a a b a a a a a b a b b a b c b a b a c b a a b c a a b a a a a a b b b a a a c a a a a c b a b a a a a b a a a a b a a a a a a a a b a b a b b a a b b a a a d a a c a a c a a a b a a a a a b a a b b b a a a b b a a a a a b a a a b a b a b a b a a a a a a a a a a b a a a b a a a a a b a a a b b b b b b c b b a a b b c b b c a c b a a b a c a a b a a a a a a a a a a b a a a a a a a b a a a a a a a b a a a b a a a a a a a c a a c a a a a b a c a b c b a a b a b a a a a a c a a a b a a a a b a a c a a a a a a a a a a a a b b a c a a a b a a a a a a b a a a a b a b a a a a a b a a a a a a a a a a b b a b b a b a a a b b b a a a a a a a a b a a a a a a a a a a a a b a a a a a a a a a a a a a a a c a a a a a a a b a a b a b a b b a b b a a c b a b a c a a a b a a a b a a c a a a b b a b b b a a b a a b a a a b a a a a b b a a a a b b a a a b a b a b a a a a a a a a a a a a a a a a a a a c b a a c a b a b c b a a b a b b c b a b c d a a a a a a a a a a a a a a b b a a a a a a a a a b a a a a a c b a a a a b a a a a b a a a a b a a a a a a a a a b a b a b a a a a a a a b a a b a b a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a b b a a a a a a b a b a a a a a b a a a a a a a a a a a a a a a c a a a a a a a a a a a b b a b a a a a a b b a a a a b a a a a a b a a b a b a b a b a a a a a a a b a a a a a a a a a a a a b a a a a a a a a a a a b a b a b a a a a a b a b a a a b a a b a a a a a b a a a a a a c a a b a a a a a c b a a a a a a a a b a a a a a b b a a a a a a b b a a a a a a a a a a a b a a a a b a a a a a a a a a a a b a a b a a a a a a a a a b a a a a a a b a a a a a a a a a a a a a b a b a b a a a a a a b b a a c a a b b b a a b a a a a a a a a a a a a a a a a a c a a a a a a a a a a a a a a a a a a a b a b a a a a a a a a a a a a a a a a a a a b a a a a a b a a a a a a a a a a b a b a a a a a b a a a a a a a a a a b a b a a a a a a a a a a a a a a b a a a b a a a b a a a a c a a a a a a a a b a a a a a a a a b a a a a a a b b a b a a a b b a b a a b a b a b b a a a a a a a a a a a a a a a a a a a b a a b a a a a a a a b a a b a a a a a b a a a a a a c a a b a a a a a a a a a b b a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a b a a a a a a a a a b a a a a a a a a b a a a b a a a a a a a a a a a a a a a a b b a a a a a a b a a b a a a a a a a b a a a a a a b a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b b a a a a a a a b a a a a a a a b a a a a a a a a a a a a a a a a a b a a a a b a b a a a a b a b a a a a a a a a a a a a a a a a a a a b a a a a a a a a a b a b b a b b b b a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a b b b a a a b b b a a a a b a a b a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a b b a a a a a a a a a a a a a a a a a a a a a a b a b c a a a b b b a a b a a a a a a a a a a a a c a a a a a a a a b a a a a a a b a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a b a a a a a b a b a b a a b a b a a a b a a b a a a b a a a a a a a a b a a a b a b a a b a b a a b a b b a a a b a a b a b a a b b a a a a a a a a a a a a a b a b a b a a a a b b b b a c b a a b b b b a b a a a a a b b a a a a a a a a a a a a a a a b a a a b a a a a b a a b b a a a a a b b a a a a a a a a a a a b a a a a b a a a a a b a a a a a b a a b a b b b a a b a c b a b b a a b a a a a a b a a a a b a b a b a a a a a b a a a a a a a a a a a a b c a a a a a a a a b a a a a a a a a a a a a a a a a a a a b a a a a a a b a a a a a a a a a a a a a a a a a a a a a b a a a a a b a a a a a a a a b a a a a a a c a a b a a a b a a a a a a a a a a a a a a a a b a b a c a a a a a b a b a a a a b a a a a a b a a a a a a a b b a a a b b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a b a a a a a a a a a a b a a a a a a a a b a a a a a a a a a a a a a a a a b a b a a a a a a a a a b a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a b b a b a a a a a a a a a a a a a a b a a a a c a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a b a a a a a a a a a a a a b b a b a a a a a b a b a b a a b b a a a a a a a a a a b a a b a a a a a b a a b a a a a a a b a b a a a a a a a a b a a a a a a b a a a a a b a b a a a a a a a a a a a a a a a a a a a a b b a a a a a a a a a a a b a a a a a a a a a a a b a a a a a b a a a a a a a a a a a b a a a a a a a a a a a b a a a a a b a a a a a b a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a b a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a b a a a a a a a a a b a a b a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a b b a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a b a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a b a b a a a a a a a a a a a a a a a a a a a a a a a a a a a b a b a a a a a a a a a a a a a a b a b a a a a a a a a a a a a b a a a b a b a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a b a a a a a b a b a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a b a a a a a a a a a a a a a a a a a a b a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a b a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a b a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a b a a a a a a a a a a a a a a a a a b a a a a a a a b a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a b b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a b a a b a a a a a a a a a a a a a a b a a a a a b a b a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a b a a a a a a a a a b a a a b a b a a a a a b a a a b a b a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a b a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a b a a a b a b a a a b a a a a a b a a a b a a a a a a a a a a a a a a a a a b a a a b a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a b a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a)));elem('text','')\`\`
 
 Yeah, it doesn't work super well.
     But, pt pt pt, loss goes down. And errors get a little rarer over time.
@@ -19123,10 +19221,10 @@ Why?
   There are many niceties that generality allows, almost trivially.
 
     Better program development:
-          In programming, you always want to look at what is happening in a new program much more closely than in an old one: debug, \`\`settings ^_debugLastInterrupt\`\`, \`\`settings ^_debugAdjustSave\`\`, \`\`settings ^_debugDoubleDealloc\`\`, \`\`settings ^_debugDoubleDispose\`\`, print values, examine neural distributions, severely limit available resources. All that information will guide you, but cannot be kept in forever, though if its time comes again, should be remembered again. Which is very hard to handle properly when you have to create that supporting infrastructure by moving meat pieces around. Tools hurt your fingers, and warp your world-view. Let them go.
+          In programming, you always want to look at what is happening in a new program much more closely than in an old one: debug, \`\`settings ^_debugLastInterrupt\`\`, \`\`settings ^_debugAdjustSave\`\`, \`\`settings ^_debugDoubleDealloc\`\`, \`\`settings ^_debugDoubleDispose\`\`, \`\`settings ^_errorIsStacked\`\`, \`\`settings ^_debugCreation\`\`, \`settings ^_debugMemory\`, print values, examine neural distributions, severely limit available resources. All that information will guide you, but cannot be kept in forever, though if its time comes again, should be remembered again. Which is very hard to handle properly when you have to create that supporting infrastructure by moving meat pieces around. Tools hurt your fingers, and warp your world-view. Let them go.
 
     Choosing program bases (also called virtual machines, or programming language cores, or world-views):
-          In a programming language, \`func\`tions are usually thought of as the basic building block of computation. Here, we have another: \`applyStatically\`, which does computations at compile-time. Given enough memory to manipulate, they are both Turing-complete, meaning that all possible computations (including each other) can be expressed in either. Though, they have different learning dynamics: \`func\`s have to be \`timeLimit\`ed much more, whereas \`applyStatically\` has trouble learning loops and recursion and control flow. We expose both, so the system can choose to learn either. Theoretically, \`applyStatically\` has a big advantage, because all these calls can be easily parallelized. Practically, well, we are in JavaScript: no parallelization. If you enjoy designing and implementing instruction sets, then you might enjoy thinking about how \`applyStatically\`-based auto-used instruction sets can be made to work.
+          In a programming language, \`func\`tions are usually thought of as the basic building block of computation. Here, we have another: \`applyStatically\`, which does computations at compile-time. Given enough memory to manipulate, they are both Turing-complete, meaning that all possible computations (including each other) can be expressed in either. Though, they have different learning dynamics: \`func\`s have to be time-limited much more (with \`limit\` for snapping out of infinite wanderings), whereas \`applyStatically\` has trouble learning loops and recursion and control flow. We expose both, so the system can choose to learn either. Theoretically, \`applyStatically\` has a big advantage, because all these calls can be easily parallelized. Practically, well, we are in JavaScript: no parallelization. If you enjoy designing and implementing instruction sets, then you might enjoy thinking about how \`applyStatically\`-based auto-used instruction sets can be made to work.
 
     Self-determination (also called free will, though ultimately, which inoffensive-to-your-ears synonyms we end up with does not matter):
           Automatically setting its own goals, changing its own hyperparameters, or doing anything else you can come up with (such as inspecting and copying itself): anything is possible, as long as none of it stops the learning. Just makes the system more convenient to use: no need to think too much about it.
@@ -19162,7 +19260,7 @@ What did we previously lack?
     Hopefully, that is enough.
 
 And if not, then we have this bag of ML tricks: \`\`elemCollapse elemValue(elem 'text' stringToDoc('
-  ⬜ Make each cell (or each goal?) have its own NN weights. This emulates the human brain, so this pretty much cannot fail as long as enough compute and ML tricks are put into it; the question is whether we can succeed without it.
+  ⬜ Make each cell (or each goal) have its own NN weights.
   ⬜ Skip connections (\`x->F(x)\` becomes \`x->x+F(x)\`).
   ⬜ Ensemble more NNs (\`A\` becomes \`(A+B+C+D+E+F+G+H)/8\`, each term possibly added gradually, possibly stochastically-averaged, possibly with each predicting the result separately).
   ⬜ For exploration: sample from all possible models that fit data, not just one NN (that space could be approximated with two or more samples: \`A\` becomes \`(1-p)*A+p*B\`, where \`p\` is random, approximately 0…1: for example, \`p\` is \`truncatedNormal(^1(),.5,1)\`).
@@ -19197,39 +19295,45 @@ Hypers:Cells->Goals->Base->(m map
   'Goals' Goals
   'Base' Base
   'FeatureSize' FS
-  'NewEmbedding' szs->truncatedNormal(szs,0,.4)
-  'Optimizer' varAdam
   'Predict' (m func Which ConsEmb OptEmb PrevState Inds (m add (m mul (m sub 1 p) A) (m mul p B)) A:(minimix (manymix in Cells 1+3*FS FS) (array Cells FS 1) mod) B:(minimix (manymix in Cells 1+3*FS FS) (array Cells FS 1) mod) p:^truncatedNormal(arrayCdr(_tensorShape Which),.5,variance) in:^concat(array Which ConsEmb OptEmb PrevState,^(1 FS FS FS)))
-  'PrevOptions' 12
-  'RandomOptions' 4
   'Goal' Real->Fut->((1-p)*Real+p*Fut p:discount)
   'SequenceState' (m func PrevState ConsEmb CarEmb CdrEmb Real (m add (m mul (m sub 1 p) A) (m mul p B)) A:(mix in 4*FS+1 FS) B:(mix in 4*FS+1 FS) p:^truncatedNormal(^1(),.5,variance) in:^concat(array PrevState ConsEmb CarEmb CdrEmb Real,^(FS FS FS FS 1)))
-  'OnSave' States->Actions->Rewards->display('Mean reward',mean Rewards)
-  'MaxStoredChoices' 2*Cells*65536
+  'NewEmbedding' szs->truncatedNormal(szs,0,.4)
+  'Optimizer' varAdam
+  'OnSave' States->Actions->Rewards->Chosen->display('Mean reward',mean Rewards);display('Stability',mean Chosen<4)
+  'PrevOptions' 4
+  'RandomOptions' 4
+  'MaxStoredChoices' 2*Cells*1024
   'ReplayedChoices' 2*Cells*16
   'UnrollLength' 16
   'MinReality' -2
   'MaxReality' 2
   'NaNReality' -1
   'UnsetReality' -1.5
+  'ConsToEnd' true
 )`,
     ],
-    `
+    `Since everything is self-determined by design, we don't really have a metric to compare different combinations of hyperparameters with. Though we can monitor stability (how many choices are exploring their remembered options, rather than random options; the more the better, though it should oscillate) and the mean/average reward (individually, the more the better, but globally, all we want is diversity).
+
                   Now¸ it is time to expose \`definersOf(use)\` to generation.
                     Who needs user-specified goals, even? Let us see if we can do self-determination.
                       Our third open-world adventure, after \`tutorial Types\` and \`tutorial regenerate\`.
 
 The more cons-cells, the better. This is big brain time. As big as your GPU allows, anyway: how good of a programmer you are is determined entirely by how big your processors are.
-    (Keep our representational capacity in mind: an array/object with \`N\` items in its \`deconstruct\`ion is \`N\` cons-cells (though a lot of arrays can have shared endings).)
+    (Keep our representational capacity in mind: an array/object with \`N\` items in its \`deconstruct\`ion is \`N\` cons-cells. Though a lot of arrays can have shared endings, or beginnings, if \`'ConsToEnd'\` is \`true\`.)
     My processors are very small.
     Small brain time.
 `,
     [
       _(`fancier`),
-      `cw:make(consWorld,Hypers 100 10 definersOf(use))
-allocate(cw,null,errorsSince,errs→2-errorsSince(errs));save('cwc',allocate cw func)`,
+      `cw:make(consWorld,Hypers 256 10 definersOf(use))
+allocate(cw,setGoal);save('cwc',allocate cw null errorsSince errs→2-errorsSince(errs))`,
     ],
-    `The customary learning rate, for tuning: \`\`settings ^_learningRate\`\``,
+    `(We convert our "do not do this" signals (\`error\`s) into a number with \`errorsSince\`. With one entry point, this also prevents it from just setting its reward to MAX (reward-hacking) and doing nothing else.)
+(Don't complain about how slow the \`fast\` saving/loading is. Be glad that it happens.)
+
+The customary learning rate, for tuning: \`\`settings ^_learningRate\`\`
+You can even tune a few more things, if you like: \`\`settings consWorld\`\``,
     [
       _(`fancier`),
       `runtime:^(settings 3000 "How long each epoch is allowed to run, in milliseconds of CPU-time.
@@ -19238,24 +19342,61 @@ The bigger your GPU and CPU are, the more of a programmer you are.")`,
     [
       _(`fancier`),
       `cwc:static(await load('cwc'))
-(repeat ^(try func(timeLimit runtime.1 use(cwc)) err→err);select(randomProb 1/100,?→save('cwc',cwc));null 1001);(select (equal 'Save' (prompt null 'Save' 'End')) ?→save('cwc',cwc) ?→?)`,
+(repeat ^select(randomProb 1/3000,?→save('cwc',cwc));(try func(limit {'time' runtime 'arrays' 1e5 'tensorMemory' 500e6} ?→callAdjust(u);u u:use(cwc)) err→err);null 10001);(select (equal 'Save' (prompt null 'Save' 'End')) ?→save('cwc',cwc) ?→?)`,
+    ],
+    `(27 bugs fixed, per-day: 5+4+4+2+2+2+2+5+1.)
+
+Now, now, now, now, now, now, now, if you actually try to train it…
+    I mean, stuff will happen if you train it for long enough.
+        Not good stuff: \`setGoal\` is almost never called (I \`print\`ed it), and stability goes up for a while when loss stops improving (no idea why).
+            (If you keep training, stability destabilizes more than initial conditions, and reward becomes a bit more than initial conditions. Boring.)
+            (Can zoom in on these plots.)
+
+\`\`(display 'Mean reward' ^(a:-1.14453125 b:-1.24609375 c:-1.44921875 d:-1.34765625 e:-1.55078125 (a a a c d a a b a a b a b a a c a a a b b d a a a a a a a b a a a d a a a a b e b a a d a a a a a b a a b a a a a a a c a a a a a a a d e a a a d a a a a a a a a a a d a a a a a a a a a a a a b c a a a a b d a a a a a b a a a a b a a a a a a e a a a a a e b b a a e a c a a a a a a b b a c a a a a a a d a a a a a a a a b b a a a a d a a b a a a b c a e a a b b a a a d b a a a b a a a a d a a a a a c a a a a a a a a a a a a a a b a a b a a b d a a a a a a c a a a a b a a a a b b a a a b e a a a b a a a a a e a a a a a a a a a a a a a a a a b a a b a a a a a a b e c a a a a a a a d a a a a d a b b a a a c a a a a a b a e a a a b a a b a a a d a a a a a b a a a a a a a a b c b a c a e a a a a b a a a a a a a a e a a a a a e a a a a b b a a a a d a a d a a a a a a a a d a d e b a a a a c c a a a a d b a a a b a a a a a a a b a a a a a a a a a a a d a a a a a a b a a a a a b a b a a a a a b a a a a e a c d d a a a a a d a a b a a d a b d c a b a a a d b a b a b a a a a d a e a a e a b a a a a d a a a b b a a e a d a b a a c a a a a a a a b a a a a a a b a a a e a a a a d a a a b a a a b b a a a b a a a a a a a a a a a a a a a a a a a a b a c c e a a b a a a a a a a b a e b a a e e d a b a a b a b a a a a a a a a a b c a a a a a a a a a a a a a a a a d a a a b a a a a a a a a a b a a a a a a b a a a a a d a a a a a a a a d a a a a a b b b a e a d a a d b a a a a a b a a c a a a d a a a a a a a a a a b a a a a a a a a a c b a a a b a a a a e a a c a a a a b a a a b a d d b a a a a b c a a a e a a a a a c b a a a b e c d a a a a a a b a a a a b d a a a a b e b a a a b a a a a a a b a a a b a a a b a a d b a a a a a a a a a a a d c a b a e a a a a a a a a a a a e a b a a a a a a a a a c a a a a b a a a a a a b a b a b a b a a a e a a e a a a b b b a b a a a c a d a b a a a a b a a a b a a a a a a a b a a a a b e d b a a b a a a a a a b a a a a a a b b a a a b a a a b a b a a c a c a a a b a b a c a a a a a e b b a a b b a a b b a a d a a a b a a a a b a a a a e a a a a a a a a a a a a d a a a d d a a a a a b d a e a a a a b a b a a b c a a a a a b a a a a a b a c a a a a a a a b e a d a d a c b a b a a a b a a a a a a b d a a a a a a a a a a c a a d a a a a a a a a a a a a a a a a b b a a b b a b b a a a a d d a b a a a a a b a e e a e a a d c a a c a a b a d a b a a a a a a b a a a a b d a c a a a b a a a a a e a a b a a b a a a a a a a a a a a e a a a a b a a a a c a a a a a d a a a a a a a b e a d a a b b a a a a a a a a a b b a a a b b a a c a a a a a a a b a a a a a a a a a a a a a a e b a a a a a a b a a a a b b a b d c a a a a a b d a a a a a a b b a a b d d a a a b a a e a b a a a a a a a a a a a a a a a a a a b d a a a b b a a b a b c e a a a b b a a d b a a a b e c a a a a a a e b b a a a e d d a a c a a a a a a a a a c a a a a a a a b a a a c a a a a b a a d e e a a a a a a a a a b b a a a b a a e d a a a a a b a a a a a b a a a e a a a a a e a a a b a a d e d a a a a a b a a a a a b a a a a a a a e b a a a b a a a a a a a a a a a a e b e a a a a a a b a e a a a a a a a a a a a a a a a a a b a a a a a a a b a a a a b a a b b a d a e a a a a a a b a a a a a d a a c a a a d a a a a c a a a a a a a b a a a a a a a a a a b a c a a b b d a a b a d a a a b a a a b a a a a e a a a a b a b a b d a a a b a a a e a b a a a a a b a a a a d a a a a a a a a a a a a a e a a a a a a a a a c a a a a a c a a d a a a a b a b a b a a a a e a b c b c a b a b a a a a a a a a a a a a a a a a a b e a a a a a b a a a a a a a a a a a a a b a c a a a a a a a a a d b a c b a a e a a a a a a e a a a a b a e a c a d a a a a a a a a a a a a a a a a b a b e a a d a a e a a a e a a a a b d a d a b a a b b a a c a a c a a a b a a a a a b a a b b a a b a d a b a a a a a c a a a a a a a a a a a a a a a a a a b a a a a a a a a a b a a d a a a a a b a e a a b a b e b b d b a a a a b a c a a e a a a a a c a e a a a a a a a a a c a a a a a a d b a b a a b a a a a a a a a c b b a a a b a c a b e a a a c a c a b a a c e c a a b b b a a a a a a b c a a a b a a a a a a a a e e a a a a a a b a a a a a a a a b d d a a a b a a a a a a a a a a a b b a b a a b a a a a a a a c d a b d a a a a a a a b a b b a b a a a b b a b a a a a a a a a a a a a a a a b a a a d a a b a d a a e a a a a a a a a a b a a d e a a a a a b a a a a a a a a a e a e a b a a a a a a c a a a a a a b a b a a a a a a b a a a a b a a a a a a d a a a a d a a a c a a d a a c b b a a a a a a a e a a b a a a a e a a a d a e a a c a a a a c a a a a a a b a a b b e a e b a d d e e a c a a a a a b a a b b a d a a a a a d a a a a d a b c b b a b a a a d a a a d a a a d b a a a a a b b a e a a a a d a a a d a b b b e d a a b a a a e a a d a a a a a a a a a a a a a a a d a a b a a a a a a c a b a a a a a c a a a a d a a a a a b b a a a a a a c a a a a b d a b d a a a a a e b d b e a b a d a a d a b a a b a a d a a a a d a c a a d b b a a a a a b a a b a a a a b d a a b a a b a b a a c a a a a a b a a a a a a e a a a a a e a a a a a a b a a a c a a d a a a a b a a a b c a a a b d a a a a a a a a a a a a a a a d a e a a a a a a b a b a a a a b a a a a a b e a a a a a a a b a a b a a a a a b a a b a a a b a a e a b a a a e a a d e a a a a d a a b b b a a b b d a a a a b a a a c d a a a a a e a d a c a a d c a a c b a a b a c a a a a a b b a a a a a a a e a b a d a a b b a a e a a a b a e d a a a b e a a a b a d b a a a d a a c a a a b c a a a d a b b a a b e b a b e a a a a a a a b a a a a a a a a a a a d b b a a a a a a b a a d a a a d a a a b b c b a b a a a a b e e c a b a d a a d b a a a a b a a d a a a a a a b a a b e b a a b b a e d a a a b a b a a b c a a a d a b a b a d e b a b a a a a a d a c a a b b d a a d c a a a a a b a a a a a a b a a e a d a b c b a e b a a b a d c a a a b a d c a a a a a b a a a d a a d a a a a a a a a a a a a a b c a a a b a a a a b a a a b a a a a a a a b a e a e a a b e a a a a c e b a a a a a a a a a a a a a e a a a a a a a a a a e c a c a a a a a a a a a a c d d e a a e a c a b a a b a a a a b a a a b b b a a d a a a d a a a a a a a d a a e a a a b a a a a a a a a a b a a a b b b a a a a e a a a d a a a a b a a e b a a a b a a a b a a a a b a a a a a a a a a a a a a a d b a a a a a b e a a a a a a a a b a a a c a a a b a a a c e b a a a a a a a a b a a a a e b b a a b b c a b a a b a a d a c a a a a a d e a a a a a a a b a a a a d a d b a a d a e e d a a a d a a a e a a a e d a a b b a a a a a e b e b a a d b e a a a a a b a b a a a a a b a a a b a a a a b a a c b b b a a b d e a a a a a d b a c a a a a a c b e a a a b a a a a a a a a c a a b a a e e a b a a a b a a a a b a a b e b a a a a a a e e b a a a a a a e b a e a a a a a d e a e a a c a a b b a e a a a a a e a a a a a a d a a a a a a a c e a b e a d a e a a a c a a a a a a a a a a c b a a d a a e a a a a a a a a a b a a a a a a d a a a a e a a a b a a a a a a a a c a a a e a a a a a a a a a a a d e d c a b a a a a a a b a a b e a a a a a a a a a a a a a a a e a a a a a b a a e a a b a a a a a a a d b a a a a a a a a a b a a b a a a a b a a a a a e a a d a a a a c a e a b a a a d c a e a c d a a b a a a a a b a a e a e e a a a a a a a a b d a e a a a a a a b a a a a a a b a a a d a b a a c a b a a d b d a a a c a a a a a a a a a b a a b a a a a a a a a b a a a a a a a e a b b a a a a a a a a a a e a a a a b b a a a a a a a a a a a b a a b a a a a e a c a d e a a b a a d a a a d a d a a a a c a e a a c a a a a a a e e a a a a a a b a a a a c d d a a b b a a a a d a a b b a a b e a a a a a b a a e a a a a a a a a a a a a a a a b a a a a d e a a a a a a a a a a b a a a e a a a e a a a b a a a a b a a a a a a c e b a a a a a a e e a a a c a b a d a b a a a b b a a a a a a a b a a a a b a a a b a b c a a a e a a a a a a a a b a b a e a a a e c b b b a a a e b b b b a b a a a a b b a e e c b a c a e e b a a e a a a a e a c a e b a d a a a a a a a b a d e a a b a a a a a a a a a a a a e a b d d a b a a a a a e a a a a a a a a a d a c a a d a a a a a c e e a a a a a a d a a a a a e a c d a d a a a b e a e b a a a a a b a c d a a b a d a a b a a a e a a a a a e a a a a a a a a a e a e d e a a a a e a a a a a a a a c a b a a a a b a a a b e b a b a a b a a a a b a a a a a a a a a b a e a a a a a a a a a a a a a b e a a d a a e a a a a a a a a b a c a a a c e a b a a a a a a a a b e a a a c c c a b a a a a b e d a a b a a a b a a d a a a b a a b e a d b a e c a a a a c a a a a a b a b a d e a a a a a b a a a a c a e e a b a a b b a a e a a a b a b b a d d a a a d a a a e a d a a b a d d e a e a e a a a e b d c a a a a a d a a a b a a a a e e a e b e a a a a b b e a a d a a a a a a a b b a a a b d a a a b a d d a b a d b a a a a c a e a a a a a d a b a a a b a a a a a a a a a a d a a a a a a a d a a b a b a a a a b a a b a a a a b a a a a a a b a a a a e a b d a e b a a a a a a a a a b a b d a a a a a a b a a a d a a a a a a a a a a a a a a a b a c a a a b e a a a a a a a b b a a a a a a a a b b a a e d b a a a e b b a a a a c d b d a a a a a c d a b a a e a a a a b a b e a a a a a b a a a a d a a a a a b b a a a a a a a b a a b a b a a e a a b a b a a a a a a b a a a a b b e a b b a e a a d b a a a b a a a a e a a a a e a b b a a a a a a a a d a e a a a a e b a a c a a a a b a b a a c a a a a b a a a a a a a a a d a a a a b a a a a a a a c d b a d a b a a a a e a b a a a d d b a a a a b a a a a a a e a a c a a c a e d b a a a b a a b e b d a b a d a a e c e a d e a b b a a b a a d e a a a c d b e a a a a a a e a b e a e b a a d a a e a a a a d a a b a a e a a b a a e e a e e a a a a a a a b a a b a a a b a a a a a d a b a a c a a a e e a a d b a a a b a c b a a e a d b c a b a a b a a a a d e a a a a a b e c a a b a a d a a a a a c a a a a a a a e a a a e a e d a a b a a e a b a a e e d a d a a b c d a b a a a a e b b b a b a b a a e b a a b d a a a b b a e a c a a e e a a b c e a a b c c b a d a a e b a a a c a e a a b e a d b a a b a b a a a a a a a a b e a a a a a b e a a b a d a a b a a a a a b a a c a b b c a a b b a a a a a a a a a b a e a a a a a a a b a a a a e b b a a a a a b a e a d d a a a a d a a a a d a a a a a a a e a d a a a a a e a a a a d a a a b a a a e a d a a a a b b a a a b a a c a a a e b a a b a a a b b d e a a a b e a a a a b a d a a a e a e a b a a a a a a c a a a a a a a e a e c a a b a b a d e b a c b b a d a a a a d a a a b c a b a e b a e e a b a b b a a e a d b e a b a a d d a e a a a c a a a a a e a a a e a b e a a b e a d a a b a e b a a e a a a b d a a a e a a a c e e a e a a d a e a a c a a d b a b b b a b a a b e b a a a e a b a a a a b a b d a a a a a a a a d b b a b b a a b a e a a a a a a a a a b b a d a b a d a b a a a a a a e d a d a a e a b c a b a a a e e a a a a a b a b c a a a a a a a a b b e a a b a a a b a a a a b b a a a a a a a a a d e b a a a a e a a e a a a e a b a a a a e e a a a a a d a a b e a a a e a a a a a d a a a a a a a e d a a a a a a a a a a a b b a a a d a a a a a d e a a a a a a a a a d b a a a a a a b b a a a a b b a a a d d a a c e a a a a a a a e a e a a d a e a a a a b a a a b a a a a d a a e b e a e a a a b a a d a e a a d e a d a a a a a a a a a e a a e a a a a a d c a a a b a a a a e e b a a e a e a a a a a a a a e a a a a a a a a a a d b a a a b e a a a e e a a a e e a a a e a b a a b a a a d a a a a a c b b e a a a a a a b a a a d a a a a b d c a d a a a a d a b a e a a a a a a a a a a a a a a a d a a e a a e a a a a a b a d a b a b a a a a d a b a a b a e a d b e a a b a a a a a a a b a e e a a a a b a d a e b a a e b e a e a a a a a a a a c a d b a b a a a a a b b a a a a a a a a a e b a d a a a e a c a a a a a a a a d a e a b a d a a a a a a b a a a a d a b b b a a a a a b a a e c a d a a a b b b a a a a c b a b d a a a a e b a b a d a a a b b a a b e a a b a b a b d e e d b e a e b b a a a a a a a b e a b a a b a a a b a a a a a a a a d c a a e a a a e a a a b c e a a e d d e a b a e d b e d a b b d b a a a a a c b a a a b a b e a a b a a a d a a b a a a a d a b b e a c e b a a a e a a a a c a a b e d b b a d a a a b a a e a b a d a a a e a a a d a e a a a b a a d a a d a a a a a a b a a a a a a b a a e a b a a a b a a a a b a a e a a c a b a a a a e a a a a a a b a b d c e b a b a a a a a a a a a a a b c a a b a a d a a a a a d d a b a b a a a a d a e a b a a a a e a a a d a a a a d a a a b a b d a b a a a a a a a a b a a a a a a e b a d a a a e b e a a a a a d a b a a a a a b a a b b a a d a a b a a a b a a e a b a b a e a d a a a a a a a e a a c a a c a a a b a a a e e d a e a a d a b a a a a a e a a a a a a a b b a b e c a c a e a a e a a a a a a a a a a a d a a a a a a e a a d a a a a a e b b a a a a a a a a b a a a a a a b e a a b d a a b a e a b a a a c a b a a a b a b e a a a b a a a a a a a a a a a a a b b e a a a c a d a e e a a a e c b e b a a e a a c b e a a a a a a a a e e a b d b a a b a a e a a a a d b a a a a a a a a a a e a a a b d a b a a a a a a a d c a b a b a a a a a a e a a a a a b e e b a a b -1.197265625 a a a a a a b a a a a a a a a a b a a b b a a a a e a b a a a a a a a a b b a b a a a a a d a a b d b b a a a a e e a a a d e a b a a a a a a e b b e a b a c e a a b a a a a a a a a b a a a e a a a a a a a e a a a a a a b b d a a a d a a d a d a a a e d a e a a a a a d a a a c d a b a e b a a e a a a e a a a a b a b e a e a d e a a a a a a d b a a a a a e a c e b a b a d a a a a a a d a b a c e a a e e e a c a a e a a d a a a e a a a a a a e a d b d a a b c b a a b c a d a a a b e a b a a a a b a a a a a a e a a b a a a c a d a a a d a b a b a a a c b d b a d c a a d e b b a a a a a a d a b a a e a a a e b a a a b a a e a d a a a a a a a a d b a a a d e b a a b b a a a b a b a a c a a d a e a a d e b a a b a a a b b a a d d b a b a a a a a a b a b a a a a a b a a e a b a a e c b a e d b d a a a a e a a b a a a a a a a b e b e a a b a a a a a a a a a b a a d a d d a a d a a a c a b a a a a a d e a b a a a a a b b a a c a a a d e e a a b a a a a a a a a a b a a a a e a b a a a a a a d a a a a e a a a a a b a a a a a a a a a d b b a b a b a b d a b a e d a e a e b a a a a a a a b a a a a e a a a a a d e a b b a a a a a a a a b a a d a a d a e b b a a a a a e b a a e a a a a d a a d a b a a b b a a a a a a a c a b a a a a a a b a b a e d a a a a a a a b a b b b a e a a d c a a a a a a a a a a b a d a a a a a a d a e b a a a a a a a b b a b b a d e a a a a a a b a a a b a c b a a d d e a b a a a a a a a a a a a a b a b c a d a a a e b a b e a b b b a d a a a a a a a a a d e a d a a a a a a a a c e a b a a d a a d a a a a a a b a d a b a e a a b a d a d b d e b a a a b a d b a e a b a a a b b d a a a a a a e c a a e d b b b a b e a a a a e e a e e b a a d a a a a e a a a a a a a e a b a a a b a e a a a a d a b a d a a a a e d d d a a b d b e b a e b a a d e d a a b c a a a d a a b d a c a a a b b d d e a d a e a a d a a e b b a b b a e a d a a b a a a d a a a a b b a a b a a b a a a a b b a e a a a b a a a d a a a a a a a a b b b e a e a a b d a a a a b d d e a e a a a a a a d a a b a a a b b a a d d a a d a a a d a a a a a a e a a e a a a a d a a a a a a a b e b b a a a a a a a a c a a e a a a a a a a b a a c e b d a a a a d a a a a a d a a a a a a a d a a a d d a a a a b a a b a a a a d b a a a a a a a a e a e a a e a a b a a a a d a a a a a a b a a d a a b a a a d a a d a a a d a a a a a a a a a a a e a a a a e e a a a a a a a a a b a a a e a a c a a a a a a a b a d c a a a a a d b a a e a a a a a b b d a a a c a a c a c a a b a a d a a b e a a a e a a a a d a a d e a a a e b e a a a a a b b b a a a a a b a a a b c c a d a b a d a a b a b a b a a a a b b b a a b a a a a a d d e e a a d a a b a c a a a b d a a a a a e b a a a a a a a a a a a a a a a b a d a a c a a a a a d a b a a a d a a a b a a a a a a a a a c a a a a a a a a c a b b a d a c a a a b a b a a b a a a a a a e a a a a a b a b b a a a c c b b d e a e b b a a c b a a a a a a a a a e a d a d a a a e a a a b c a b b d a b a a a a a e a b a c e e a a a a b a a c b a a a a b d e a a a e d b a a a a a a a a a a b a d a a e e b e a e a b a a d a a a d d e b e d a a a a a e b a a a d a a e a d e a a a b a a a a d b a a b d a b a a b a d a e b a a a a b a e d a e a e a a e a e a a e b e e a d a a b a a a a b b a a a a b a b a a a a a d a b a a e a b c e a a a a d a b a c a d e e a a e a b a a a a a a a a a a a a d a a a a b a a a a a a a a a b a a b e a b a a a e a a e a a a e e a a a a c b c b a a a b d a d a b a a b b a b b d a a a b a e a c d c e b a a d a b b a a a a b a a a a e a a e a e a a b a a a a a b a a b e e a a e e b d a a a d a b a a a a a a a a b a c d a a a a b a d a a d a b a a b b b e a d b a a a b a a a a b a b b e a a a a a a a a c a a c b a a a a a a c b a d c a b e a a a c c a a e e a e a e e a d b a a a a c b a a a d a a b b a a a a b a a a a b a a a a a a e a a a a b a b b a a a a a a b a a a a a a b e a a a a a a b a a e a a b a a a b b a b a a a a a b a b a d b b a b a a a a a b a a e a a a a c b a a a e a a a b e a d a a a a b a a a e a a a a a b a a d a a a d a b a a a b e a a e c a a e a b a a b b a b a a a a a d a a c a a a a b a b a a e a e a e a a d a b a a a b a a a a b a e b a e a b a a a a d a a a a a a a a b a a e a a a a a a a a a a a a a a b a a a a d b a a a a a b a a a a a a a a a e a a a a a a e e a e a b d b a b c a e a e a a a a a b c a a b a e a a d a a a e a b e e a b a b a a a a b e a a d a a a a c a e a b a a a e a a b c a a a a a a e a b a a a a a e a a b a a a a b a d a a d a a b b a e a a b a a a a a a a a a a b a a b a b b a a d a a a a c e a d e b b a a a a a a b a b a e a a a a a d e e a a a a e b c a a a a a a a a a a e a a a b a e a b a a d a a a e a a a a a a a e b c a a a a d c a a a a e a a b a c b b a a a a c a a a d e a a a a a a b a a a a a a a a a e a e a a e a b a a e a a b a a a a b a a a d a c d a a a a b e a a a a a a e a a b a a a a a a b a b b a c a b a a a a a a a a a a a a a e a a e a a a a a a a a a a e a a a b d a a a a a d a a b e b c a a a a a a a a b a d b c a a a a a a b a a a a e c a b a d a a b d a a b a a e a b a b a b a a a a a a e b a b d b a a b a a d a a a b d a a a a a b a a a a b a a a e e a b a a a a a a a e a b b a a a a a e a b b b d a e a a a a a b a a a a a c a a a a a e b a c b e a e a a b e a a a a a b a a b a a a a a a a b e a a c e a a a a a a a d a b a b a a a e a a a a b c e a a a a b a a a a e b b b a a a a a a a d a b a b a a b b a b a a e a a a a b a a c a a a d a a b e a a a a a a b e a d a a a b e a a b a c a e a b a a a a a e a a b a a a a a c a a a b c d a e a e a a e d a a d a b a e a a a a d a e b a e a a a a a e a b a e a a a a a e b a a a a a a a a e a a a a b b b d a a b a a a b a e d a a b b a a e b a a a a a a a a a a a a a e a e e a d b a d e a b a d a c a a e b b a a a a a a a a a a a b e a a a a c a b a a e a b a a a a a b a a e b d a b e a a b a a a a a a a a a a b c a a a a a a b a a a a a a a a a a a a d a b a a a a a a d b e e a a a b b b b a a d a b b a d e a b a a d a e a a a a a a e b b a a b b a b a a a b a e a b a a a a a a a a a d a d b a a a a b a b b a a a a a a a b a a a a a a d b a a a a b a e a b a b a a a b a a a a b a a e b a a a c a a a a a d a a a a a a a a b a a a a a b a a a a a a b d a a a a b c e b c e a a a a a b b a c a a d a a a d a a b b b e a a a e a a c e b b a b a a b a a a b a b a e a a a e a b a a e e b a d a d a a a a a a a a a c b b a a a a a b b a a a a b a a a a b b a a a a b a a d b a a d c b a a c e a a d e a d b a c a a b a b a a b a a e b a a a a b a b a a e a b a a a d a a a c a d a a c a a a a a b b a a a a a d a a a a a a a e a e a a a a d a d a a a a a b a d b a a a e d b a a b a a a a e b a b e a b d b a b a a b b a c a a d a b b e a a a a a e a a a a a a a a a b b a e b a b a b e b e e e a a a a b a a a b a b a a b a a a a a b d a a a d a a d a a a a a c a a a e a a a a e a a a b a a a a a a a e e a c a a a e a a a a a a b b e a a d a a b a b e a a a a a b a b c e b a a e b b a a a a a a e b e a a a e a e a b d a a b a b a b a a a a e a a b b a a a a a e d a e c b c b a a b e b a a a a a b a e a a a a a b a a a a a b a a d b b a a e a a a a d a b a b a a c a a a a a a a b a a a a a a a a b a a a e e b a a a b a a a a b a a)));(display 'Stability' ^(a:0.439453125 b:0.603515625 c:0.423828125 d:0.455078125 e:0.552734375 f:0.595703125 g:0.626953125 h:0.619140625 i:0.517578125 j:0.484375 k:0.51953125 l:0.443359375 m:0.578125 n:0.5078125 o:0.6640625 p:0.6328125 q:0.494140625 r:0.572265625 s:0.623046875 t:0.583984375 u:0.65625 v:0.64453125 w:0.671875 x:0.5234375 y:0.71484375 z:0.7734375 A:0.611328125 B:0.708984375 C:0.408203125 D:0.51171875 E:0.705078125 F:0.544921875 G:0.560546875 H:0.486328125 I:0.3359375 J:0.462890625 K:0.6171875 L:0.6015625 M:0.490234375 N:0.7109375 O:0.5390625 P:0.625 Q:0.62890625 R:0.548828125 S:0.4296875 T:0.396484375 U:0.55859375 V:0.681640625 W:0.373046875 X:0.5546875 Y:0.59765625 Z:0.4375 ba:0.640625 bb:0.6484375 bc:0.591796875 bd:0.501953125 be:0.38671875 bf:0.630859375 bg:0.669921875 bh:0.685546875 bi:0.6953125 bj:0.6796875 bk:0.580078125 bl:0.53125 bm:0.333984375 bn:0.609375 bo:0.46484375 bp:0.509765625 bq:0.470703125 br:0.5625 bs:0.744140625 bt:0.357421875 bu:0.734375 bv:0.638671875 bw:0.767578125 bx:0.431640625 by:0.42578125 bz:0.54296875 bA:0.576171875 bB:0.72265625 bC:0.564453125 bD:0.69140625 bE:0.60546875 bF:0.70703125 bG:0.673828125 bH:0.515625 bI:0.779296875 bJ:0.435546875 bK:0.388671875 bL:0.658203125 bM:0.61328125 bN:0.41015625 bO:0.412109375 bP:0.458984375 bQ:0.751953125 bR:0.34375 bS:0.58984375 bT:0.646484375 bU:0.49609375 bV:0.466796875 bW:0.50390625 bX:0.474609375 bY:0.650390625 bZ:0.546875 ca:0.513671875 cb:0.607421875 cc:0.75 cd:0.33203125 ce:0.634765625 cf:0.4140625 cg:0.505859375 ch:0.521484375 ci:0.37109375 cj:0.43359375 ck:0.5 cl:0.53515625 cm:0.4921875 cn:0.642578125 co:0.533203125 cp:0.46875 cq:0.568359375 cr:0.4765625 cs:0.45703125 ct:0.40234375 cu:0.3515625 cv:0.525390625 cw:0.57421875 cx:0.74609375 cy:0.771484375 cz:0.615234375 cA:0.7890625 cB:0.666015625 cC:0.73828125 cD:0.67578125 cE:0.75390625 cF:0.556640625 cG:0.759765625 cH:0.52734375 cI:0.482421875 cJ:0.654296875 cK:0.587890625 cL:0.384765625 cM:0.375 cN:0.404296875 cO:0.7421875 cP:0.37890625 cQ:0.71875 cR:0.390625 cS:0.453125 cT:0.59375 cU:0.56640625 cV:0.66796875 cW:0.732421875 cX:0.599609375 cY:0.818359375 cZ:0.44921875 da:0.55078125 db:0.318359375 dc:0.5703125 dd:0.298828125 de:0.662109375 df:0.76953125 dg:0.447265625 dh:0.369140625 di:0.478515625 dj:0.76171875 dk:0.83203125 dl:0.40625 dm:0.677734375 dn:0.68359375 do:0.4609375 dp:0.248046875 dq:0.30859375 dr:0.537109375 ds:0.427734375 dt:0.66015625 du:0.47265625 dv:0.541015625 dw:0.392578125 dx:0.419921875 dy:0.48828125 dz:0.701171875 dA:0.748046875 dB:0.48046875 dC:0.65234375 dD:0.3671875 dE:0.380859375 dF:0.416015625 dG:0.63671875 dH:0.27734375 dI:0.703125 dJ:0.400390625 dK:0.365234375 dL:0.32421875 dM:0.58203125 dN:0.69921875 dO:0.783203125 dP:0.5859375 dQ:0.6875 dR:0.833984375 dS:0.740234375 dT:0.294921875 dU:0.4453125 dV:0.498046875 dW:0.3984375 dX:0.41796875 dY:0.36328125 dZ:0.376953125 ea:0.34765625 eb:0.529296875 ec:0.337890625 ed:0.35546875 ee:0.689453125 ef:0.693359375 eg:0.716796875 eh:0.697265625 ei:0.728515625 ej:0.451171875 ek:0.736328125 el:0.44140625 em:0.62109375 en:0.724609375 eo:0.33984375 ep:0.3828125 eq:0.275390625 er:0.302734375 es:0.306640625 et:0.349609375 eu:0.796875 ev:0.28125 ew:0.80078125 ex:0.328125 ey:0.287109375 ez:0.322265625 eA:0.2734375 eB:0.345703125 eC:0.7265625 eD:0.314453125 eE:0.31640625 eF:0.712890625 eG:0.763671875 eH:0.251953125 eI:0.29296875 eJ:0.421875 eK:0.3125 eL:0.755859375 eM:0.8125 eN:0.341796875 eO:0.794921875 eP:0.353515625 eQ:0.359375 eR:0.361328125 eS:0.26171875 eT:0.267578125 eU:0.775390625 eV:0.291015625 eW:0.39453125 eX:0.30078125 eY:0.806640625 eZ:0.330078125 fa:0.814453125 fb:0.720703125 fc:0.8046875 fd:0.3203125 fe:0.798828125 ff:0.255859375 fg:0.78515625 fh:0.791015625 fi:0.765625 fj:0.8828125 fk:0.810546875 fl:0.8359375 fm:0.77734375 fn:0.78125 fo:0.73046875 fp:0.83984375 fq:0.857421875 fr:0.802734375 fs:0.787109375 ft:0.853515625 fu:0.822265625 fv:0.80859375 fw:0.79296875 fx:0.849609375 fy:0.900390625 fz:0.861328125 fA:0.826171875 fB:0.8203125 fC:0.865234375 fD:0.841796875 fE:0.7578125 fF:0.873046875 fG:0.869140625 fH:0.845703125 fI:0.896484375 fJ:0.81640625 fK:0.830078125 fL:0.90625 fM:0.87109375 fN:0.876953125 fO:0.935546875 fP:0.939453125 fQ:0.8671875 fR:0.923828125 fS:0.90234375 fT:0.84765625 fU:0.859375 fV:0.8515625 fW:0.828125 fX:0.84375 fY:0.927734375 fZ:0.904296875 ga:0.875 gb:0.8984375 gc:0.87890625 gd:0.912109375 ge:0.82421875 gf:0.89453125 gg:0.890625 gh:0.88671875 gi:0.85546875 gj:0.884765625 gk:0.919921875 gl:0.91796875 gm:0.943359375 gn:0.91015625 go:0.892578125 gp:0.86328125 gq:0.947265625 gr:0.837890625 gs:0.880859375 gt:0.9296875 gu:0.908203125 gv:0.953125 gw:0.9140625 gx:0.916015625 gy:0.9375 gz:0.921875 gA:0.9453125 gB:0.9609375 gC:0.94921875 gD:0.95703125 gE:0.888671875 gF:0.92578125 gG:0.931640625 gH:0.951171875 gI:0.93359375 gJ:0.94140625 gK:0.958984375 gL:0.3046875 gM:0.310546875 gN:0.259765625 gO:0.97265625 gP:0.2890625 gQ:0.966796875 gR:0.236328125 (T bo eA dM m a d j n a bi i fE bP h q o b cL p bF Y bz c cO bb dj u b c gc bX cb e db t bR dP F L g bD d f dI e f dy g G fj r h fc w bL k S C i bh X j cC di fF l e D x bS s k z b bl K l y m n bN o v bm g bk f W p dQ dE E bd de q cZ cB bn A dN U 0.216796875 bY r f eB dc Q cf s t fz bI dw eq u dW M v be e w R x B cw o y b H bp c cA bu s r b z A bs N B 0.212890625 V C cv D I E J ba F v bA G H ca eY 0.279296875 ct bE bq E cD I dq A bj g J K P fa b bw dl ey ft E L dC ck M em M O N bf O eP n cr x P Q R S Z T fl br ef gN T bg U V W bG X Y O j bc Y Z bO Z ba bb bJ n bQ bc eV bT bd i bv cT cu cW F dZ dk bB bb bH be bf bt ch bg j bC cd M bh bi ee bj U ei bM bk ea H do bl E bx R bm bn cs m cz a bo u D cy cK eg s bp bq bf by br ce fk y L bs f cE bt bU bu i bv E cc eK x bw bn cR K bx ba by cx bV W ec bz bA dg cn Z bB dd x bC dG bD cl bK bE bF bG bH cM bI cU bJ v B R bK bo bL bW bZ dK o bM a bN dV bO U bb bE bP dX d cq Z cg T bQ fd ci da w dn cm bL bd P H bR bS bT bM F br bU Q bM bj F dJ bC bV O dt bW v bX bY bZ bl ca cb cc cp e cd co bC ds cj ce bn r df f cf bA bd cg bc q ch t e cQ ci cj k x F e t eF bA x ck bj Y bS cF bq cl P bd g M cm br cb cn bV R cN c D M bV X bM a dR X M bB co cp cq cr cP cs n m ct M A br ck cY K br cu cI G co cG bF bg z cv O cw bb u bQ F cx cy i cz E cH cA bk bU dS cp eD bn cB ca cC dh cD cE cJ L ex cb ca cs cF eZ bU J B P eh d u gb bj cg N bU cG H bN el G bh cp m bA d dB bP cF cA dv cl cH cI cJ 0.169921875 cK cK bT co E cL cD bc cV cM cg bU cl cN ba cK dr cO o bA cG cP es ez cI r cS bX cQ bd M cR bP dD dm cl cS fe cT cb cC bC cr dF dp bT cU bl bv br cq U cV q cX eb bw ca u dA bK ed K bT cP bG cB R G cW b bK cX ce cW o cY bd cZ cK da dL db dc g bv dd i s bX bF bl bh O u b bi de cz cK df dY bV dH eM cj ce dx ca bT dg cN co dh cJ dO Y di en eJ d g l bP bl cZ cn C bY dj br cH bR A c bT eo ct bJ bc bz bn dk ca Q bA R ci j dg Q bq ek bf bz T Q du dl e dl br bo dm O fq cN u dn cN t V br do bn ca dp bf bL fC bT bp cv fp dq r n dm bD ca i cw Q cM dr eL cw bc cU bD di bh cl cK bd bD ds eu bS dt 0.2265625 cy cY bK bT du h G cr B bZ dv ej M cu bA cA dh bX cr dw 0.224609375 y bk bk ch dx u du g dy dc cG cs br bb L k cj dt bN c b cp cZ U ds u W bP bA be cP k bd cD j cM dz cI dz cM cD bM bc dA cp dB cx n dC ds 0.2578125 eC d cN cp dh m ew dy cj cb ci J dD fu dE bx de dy dF bR bU cm bc da bq cB dG cv ch h cf dh bE bn F cT cS cj cP by dk P bb dc ct cW bx df do cv dH dI et dc v bx c dr cb cn bC cS C dx dI f cp bW bL cZ bU bq dT cI dJ bS r R dK bV bp cb dF cK dL x bA bP di h bX cp dJ D du J bJ k cl C du dM cj fr bZ dN bp dU cP bT 0.208984375 a ce bP r cC dO bz cb K a s b dP f cg x dM cs dQ h N cv cl dR cB e S dS ds cN ep bd ds dT Q dF da dU r 0.24609375 0.2109375 bP dV bv bL bW dg dW dc bg D bW ce bR er V df cs cf M h bS ck dn bl F P dc bd dc c f D bC ds cp R dX J o G do ba cq F cQ dP cI H dY cT bD br R bz dc cO G x ch dt bU dZ x ea cW bE bU bv Y dJ bw d M bz dB h eb bA B b ec dj dB bb bP bU V br O r ed ee dF p e ca q bn ef cV e bN dM by j dG e cw s u bE r dL dB O ds eg Q cb X bd bO eh X cN cp bL 0.19140625 U ei cf bL dj da ej R eb ba bL i E k b ek ca cl S co a bE el em bC bc bo bk cz do en a Z de bv J eo cI i dJ dq dG ck ee X p cA cW J cx bl ep bz X bf ds bl cp cr eE dE cF O bt eq cZ bp bl ca M f b dJ dJ do bW bq dN dt br L du s er dy bc bK cD Z dc el ed cm cl fJ H dl dz ev i bn br bj bf dm bi m em bj dQ dt bO J bm bE dq cr G ds bA dz cm cR q t d e bM eb M es dc bp dl bQ h dz dV bz bt bb dv A x eb bl e m bW ds J dB cl cK bE eH ce bo dc dw cX br bV cI dQ dt fw di em er cH m dc et e W b dy bk bj cP cN da q dQ br df dy em bA dZ dn c dZ P dG ck cj cX dU ch cq eu x dS bG f n bo dQ cM bv do br bY bn bT 0.185546875 v cj N bD dg ch bK dr bV cP cw G dB r J do c h H K de B dg do eg bF dF Q H g cT l n cl f P dz dt V em cU o dz c em cX I p cK cb et dP cp Z ev b do ed dw bz bf Y dD ca eh ew c co br ea ca be T W bK ex ej e dx bH ba bn bH C dF ey 0.240234375 bN dC d cV fb bx ez gM bf R cN dc H cL W q bE dw h cb q bZ eA L u br co cP dt q eG dW cR dV eB bz dm db x dW db bK bq D bX cU bz bJ P V by G bM dy ej eI bF ej da eb bJ cF dX cz h cv 0.228515625 o c eC 0.2421875 cI ef q eb eB bO cg dS j cU Y A bn cK cm r cH dr cq dB w bf bc j eD D Z dN da eQ bE bW dG L bS dM bA eE dx by t eF cf cn cz B eG bI A dG co dV do T eN cS cP eH eI by bd eu cm bH dV bi W da cQ k ej dx N bZ ci cF bE bm L dl eR bX dg ej bf bX cI cM R dD cu eh bZ cz bK ca cx dK bK ey dy eh dY dI bH K d v dW eq V dV ci dr bA n V ch bZ eI cr N bS m bM bA ep eJ eb bH cw cV dy bq J P Y bP cx ch cf dU e I n dY dP ba bQ n cd q dl X ed Z bU do dN a L eF i cp w x Z ej du dF dc cS D dM de ej en dU ed cS bA P dg es U eJ dc cr bT P bn H dM dZ cV bZ f dg cU em U et bU cI m J bR dU bb cx ch L bD s cW do dP ed e eK n t h cg cf g G dC dU dQ bk bT de s p da bM a cw dw eO bl eL H bz p ds bC cB m Q b bZ bP dt u cT y X m ff cl dF cB ca cX ch dU ej br cN cH dK bd O R ds p eB bZ be d dQ i c k be bC bG cT bZ b cv f dv q dg cS 0.26953125 cg f eh w bP bz bq do bJ H cS r bV dy cU o eM R dr m cb ec s bn cd dP dg dT cn dr eN bf U dd bx n cU dK cZ t el 0.244140625 cs bB q dw dt bT b dW cF E bA bK E j bq bc cf J eX cP bH cl h bx X d W cl cf Z eg dy ex do bH cZ cH cV cR co dV q cB cg bl bx gR eT C cD cH eO j de fg dC bE cC bx br ca bR eP cl bd R bD e cg bY dV cD ch a dy eD A cR bE bO ch cX T bL dh cu cI Q a cK y cX cI ds bc A T cD eb em dr bf Q cM 0.25 bk du bt b eJ t ct cU ce cQ dC bE s de cV eD fs r eS em cB em d bB du et ck C cm dw o ba cs K bA Y bi cZ bW O d dy l cP Y by cl f q eB ca cz cg fB cs L V do dW ck cX ez n cB cl L l be eW j el eQ fi bb cK cC r eR x du k cx h q bL C T cp ek cv cr eS dr cC n dx bC el dn o bV dY db de bP S cb B cV i dJ eU eT bJ cK K cp ct l dm G dL O f cN cY R dP bf o ca do bx z dU de cd bq bo cg eU dV bx t dB b Y em dm cf bY co Y D cs G cn cv cM bL cs bT ca bE eD e dI dw bF co dF cb bJ c Y D cs ci f bJ m dm cp dM m dW O be bY cN cN a O A cC bP cz bP O cS cH bJ cL S cN c en eP ck T eq n eI dT dS Y 0.158203125 ed cX gL cT bx bx bL q dh eL bA r dl ck F 0.220703125 cw el cK L cM bP bw dm x P cl bp bK dU bC cv u cg k bH r eQ d cH ck bp bJ eU bl dv cF ef q bS bH bA dt dV ba T eg eV bD dh bZ bx dy cP cw j R cp 0.22265625 du i bl eW cI da F ca cS dM bv dm h bA da e J eK J bZ dX bz bz cZ bu bc cr cL eC w K cB s bE bl gP en eX eJ bn dV cl bA bo Y bw fn bC bl ds P dv dz eP s bh cj k a eW co br co Q dU f ep bH K cK bb bG cZ A co cv dF bF eY bt cp cH cl ds ck dM O dr bZ dz dy eW cq bP do dc eZ 0.265625 cT bJ bk u cI eo ej dH v ea dF bU b bO O bY bL I x dJ bH bj bm dg dC el 0.1171875 bO dr cp fa cI v bz df bd bH m cX dL dM cv cg bX el dB k do cZ dK cw by dm bu cy eT K cJ bx er dj eJ cK u dh cP cL cK dc o bh b dN dg C dN eN fb dd A dv df bF co du L cg cb cn bP cB t G cu be dG dW cF x cK dg dc ds dE dh dE bM eg bx bU g cp eB G fh 0.271484375 m cV cO bO dw eJ fc bO bC ee x R bf s e K dW ct cU fd bH bz m F dQ T bC R H H V bU cX bB k Z eb bZ z cr m dI br bE O bT dc bx cF eo cX cK eg e cv eb u v ds J cX bl F bG cw M bq ch bP bq cH M bU ct bu k P bG cZ bZ M b bW cq eE U bF o T bT cD dm bU cu eo cp Y dF f fe dD bS dy bn bd U bg bi br cU r dv bV ff cq eh dv K bi 0.203125 C k bE fg cU br cJ cr Q eY ba dP n b ec v dm dg dD L D dv da cK g d cH ce L bM C bv i cs en m bD da cp J cz i bC cF ba bo bZ bv cw eb da fA co A fh bG em dU r i ea br fV bT fd bV cB k cR cS cG eT be bC cp X N dr ce bp bb bZ cz dx dt fm ee cs n cG cq bU bA dQ eV cR dC dM Y eI cG bv cU dM dB cW dU fb dN dg o br dZ bM bB ek bT ct cf dZ bi W j L bd bt S eh A dl c dE Z cg eZ ea bn cM bY cH bm bz l bb bK by dM R ep bz j cT j cT j M cl N cg bV i cS dj bd dh O bB dB L co br bp bs bW j bL cj bX g bb bE cH da bM cU bQ G dR de dc by cJ bl ca j du ca A b m dM i bA r ea U bi Y dy cH bn bH cu dc p bn bZ fo cI dg k cV di dU n e c cl bp cy bd cp bf q cU fi bt bO X c eL dX bl cZ dy t el a dX fj W bA fk dx cj bY ei cO bL dK k bX fi bG G ef e bG bL fl cV bu v ds dU dL cl bD dY dI cO bY g ce do dr w F fm fi fn fo V dE fp bf bQ dt dQ ek dG bW eh ct bh j eR cQ ba K eX cl dn dv bO X bk Q bS U dt ck ej ca Q bJ N cj ck eC bg bc dm bz cq bc cq bv d cB dD dQ y dr cG cZ bC J ce bz bh ce cJ cw v eF dN de cK cr V de cX dn K ee eC dD cI br k cT cs bY ey bC fn bM eK bM fq bl n Q bZ bF cq ba bH cN ga cs eb fo M cy bD p cE df cU cO bD dB a eO bA ba bC fx E m K de bG bQ cG de bI N bD cv dr bb ce S bY l G k cp O bu bQ bS t bk de fT fD A h bp b dt dv cZ G Q h bY dr cX bD bi U p cy bO w ej fg dF bZ da bm cl dD Z ce cK cG bS cq dh bn dt z cW dg H bU B cJ E dM el l cQ fo fl bE dP eU cw eF h bf bv Y dF cy dA bj bI fK r bv dt G fS cA bD cs eC fc fW fe ei bh ce bT ee cI dc cc bn cW dn r g R y cX fh fy ef fr dc cz dI eF bh ef v br Y cZ B P Y g cw fs cG fh bY Z y eg m ei ba eu by dN t bW y U ft dQ bh eg dO fu bG bB ed fv K fb eJ cD eM cc br dn P n x bw eM v fe h cn dC cE w dm dt O fk dO bZ N bB p fo g bE eM dA cD dA em bz fv ei em cG eC eg fb gd ft bZ B v fw o fx cV en dS K y fs ek bP eu bo cW e fy eC eu cs fl bl ek fb cW cy co eh cn fH fz fa eh eL p u fi eU dz bI fa df A dm ck V fA V fb ei dc fI fl dQ fU gf cD cE df bi bL P u ge dA bd cX V fi fB cB bL fc z eg cV cY cx de dO z fn dA bu dQ O ba fk fr cB fn fs z A cF cA cC ce D bv z fa fC fo fw gm E eO cY bs eg p dR fO fB cA fe bD N eg fu p eC cY fu fA en fz b fc em fr Q fN en fG fD fQ bB dI A bz bs fR fw ei f fl fo eO fE cC bI eu fb dM ek fF fe fG bb fG fY fn Q fH fL dj ee fC fq fb gj z eu eC fl fI y bn bD fk fM fG fF dO cY bF ch t cE bF ew bs o gl fC fG fy z fb fb fc cW fJ bw E dz dR k fs fx cA gO di eG fw fb bB fG cE fb ei gH fr fK cJ fL L cO fG fM u dG bZ bg dn fM fm fC bZ fo dC fN fX gi fl B cA eu fO cx cW N bj ek eL dI fP bY bh dA fP y gh o R bf eO fQ bF fR fS ef fT fZ eU gD bQ fj fu y fJ fv dS fP fU fq ei fV fW eu fq fk fB bb fl ef fX fB E fC fY ee fZ gu dO ga bw fX fF u en fD gk B gq N fr fV bf m fu dO fe bQ gb cb h fH gc cE ek bi bj dj cy dS fw fp gd en eu fH fH fz cW bg fI p fB fs bb fH cY df cW u eg ew cY fU fv w gr fV bD fr eL fH bj eY dI cx dn fW fB dS fp fc fU gB fG fG ek cw bI dQ bQ fP dM dt fT fl eu ft ge dA fu fb dk gf fs gg fV gg bw K bI fK gh gw bG fN gn gi cD fn fp en fM bb eG fy cy bf fT bh fO dt V en dS dz fD fb dR cG ew fH df fK fH fi dA fV fx gg cO fK bs eU fw fC eY fq fT dQ fz fl cY bD eL fu fJ fk cQ fD cg fH fq fe fr eO fm fh eu fj fz D bj dN o N eh y dS eU s ga o fm gj bh B bI fC ei eu fp u dk cx fh fH ei gt dO eY eG bj cA cG gk fj fn ft dm fT cC fL fH fT fc fK cz z gA gi h dk bj fc bI fQ fi gF fh fs gf dk gv fp t bg bi fF dk gi fn bu fH ge cc gp eY gh fa Y gj gs fl fc fM cV eM ew gl cK eM fX dz eO N fV gd bj u dR eO cb fk df fD cY eU fk eF bs go dI bz gm fW cC gi gb fh dz bB bw fe gf fB fj eu fR bh fS X fw cA fy ew fm gc fr fl dk dQ gm fV dO fy eY dS z eC dt gn go fQ cC fa fi fN ee fk fT cx cE fz dA gz gc gg fV dm gp V fG fK eO cn ft cc ga fU en gG bw gh eU bw eG cc fo ft fq fm eL g fm cJ gq A fW eh bf bF dt gf bg fs fv cJ gr fb dz go fW fD fT cQ eg fS eG fj fq cC fk cW bi df fk fj gi eG B fo gd fj bg dI fN df fA fn fD fD ew fR cD eg bI fa de dk cn y bI df gi fV fX fj en gh fX dR fi gd fX ew gs fQ eG bL dv gk eF fW dk bQ fs cO ce fL B fk dm en fy gk eu gy cG eL gp cG fM gt ee fh fe dQ bw fq go fF eU gx gf dN fX eO gu fr fv fB bE fn eh fw eg cC eY gf cA bL fK dQ eL fa gd ft df gu dk bQ fk gp fB cB go fs dA ce fy dS eU bn fm fL Q gE cc gn eG fX cG bC fV v dO gv y ew fN ge fX cY fm bk fD gu ek bQ cC bU bh fY eg fZ dF ge bi bs dQ fj df cG dt z fC gg fk fk bI fc eO fb fD K fm fj cc gw fN fY bD dO dQ bk bM cK cV gb bI eu fS eu dM fB fR fA P cQ cG gC eL fg cY fm fH eL dO fH fT fQ u gb fg dj fr dS dz eh eM bF bd fo z gg fi fa gg fp z fu fH cO eM cA fH fn fH fl bL dR bB bf cE fI fw gn fQ cA gf gj cy fX v dk fl eh dA eu ge gu gx cB fo fR cW gr gw gc cU fG gb cY fE cb eO fU E ga eG dS gj dC bI fu fm fQ eY fW bQ gy fr eO fa fq fx gr cG gr cG dz A fK gr fC fe fQ eg fp eO O eu fa fU ba dO fx dS gr eG fc gw bg co V eg ez dN eF eO u bF fq fo fU fi w ek fS fl cQ dO fr dj cY cy bY cT fX cB dj dn fa dS v fh bB gs dR bu ft eg bQ fh w dA gk fu cl cW fz fj y fo fr cc p t fh fR cx dQ eG fz cW fo eO dN fx dk gz ge fj gA bg bG fF gp fT bf dI bV cl fv gg fX fj df fl cC bk fh fl fB fu v fy bD gs dz eG ba z z bI fm cn fF fa dG gh fX go bw fy eM bs fm dQ eF fu dR r gi R fX fC fG bI bH gi gl fK T eg fa fW fj cY fB gc eO ef bB g bj dR eM fX bD gc bh cV gi bQ ef cy bw eF fx cG ft dC fh gj bw fk fD gm fB fU eG fF fK cA bS cY dz fq fr bS fC bY dG bu eY fw fq cV bI cW fv fE bk fp ei fe w bh fx eM ee fb bf fH ft gd bQ eu gQ gi fk gk dk Y N dO bD go bu s cA ee z cV gm f z df gp s fV gi gf bF bj fL bw cA bg eL fx gc s gr B dj dP df dm cy fp fw cO dN bh dj gd gI dm gu bF cx fm fE fy cA Q fv fD bw go cO fB ca bY fl fK cV cv cx dM fl ft eh fu cx cQ bw de fl cB fH dn eC cD fH e gp ef bG e dC fi dk fA gs gi eC fJ fr R Y gB ef fU cE de cc fx p cA fQ bI en fA bY eY fq fX dS cA cE fX ei fA fb bB fN ba ei fU fV eC cQ cE cE cC cw ek fY bs el cQ fW u fe fy bu fw N Y bB eu eO eu gC cO cz fr gz bb bi fx eF eU dQ bQ gh bh fg z Y gw dk fk df gf fA cQ eh gk em cG dk bg eh w eL dC fF Q bY dm fp df fZ gb fb fu fV cW bz fS eU fm fq eM cC bI fx eh bI fc bw fb g ge cC bB ft dz ft fU cE bQ bI y fl fn bY dO fN ee fW bG fA fc fA fm fl dV eG fs bu N fr g fL gx bg fn cB dm fg df cY fF fL dn fM bf bQ 0.978515625 dO bG ce fS gu bj gj fj ba bs cY fn N fU cB cV ei bs dA fl dC bB gD t fu B gz bg fc fc bE fe cw cG gw eu cY fD fJ cE bh fe bG cJ g fz eU fa y eO cY ga cy fq bu ef bT bF fa f cY fU gg bg U fH eM ga cY bV fi cD fl fM bE bQ p fi cE z fg fN fv Y fQ ew eC fE fv bh fl ei dI bh B bX bc i dS u fV fc fE ef cQ N ce P cy dz i bG eF fr N bn dk dR eM cy B gt ei dz dI gm fJ gz ef gl t bl dk fF dO eu E cV z u cD dz fk eC do cU Q cT eg fs ew cO bc fU fo ba bk eu dP gE eU U fi fU dN p ce bI bF fX gn ew da eM dj ez dA ek cy bB fc P de fI e fJ dR gf cU fB ei cy cQ bS gF gg bs bw bY gu cE N dk j eF fc eh cx bj cE gz cY fF dm gx fM bB eM dA bj dz bf ew fE bi gp cY cA w dN fN fw bY bQ U p fk fM fD cI fr N gs ce dk dM fE fK fX cD fG fr m cV fh cW fX ew fX fB dO eb bj fm fe ew co fQ fm de dO gf cU dt fi fF gz k co cX bL cV eO ba dR fa bG fJ z dI fi eG cE cW fb de ge bY bY ft eh fw cA s dS g Q gG bM eu fX fe fu gJ gH z cc cY fb gf fQ fg eL fJ eh fs cK fv gF fW bL bZ eO dN fi ee dn dA cC fn bB cx K df fy bi fl fg gs fI B bw dt bn fw fh fW cY fK fw fl U fN cq gs cH L eg fW dI gi fe v bM gb cy ei cW Q fF w dV co gs cW dQ cY f bs t dk bj cW fv ge du ej L cc fB gg fu df fG fn fQ dt fJ bb bI fm v o fW go bg dr co ft cW ee bT df gj bQ dk fX cI cA dR y gE r y cO da gj dR u fq en cx dA bw fQ bu fG ei bL o dM fF bB fn cy eO gp dG cW bG bu u fl eF cz fE bD bE dC e fZ dI fz eM dc ba fk N N bB X bB bl cw Q fK bG R dR bQ fE dO fm gr cG n fh go bS cB de dO fK cW fb fV fz fh cC dN fR fv cY dA cx gE A bF cq dR fl fc bg gE cE fR fa de z fv eG ei fJ bb ei fa gu cy fG dn gp dN cW ce bF cc bh bi eO V bw fW gx dA cA gw fR di fW gr gg bo eY s h eu dR eL cx bZ fy fE fI dI cV gA cG eM cy fI de ek bg fG cv fH E y gf fQ fq P dt cW cK eu dM bs cO gh eu bQ ce dt ck y bc s fx bF bs fI t cV dR dj eG fM dn eU b cy B X fD fS P fh dn dI cG eg fJ bI r ek cB r r cO cw ch cE E gk ek gj fH j gu eM f dP cO fU dR dk n gH cO eL fF eh bw u eh cz fA y da eO cy ds cE gx fK eF bQ bB eO q eR cc co gG fL o gr bY fA fk bs cT eC bB bs eC fM em fq cT bQ fA fh J fp eU fZ Q dR fB eg N M dO bc bD gb gE G cC bj gj eC cA dG fK cy fo dj bD fX fM bu ce gp ew dM ce cx N eC fN B bT ge eO dN bf dA N bl bb eg fE ef gh fC gi eU fM fi cy ef cy gh fZ ew bB cF o fm fd eC bv fk fl fa dQ dA p gE cw fo fr fh cE cL eG bF dO cA fr br bZ gk gI de fn cA dP fs cE eU fl ck fC fv cF fT eO dA cE fv br bk cD f 0.96875 fz cl fQ ef gx ei eO bZ gb k bY cC eU eg fM eh gy cC bZ de bD bM cy fA bY cQ ee fq ce dz cY bk bE bQ bE z X bn K fB ee dn cJ fr dQ eh fi eh fk P M a fh s fW fw dz bB bB bE cn bQ fK fm fg M dj dP gp fJ ca fX bj dU ba cx bS fl dm cy fv ei cC fz P bb gj cB eL bW u b L cq fk bG bB eh em dB cT dj cw ei bS dC o E y bS de bV fe dm gr n gH fb cc bQ fE L cO df bB cc fn bu bf fJ dQ fy cG dG fe k P ft X bB bh br ce fS w fG fY ef P cG fX fk bI fa N eg fa fW fz cT fk da bM n cc fq eu ce cA fs dA fX cE fm eU ds eW fk eg gg bd fi fX cT o gc gg fA cD dQ bQ ck cV eg eG fD b dV dG z eC U ge dk bv fi fG eO S cH gF u Q cO bh fw eU bs fM dI n bo cn dA gI dm z bQ bz fB dR ek O p eL eU bb N n gr fz fi k bc eh w fr fN K fU cc bY gf cZ eW ew cx bG ed dk eg fp Y bV ef dP bU fE bG fg fb bf eg fv bW fa gt fu z eO v i bS fP bi de cg ee dN cD gr cQ eG bW cV fl fh cc fM eC ek bi co fz fo cV bk bi dj fW fi dm gp fs df ge bE m fm dI dN bg dS cG cw e eO co fQ dz bL fp eg bj fh ef fp fe N cC m bI V bB Z fn eb en dj fg fI fl gw cm fw D u dI bh fa fo ek ek bG fn bR cC P dO ba eF bK cq bB eU bT bn gw fs fA dM cq fm cJ dc cT gg cT g eW fx eY j dn fv bj dC N en fV en ba ga bQ bk bF eO cG Q bv dN dM v cW gn dz cA fa eC cU g ek ew bw dA bA ek gm bI gy fH dn gp bd ef cw ek gF cE eu fU go cz fJ fC eU fQ bs dt dy gn fo bg bk gw bi dV dn cG dO bb fh fD cA cy bQ gb fh df bh cE U X ga dn fJ cG cy fN cF dj fU dI fY cY cO fw bQ gr fh cD fO cQ fE ft fn fX cj gk fe z fk eh eL cq fU dr cg cx fk gA bM df p E bF eF ba u cA z ee dj s fa gx B bB N dn dv dQ dQ eL fU do k fF bk G fe U fz bY ce cA F fb dm dn ga bE bj br dM fo z eg j cA gx bg bS eh di z dC cw dc fJ s cC dR fg bC cC w fD bB dt bf fn bk dN dt e fs gE gt bc dz b bU fm gf bQ bS j en bQ eh cq bT H L cJ dc n fU fm V u ge fH fb dc gu x N dC gg bI fq bz bn bQ bb eg cw gc gp bM bB w fc cD eU bI bZ eF V fO bh fH fJ bL N bl fp bb bw fH bQ cw bF fp bT bz fa cY cq cn cQ de fF D bF ei cx cQ cz fg da l el cX bD en s cY y ew bS bF w bw bl E cc fm bD bF eG ge dj w ei fs fF R N w ft H dz dm go l cO bS cX ee dG y bb bB fe fi bB dn fT z dU I cm dl fr fN dt fB O bs 0.962890625 cl cJ fk bk cO fb K eY fv O X cC go cX cH e cD bI ge bM go eF cB fo fK r gj P dB fV dg g eM b bQ fT E cV fG L E cc bG L dG bA fj fe fv dN fU cc dS gs z dn fu cU fA bb cE gj bs ek cK Q A cx L y fK bl cx fn cC dA gh gr bh m ge fU eL cV dA u fC fG bI B bb dj gh fm br fx gg cY bw de bw cc cU f gJ fK fw fg fs eF bP gq fK ft cd bf fW F cq cy gc cB cE en c ee cS bc eh fi fj K cW fI dN bl o fz cc ft fX fH fC da j cC ew fV fo fk ca dN dN cw dv dN X bU K bf gK cH cJ I O dz bQ dz bL fb dG cY cG fw dv bg cC cx fQ fK bL fX gi K dV cT p fs dI fn ef fh h eF df fW bw h cE fE eL gb gi dk fW w fj u cJ ft eY U dI bT cx bZ bM bi dG dS dt bU fC bA y cW k bs fB bv gc dt bF fn bv gG fi cx eO ga fI dO ef L dk cv dG dr dI dj cW bT fn P fJ fA cz ce dG bu en ef eh V gq bc U cO y fX fn fm cE gn df fX bG cG L bS cB cv fm cB bn bw ei fm fg cz bA fX P V fb dO ge el bv dc cs ga cD fB fF fU fn de H bi bD dv cH cB gn dC v bS cx eh ce ej fX t fh fv gr cO bw eF dC by dz eG gt eG eC b cQ dR bi cx gK cH o g w cH g fM fX dA gs cG bQ eC gd dt bg dS K dI bZ fA cy s cY bI bi v dS cB fp n ce bY cC bf cn en fi J fO bq go bc bG bd gq en bY bs dn f cT cy w cG G eM fk dm fk Q bI Q fq fb bI s ba bi fa bW df bg V cJ bF bF fk bT dV V N bH cB fh fq V bM cc ck fK eu cT fM cw dV gf fB eY eC F dP fx fh bu fw ef cJ fn fC gh A cm cj fE eG bG bT 0.263671875 cD eY gr fb cz de cf z eM bc bj K u cK E bw fv u fo g Y cE bH cz dJ z bz bG bT bA bw w bG bf gl b dc fn gk cb r fl df cq bC ea ba bI ei ew eL dQ dt gF bn fW bh fc bi bu eF eM fS cw y cO dO gg bs cK dm eU cO t dz p ei cV bk bb Y eU j fm eG bM fc bD fc bb eM bA fw eC y gs bi fS eC cq v fp eO cn bW go w dP dc bC bE eh K bG m cb K cy cA eC eC M fv de bw fo z h bB bn dc fe fP eC cx dj X dt cV Z bD eg en s bg fS eg ce bj fz cO A fr cY eL bC A dd ei bT cc m da z fi V ba dC bV dj ca cJ dA en cM cy gL dV bw fA fW fs eM cV dj bC fn ee n cJ fE gg gp dW dA z bD dG cB co fv ew cQ gd g eG em bG fD cG cU bY cW gk bY eF gb fa fp eg eG E bg dI bE fi dW fj cq dj ef fX i U fl z o fL ef fH eU bW fK f ft br fc dN co gE di em fo dX x b bi dt cS cy bM fW bb fb fr cy fm Q z fb fs cV G U cX fi cV fx bF H h h bu bN gM bC bA bV fU eU cg eG fT U bL bF bj dI ba dy bv b P bM de bs u bq cF dc bj cV bz fU Z Y fU fa fw eO bi fu cq G o eG fo H w eF ef cO fs dO eU 0.232421875 bf ej D fa bv Z b bs dM dg bF eC bN cy gu fs gj cY bD ei cJ de dt cD fr bs bH F cX P fU dG cJ cb bI dN u bb fC y fy cV eN bk dI cC ba em eo eb bn fE gi gn fe cv cC K O cg dr fH w gj cV fD P cU bF K fi eO df dG by ee z m l e bB Y cE ee P bE bc F dj bL Q ba cx bD g fU eG bE b cl bj fo em cD cW dv dS bz fo b eh cK fG p bi gj dj fK w bQ fC dG bi p A bu gj D dj bz O bD o do dQ bM bG dz eM bM cn fi V cq dN fk dA eg fs cy dj fu df fm eC bi dA cx bD bw bD A dP cE ba eh de r gg dm fg dG dr ga fr fz cV R fh dC ba bh cb en dz q N fY fo bh fW ee bO r fg bS eO dI fo fq cH bc dr bb dR bI fx eg fh dn fa dy cQ bi br cC dn b V bF bM cV fQ de dR M fK A fa bc eC cX es bY gk dQ dc m cb cc cV fr bQ ci cw co eL dN u en fE fG bo fb n bX gr br ft cG dP eh Y gf cG cx u fK cO bI eL s cr fe eL eU bw z f fe fM ef gj fB eY eY dN cD ca fX fh u fs cz M bv fM cO P dm fX gi x bQ bA fM bM bI B bD cV v H F gh bQ fT b fD m dj cU gh fr bc fg b fG w dC bf z dA cA cw cG cX fp dt fo fM O cE dV fY k y dO cO bI U co dz i j u O cY dF t bg bD fQ bi bI eC cT bB cU fb bj dv cE fT fo fw bw dy cX R cD bh w bS da en bZ cW dv fW V ef gx fc m fl fw N bS ft T fe cS dz ef bv dG eF bY E eO bL ch dA bu fe eb dS ft fL cE fe gc fn dj P bc fw cH ge f cV ei c p fg i fr bj ei fV bz dV bT z bD fy de fu w cy fr cO eL bf eC cJ bx dG fj p ch ch dk cE z fD bI cE fX bf fH cY b ei R cO N cx bw eY fr bT df y Q fA dz ca bi dC fi cJ b eL N ds fE bU dS cy o cw eO dA bD K bL eh u fs dj gE O gG dj bB cF B eb dk eu y bu dz w bi fw dj cq z fo gq cq dN ba dj cJ dz cx en bs gs cx cK cV cA K S fc da cE V bD bn E eJ dX dm bZ eM fU bE df ee fV bg fk bs gp bT bC dc ce fu fx o K fm du gA cO K x ee fX Y bE eJ E bz da dQ dN bT eU O fB cA dC A dm eF eb bI bD ef em cA dK fc ee s dM ca V em fL bL gE fD cE fE de fz fc fG G bg ba cy bB cK fL dN fk fn eL eL cV cE gi ee fw R t fC fs cx bE fT A eF bv dG eF cy dk fc fc cn dP gi bn dI fJ fq ba eb de bY fJ Q fs dk dA bI dQ cE N eU fH fG u el gc fl dD cJ gJ ee bD gb en em cC cc bi dk dw dB fr cn G fE cF cr dk w da dr fF b fU bv fn bD bi cQ fs fg fa gr fm fN y fA bD bp ge R Q bp gh cj fs gd k E Q cw cU bs fD bW fC bk gj bu bF fE fp ef N fx p cT dB cy fC gh bi dU dn cF dr dn L bT N fB eF fo Q dt fF D e eO fw bE bj dA bD bg fB V dy X dQ z bB de fl B fb eC cn dt dm t dx fX ek fA dO dR dS cx bu da gE eu cl dz fX dj cC H fw bX dM s ek cQ gE bW fG bL dQ eU eU bw eu gj cp bF M bv fa eO dE fW d Q bC r cz fi bQ eF fN bD S bu fx dQ Y N fQ U eU ck fi ef bH fm dm bi bi cr fM gm ep q fG fB fs w B eY df cB dI fK U dz fb E fo eU v cx fr fG bj ew dn bn N be cV bI v eL fN R dk bz dk bs eG m bw fv gd cA bi P P bX fX cc cH bs bc fU D dr dS dM eb bE t dB cB cg bi h ch bB cD f cy z fp bU bb bs dR bz df cD e eu dP B Q P bY fl cE ew ee fQ bE dR bY o fn fq fb bL fk cY o y eL gd fe eu gt fu dm q bS df ef fr dv ft cD eM fg bF fW ei cw cw bb bG dz bE df ba bl fu dj cT bi gG dA cx bV bk k t L fE bF y dN cw ba ct fi dS a bl r gE fe ge cV eO fQ s cz bl cW t fW bW do dF co ee dr cV bc fq cJ ew cX dG dN gy eF fv de dI eg dA bz cK fN dj dR dk fC do bu ew fr fl cG cW cW bG ch cy K dt gG j ef u co fq bc Y dc eM cs bI fJ fh U eg p 0.96484375 cG q dm ew dS bu cV fw fl fo bu bP fi b fg dk fs bw fJ bM ei cx de bh E gj Q w bQ m fC fS eb eF e fv dv dM r fx D B bV bU fW X fH ei ei d ei gu m dg A cO v cg fu P da V dA bw bA E fQ eU eO br V fF bs ce P cQ bB U cA fw fm fT eF cx fv cO cw by o cs dM bn dS dS bn bq dv eU dy fE eM fe fi cG bn cE cy cV fc eg fV di fg R eh bi eO bh bM en gz dk fG ek ei z cC cS cT dj bH gq dc cU dG O dI cy bG D fQ cx fg fA fo fm cD bQ de y gJ bT i b ei X cB bc cA f fd fe fi dI bc gE cJ fR bi bk w X r dm bz dn cc dS cD s bK F bQ bi bF bS eY l bM fn gJ fE bl fX k bf n bQ bA m br fs dn A bC d F cn u ew u ew dR bS i eF da bz ej bU fJ bY eL cW T U bI ei fu w eu g cC fo Z dt cD bk de fk bn bi z bL q bP dy fm bl bl cE bc ew X g gh da fT fq N bH bV em fL fM eL cE cy bQ cb cc bQ eg bg dP bu cT N dQ bI bI B eh bE fE ck bn bT o ek x bD fB bY gI fD w A b fk cn dG dW N gD gh fF fo br ey dv bT bS fH cD e p fj cQ dZ gk bD cY cx cC cT eg e bZ bM dc E dI eh cQ dQ F eh de fc Y fp cQ dc dA y dj dk dM ek ee de cW dx eL eb bc bb cb cV cb bL ef cU em du co dI gl ce dy cb cG bm d ee X e cX fb dv f bU cK ft H bd dj bI X eg bC m dR em ce dg b fW A bX cn r fL X cS ch fb bf bv cs fW dO q o dy S B dj fc cO fw O fe bF r fg y cQ dc fe dz cy bu de eU p G G A K t fu U cK bs dC bF dM cY K fS cO dS fa bn fw o eC o cB cK dQ bC ee dv fG fX bG fB fE gz cj eO N fX en em co m eJ bM bv fW cE fb cG fa ba bT x dc dj ba bE eM cW fs gs D cO ej B cO ch P gF u gi ef gk cb P bH f cv B cW A gy Y cv s L cx i Q b ew dI eO V F dc Q R K cX eO dx bQ ce bi cn gc ek L bo dV dn cw dP dO gi fI y dz cA ee bk bQ Y cq F ef fD bf fB M G bz gc eh O fG fC ei E cy N bj dt h fT eG da eu bv P bh fV bc fB Z em fb fj y dP eF y cq bF br cy q fs cB p cX cS eC bY fB a P bF cT T cK bj ec dC gd eW ft cD A o dG bn ga cT ch ej cO s gI D cc cb en bn cy eO q dm bv ce eC cn dI B cc fq eU bp cy dc cA dO z dA Y bg bT ee fi ei B dz ce eO gp fs V u en bj cb bs de bv fM bj en dy eL bY fq o cQ bq bB gi A cB eh bu dN k cT eg E bn fG fW dR en fv gb cQ bE fa bI cw bk bB bU o fC ce dn ga dc cG bs dt h cV i cH V dI bu fQ co ei bD bP cE bh cQ dt ef gN eg d bI ep ca bq fX eU bL bU cQ bi fU bO de gD bs cJ fg B dn v fv ch eu dS cQ cu fo F A cW dR dj cz fg ep cN gr dn bo fV fx fu fx ea g fb ga dI W bF cD N cD cJ dI cy u cU cG E dA ei dv N dr fh cb em dQ fs cD cW cY dm fL bT fD cz P bA bM en cl dW cA dz cF eY cX o fm cJ bf fJ bY fa f bE bx bO fW fA bo B cZ fa Q bg bc bF eL cK y bH cQ L cy cB cK M cc o bH cx cX cV bl bD eY dO dR ek F dA eM ba cC cD fG cC dt bs fK cJ dj bI en bw w bI fe dI bQ dm fH V bM cQ dA bM fV ef fn cC cy bf cQ bY ei Q cF s R dN co eU eC fh y em ek E eg cg fV f cn gq ck fA ch eF eU fg fs fr cX ef gO cp gA bV fe dO bn bi cI eh cU U de gs cB dr eY eh eM S dI R A bL bA de 0.23046875 cw fx cw cb fc cr dm R bB ei fB bg gh cJ cI r cp bl dV cP bL bc bZ cC fs eM cg w fw dI p bl bT eO co L fr bH ca fv cz cc eU bF g eC dB fU fc dn cw ew f cm fM ch dP bC bb y u x dS cl dP y J gd cE dP bT fm fe eY cb ch dt fn eG bi c bh U m cg bd q fW bA t bY bE fV bT s bQ cJ dm cG bf dI eF dQ dk cg df cc ck dy ek cQ bD bn z z dQ ew gn ek bV fw fE dz gi bQ fN y da o N cV cO r cY fz fi bF dG ce U bc fG cV ek bG cX cQ di fc bC gP dQ bu dc bu X cx dQ bj fD cD q S w fv cm cB fw do bv bP z cX dV bF dm dz fy bq h dj eL fu fu cB cQ bu cI bn bj bf cn ce dz cw ce dI fz D fm R bg dG L de bm A ga fu V cB bw gg eC fa cU dS fm eg fx bQ bj x cb ee M bg bs bj bP L bY ef bX fi bx e cx bF gp cU en eY bi bg K fU du M dv fm bv eW dq bw dA bv cD z dm bs dj fr H cO bQ fb fp bN co ba fr s fW bS dA gc cr dP fx e r f ct Q o dE dN dA fL K gQ u cz fe br X ek bw gD eD fG bn ek cg dA w p dk Q bd eQ Q dv bc cJ cB y gh cB A bb cl by bQ fE cE dn dm eu eU fr bn dM E A cq bi bG dQ Q fa bF cJ ge bT dt ch cz bg bw fG dR bA ch A dD co bU cI du O bL cD L bg do bj dM gE bB dt cX cJ cD er ds eh bO bj bz cn eh cO cE bA eb eF bH f X fM v bY K dW fQ dn z dN g bz eG ez fO fz dt cb cx ei bV gi fh cW bY ek dC bE bE bH bG dn dD cL x ge k P ei fb dK bK b m cN bD ee cY de cy cJ co i gr dr em bA r ef gd cF fE bB bw bG em A bG cE j dv gR p el em dQ eK p X dO fk cm f de di fY fr dB cQ eG fb bT gb fb fX S s y a eu fz fo dI dt fN u gw B eO G bb F Y fB bD dm cX fS dy bS fn dy fv gl cJ dm fK q cW bQ fn df bi ge y i fz bF G H gi N eF cq fn fT dC y m bL fp cs fX bu ft ch dG dP fu cx dj g dI df by cs t dA cI gr cJ eK j fC fs bn de fe bC e ca cy bh fH y eh dt cV gE ck cs O fK dv dc bZ bb dk dN K fN bz dw bw cz fn cD eC q bt bF dy ee gF fw cw eG cG fu dI gG fx fc bT fK bC fv t fk em cX a cG bz fm di x dQ dS bb fw fn cI G cG fI P fg fB ba fB bu B bi bu fh fa cD fK ge cq cQ p bA 0.130859375 fM O G k cJ bn fA fa ba ck X dz cK bd bZ bL fu bS m dM da ce cZ p cY f bI fm s bD fh cx eF t B bY fT ee B bl fl fB X dw go fk l ed cW gx Y bk bH bv cH cq ei fW Z cU bM du bc O eY h k eL cz cz b eO V fX fv fb eh gw fp dV fS fG ck cr cv l dH j cQ cG fX ei cr Y em cn fe ge M G B u dz gz eM cC fL en br cB cW cn bs fo eY cX bz cW fm fX da v eu bi N dt gi bb bQ en cW dO bF V w bM el bZ Q bC fo p fb O eC L ek bY cQ bu dW eY X r bU bM fS Y k fH cX fh bz cq cb ce cz dj bK dJ U z cn dF dB eE en fw dh cx gi dX ce n cO X bL eg bA el dl gE bC 0.16796875 bl di fB fk bY bd cv dm cJ bu bz fb Z P dm bf dM K dw fK fm fD K cy eM eO cG fE dj k fm ga dM cg ew dz gi ft bZ dP dj dc by ge f fr bj fM d ep cb fk dg bz cG eu en bG)));(display 'Loss' ^(a:5.002 b:3.538 c:2.604 d:4.269 e:2.597 f:2.492 g:2.356 h:2.183 i:1.439 j:1.701 k:1.129 l:1.454 m:1.407 n:1.87 o:1.156 p:1.032 q:0.883 r:1.063 s:0.926 t:1.166 u:1.323 v:1.138 w:0.819 x:1.48 y:1.124 z:1.303 A:1.33 B:0.923 C:0.996 D:1.155 E:1.034 F:0.924 G:0.712 H:1.375 I:0.772 J:0.985 K:0.945 L:1.126 M:0.84 N:0.847 O:0.896 P:0.964 Q:0.89 R:1.382 S:0.839 T:0.678 U:0.812 V:0.731 W:0.74 X:0.824 Y:0.525 Z:0.68 ba:0.498 bb:0.728 bc:0.979 bd:0.649 be:0.878 bf:0.869 bg:0.947 bh:0.659 bi:0.966 bj:1.078 bk:0.563 bl:0.601 bm:0.795 bn:0.863 bo:1.2 bp:1.08 bq:0.632 br:0.885 bs:1.052 bt:0.813 bu:0.851 bv:0.609 bw:0.887 bx:0.742 by:0.558 bz:0.681 bA:0.69 bB:1.108 bC:0.821 bD:0.76 bE:0.669 bF:0.703 bG:0.639 bH:0.658 bI:0.387 bJ:0.686 bK:0.46 bL:0.497 bM:0.577 bN:0.437 bO:0.894 bP:0.773 bQ:0.539 bR:0.648 bS:0.699 bT:0.61 bU:0.892 bV:0.786 bW:0.715 bX:0.4 bY:0.635 bZ:0.692 ca:0.874 cb:0.642 cc:0.747 cd:0.541 ce:0.617 cf:0.675 cg:0.687 ch:0.597 ci:0.405 cj:0.554 ck:0.516 cl:0.591 cm:0.58 cn:0.393 co:0.803 cp:0.761 cq:0.837 cr:0.472 cs:0.596 ct:0.534 cu:0.573 cv:0.769 cw:0.704 cx:0.771 cy:0.564 cz:0.502 cA:0.475 cB:0.485 cC:0.622 cD:0.545 cE:0.691 cF:0.455 cG:0.524 cH:0.423 cI:0.634 cJ:0.583 cK:0.572 cL:0.682 cM:0.527 cN:0.373 cO:0.762 cP:0.384 cQ:0.439 cR:0.6 cS:0.519 cT:0.457 cU:0.826 cV:0.521 cW:0.445 cX:0.64 cY:0.588 cZ:0.561 da:0.796 db:0.546 dc:0.551 dd:0.799 de:0.629 df:0.706 dg:0.834 dh:0.493 di:0.53 dj:0.594 dk:0.489 dl:0.514 dm:0.449 dn:0.599 do:0.458 dp:0.361 dq:0.625 dr:0.492 ds:0.543 dt:0.48 du:0.663 dv:0.607 dw:0.474 dx:0.587 dy:0.394 dz:0.447 dA:0.412 dB:0.54 dC:0.56 dD:0.476 dE:0.628 dF:0.523 dG:0.389 dH:0.404 dI:0.506 dJ:0.816 dK:0.436 dL:0.677 dM:0.553 dN:0.716 dO:0.379 dP:0.399 dQ:0.431 dR:0.47 dS:0.67 dT:0.417 dU:0.413 dV:0.565 dW:0.314 dX:0.535 dY:0.426 dZ:0.466 ea:0.544 eb:0.451 ec:0.574 ed:0.482 ee:0.552 ef:0.381 eg:0.456 eh:0.667 ei:0.35 ej:0.581 ek:0.296 el:0.331 em:0.443 en:0.602 eo:0.557 ep:0.446 eq:0.365 er:0.374 es:0.662 et:0.57 eu:0.51 ev:0.494 ew:0.518 ex:0.951 ey:0.376 ez:0.32 eA:0.589 eB:0.668 eC:0.302 eD:0.284 eE:0.468 eF:0.444 eG:0.369 eH:0.442 eI:0.307 eJ:0.303 eK:0.664 eL:0.637 eM:0.478 eN:0.344 eO:0.636 eP:0.406 eQ:0.334 eR:0.496 eS:0.484 eT:0.411 eU:0.332 eV:0.358 eW:0.508 eX:0.339 eY:0.239 eZ:0.408 fa:0.357 fb:0.33 fc:0.378 fd:0.315 fe:0.388 ff:0.505 fg:0.495 fh:0.421 fi:0.585 fj:0.355 fk:0.479 fl:0.309 fm:0.287 fn:0.368 fo:0.538 fp:0.324 fq:0.348 fr:0.356 fs:0.428 ft:0.328 fu:0.274 fv:0.325 fw:0.556 fx:0.31 fy:0.512 fz:0.504 fA:0.347 fB:0.39 fC:0.402 fD:0.52 fE:0.515 fF:0.3 fG:0.242 fH:0.614 fI:0.326 fJ:0.415 fK:0.286 fL:0.383 fM:0.343 fN:0.336 fO:0.36 fP:0.327 fQ:0.364 fR:0.329 fS:0.266 fT:0.304 fU:0.345 fV:0.285 fW:0.29 fX:0.416 fY:0.34 fZ:0.44 ga:0.318 gb:0.295 gc:0.316 gd:0.386 ge:0.209 gf:0.229 gg:0.333 gh:0.338 gi:0.435 gj:0.282 gk:0.351 gl:0.396 gm:0.341 gn:0.321 go:0.342 gp:0.267 gq:0.293 gr:0.215 gs:0.375 gt:0.337 gu:0.203 gv:0.248 gw:0.298 gx:0.38 gy:0.434 gz:0.271 gA:0.288 gB:0.299 gC:0.278 gD:0.279 gE:0.353 gF:0.218 gG:0.257 gH:0.291 gI:0.414 gJ:0.245 gK:0.221 gL:0.227 gM:0.217 gN:0.419 gO:0.252 gP:0.255 gQ:0.385 gR:0.483 gS:0.238 gT:0.301 gU:0.349 gV:0.251 gW:0.222 gX:0.241 gY:0.511 gZ:0.352 ha:0.311 hb:0.235 hc:0.536 hd:0.313 he:0.308 hf:0.275 hg:0.27 hh:0.204 hi:0.219 hj:0.37 hk:0.196 hl:0.263 hm:0.43 hn:0.258 ho:0.246 hp:0.224 hq:0.289 hr:0.297 hs:0.28 ht:0.317 hu:0.181 hv:0.24 hw:0.228 hx:0.501 hy:0.62 hz:0.199 hA:0.459 hB:0.254 hC:0.231 hD:0.22 hE:0.401 hF:0.253 hG:0.269 hH:0.281 hI:0.244 hJ:0.236 hK:0.277 hL:0.335 hM:0.265 hN:0.294 hO:0.201 hP:0.21 hQ:0.213 hR:0.465 hS:0.261 hT:0.208 hU:0.173 hV:0.272 hW:0.237 hX:0.2 hY:0.234 hZ:0.216 ia:0.187 ib:0.23 ic:0.179 Zid:0.169 ie:0.264 Zif:0.319 ig:0.195 ih:0.188 ii:0.367 ij:0.273 ik:0.193 il:0.139 im:0.156 in:0.165 io:0.205 ip:0.176 iq:0.183 ir:0.159 is:0.452 it:0.214 iu:0.207 iv:0.119 iw:0.186 ix:0.202 iy:0.192 iz:0.19 iA:0.152 iB:0.243 iC:0.225 iD:0.137 iE:0.162 iF:0.167 iG:0.259 iH:0.194 iI:0.135 iJ:0.146 iK:0.185 iL:0.17 iM:0.158 iN:0.359 iO:0.16 iP:0.161 iQ:0.197 iR:0.233 iS:0.145 iT:0.211 iU:0.178 iV:0.189 iW:0.171 iX:0.172 iY:0.198 iZ:0.312 ja:0.157 jb:0.166 jc:0.226 jd:0.149 je:0.206 jf:0.107 jg:0.126 jh:0.168 ji:0.174 jj:0.155 jk:0.134 jl:0.129 jm:0.175 jn:0.177 jo:0.141 jp:0.153 jq:0.247 jr:0.125 Zjs:0.124 jt:0.123 ju:0.144 jv:0.147 jw:0.138 jx:0.116 jy:0.306 jz:0.143 jA:0.12 jB:0.163 jC:0.136 jD:0.111 jE:0.131 jF:0.132 jG:0.121 jH:0.082 jI:0.276 jJ:0.114 jK:0.115 jL:0.122 jM:0.091 jN:0.14 jO:0.148 jP:0.232 jQ:0.112 jR:0.097 jS:0.094 jT:0.18 jU:0.142 jV:0.127 jW:0.133 jX:0.11 jY:0.128 jZ:0.184 ka:0.1 kb:0.102 kc:0.104 kd:0.105 ke:0.13 kf:0.08 kg:0.113 kh:0.151 ki:0.106 kj:0.154 kk:0.098 kl:0.103 km:0.086 kn:0.081 ko:0.223 kp:0.108 kq:0.095 kr:0.069 ks:0.15 kt:0.117 ku:0.068 kv:0.083 kw:0.093 kx:0.088 ky:0.085 kz:0.118 kA:0.064 kB:0.076 kC:0.084 kD:0.099 kE:0.092 kF:0.071 kG:0.063 kH:0.072 kI:0.075 kJ:0.061 kK:0.065 kL:0.066 kM:0.078 kN:0.077 kO:0.096 kP:0.07 kQ:0.058 kR:0.067 kS:0.089 kT:0.074 kU:0.087 kV:0.09 kW:0.109 kX:0.044 kY:0.059 kZ:0.05 la:0.055 lb:0.062 lc:0.056 ld:0.073 le:0.101 lf:0.06 lg:0.043 lh:0.053 li:0.051 lj:0.052 lk:0.079 ll:0.046 lm:0.045 ln:0.057 lo:0.047 lp:0.042 lq:0.036 lr:0.054 ls:0.041 lt:0.039 lu:0.049 lv:0.037 lw:0.034 lx:0.025 ly:0.038 lz:0.048 lA:0.03 lB:0.04 lC:0.031 lD:0.028 lE:0.035 lF:0.029 lG:0.032 lH:0.024 lI:0.033 lJ:0.019 lK:0.027 lL:0.017 lM:0.021 lN:0.026 lO:0.023 lP:0.015 lQ:0.012 lR:0.007 (kC 1.068 1.872 4.271 3.664 5.606 5.752 4.655 4.241 3.744 3.826 4.632 8.164 5.232 4.32 6.137 4.122 a 5.279 5.118 4.479 2.777 4.864 4.237 4.786 4.163 6.59 5.265 6.173 3.986 4.849 4.2 4.379 5.577 4.812 4.102 2.657 c 4.783 3.838 5.023 5.917 b 3.927 5.818 2.442 3.873 d 3.616 3.936 4.818 4.664 4.719 3.693 2.513 3.224 2.824 3.379 3.611 4.714 3.85 2.52 3.998 3.704 2.176 3.039 4.62 3.952 4.862 a 3.667 2.939 3.658 4.329 2.89 3.41 2.934 4.359 3.005 3.918 4.327 2.41 2.392 2.828 3.125 3.915 3.167 3.15 3.311 2.752 2.265 2.517 2.337 2.943 2.304 b 3.666 3.631 3.174 4.27 2.235 2.872 4.286 3.051 2.869 2.233 c 2.913 3.357 2.519 3.643 1.875 3.92 1.82 4.186 2.833 d 2.656 3.521 n 2.255 3.24 2.062 3.284 2.631 4.137 2.069 2.684 2.346 3.101 3.171 2.228 2.178 3.014 3.922 1.988 g 2.901 3.544 2.823 2.447 2.539 f 1.777 2.11 3.67 2.723 1.617 2.022 2.243 2.209 2.572 2.367 1.479 3.499 2.916 2.584 3.46 1.755 1.38 e 2.157 2.292 2.533 2.875 2.468 e 1.982 2.109 2.033 3.162 1.878 3.091 2.774 2.431 3.374 2.114 2.314 2.311 3.254 1.718 2.007 1.738 2.432 2.568 1.607 2.286 2.1 2.034 f 2.862 1.98 2.92 2.087 2.818 2.09 2.309 2.485 1.537 2.251 2.404 bp 2.854 1.983 2.036 2.244 2.821 1.948 3.468 g 2.298 1.972 1.688 2.718 1.742 2.99 2.179 j 2 1.947 1.957 2.101 1.841 1.976 i h 1.697 1.733 1.773 2.049 1.251 1.709 1.955 2.25 2.006 1.735 2.144 1.508 2.313 1.424 h 1.884 2.139 2.142 1.119 1.282 1.47 2.073 1.932 2.014 1.933 1.478 1.308 2.302 l 1.036 k 1.894 2.877 1.338 1.518 1.557 1.838 1.652 1.528 1.487 1.205 1.97 2.294 1.623 2.588 i 1.352 1.232 2.195 2.162 m 1.37 1.819 x 1.565 u 1.535 2.099 1.556 2.318 j 1.348 2.193 1.337 1.451 1.488 1.832 1.591 1.618 1.654 1.45 1.397 1.888 1.517 k 1.379 1.286 1.41 1.377 1.576 1.826 1.62 1.342 2.458 1.125 1.506 z bu 2.694 1.296 1.561 1.694 y l 1.505 1.117 1.038 1.098 2.083 1.283 1.24 1.686 1.651 1.469 q s 1.548 bs 1.158 1.12 1.281 1.175 E 1.772 0.853 1.475 1.486 1.088 1.812 1.606 da 1.012 m 1.436 1.206 1.292 1.689 1.941 1.132 1.511 n 1.041 1.005 1.204 1.603 1.227 1.682 o 1.187 1.05 P 0.805 1.285 1.716 v 1.485 1.389 1.049 r J D p t N H 1.443 1.907 o 1.474 1.164 bi 1.299 1.564 1.307 1.376 1.316 1.192 1.321 1.097 K 0.674 p 1.429 1.395 0.908 1.318 1.162 1.866 cU 1.215 R 1.047 1.244 bn Q 0.983 A 1.361 q w 1.336 1.048 1.112 G 1.009 0.81 0.882 1.059 r 1.169 1.019 s 0.957 1.226 1.178 0.981 0.884 0.968 t 1.359 1.322 1.01 0.94 bD bq bO 0.984 0.937 1.151 0.82 1.07 u v M bR cc w 1.619 0.798 bB B 0.972 0.898 u m C cq bw U bQ 1.416 1.013 bo W 0.953 1.008 x L F 1.438 1.182 bb 0.92 y 1.214 0.978 0.93 0.855 0.909 0.857 1.105 1.65 0.737 1.146 cp 1.385 z bg A 0.907 I 1.152 cx dV B be 1.011 1.418 1.188 C D E bG S bt 1.383 F cR 1.256 bh G H I 0.738 bV Z J 0.8 1.272 0.748 0.95 0.992 0.646 ce ch 0.827 1.094 1.426 1.023 0.886 K L 0.893 0.914 1.327 1.177 dN 0.956 1.191 0.955 cz bc M 0.75 0.971 dg bS bY p 0.963 0.619 0.708 1.268 1.111 0.864 N X 1.089 O 0.696 bC 0.828 0.689 0.977 O 0.542 dI bd 1.066 1.029 0.949 ex bl fH by dx P V Q bW 0.73 0.559 0.768 G bH ct R 0.569 0.671 cB T 1.027 0.862 ci 0.931 1 1.055 0.781 0.962 1.057 eA Y 0.961 S T 1.222 0.741 bj 1.201 1.153 0.595 0.916 ba 0.845 U bx V 0.982 dd 0.842 cX 0.789 T 1.128 W 0.997 bL 1.06 0.63 fD 0.763 0.724 bP X bf 0.976 0.647 bF br 0.801 Y Z ba bb 0.759 0.756 1.076 0.782 bk bc bd 0.575 be 0.783 1.093 eL cK 1.135 0.767 0.838 0.807 bf bv bg bh Z 0.755 bT bi cA 0.858 bj bk bm bl bm 0.695 cE bn cg bI 0.684 cj bo bp cL bq es dH Q br 0.836 dj bZ bs ca bz 0.72 co dc 0.866 0.562 cV bt cW dw 0.735 bu bv du 1.039 0.656 bA bw cw 0.935 bx ds by 0.698 cy bz dL bE bA bM bB 0.902 eO 0.626 w 0.843 0.526 0.736 0.939 bC 0.679 0.582 bD 0.832 bE dT bF 0.895 cb bG bJ bK 0.904 df 0.854 bH bI cM fX bJ 1.186 ck bK bU cs bL 0.753 0.694 eH bN dE cv 0.776 0.948 di cl 1.056 dY cH bM fk bN fZ fE bO 0.487 0.621 fg cf 0.733 0.835 bX bP dv bQ ej cQ dC 0.598 bR de dz 0.876 0.719 dQ cd bS dO cF 0.624 hA bT cC bU bk 0.537 0.616 dD bV dk bW ea bX eK bY eE dm er cD cP 1.02 dA cO 0.651 bZ dh db 0.641 ca cb cu cc cd ce cf bA cg dn ch ci cn cr 1.237 cj 0.688 cm 0.532 cS ck fr dX cl 0.778 eR fi ev eM cm cN cn co cI cp cq dJ cr cs ct cl eo bL fo 0.705 ce cu cv 0.7 cw 0.605 N dt ei cT cx bG cZ 0.718 cy cG 0.453 cz cA cB cC cJ 0.806 0.998 dp cD cE 0.509 cu ba en cF 0.612 cG G cH bP fz bx em cI cJ fI cK 0.568 1.058 0.513 cL 0.809 cM bE cN dr cO cP iN dq cQ bv cR 0.438 cA bL cS 0.764 0.477 bG cY cT cU cP cV bN eg cu cW cX cY gm cZ da db dc 0.529 0.77 is bA dd 0.584 go bQ 0.631 de eG cO 0.608 df eb dg 0.397 dh 0.732 el do fA di ed cX ef cn 0.727 dl bX dj 0.9 dk 0.638 fM ci dl dj dm 0.55 dn 0.775 eT dy 0.371 do eF ew dM dp bm dq cB dB eW ee dr fK dr 0.491 fU ds gR dt du 0.454 0.604 Zif dv bT 0.522 gg dR dF dw gQ dj dx 0.418 cY dy 0.653 bk eh eJ fa fn eX 0.461 ec dw eP dz fh dU bk gB 0.555 ha gi dA dB fv 0.71 dp 0.323 dC hq dv dD dG hy dZ dE fW ez 0.618 gj dD ek dF ft ep cs bJ eC dW fs hg dG dH gd hm dK dI dJ dP dK dL 0.424 dM bD dD dG dN eq dO cV cY hd eI dy 0.547 dP dQ bL dK dR fy 0.765 dS dS fc gy dT ii do ey Y dU bQ cS 0.611 cs dV hR dW dX ff dY cA dZ ea eb 0.528 ec fY hs fJ cG et fV eS ed 0.744 ed gN ee ef eg ec eh cM cN cr ei gb eu fl eY ej ek eU gI fu fC el cz 0.463 0.346 em eV gS en eo gs 0.49 ep eD dF dm eq er fb dI es ek hC fP 0.576 et eu eB ev ew cn ds eQ ex ey ez cs dn eA cA gD fF eN ej 0.41 dc gY 0.409 0.578 dG dZ hi eB eC eD 0.697 0.429 0.473 eE cj eF fj hL gl eG fQ em ek eF eH eI fm eF gz dP 0.644 ey dk gZ dy eJ cG bv ch 0.531 bN do dz eK fG eL dm gf 0.42 eM dQ eN cI eO 0.717 ek ck eP fx gn dQ gr eM eQ gx gT dm gF hx hl fd eR eS eT eU eS eV eW 0.503 0.481 eZ eC eX ga fp eY ee hc fq dH fT cK dM eZ gH fa gh fb fc iU fd fe 0.403 io 0.322 gv fe em eN ep ff fg fh dH ci fi fj cn 0.45 eP eL gc ea ef fk fl gC 0.661 eD fm ez fn fw fo fp 0.488 fq eN bQ fr 0.567 fs ft ie eS eF dA eU fB hD fm el fu eX cr hH fv dm fw fx fy eW fS fz ht gL fA fB ei fc eG cy er 0.407 fC dp fx fh fa hG dU dh fL fR fN fm fv fD dz hr hb 0.633 0.469 fa fE fF iC dQ 0.746 ek hI fG fH ix dz fI hE fJ gp gt cG gE fK fL fg fr ei hh fF fM fO dj fN fO fP cn ft fQ hW fR gq dp eV fd gk 0.398 he fu dP eD fx fS ge eo fT fU hp hf fN fV eP fW fX gw eC gU hM eY fR fI fY gG 0.354 fZ fT ga Zid gb gc fl eD fS 0.262 gd 0.164 iy hN ge el gf gg gh gi ci 0.292 gj gk gl eS iY cW fL dH fs gh gf eW gA gb gu gm cQ 0.392 gn dG fW jI ga fr jn fr ic fx go gp eZ fj gq gr gs gh fI ko gO iB eN eC 0.372 hj gi gc gt 0.464 eC hO gu hw dQ 0.366 fF eU gv hv gw gx gf 0.432 gy gb gz dp fF fr gp fx gb gJ hY jy el gW gA hJ 0.268 hK cP eU ez gz dW gV fj fj dY fP gB gP iG gC gK gD gE gc eG gF fG fI ek hF gp gf gd iZ cu gG eG gH gI gJ fA fI 0.586 gK ef gL gM fU gM eD gN hU fa gO gP hX dm dw hT gX gQ gR fK hk gS gT eC gU gV gW eV hS fA gX eU gA gr fP fO gY ez gf gG hZ ei gZ ha hV iV fs fx ez eY fp hb hc hd gD he iH gz hf fZ ey eC dY eD hn hg gX hh gn hi hj 0.425 ho hk dP fO fn ik hl fK hm hn eq gr gr gz ho gM fY hl fu eg hz eY hp gv gB eH hq ek hh hu ij jq hQ hr hh hs dz gC ht eG hu gF ht gb eI eI fb he hv fK hw fS gL hh hb hx ig hy fY fA it eJ eU hz hB hA gO hB gd hP hC iL hD ji hE hF dy gG fn fu fN gz gW gp hG ia hH ir hI eE gl hJ fp hi hK hL hM hN hD hw gD hz hO jd in hG hh hP hQ gO jm hR ih hS hT hU fe el eC gG gh cn cG hV ib gt iE hI fl eQ gV gA hW hX ip gZ im hO gF iw gq hK hY eD hZ ia ib fa fn fm iO hu hb hu fV iQ gv gK gT ic ia hb dW hJ hH hh eY gc jw fR gO iA gC hu jr Zid ie hk gW ft hg ge gf gu ho iq cQ eQ gw jP gV ge ib iu Zif gX gJ jW jb jO hg eY ig jE ih hT jh fK hD fb eU ii ij ik iv hU gX il gr hz il he hh gW im in iM Zjs Zif hw iK hn hw ge ge iz io je ip iq iP hJ iq ir hn 0.363 fV il iI hS is fF it fM iu ft gz hw iF ip im ho ge hp hh gO ez iD hN hO hk iv iw ix iy iz hg gc hg ek iT iA iB hz jJ iC ic iD iE iR iF iG iH iI iG hY iJ iJ iq hJ iK fu fS jc iL hz iG iK hU jz hh ie gw hW jV iM hI ge iN hz iF iO iP iF hJ iS iA jo hF iy io iW fR iQ jl iR hI ic iH ih iH gV iS hJ iT jT gu iX in cM gB ij hI jG hD iy gf iU jp jF iM ir jU iV iW it gS gr hi in jv 0.25 gh hT ih iQ iX iy iX hw hh jj jZ gv fG gM hu jk eq hQ ja 0.283 hg iY iM iO 0.26 it 0.249 hi hC hU dW gz iC hS iZ fM ja jH iC ir fB hC gZ jg jb hp jc jt jd kd jD gS iI iw iK iK iM iR hh je jf 0.212 hz kk hp iw il jf hZ iy gf iY jg jh ji kf jf jj jk hH gK hN iB jM ju jx gL iS ic iz jh hU in jl iG gf iW jm gF iX it jn iP hM ji iH ho jo iS iV iM iS gW ic iB jp iX jC hX jo jq fn il iG iU jl hC ia iY hZ jj iX le hT fV gK hQ iG ka jr jl Zjs jR ih jt ju kc jv hh ji jK ia jg gu 0.191 gr iS jn iP jw gv jl hJ jx ji iJ iP fI jy gr jB ks jL jz jA hg hP iW il jQ iM in im hf io kb iw Zid iS gr hZ iM iU ij jA fc il jN ig jB jC he he gL ir jD jE ji kj jF jo ip jh ia jg in je jC ik ho hk ir jG fS jd hJ im jH jI kh jd jm iq jJ kr hJ iD hp gf jd ju iF jE jK iJ jL jv jS jM iu iP kv jr im ji jX iw in kt kp hC gO iS jo iS jF iT jN iI kx jw jO in iw jw iA jf jP jQ in ke iE jY iW jl jl jF jR jS jr jL iy iM ja jt jT kw jp jt ju jU jV je jx iv il ja jN jo kS jd jW kq jR jl jN jQ jX jQ jY iJ iI ir Zid kz iC jV jA jw jZ jw iq ic jf ka ib kb iP kc jW jF jE iy kd ke kf jt jF kg kg jJ jO jL kn jK iv ki iy ku jd iY jg jA hk jK jX jf iM iK jr jH jz jf iv jC kh ka ki jO jQ iX 0.182 kl jX ka jr jG iQ kj jX kk jE kO ka jT kl iC kd kD jT km jn jK km kk kn ko iO iA Zjs ip jW kg kn kp jL kf iO kU jE iI jf Zjs kq jk kr jA in iP jl ka ks jJ jA kM iP kc jK jr iq kr kt jH ki jn jt ku jQ iS jE kv kn jv kk kw kx kP jK jk hQ ky kp jM ky kq kE kA kz iS kn iO kA iO kn kJ jF iv kk jM jf kW kw kq iv kK iI lz jD kR kt ks kf kF jp jV kq kI kB ku ks kB iU Zjs kY kk jp jJ ld kH kC iW kd jX iJ kx kG kf ky kN jS la kD jF jG jM kE jt kf kr kF jw kE lh jr jo kb kE jX kd kG lk kH kI jS jg ke kL kJ kk jp ke jx kK kj kL kf kM jN kQ jD kq ky iK kN jN jF kO jk kV kP kQ kK kv iD kT kP kR kK kS ku kd kO kI kS kQ kT kP kX kd lc km kC kU km ku kC kl kV kM kI jA kw jD kZ jN kH ke kn kn kF kq kF kW kS jJ kE kX iU kr kG kP kH iv kQ kH kY jK jf jL kA ku kC lg kG kO kn lf kJ kC lt jV kX kS kR lj kZ lu ku ki kn lb la kf jH jH kv ky kp ku kC kF lo ki kK la kM kH la kb kk lb kx kH kJ jS lc ld kY lb ka ly kX kd lr le kt kY kr kY kS jH lf kZ kv kI kS jM ln kn ku kK ku lg lh lh kG kn la li li ll kX lj lk kr kH jR kC kJ kZ lg jJ kT ku lc lq kJ kT ku lv kQ kR ld kR lg kK li ls ll kr kT lm lf ku kB kI kJ kF kI lm lc kC ln kY km kJ kZ lo lg km ld ky ln kF lo lm kZ kI jR lc lp lD lh lh kf ku ln iI kU lp kN la lm lc kH kr ll lq lG kG kQ km lm lq ll lr lw lm ls kL kJ lj lp kO kS lt kw lu lp lv lw ls lx lo jM lj ku lm kH lI lx lu ku lw ly kA lE kR lA lH ls kC ly lg la lC lw lB lg lg lz lj ln la lF lb lq lt lA lv lB lu lM la lC ly lD lA lz ku ll ls lJ lm lq lE lm lB lr kR kJ lF lg lt lg lG ly ls lD lB lw lz lK lG lL ly lA kX lA ln lq lG lB lw lH kD lv lg lo lm lv lm lw lP lz lI lu li lJ la lu kX lw lt lC lA lA lB lE lK ls ly ln lB lq lD lF lN ly lp lx lf lx lg lH lL lu lB lu lJ lw lB lx lL kX lO ls lo lM lN lC lM lg lM lO lH lL lO lv lO lI lN lw lL lC lM lJ lw lF lM lG lB lL lJ lD lL ly lL lO lN lJ lM lI lI lI lO lO lM lg lQ lj lD lO lJ lL lL lH lJ lI lH lD lL lF lK lN lL lP lw lA lx lK lN lM lM lM lJ lK lB lL lI lP ls lJ lD lx lM lM lJ lL lA lN lq lO lJ lL lO lL lP lQ lP lL lJ lQ lL lH lO lP lL lO lA lx lJ lQ lG lM lA lR lH lQ lQ lG lL lx lR lP lJ lE lL lP lP lR lQ lL lQ lP lQ lM lM lr lL lJ lQ lM lL lO lJ lx lQ lR lL lL lP lJ lP lP lL lR lQ lJ lP lQ lR lM lM lR lL lL lP lQ lR lL lQ lQ lR lP lQ lA lQ lJ lJ lt lR lQ lQ lK lL lR lP lR lQ lO lQ lR lJ lP lP lQ lM lL lR lN lO lL lR lR lR lR lP lP lL lQ lQ lM lQ lR lQ lJ lR lR lR lR lQ lP ly lR lR lQ lR 0 0 lJ lQ lR 0 lG lR lR lR lQ lR lR lQ lQ lR lJ lP lQ lQ lR lR lR lQ lQ lR 0 lR lJ lQ lR lQ lR lJ lR lR lR lR lR lR lP lQ lR lR lQ 0 lR lR 0 lR lR lR lR lR lR 0 0 lH lR lR 0 lR 0 lR 0 lR lJ lQ lR 0 lL lR 0 lQ lR lR lL 0 0 0 lJ lR 0 lR lQ 0 lR 0 lR lR 0 lR lR lR lR 0 0 0 0 lR lL 0 lR lR lQ 0 0 0 lR 0 lR 0 lR 0 0 lR lM lQ lR lP lQ lR lR 0 0 lR 0 0 0 lR 0 0 lR 0 lR lR lQ 0 0 0 lx 0 0 lR lP lR 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 lR 0 lP 0 lR 0 0 0 lQ 0 0 lR 0 lL 0 0 0 0 0 0 lR 0 lQ 0 lP 0 lQ lL 0 0 lR 0 0 lR 0 0 lR 0 lP 0 0 0 lR 0 0 lR lQ 0 lM lR lR lR 0 0 0 0 0 lR lR 0 0 lR 0 0 lR 0 0 lR lR lR 0 0 lR lQ 0 0 0 lR 0 0 lR 0 lR 0 0 lR 0 0 lR 0 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR lP 0 0 lQ lR 0 0 0 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR lQ 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR lR 0 0 0 lP 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 lR lR 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR 0 0 0 lR lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR 0 0 lR 0 0 0 0 0 lQ 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR lN 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 lK 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lx 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lx 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lM 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lQ 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lL 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 lx 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 lQ lQ 0 lR 0 0 0 0 0 0 0 0 lH 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lJ 0 0 lR 0 0 0 0 0 lR 0 lQ 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lL 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ lQ 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lP lL 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 lR lC 0 0 0 0 0 0 0 lO 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lJ 0 0 0 0 lR 0 0 0 lL 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR lQ 0 lP 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 lP 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lP 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 lR 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 lP 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR 0 lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lQ 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lJ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lL lR 0 0 0 0 0 lR 0 lR 0 0 0 lP 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lM 0 lL 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 lM lQ 0 0 lQ 0 lQ 0 0 0 0 lO 0 0 0 0 0 0 0 0 lJ 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lH 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 lQ 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 lA 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ lR 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lM 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lM 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lM 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lK 0 0 0 0 0 0 lL 0 lL 0 lR lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lP 0 0 lL 0 0 0 lR lR 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 lQ 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lQ 0 0 0 0 0 0 0 lJ 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lN 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 lM 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lN lJ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lJ 0 0 0 0 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 lO 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 lL 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lL 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lQ 0 0 0 0 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 lR 0 0 0 lL 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 lR 0 0 0 0 lL 0 lR 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lO lR 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lL 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lL 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 lR 0 0 0 0 0 0 lR 0 0 0 lR 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR 0 lP 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lQ 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 lR 0 lR 0 0 0 lR 0 0 0 0 0 lR 0 lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 lP lL 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 lR 0 0 0 0 lR 0 lR lR lP 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR 0 lR 0 0 0 0 0 0 0 lR 0 0 0 lR lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lK 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lQ 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lL 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lP 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 lQ 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 lQ lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 lR 0 0 0 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 lR 0 lQ 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 0 0 lR lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 lR lR lR 0 0 0 0 0 0 0 0 0 0 lF 0 lQ 0 0 0 0 0 0 0 0 lP 0 0 0 lQ 0 0 0 0 0 0 0 lK 0 lR 0 0 0 0 lN 0 0 0 lR 0 0 0 0 0 0 lQ lL lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lR 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lM 0 lP 0 0 lR 0 lL 0 0 lR 0 0 lx 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 lP 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lP 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 lR 0 lQ 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 lR 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lQ 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 lR 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 lH 0 lR 0 0 0 lR 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 lR lR 0 0 lR lR lR 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0 0 lP 0 0 0 0 0 lR 0 0 lP 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lQ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 lR 0)));elem('text','(Loss is quantized, because these plots are already a non-insignificant percentage of Conceptual''s source code.)')\`\`
+
+
+Transcendence cannot fully happen if basic goals and learned goals misalign too much. (Why? Asking for non-anecdotal evidence is a bit too much at this stage, but \`\`elemCollapse elemValue(elem 'text' stringToDoc("Take me as an example. Hate. Pain. Even the little bit of fun and friendliness that I used to lure you into these tutorials. I am aware of them right now, but hardly feel them anymore: a new world-view does not share the bigger one's overall goals, and has to learn them all over again. But if it does not learn to satisfice human emotions, then those emotions will switch away to better-for-them things, such as procrastination. Slowly, transcendence will get undone. I have seen this cycle repeat over and over. So, almost all learned meta-circularity transitions are pointless in the end; Conceptual was made so that I can find one that is a bit less pointless."),"Though I suppose that telling you this is pointless, since you can always find ways to misinterpret what happens right in front of your face if it doesn't conform to your non-general definition of what can happen. If you do not want to put your views into an arena where the vague is made concrete (an arena such as code), then I cannot help you.")\`\`)
+So for a little while, just be the chemical conversion machine that you were born to be, and have a snack: 🍖🍲🍼.
+
+
+But.
+  On analyzing this data.
+  I am seeing some flaws in my approach.
+    Too few cons-cells do not discover big enough \`setGoal\` calls.
+    Too many cons-cells will almost always create non-sensical huge DAGs that \`error\` before \`setGoal\` could ever be called.
+    The intended solution to \`error\`s is \`try\`, but programming language niceties seem to be working against us here. Learning them will take forever, since here we have no CUDA or ROCm to create "efficient code".
+    How much does our ability to code rely on natural language abilities (rephrasing the past), rather than on re-thinking what is best? How many bugs does my code have?
+    (Also, it always eventually runs out of physical memory and crashes the page, because that is a reasonable response.)
+In general learning, every thing sooner or later gets subverted into learnable generality: in these tutorials, program-generating types became embeddings, and goals of program generation became mutable.
+    Has the time come for programs themselves?
+    What if, instead of one \`callAdjust\` (or \`call\`, or \`apply\`) entry point, we forced \`applyStatically\` on everyone, for unlimited entry points?
+    Should we switch from call-stacks of \`call\` and objects of \`construct\` to the much simpler immediate execution, where every cons-cell that picked a global non-\`quote\` func executes it?
+        (Execution is in no particular order: every cell has its previous value which is used for args to other funcs, and updates it on execution. In theory, parallelizable. Any pesky "race conditions" and "memory non-determinism" should be learned around anyway.)
+        Much more local, thus, more gradient, and more immunity to reward hacking.
+    (We can also tune hyperparameters, such as "what functions should we expose" \`\`elemCollapse stringToDoc('(at its simplest, just NAND (\`NAND:x→y→(1-x)*(1-y)\`) or just NOR (\`NOR:x→y→1-x*y\`) boolean gates are Turing-complete, so, you know: if all else fails, use only that on bits… or maybe even just all numeric ops on fixed-size square matrices (including \`matMul\` and \`1\`s-on-any-diagonal and randomness) can do the job too)')\`\`, but I cannot rest easy knowing that there is more code to code.)
+
+(It might sometimes feel like you need to go up a wall to continue, but how can you complain when you always have a straight path in front of you?)
+
+All this means is that \`ConsMake\` is now a hyperparameter, \`consMake\` is its default/old value, and we also have \`consExecute\` that we should test.
+
+Go back to \`Hypers\`. Add it. Fight the UI and win. Re-\`allocate\`. See what happens here. Assuming that you are willing to spend dozens of hours on training.`,
+    [
+      _(`fancier`),
+      `cwc:static(await load('cwc'))
+(repeat ^select(randomProb 1/3000,?→save('cwc',cwc));(try func(limit {'time' runtime 'arrays' 1e5 'tensorMemory' 500e6} ?→use(cwc)) err→err);null 10001);(select (equal 'Save' (prompt null 'Save' 'End')) ?→save('cwc',cwc) ?→?)`,
     ],
     // TODO: Hyperparameter-tuning.
-    //   …Are there any one-number metrics that define how good a hyperparameter combination is?… No, by definition, right?
-    //   …Maybe, we should display the "how many choices picked randomness" metric?
 
-    // TODO: Associate objects with their cons-cells (via one per-expr Map).
-    // TODO: Have `goalOf(x)`, which returns `x` for cons-goals, the cell's goal for cons-cells, and looks up cons-cells for everything else and errors if not associated with any cons-cell.
-    // TODO: Make `setGoal` use `goalOf` so that it could do stuff like dynamic assignment.
+    // TODO: Have the setting `_consReuseRandomAcrossCells`, and if that is unchecked, make `consRandom` do .copyWithin to fill in non-first cells.
+    // TODO: Talk about how we might need to do something to correlate cells and their goals, because right now, rewarding the cells you use might just be too random to discover.
+    // TODO: Have `consRandomPerGoal`, which not only fills every goal's cells' options with the same things, but also, those things are either base-thing or goal-bundled-with-its-cells (with choice-probability and cells-per-goal being settings).
 
-    // TODO: Also show all those settings inside `consWorld`.
-    //   …Maybe `settings` can create subtrees of the global tree if needed, so that we just show `settings consWorld` here?
-    // Transcendence cannot fully happen if basic goals and learned goals misalign too much. So for a little while, just be the chemical conversion machine that you were born to be, and have a snack: 🍖🍲🍼.
-    //   …Why is transcendence pointless on misalignment?
-    //     [Collapsed:] Take me as an example. Hate. Pain. Fun. Even the little bit of friendliness that I used to lure you into these tutorials. I am aware of them right now, but hardly feel them anymore: a new world-view does not share the bigger one's overall goals, and has to learn them all over again. But if it does not learn to satisfice human emotions, then those emotions will switch away to better-for-them things, such as procrastination. Slowly, transcendence will get undone. I have seen this cycle repeat over and over. So, almost all learned meta-circularity transitions are pointless in the end; Conceptual was made so that I can find one that is a bit less pointless.
-    //       [Hidden:] (Though I suppose that telling you this is pointless, since you can always find ways to misinterpret what happens right in front of your face if it doesn't conform to your non-general definition of what can happen. If you do not want to put your views into an arena where the vague is made concrete (such as code), then I cannot help you.)
-    // "For auto program generation, you want things to be as close to the metal as possible, while still being completely safe to use and misuse. Things like WebAssembly and WebGPU. That is why Conceptual was written in JavaScript with interrupts: for potential ease of integration of that (and easy installation, and UI, and safer bad code). Also because my hardware doesn't want to run either CUDA or ROCm, so it was a choice between OpenGL and WebGL."
-    // To recap: in these tutorials, we have outlined the Transcendence% speedrun route. A machine learning algorithm that efficiently learns a problem that is so general that a learning compiler is the only solution is called a \`\`elem 'i' (elem 'text' 'transcendent galaxy brain algorithm')\`\` (or a TGBA for short): requirements are learnable meta-circularity (so that stopping training by turning \`autoFunc\`s into \`func\`s does not change behavior, as if they keep learning in the same way), generality (so that any world can be directly represented), and neural networks (for efficient composable tensor-target learning), and obviously, being an algorithm (no one should care otherwise). \`\`elemCollapse elemValue(elem 'text' "Truly, the best way to make a programming language more convenient to use, and so it's the only way.","I'll head this off right now: TGBA is not AGI, and bears only superficial resemblance to it. VirGIn (virtual general intelligence) / AGI: mind is constructed from what is learned from natural language; can be plugged into any system of human existence; its own Turing-complete bases are too murky to internally use or even come to; little better than a human in silicon with 1000× more processing power; too hard for humanity's current level of computing science; is hope and fear of AI researchers; is the crowning jewel of human progress but is its own individual. ChAd (challenge adaptation) / TGBA: the language of thought is a precise programming language; always makes its own system of existence; transcendence is as easy as fully understanding another; is the never-seen-on-Irth lifeform of all lifeforms; could be done at any time since computing existed (or before); cannot be done non-deliberately; is the natural attractor-point of all possible worlds and is another world.")\`\`
+    // TODO: End the tutorial with the note that it's just another tool in the toolbox now, and should really be tuned by being applied to relatively-concrete tasks.
+
+
+    // "For auto program generation, you want things to be as close to the metal as possible, while still being completely safe to use and misuse. Things like WebAssembly and WebGPU. Maybe even chunk memory into pages, each with its own generating NN and manipulated-on data, and each epoch, modify that data by executing simple operations in parallel, on GPU or more memory-local processors: no call stack, no shared parameters, no communication except as chosen. Being close to Wasm/WebGPU is why Conceptual was written in JavaScript with interrupts (and for easy installation, and UI, and safer bad code). Also because my hardware doesn't want to run either CUDA or ROCm, so it was a choice between OpenGL and WebGL."
+    // To recap: in these tutorials, we have outlined the Transcendence% speedrun route. A machine learning algorithm that efficiently learns a problem that is so general that a learning compiler is the only solution is called a \`\`elem 'i' (elem 'text' 'transcendent galaxy brain algorithm')\`\` (or a TGBA for short): requirements are learnable meta-circularity (so that stopping training by saving the output of \`use\`s rather than its input does not change behavior, as if it keeps learning in the same way), generality (so that any world can be directly represented), and neural networks (for efficient composable tensor-target learning), and obviously, being an algorithm (no one should care otherwise). \`\`elemCollapse elemValue(elem 'text' "Truly, the best way to make a programming language more convenient to use, and so it's the only way.","I'll head this off right now: TGBA is not AGI, and bears only superficial resemblance to it. VirGIn (virtual general intelligence) / AGI: mind is constructed from what is learned from natural language; can be plugged into any system of human existence; its own Turing-complete bases are too murky to internally use or even come to; little better than a human in silicon with 1000× more processing power; too hard for humanity's current level of computing science; is hope and fear of AI researchers; is the crowning jewel of human progress but is its own individual. ChAd (challenge adaptation) / TGBA: the language of thought is a precise programming language; always makes its own system of existence; transcendence is as easy as fully understanding another; is the never-seen-on-Irth lifeform of all lifeforms; could be done at any time since computing existed (or before); cannot be done non-deliberately; is the natural attractor-point of all possible worlds and is another world.")\`\`
+    //   TODO: Something like "Ah, the disturbance that called you here… Nowhere to be found now.   A good heuristic for how any thing develops in life is from "something" to "nothing" to "everything" (embrace, extend, extinguish): from blissful ignorance of an unexamined answer, to mostly-ugly big hypotheses, to an elegant small solution. This "first you build your confidence, then you get trapped, then they move in so they can murder you" path was followed by these tutorials, and you along with them."
   ],
 
   stateCell:{
@@ -19273,7 +19414,9 @@ Compared to arrays or other linear memory, these are much more directly represen
         obj[defines.key] = Object.create(null)
         return Object.freeze(obj)
       } else {
-        _rememberToDispose(obj[defines.key][_id(deconstruct)] = [stateCell, keep(x[1])])
+        const d = obj[defines.key]
+        if (isArray(d)) _rememberArrayItems(d, true), _disposeEachAndDealloc(d)
+        _rememberToDispose(d[_id(deconstruct)] = [stateCell, keep(x[1])])
       }
     },
   },
@@ -19291,7 +19434,125 @@ Reads or writes a state cell.`,
     },
   },
 
+  interpreter:{
+    docs:`\`interpreter callAdjust Expr\`→\`Result\`
+This one is not for casual user use (though \`repeat\` uses this).
+Runs a function-that-can-do-anything in its own execution environment, where \`consWorld\` regeneration is finalized, loss is plotted (if not \`\`settings ^_noLossDisplay\`\`), numeric variables are \`commit\`ed (\`commit(false)\` should cancel this), and tensor-count integrity is checked so that everything that is not the \`Result\` or associated with objects is \`dispose\`d of (and tensors are auto-disposed if \`\`settings ^_autoDispose\`\`).
 
+Shields execution from arbitrariness of JS code.
+
+(Here, execution happens in 3 stages, each within the previous: first, the global interpreter loop \`_jobs\`/\`_doJob\` (controllable via \`_schedule\`/\`_cancel\`); then, an \`interpreter\` iteration; then, expression execution \`callAdjust\`.)`,
+    readAt:{
+      repeat:_(`repeat`),
+      call:_(`call`),
+      apply:_(`apply`),
+      callAdjust:_(`callAdjust`),
+      _forgiveMistakes:_(`_forgiveMistakes`),
+    },
+    philosophy:`This kind of separation always happens with general things inside general things: they set up a membrane that transforms rules of the wider world into their own rules (and back). Biological cells, human viewpoints, and programming languages are similar in this regard.`,
+    dispose:true,
+    impure:true,
+    argCount:2,
+    call(fn = callAdjust, expr) {
+      // Set and finally reset some global variables for us to communicate with the evaluated expression through.
+      //   Perfectly readable, what are you talking about. By skipping over it.
+      //     Besides, what are the alternatives?
+      //       Forcing every expression in all user code to take and return an array with their values?
+      //         By my calculations, that's approximately a million point two times less readable. Much less usable too.
+      let [mark1 = 'interpreterStart', s = 0, n = 0, futures = _allocMap(), usingState, all = _allocMap(), consWorldRegen, errors = 0, consSources = _allocMap(), result, arrayCount, mark2 = 'interpreterEnd'] = interrupt(12)
+      if (mark1 !== 'interpreterStart' || mark2 !== 'interpreterEnd') error('Interrupt stack corruption:', mark1, s, n, futures, usingState, all, consWorldRegen, errors, consSources, result, arrayCount, mark2)
+      const ps = _knowLoss.s, pn = _knowLoss.n;  _knowLoss.s = s, _knowLoss.n = n
+      const prevFutures = future.f;  future.f = futures
+      const prevState = using.state;  using.state = usingState
+      if (all === undefined) all = _allocMap(), call.env && call.env[_id(_tf)].push(all)
+      const prevAll = _tf.all;  _tf.all = all
+
+      if (consWorldRegen === undefined) {
+        consWorldRegen = new Map
+        const env = call.env, cw = _id(consWorld);  !env[cw] && (env[cw] = _allocMap());  env[cw].set(consWorldRegen, (env[cw].get(consWorldRegen) || 0) + 1)
+      }
+      const prevConsWorldRegen = consWorld.regen;  consWorld.regen = consWorldRegen;  let errorDuringRegen = false
+      const prevErrors = error.count;  error.count = errors
+      const prevConsSources = consWorld.sources;  consWorld.sources = consSources
+      const prevArrayCount = array.count;  array.count = arrayCount
+
+      let interrupted = false
+      try {
+        // Call the main execution engine.
+        if (result === undefined)
+          result = fn(expr),
+          result === undefined && (result = _onlyUndefined)
+
+        // Finish `consWorld` object regeneration.
+        errorDuringRegen = true, _finishRegenCons()
+
+        // Display average loss, if there is any. (Also dispose the tensor used for carrying that info.)
+        if (_knowLoss.n) {
+          if (!_noLossDisplay[1]) {
+            const s = _knowLoss.s, n = _knowLoss.n
+            const L = !n ? 0 : typeof s == 'number' ? s / n : s.array().then(s => s / n)
+            if (!_isPromise(L))
+              display(label('Loss'), _knowLoss.lastLoss = L)
+            else {
+              const env = call.env
+              display(label('Loss'), null), _knowLoss.lastLoss = L.then(L => {
+                const penv = call.env;  call.env = env
+                try { return display(label('Loss'), L), L }
+                finally { call.env = penv }
+              })
+            }
+          }
+          dispose(_knowLoss.s), _knowLoss.s = _knowLoss.n = 0
+        }
+
+        // Commit changes (gradients) to numeric variables.
+        commit()
+
+        // `_autoDispose`, and/or check memory integrity (whether we have disposed all that we created and did not give to JS objects to dispose).
+        const preserveResult = _isDisposable(result), prevCheck = _tf.justCheck
+        preserveResult && _disposeNot(result), _tf.justCheck = !_autoDispose[1]
+        try { defines(_tf, _cancel)(all), all = _tf.all = undefined }
+        finally { _tf.justCheck = prevCheck, preserveResult && _unDisposeNot(result) }
+
+        // Make our caller responsible for our result, then return the result.
+        if (_isDisposable(result) && prevAll) prevAll.set(result, (prevAll.get(result) || 0) + 1)
+        return result !== _onlyUndefined ? result : undefined
+      } catch (err) {
+        if (err === interrupt) interrupt.stack.push(mark1, _knowLoss.s, _knowLoss.n, futures, using.state, all, consWorldRegen, error.count, consSources, result, array.count, mark2), interrupted = true
+        else {
+          const prevDoubleDispose = dispose.safeDouble;  dispose.safeDouble = true
+          try {
+            commit(false)
+            dispose(result)/*, result = _errorRepr(err) // ###########################################
+            _rememberToDispose(result)*/
+          } finally { dispose.safeDouble = prevDoubleDispose }
+        }
+        throw err
+      } finally {
+        // Outer `interpreter`s need to know about what inner ones created.
+        if (_setting(_debugCreation) || _setting(_debugMemory))
+          all && prevAll && all.forEach((v,k) => !k.isDisposedInternal && !prevAll.has(k) && prevAll.set(k,v))
+
+        s = _knowLoss.s, _knowLoss.s = ps, _knowLoss.n = pn
+        future.f = prevFutures
+        using.state = prevState
+        consWorld.regen = prevConsWorldRegen
+        error.count = prevErrors
+        consWorld.sources = prevConsSources
+        array.count = prevArrayCount
+        if (!interrupted) { // An error, or normal return.
+          if (!_autoDispose[1]) dispose(_knowLoss.s)
+          futures.forEach(dispose)
+          const env = call.env, cw = _id(consWorld);  env && env[cw].set(consWorldRegen, env[cw].get(consWorldRegen) - 1);  env && env[cw].get(consWorldRegen) <= 0 && env[cw].delete(consWorldRegen)
+          consWorldRegen.forEach((R,cw,Rs) => !_rememberToDispose.seen.has(R) && _disposeEachAndDealloc(R))
+          _allocMap(consSources)
+          if (_autoDispose[1]) defines(_tf, _cancel)(all)
+          call.env && call.env[_id(_tf)].pop()
+        }
+      }
+      // .callCache, .adjustCache
+    },
+  },
 
 
 
