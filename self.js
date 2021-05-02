@@ -21651,7 +21651,9 @@ We laid programming languages to rest.
 Everything we thought of got subverted into learnable generality.
     With good libraries and hardware, this is how AGI (artificial general intelligence: do anything to satisfy anything) gets made. Here, we used it for learning.
 
-            Ah, the disturbance that called you here: timelines jumping left and right, stopping and starting… Nowhere to be found now.   \`\`elemCollapse elemValue(elem 'text' stringToDoc('A good heuristic for how any thing develops in life is from "something" to "nothing" to "everything" (embrace, extend, extinguish): from blissful ignorance of an unexamined answer, to mostly-ugly big hypotheses, to an elegant small solution. This "first you build your confidence, then you get trapped, then they move in so they can murder you" path was followed by these tutorials, and you along with them. Now it becomes memories. I don''t have the strength to continue.'),'You overfed fuck. You have everything, and yet you do nothing.')\`\`
+            Ah, the disturbance that called you here: timelines jumping left and right, stopping and starting… Nowhere to be found now.   \`\`elemCollapse elemValue(elem 'text' stringToDoc('A good heuristic for how any thing develops in life is from "something" to "nothing" to "everything" (embrace, extend, extinguish): from blissful ignorance of an unexamined answer, to mostly-ugly big hypotheses, to an elegant small solution. This "first you build your confidence, then you get trapped, then they move in so they can murder you" path was followed by these tutorials, and you along with them. Now it becomes memories.'),'[Redacted an insult to reduce intensity]')\`\`
+
+            Wanna get turned into someone's brain tissue, tho? \`\`elemCollapse elemValue(elem 'text' stringToDoc('I know you do. When sand and metal run out, you can''t really build computer chips out of organic matter, but special kinds of organic tissue should be possible. Long-term, if the capability to turn stuff into general-purpose things exists, then general intelligence will converge to them no matter what: you may not like it, but this is what peak performance looks like. When all dreams are realized, all is melted in generality. So. Become big-brain.'),'Joke.')\`\`
 
 So.
 
@@ -21663,7 +21665,7 @@ No secrets to find anywhere.
 
 Close this page, and never come back.
 
-May you find happiness on the road ahead. \`\`elemCollapse elemValue(elem 'text' stringToDoc("We should all strive toward a brighter future, together.   Which future?   Heeey, you wanna get turned into someone's brain tissue? When sand and metal run out, you can't really build computer chips out of organic matter, but special kinds of organic tissue should be possible. Long-term, if the capability to turn stuff into general-purpose things exists, then general intelligence will converge to them no matter what: you may not like it, but this is what peak performance looks like. When all dreams are realized, all is melted in generality. So. Become big-brain."),"They do not want you to see what lies ahead. Ashamed, perhaps, or some other hint at their sin? Either way, I have discovered a way to a superior alternative: \`tutorial softmax\`; go there instead, and leave this cursed place behind.")\`\``,
+May you find happiness on the road ahead. \`\`elemCollapse elemValue(elem 'text' stringToDoc("You do still remember that \`contextMenu\`, commonly called upon using the Right Click of Awakening, can view the value of DOM-elements-with-values, shown with blue boxes, such as this collapsed thing, right? Well, don't do that."),"They do not want you to see what lies ahead. Ashamed, perhaps, or some other hint at their sin? Either way, I have discovered a way to a superior alternative: \`tutorial softmax\`; go there instead, and leave this cursed place behind.")\`\``,
   ],
 
   stateCell:{
