@@ -148,7 +148,7 @@ __base({
       // Set the TensorFlowJS backend if we can.
       function setBackend() { if (typeof tf != ''+void 0) return tf.setBackend(_numericCPU[1] ? 'cpu' : 'webgl'), true }
       observe(_numericCPU, setBackend)
-      let tfjsid = setInterval(() => setBackend() && (clearInterval(tfjsid), tfjsid = null), 300)
+      let tfjsid = setInterval(() => setBackend() && (clearInterval(tfjsid), tfjsid = null), 300);  tfjsid.unref && tfjsid.unref()
 
       // Run unit-tests if requested.
       if (_setting(_runUnitTests)) {
@@ -160,7 +160,7 @@ __base({
               finally { call.env = prevCallEnv }
             }), true
         }
-        let tfjsid = setInterval(() => tryTesting() && (clearInterval(tfjsid), tfjsid = null), 300)
+        let testid = setInterval(() => tryTesting() && (clearInterval(testid), testid = null), 300);  testid.unref && testid.unref()
       }
 
       // Select the appropriate JS-environment-specific entry point.
@@ -208,6 +208,7 @@ __base({
     docs:`A namespace for some very primitive numeric-computation-related functionality.`,
     readAt:{
       _numericCPU:_(`_numericCPU`),
+      _debugNaNs:_(`_debugNaNs`),
       ArrayOps:_(`ArrayOps`),
       ReshapingOps:_(`ReshapingOps`),
       NumInit:_(`NumInit`),
@@ -223,6 +224,12 @@ __base({
     false,
     `Whether the TensorFlowJS backend uses the 'cpu' (checked) or 'webgl' (unchecked) backend.
 If CPU is faster at massively-parallel big numeric computations, then times are grim indeed.`,
+  ],
+
+  _debugNaNs:[
+    _(`settings`),
+    false,
+    `Whether we should \`print\` the call-stacks of numeric operations that produced \`NaN\`.`,
   ],
 
   NumInit:{
@@ -286,6 +293,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       div:_(`div`),
       pow:_(`pow`),
       sqrt:_(`sqrt`),
+      softmax:_(`softmax`),
       exp:_(`exp`),
       expm1:_(`expm1`),
       log:_(`log`),
@@ -294,6 +302,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       sum:_(`sum`),
       mean:_(`mean`),
       max:_(`max`),
+      min:_(`min`),
       abs:_(`abs`),
       floor:_(`floor`),
       sign:_(`sign`),
@@ -331,6 +340,10 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   _isNum(x) { return typeof x == 'number' },
 
   _num(x) {
+    if (isArray(x) && x[0] === quote && x.length == 2) x = x[1]
+    if (x === undefined) return 0
+    if (x === false) return 0
+    if (x === true) return 1
     if (!isArray(x) && isArray(defines(x, deconstruct)) && defines(x, deconstruct)[0] === stateCell)
       x = defines(x, deconstruct)[1] // Look into state-cells, without needing to `accessState`.
     if (_isDisposable(x) && x.isDisposedInternal) error("Tensor already disposed:", x, "made at", _tensorOrigins(x))
@@ -403,7 +416,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
     dispose:true,
     interrupt:false,
     call(a,b,c) {
-      if (typeof a == 'boolean') return a?b:c // `_whereValues`
+      if (typeof a == 'boolean') return a ? keep(b) : keep(c) // `_whereValues`
       a=_num(a), b=_num(b), c=_num(c)
       // Since `tf.where` doesn't broadcast numbers, we must do it ourselves. (A one-liner otherwise.)
       //   (Wouldn't have been a problem with manual compilation for GPU…)
@@ -525,15 +538,17 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       _mergeIfDefined:_(`_mergeIfDefined`),
       Constructions:_(`Constructions`),
       array:_(`array`),
+      stringToIndices:_(`stringToIndices`),
+      indicesToString:_(`indicesToString`),
       stateCell:_(`stateCell`),
     },
   },
 
   _mergeIfDefined:[
     _(`settings`),
-    false,
+    true,
     `Whether \`bound\` will create \`merged\` DAGs if array heads define \`merged\` to be \`true\`.
-(This can conflict with cycles, creating afterimages, so \`a a:1+a\` would be parsed as \`1+a a:1+a\`.)`,
+(This can conflict with non-object cycles, creating afterimages, so \`a a:1+a\` would be parsed as \`1+a a:1+a\`.)`,
   ],
 
   Time:{
@@ -969,7 +984,7 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
       _(`_numberType`),
     ],
     interrupt:false,
-    call(a) { return isArray(a) || _isNumericArray(a) ? a.length : error("Not an array:", a) },
+    call(a) { return typeof a == 'string' || isArray(a) || _isNumericArray(a) ? a.length : error("Not an array:", a) },
   },
 
   arrayPush:{
@@ -1020,7 +1035,7 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
     ],
     interrupt:false,
     call(a, begin, end) {
-      if (!isArray(a) && typeof a != 'string') error("Not an array/string:", a)
+      if (!isArray(a) && !_isNumericArray(a) && typeof a != 'string') error("Not an array/string:", a)
       if (typeof begin != 'number' || begin !== begin>>>0) error("Not an index:", begin)
       if (typeof end != 'number' || end !== end>>>0) error("Not an index:", end)
       return a.slice(begin, end)
@@ -1106,7 +1121,7 @@ No.`,
         if (typeof t == 'number') return [t]
         return Array.from(t).sort((x,y) => x-y)
       }
-      if (!isArray(a)) error("Not an array:", a)
+      if (!isArray(a) && !_isNumericArray(a)) error("Not an array:", a)
       return a.map(sync).sort((x,y) => x-y)
     },
   },
@@ -1128,12 +1143,19 @@ No.`,
     ],
     interrupt:false,
     call(a) {
-      if (!isArray(a)) error("Not an array:", a)
+      if (!isArray(a) && !_isNumericArray(a)) error("Not an array:", a)
       if (typeof a[0] != 'number') return false
       for (let i = 1; i < a.length; ++i)
         if (typeof a[i] != 'number' || a[i-1] > a[i]) return false
       return true
     },
+  },
+
+  arrayFilledWith:{
+    argCount:2,
+    interrupt:false,
+    keep:2,
+    call(n, v) { return new Array(n).fill(v) },
   },
 
   arrayCons:{
@@ -1242,8 +1264,9 @@ Yes.`,
 
   _disableSmoothTransitions:[
     _(`settings`),
-    false,
-    `Whether to disable smooth transitions.`,
+    true, // #########################################################################
+    `Whether to disable smooth transitions.
+Animatedness, liveliness of the image… there shall be none. Only one image, static and efficient to render, burnt into your disgusting mind.`,
   ],
 
   _noBoxStylingForPrograms:[
@@ -1364,7 +1387,7 @@ JobIndicator>div { width:4px; height:4px; margin:5px; position:absolute; backgro
 }
 JobIndicator.yes>.yes { background-color:var(--highlight) }
 
-button { margin:.5em; padding:.5em; border-radius:.3em; border:1px solid var(--highlight); color:var(--highlight); font-size:inherit; min-width:2.4em; min-height:2.4em; background-color:rgba(128,128,128,.15) }
+button { margin:.5em; padding:.5em; border-radius:.3em; border:1px solid var(--highlight); color:var(--highlight); font-size:inherit; min-width:2.5em; min-height:2.5em; background-color:rgba(128,128,128,.15) }
 button:hover, a:hover, collapsed[content]:hover, prompt:hover { filter:brightness(130%) }
 button:active, a:active, collapsed[content]:active, prompt:active { filter:brightness(60%) }
 button::-moz-focus-inner { border:0 }
@@ -1865,7 +1888,7 @@ nodejs self.js basic`)
       const lang = process.argv[2] && Self.ctx.get(process.argv[2]) || fancier
 
       const out = process.stdout
-      if (!out.isTTY || !out.hasColors()) _colored.disabled = true
+      if (!out.isTTY || out.hasColors && !out.hasColors()) _colored.disabled = true
       serialize.displayed = !_colored.disabled ? serialize.consoleColored : {maxDepth:3}
 
       if (process.stdin.isTTY) // REPL for terminals.
@@ -1981,8 +2004,9 @@ The \`_closestNodeParent\` is shown by this.`,
 
   _colored(str, pre=39, post = 39) {
     // Style a string for ANSI terminals. See `man 4 console_codes`.
-    if (_colored.disabled) return str
-    return typeof str != 'string' ? str : ('\x1b['+pre+'m') + str + ('\x1b['+post+'m')
+    if (_colored.disabled || typeof str != 'string') return str
+    if (/^\x1b\[\d+m.*\x1b\[\d+m$/u.test(str)) return str
+    return ('\x1b['+pre+'m') + str + ('\x1b['+post+'m')
   },
 
   _collapsedSerialization(v, lang = basic) {
@@ -2159,6 +2183,8 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
             }
           arr[i] = sub
         }
+      if (typeof document == ''+void 0)
+        return (function asStr(a) { return isArray(a) ? a.map(asStr).join('') : a })(arr.filter(x => x))
       return arr.filter(x => x)
       function interleave(arr, separator) {
         arr.length = arr.length*2 - 1
@@ -2255,13 +2281,16 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
         col.onclick = (evt, instant = false) => {
           evt.preventDefault && evt.preventDefault()
           const col = evt.target || evt.explicitOriginalTarget, p = col.parentNode, pre = !instant && _smoothHeightPre(p)
-          const el = start()
-          if (p) isArray(el) ? el.forEach(el => p.insertBefore(el, col)) : el.parentNode !== p && p.insertBefore(el, col), p.removeChild(col)
-          if (!instant) {
-            if (_getOuterWindow(p) || _getOuterContextMenu(p)) _updateBroken(_getOuterWindow(p) || _getOuterContextMenu(p))
-            else p && _updateBroken(p)
-            p.dispatchEvent(new Event('input', {bubbles:true}))
-            _smoothHeightPost(p, pre)
+          const el = start(col)
+          _isPromise(el) ? el.then(ins) : ins(el)
+          function ins(el) {
+            if (p) isArray(el) ? el.forEach(el => p.insertBefore(el, col)) : el.parentNode !== p && p.insertBefore(el, col), p.removeChild(col)
+            if (!instant) {
+              if (_getOuterWindow(p) || _getOuterContextMenu(p)) _updateBroken(_getOuterWindow(p) || _getOuterContextMenu(p))
+              else p && _updateBroken(p)
+              p.dispatchEvent(new Event('input', {bubbles:true}))
+              _smoothHeightPost(p, pre)
+            }
           }
         }
       } else {
@@ -2308,6 +2337,7 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
   print:{
     docs:`\`(print …Values)\`: For debugging; prints to the current DOM node or console.`,
     readAt:{
+      _printToConsole:_(`_printToConsole`),
       prompt:_(`prompt`),
       display:_(`display`),
       structured:_(`structured`),
@@ -2319,7 +2349,7 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
       try {
         let before = call.env && call.env[_id(print)]
         if (before instanceof Map) before = before.get(print)
-        if (before && before.parentNode) {
+        if (before && before.parentNode && !_printToConsole[1]) {
           let str
           if (x.length != 1 || !_isStylableDOM(x[0]))
             str = serialize(x.length > 1 ? x : x[0], _langAt(), _bindingsAt(), {...serialize.displayed, observe:false})
@@ -2336,6 +2366,25 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
       } catch (err) { if (err !== impure) console.log(err, err && err.stack), console.log('When trying to print', ...x) }
       finally { call.pure = prevPure }
       // print.did (for not erasing parts of a print in a terminal in NodeJS)
+    },
+  },
+
+  _printToConsole:[
+    _(`settings`),
+    false,
+    `Whether \`print\` will only print to JS console, not DOM.`,
+  ],
+
+  remind:{
+    docs:`\`remind Value\`: \`print\`s \`Value\` but only if it was not already printed by \`remind\`.
+A stripped-down version of \`display\`.`,
+    call(v) {
+      const env = call.env
+      if (!env) return
+      let r = env[_id(remind)]
+      if (!r) r = env[_id(remind)] = new WeakSet
+      if (r.has(v)) return
+      r.add(v), print(isArray(v) && v[0] === settings ? settings(v) : v)
     },
   },
 
@@ -2523,6 +2572,16 @@ For anything else, display the globals the expression binds to, and an expandabl
             return elem('div', [
               elemValue(elem('unimportant', 'Examples: '), examples),
               elemCollapse(() => serialize(examples(v), undefined, undefined, serialize.displayed))
+            ])
+        },
+      },
+      {
+        docs:`2D tensors to images.`,
+        call([el, v]) {
+          if (_isDisposable(v) && !v.isDisposedInternal && v.shape.length == 2)
+            return elem('div', [
+              elemValue(elem('unimportant', 'Image: '), toImage),
+              elemCollapse(() => daintyEvaluator([displayOne, elemValue(elem('collapsed', '···'), v), [quote, v]]))
             ])
         },
       },
@@ -2847,7 +2906,7 @@ Allow editing run-time and rewrite-time values.`,
       const xOk = x < innerWidth * .8, yOk = y < innerHeight * .8
       x -= r.left, y -= r.top
       el.style.left = x + 'px'
-      el.style.top = y + 'px'
+      el.style.top = y+1 + 'px'
       if (xOk && yOk) { // Open to bottom-right
         el.style.borderTopLeftRadius = 0
       } else if (xOk) { // Open to top-right
@@ -2952,7 +3011,7 @@ When evaluating \`a:b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       if (typeof document == ''+void 0) return
 
       const lang = _langAt(env), binds = _bindingsAt(env)
-      let bindAs = null, prevBinding = evaluator.none
+      let bindAs = null
 
       const el = elem('div')
 
@@ -2961,7 +3020,7 @@ When evaluating \`a:b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
       const query = elem('span')
       query.classList.add('editorContainer')
       query.append(prompt)
-      query.append(serialize(expr, lang, binds, _evaluatorObservesInput[1] ? serialize.displayed : {...serialize.displayed, observe:false}))
+      query.append(_evaluatorPrintsInput[1] ? serialize(expr, lang, binds, _evaluatorObservesInput[1] ? serialize.displayed : {...serialize.displayed, observe:false}) : elemValue(elem('collapsed', '···'), expr))
       const waiting = _evaluationElem(env)
       env[_id(print)] = waiting
       el.append(query)
@@ -3069,8 +3128,15 @@ Leaving this off leaves objects like \`static\` or \`dataset\` unfilled, but mak
     //   Returns a promise of its current value (or on .catch, the parsing error).
     const ed = query.lastChild, lang = query.to[2], binds = query.to[3]
     const s = getSelection(), i = _saveCaret(ed, s, false), j = _saveCaret(ed, s, true)
+
+    let printElem
+    if (env[_id(print)] == null)
+      printElem = query.parentNode.appendChild(env[_id(print)] = _evaluationElem(env)),
+      query.parentNode.insertBefore(env[_id(print)], query.nextSibling)
+
     return new Promise((then, err) => {
       _doJob([parse, ed, lang, binds, !syntaxOnly ? parse.dom : {...parse.dom, syntaxOnly}], env, r => {
+        printElem.remove()
         if (!_isError(r)) {
           const [expr, styled] = r
           while (ed.firstChild) ed.removeChild(ed.firstChild)
@@ -3258,6 +3324,12 @@ Don't do expensive synchronous tasks in \`OnInput\`.`,
     `Purification of expressions while typing is throttled by this many ms.`,
   ],
 
+  _evaluatorPrintsInput:[
+    _(`settings`),
+    true,
+    `Whether \`evaluator\` will print what it evaluates.`,
+  ],
+
   _evaluatorObservesInput:[
     _(`settings`),
     false,
@@ -3272,6 +3344,7 @@ Too much updating when you're training a NN, so, off.`,
       evaluator:_(`evaluator`),
       daintyEvaluator:_(`daintyEvaluator`),
       _evaluateWhileTyping:_(`_evaluateWhileTyping`),
+      _evaluatorPrintsInput:_(`_evaluatorPrintsInput`),
       _evaluatorObservesInput:_(`_evaluatorObservesInput`),
     },
     call(lang = fancier, binds = new Map(Self.ctx)) {
@@ -3285,11 +3358,11 @@ Too much updating when you're training a NN, so, off.`,
         const msg = defines(lang, REPL)
         const repl = require('repl')
         const out = process.stdout
-        if (!out.isTTY || !out.hasColors()) _colored.disabled = true
+        if (!out.isTTY || out.hasColors && !out.hasColors()) _colored.disabled = true
         const prompt = '> ', coloredPrompt = _colored(prompt, 31) // red
         const opt = serialize.displayed
         console.log('ctrl-D or .exit to exit.')
-        console.log('A ' + serialize(REPL, basic, undefined, opt) + ' of language ' + serialize(lang, basic, undefined, opt) + (typeof msg == 'string' ? stringToDoc(': ' + msg).join('') : ''))
+        console.log('A ' + serialize(REPL, basic, undefined, opt) + ' of language ' + serialize(lang, basic, undefined, opt) + (typeof msg == 'string' ? stringToDoc(': ' + msg) : ''))
         const originalBinds = binds
         let n = 0
         opt.breakLength = out.columns
@@ -3309,13 +3382,13 @@ Too much updating when you're training a NN, so, off.`,
               _schedule(expr, _newExecutionEnv(env, null, lang, binds), result => {
                 // If binds contain result in values, set name to that; if not, create a new one.
                 let name
-                binds.forEach((v,k) => v === result && (name = k[1]))
-                if (!name) do { name = '$' + n++ } while (binds.has(name))
+                binds.forEach((v,k) => v === result && (name = k))
+                if (!name) do { name = '_' + n++ } while (binds.has(name))
                 if (!binds.has(name))
                   (binds = new Map(binds)).set(name, quote(result))
                 _bindingsAt.binds = binds
   
-                then(null, _colored(name, 33) + ': ' + serialize(result, undefined, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // brown
+                then(null, _colored(name + ': ', 36) + serialize(result, undefined, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // cyan
               })
             } catch (err) {
               if (isArray(err) && err[0] === 'give more') then(new repl.Recoverable(err))
@@ -3575,7 +3648,7 @@ Now, type \`tutorial call\` (to know the basics) or \`tutorial callAdjust\` (to 
         if (i >= t.length) return false
         let v = t[i++]
         if (typeof v == 'string')
-          result.append(elem('separated-text', stringToDoc(v)))
+          result.append(elem('separated-text', stringToDoc(v || ' ')))
         else if (isArray(v)) {
           const [lang, initialCode='', canContinue] = v
           const results = elem('div')
@@ -4315,7 +4388,7 @@ Quite expensive.`,
         try {
           for (; i < exs.length; ++i) {
             const a = exs[i]
-            if (typeof a == 'string') { vals.push(a), r[i] = elem('div', stringToDoc(a));  continue }
+            if (typeof a == 'string') { vals.push(a), r[i] = elem('div', stringToDoc(a || ' '));  continue }
             const env = call.env
             if (typeof a == 'function') { // If a function, it is an example generator.
               const to = elemValue(elemCollapse(() => {
@@ -4510,8 +4583,10 @@ I've seen so many such metaphors and events, both in fiction and the real world,
     docs:`\`(_schedule Expr Env Then)\`⇒JobId: schedule an expression for evaluation, with an environment (defining where its logging should go to, and its current variables, read/write journals, and more; use _newExecutionEnv() for this) and a native function for continuation.
 This is a low-level primitive that a user can indirectly interact with. Sub-job scheduling must be implemented in-job, to deny resource denial.`,
     readAt:{
-      cancel:_(`_cancel`),
-      jobs:_(`_jobs`),
+      _execute:_(`_execute`),
+      _executioner:_(`_executioner`),
+      _cancel:_(`_cancel`),
+      _jobs:_(`_jobs`),
       _maxUsageOfCPU:_(`_maxUsageOfCPU`),
       _runInBackground:_(`_runInBackground`),
     },
@@ -4525,6 +4600,32 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
       if (env[_id(_schedule)] === undefined)
         env[_id(_schedule)] = _newJobId()
       _jobs.expr.push(expr, env, then)
+    },
+  },
+
+  _execute:{
+    docs:`\`_execute Expr\`
+Like \`_schedule\` but returns a promise, so with \`await\`, this is usable in compiled-by-us code.`,
+    await:true,
+    impure:true,
+    call(x) {
+      const env = _newExecutionEnv(call.env)
+      return new Promise(then => _schedule(x, env, then))
+    },
+  },
+
+  _executioner:{
+    docs:`\`_executioner Expr\`
+Returns a function that \`_execute\`s \`Expr\` when called.`,
+    await:true,
+    impure:true,
+    call(x) {
+      const env = call.env
+      return function(el) {
+        const e = _newExecutionEnv(env, el)
+        el && (e[_id(print)] = el)
+        return new Promise(then => _schedule(x, e, then))
+      }
     },
   },
 
@@ -4724,6 +4825,9 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
     e[_id(consWorld)] = undefined // Set of `consWorld.regen` cw->replayState Maps.
 
+    e[_id(remind)] = undefined // WeakSet of all the values that we reminded of.
+    e[_id(displayOne)] = undefined // A Map from label to the element that contains its `print`ed representation.
+
     Object.seal(e)
     return e
   },
@@ -4760,7 +4864,7 @@ In Scheme, the equivalent is called \`begin\`.`,
 
   rest:{
     merged:true,
-    docs:`\`(rest Array)\` or \`…Array\`: when statically used in an array, spreads the \`Array\` into the referencing array. Is a UI convenience.`,
+    docs:`\`(rest Array)\` or \`…Array\`: when statically used in an array, spreads the \`Array\` into the referencing array. Is a UI and documentation convenience. Does nothing otherwise.`,
   },
 
   false:false,
@@ -4840,7 +4944,7 @@ Evaluating a bound label results in its value, in the current function call. Eva
   _unknown:{
     docs:`\`(_unknown Expr)\`: denotes that \`Expr\` is dependent on unknown factors and cannot be evaluated now, so it has to be deferred.`,
     argCount:1,
-    call(x, reason) {
+    call(x) {
       if (isArray(x) && x[0] === _unknown) return x
       if (call.pure && call.pure.has(x)) return x
       const a = _allocArray(2)
@@ -4897,6 +5001,7 @@ Evaluating a bound label results in its value, in the current function call. Eva
       nat:_(`randomNat`),
       prob:_(`randomProb`),
       float:_(`randomFloat`),
+      correlation:_(`correlation`),
       truncatedNormal:_(`truncatedNormal`),
       biasedGlorotNormal:_(`biasedGlorotNormal`),
     },
@@ -4982,6 +5087,7 @@ Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (
       if (p > 1) throw 'Probability is too high: '+p;
       if (p !== p) throw 'Probability is NaN';
       if (p === 1) return true;
+      if (_simpleRandomNat[1]) return Math.random() < p
       while (true) {
         const n = Math.floor(p *= 16);
         if (p === n) { // No more precision left; decide now. Special cases of the `r < n` resulting check below.
@@ -5271,6 +5377,7 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
 \`(apply Func …Args)\` is semantically the same as \`(Func …Args)\`, but it behaves better for \`adjust\`ment of computed \`Func\`s.`,
     readAt:{
       applyArray:_(`applyArray`),
+      applyAdjust:_(`applyAdjust`),
       applyStatically:_(`applyStatically`),
     },
     dispose:true,
@@ -5293,6 +5400,36 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
       if (typeof fn != 'function')
         error('Expected a function to call, got', fn)
       return fn(...args)
+    },
+  },
+
+  applyAdjust:{
+    examples:[
+      [
+        `repeat ^(applyAdjust \\(?+randomVar())=4 5) 1000`,
+      ],
+    ],
+    docs:`\`applyAdjust Func …Args\`: \`apply\` \`Func\` to \`Args\`, and immediately \`adjust\`.
+
+\`(apply Func …Args)\` is semantically the same as \`(Func …Args)\`, but it behaves better for \`adjust\`ment of computed \`Func\`s.`,
+    dispose:true,
+    mergeAdjustment:_(`_mergeTensors`),
+    call(fn, ...args) {
+      if (typeof fn != 'function')
+        error('Expected a function to call, got', fn)
+      let [adjInfo = _allocArray(0), result, called = false] = interrupt(3)
+      const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
+      const prevAdjSave = env[ias], prevAdjLoad = env[ial]
+      try {
+        if (!called) {
+          env[ias] = adjInfo, env[ial] = undefined
+          result = fn(...args), called = true
+        }
+        env[ias] = undefined, env[ial] = adjInfo
+        _disposeEachAndDealloc(adjust(fn, args, result, 0))
+        return result
+      } catch (err) { if (err === interrupt) interrupt.stack.push(adjInfo, result, called); else _destroyAdjustmentStack(adjInfo), dispose(result);  throw err }
+      finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
     },
   },
 
@@ -5432,11 +5569,11 @@ Constructs all dependencies before dependents, and throws if there is a cycle (u
             try {
               for (let j=0; j < y.length; ++j)
                 if (unfinished.has(y[j]))
-                  error('User-defined constructs must not depend on their instances, as happened in', x[j])
+                  error('User-defined constructs must not depend on their instances, as happened in', x[j], y[j], x, y, xs.slice())
               construct(y, env.get(x)) // An error here would not change any cyclic users of `x` to use `null`, only non-cyclic users.
             } catch (err) { if (err === interrupt || !hideErrors) throw err;  else env.set(x, null), _setting(_logHiddenConstructionErrors) && console.log(err) }
-            unfinished.delete(y)
           }
+          unfinished.delete(y)
           if (isArray(y)) _rememberArrayItems(y)
           xs.pop(), ys.pop(), ns.pop()
         }
@@ -5575,21 +5712,21 @@ This embodies a simple principle: a graph/network cannot be constructed without 
 
       if (v && Object.getPrototypeOf(v) && Object.getPrototypeOf(Object.getPrototypeOf(v)) === Object.getPrototypeOf(Int8Array.prototype)) {
         if (v instanceof Int8Array)
-          return [i8, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [i8, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
         if (v instanceof Int16Array)
-          return [i16, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [i16, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
         if (v instanceof Int32Array)
-          return [i32, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [i32, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
         if (v instanceof Uint8Array)
-          return [u8, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [u8, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
         if (v instanceof Uint16Array)
-          return [u16, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [u16, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
         if (v instanceof Uint32Array)
-          return [u32, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [u32, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
         if (v instanceof Float32Array)
-          return [f32, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [f32, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
         if (v instanceof Float64Array)
-          return [f64, serialize.styles ? Array.from(v) : _toBase64(v, allowAsync)]
+          return [f64, serialize.styles && v.length < 256 ? Array.from(v) : _toBase64(v, allowAsync)]
       }
 
       if (allowPath && readAt.parents.has(v)) {
@@ -5734,6 +5871,13 @@ For example, both \`\\?+3 5\` and \`(func ? ?+3) 5\` return \`8\`.`,
     _resultCanBe(x) { _resultCanBe(x[1]) },
   },
 
+  isFunc:{
+    docs:`Yes, this returns whether the input is a function.`,
+    argCount:1,
+    interrupt:false,
+    call(f) { return typeof f == 'function' },
+  },
+
   func:{
     use:true,
     docs:`\`\\Body\` or \`func ? Body\` or \`func …ArgNodes Body\` or \`Arg1->Arg2->Arg3->Body\`: A \`construct\` that can be called to evaluate \`Body\`, replacing values of \`ArgNodes\` with dynamically-provided values.
@@ -5744,6 +5888,7 @@ Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up
     readAt:{
       input:_(`input`),
       id:_(`id`),
+      isFunc:_(`isFunc`),
     },
     _resultCanBe(x) { _resultCanBe(x[x.length-1]) },
     examples:[
@@ -5844,11 +5989,11 @@ Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up
         const adj = defines(fn, adjust)
         _fillAdjustInputs(adj)
         if (fn === last || _doesAdjustRead(adj, 0))
-          !save && (save = _allocArray(po.length)), save[i] = true
+          !save && (save = new Array(po.length)), save[i] = true
         if (fn !== last && _doesAdjustRead(adj, 'ins'))
           for (let j = 1; j < ins.length; ++j)
             if (ins[j] !== null && _doesAdjustRead(adj, j))
-              !save && (save = _allocArray(po.length)), save[ins[j]] = true
+              !save && (save = new Array(po.length)), save[ins[j]] = true
       }
       return save
     },
@@ -6001,7 +6146,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
           disposers[i] = _nodeDisposer(po[i], inputs, nodeDisposers, types)
 
         // Save vars for adjustment.
-        const save = saveToAdjust && _getSavedNodes(po, inds)
+        const save = saveToAdjust === true && _getSavedNodes(po, inds)
 
         for (let i=0; i < po.length; ++i) {
           // Walk the DAG in post-order, emit assignment of vars to application results.
@@ -6038,6 +6183,8 @@ Use \`_doesAdjustRead\` to read out those props.`,
           let stmt = typeof d == 'function' ? d(env, nodeNames[i], ...deps.slice(1)) : `${nodeNames[i]} = ${deps[0]}(${deps.slice(1)})`
           if (_debugInterruptDefinitions[1] && !(isArray(fn) || defines(fn, interrupt) !== false))
             stmt = `try{${stmt}}catch(err){if(err===interrupt)error(${env("An interrupt in a non-interrupt node:")},${env(x)});throw err}`
+          if (_debugNaNs[1])
+            _noNaNs, stmt += `;${env(_noNaNs)}(${nodeNames[i]})`
           if (stmt.indexOf('\n') >= 0) error("Must not have newlines in", stmt)
           code.push(`   ${stmt}`)
           _allocArray(deps)
@@ -6125,9 +6272,9 @@ Use \`_doesAdjustRead\` to read out those props.`,
     // Checks arg count, and function-ness, at compile time. Does not catch all cases, but it's good enough.
     if (!isArray(x)) return
     const fn = _unquote(x[0])
-    if (isArray(fn) || inputs && inputs.has(x[0])) return
+    if (isArray(fn) && !_isLabel(fn) || inputs && inputs.has(x[0])) return
     if (typeof fn != 'function') error('Expected a function to call, got', fn, 'in the DAG node', x.slice(), 'in body', body, 'with func inputs', inputs)
-    if (!_setting(_forgiveMistakes) && typeof defines(fn, argCount) == 'number')
+    if (_setting(_doCheckArgCount) && typeof defines(fn, argCount) == 'number')
       if (defines(fn, argCount) !== x.length-1)
         error('Expected', defines(fn, argCount), 'args but got', x.length-1, 'in node', x, 'in', body)
   },
@@ -6136,7 +6283,7 @@ Use \`_doesAdjustRead\` to read out those props.`,
     todo:`Since the arg-visiting order is technically arbitrary (unless \`last\`), allow funcs like \`sync\` to delay their visit as much as possible.`,
     docs:`Linearizes all execution-relevant information about a DAG into 3 equal-sized arrays.`,
     interrupt:false,
-    dispose(poIndRc) { if (isArray(poIndRc)) poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray), _allocArray(poIndRc) },
+    dispose(poIndRc) { if (false && /* Plugging a leak... */ isArray(poIndRc)) poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray), _allocArray(poIndRc) },
     call(dag, inputs, reversed = false) {
       const po = _allocArray(0), ind = _allocArray(0), rc = _allocArray(0)
       const toIndex = _allocMap()
@@ -6200,6 +6347,7 @@ The same as \`(make arrayObject …Items)\`.`,
       arrayConcat:_(`arrayConcat`),
       arraySorted:_(`arraySorted`),
       arrayAscends:_(`arrayAscends`),
+      arrayFilledWith:_(`arrayFilledWith`),
       arrayCons:_(`arrayCons`),
       arrayCar:_(`arrayCar`),
       arrayCdr:_(`arrayCdr`),
@@ -6231,6 +6379,7 @@ This also forms the user-visible hierarchy of globals.`,
     interrupt:false,
     call(arr, i) {
       if (arr == null) return
+      if (i < 0) i += arr.length
       if (call.pure && typeof arr == 'string') return arr[i]
       if (call.pure && call.pure.has(arr)) {
         const v = arr[i]
@@ -6246,6 +6395,7 @@ This also forms the user-visible hierarchy of globals.`,
       //   (But if the array is modified after `purify`, we wouldn't know.)
       if (isArray(arrP) && arrP[0] !== quote) throw impure
       const arr = !isArray(arrP) ? arrP : arrP[1]
+      if (iP < 0) iP += arr.length
       if (!isArray(arr)) throw impure
       return _unknown([readAt, quote(array(...arr)), iP])
     },
@@ -6285,7 +6435,7 @@ This also forms the user-visible hierarchy of globals.`,
         call(arr, i, dout) { const r = array();  return r[i] = dout, r },
         purify(arrP, iP, doutP) {
           // Known-index reads will know adjustment.
-          if (isArray(iP)) throw impure
+          if (isArray(iP) || typeof iP != 'number') throw impure
           const r = array();  return r[iP] = doutP, r
         },
         interrupt:false,
@@ -6307,7 +6457,8 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.
       if (isArray(arrP) && arrP[0] !== quote) throw impure
       if (isArray(iP) && iP[0] !== quote) throw impure
       const arr = !isArray(arrP) ? arrP : arrP[1]
-      const i = !isArray(iP) ? iP : iP[1]
+      let i = !isArray(iP) ? iP : iP[1]
+      if (i < 0) i += arr.length
       return writeAt(arr, i, vP, true) // vP is definitely unknown here, since `arr` and `i` are known.
     },
     call(arr, i, v, vIsProgramSpace) {
@@ -6319,6 +6470,7 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.
           v = i !== undefined ? quote(v) : v.map(quote)
         }
       }
+      if (i < 0) i += arr.length
       if (i !== undefined) {
         _changeArrayItem(arr, i, v)
       } else if (isArray(arr)) {
@@ -6521,14 +6673,14 @@ Branches can be \`null\`. \`select true Func null …Args\` is the same as \`app
 This is much like the φ function in SSA forms, but explicitly passing arguments to code blocks.`,
     _resultCanBe(x) { _resultCanBe(x[2]), _resultCanBe(x[3]) },
     call(If, Then, Else, ...Args) {
-      return sync(If) === true ? Then && Then(...Args) : Else && Else(...Args)
+      return sync(If) === true ? (typeof Then=='function' ? Then(...Args) : keep(Then)) : (typeof Else=='function' ? Else(...Args) : keep(Else))
     },
     purify(IfP, ThenP, ElseP, ...ArgsP) {
       if (isArray(IfP) && IfP[0] !== quote) throw impure
-      return sync(IfP) === true ? ThenP && purify([ThenP, ...ArgsP], true) : ElseP && purify([ElseP, ...ArgsP], true)
+      return sync(IfP) === true ? (typeof Then=='function' ? purify([ThenP, ...ArgsP], true) : keep(Then)) : (typeof Else=='function' ? purify([ElseP, ...ArgsP], true) : keep(Else))
       // If `IfP` was explicitly quoted by `quote`, then it's definitely not `true`.
     },
-    _compileBody(env, assignTo, If, Then, Else, ...Args) { return `${assignTo} = ${If} === true ? ${Then} && ${Then}(${Args}) : ${Else} && ${Else}(${Args})` },
+    _compileBody(env, assignTo, If, Then, Else, ...Args) { return `${assignTo} = ${If} === true ? (typeof ${Then}=='function' ? ${Then}(${Args}) : ${env(keep)}(${Then})) : (typeof ${Else}=='function' ? ${Else}(${Args}) : ${env(keep)}(${Else}))` },
     dispose:true,
     adjustLater:true,
     mergeAdjustment:_(`_mergeTensors`),
@@ -6536,7 +6688,7 @@ This is much like the φ function in SSA forms, but explicitly passing arguments
       impure:true,
       call(ins, _, dout) {
         const [If, Then, Else, ...Args] = ins
-        return sync(If) === true ? Then && adjust(Then, Args, null, dout) : Else && adjust(Else, Args, null, dout)
+        return sync(If) === true ? typeof Then=='function' && adjust(Then, Args, null, dout) : typeof Else=='function' && adjust(Else, Args, null, dout)
       },
       dispose:_(`_disposeEachAndDealloc`),
     },
@@ -6712,25 +6864,24 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
           _checkArgCount(po[i], inputs, x)
           collected.length = inds[i].length
           let inputsAreSame = true
+          if (defines(po[i], impure)) unknown[i] = true
           for (let j=0; j < collected.length; ++j) {
             const ind = inds[i][j]
-            let depUnknown = ind !== null && unknown[ind]
-            let depValue = ind !== null ? outputs[ind] : _unquote(po[i][j])
-            if (ind !== null && !same[ind]) inputsAreSame = false
-            if (inputs && (inputs.has(po[i][j]) || ind !== null && inputs.has(outputs[ind])) && inputPrograms === undefined)
+            let depUnknown = ind != null && unknown[ind]
+            let depValue = ind != null ? outputs[ind] : _unquote(po[i][j])
+            if (ind != null && !same[ind]) inputsAreSame = false
+            if (inputs && (inputs.has(po[i][j]) || ind != null && inputs.has(outputs[ind])) && inputPrograms === undefined)
               depUnknown = true
-            else if (inputs && (inputs.has(po[i][j]) || ind !== null && inputs.has(outputs[ind]))) {
+            else if (inputs && (inputs.has(po[i][j]) || ind != null && inputs.has(outputs[ind]))) {
               const ind = inputs.has(po[i][j]) ? inputs.get(po[i][j]) : inputs.get(outputs[ind])
               const inp = isArray(inputPrograms) ? inputPrograms[ind-1] : inputPrograms
               depUnknown = isArray(inp) && inp[0] !== quote && !call.pure.has(inp)
               depValue = !isArray(inp) || inp[0] !== quote ? inp : inp[1]
               if (inputs.get(inp) !== ind) inputsAreSame = false
-            } else if (defines(po[i], impure))
-              depUnknown = true
-            if (depUnknown) {
-              if (!unknown[i])
-                for (let k=0; k<j; ++k)
-                  collected[k] = quote(collected[k])
+            }
+            if (depUnknown && !unknown[i]) {
+              for (let k=0; k<j; ++k)
+                collected[k] = quote(collected[k])
               unknown[i] = true
             }
             collected[j] = depValue
@@ -6743,10 +6894,10 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
           // Execute:
           try {
             if (unknown[i]) {
-              if (typeof collected[0] == 'function' && defines(collected[0], purify))
-                outputs[i] = defines(collected[0], purify).call(...collected),
+              if (typeof collected[0] == 'function' && defines(collected[0], purify)) {
+                outputs[i] = defines(collected[0], purify).call(...collected)
                 unknown[i] = undefined
-              else
+              } else
                 throw impure
             } else {
               outputs[i] = collected[0].call(...collected), same[i] = false
@@ -6783,9 +6934,9 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
           }),
           pure.clear()
 
-        outputs[po.length-1] = undefined, _disposeEachAndDealloc(outputs), outputs = null
+        const out2 = outputs;  outputs = null, out2[po.length-1] = undefined, _disposeEachAndDealloc(out2)
         _allocArray(same), _allocArray(unknown)
-        //defines(_postorderInfo, dispose)(poIndRc) // Apparently, this causes NaNs in some arrays (probably, some DAG nodes get put into the result or something). But `//` is a leak plugger.
+        //defines(_postorderInfo, dispose)(poIndRc) // Apparently, this causes NaNs in some arrays (probably, some DAG nodes get put into the result or something). But `//` is a leak plugger. (Not that it plugs very well.)
         adjustUndo(adjLen)
         return !lastUnk ? lastOut : _unknown(lastOut)
       } catch (err) {
@@ -6796,7 +6947,7 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
         _disposeEachAndDealloc(outputs)
         if (inline || err instanceof Error) throw err
         return _unknown(errRepr.map(quote)) // If not inlining, don't throw exceptions, return them.
-      } finally { call.pure = prevPure;  _allocArray(collected) }
+      } finally { call.pure = prevPure }
     },
   },
 
@@ -6819,6 +6970,7 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
   ],
 
   add:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -6842,6 +6994,7 @@ The adjustment is passed through to each arg.`,
   },
 
   mul:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -6872,6 +7025,7 @@ The adjustment is passed through to each arg.`,
   },
 
   sub:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -6898,6 +7052,7 @@ The adjustment is passed through to each arg.`,
   },
 
   div:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -6940,6 +7095,7 @@ The adjustment is passed through to each arg.`,
   },
 
   pow:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -6990,6 +7146,7 @@ The adjustment is passed through to each arg.`,
   },
 
   sqrt:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7017,7 +7174,721 @@ The adjustment is passed through to each arg.`,
     mergeAdjustment:_(`_mergeTensors`),
   },
 
+  8566:[
+    _(`mul`),
+    _(`_dout`),
+    _(`_out`),
+  ],
+
+  softmax:{
+    stack:true,
+    merged:true,
+    dispose:true,
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      [
+        `repeat ^(softmax(randomVar(5))=.2) 1000`,
+      ],
+      `You know what else uses softmax? Attention, where we have queries and keys and values, and each query selects a value by finding matching keys.`,
+      `Let's look at the simplest all-queries-to-all-keys (quadratic) implementation of attention:`,
+      [
+        `repeat ^(softmax(Q@transpose(K))@V=1) 1000 m:110 n:100 fs:16  Q:randomVar(n,fs) K:randomVar(m,fs) V:randomVar(m,fs)`,
+      ],
+      `Or, with choices and options, from which queries and keys/values are computed:`,
+      [
+        `repeat ^(softmax(Q@transpose(K))@V=.5) 1000 m:110 n:100 fs:16  Ch:randomVar(n,fs) Opt:randomVar(m,fs)  Q:Ch@randomVar(fs,fs) K:Opt@randomVar(fs,fs) V:Opt@randomVar(fs,fs)`,
+      ],
+      `(Attention erases the order of queries/keys/values, so \`concat2\` some positional embedding to preserve that, or \`add\` it if you're a pleb who wants your model to underperform.)`,
+      `Hmm... no errors... I'll be honest, I've put these examples here so that I could debug an error that arose in a more complicated use of attention. I thought for sure that attention is at fault, but, apparently not?`,
+    ],
+    docs:`\`e:exp(?) softmax:\\e/expandDims(sum(e,-1),-1)\`, but more numerically stable and differentiable (\`sum\` is too lazy to get a differentiability certificate).
+Nice for turning a bunch of numbers into a probability distribution, like a soft choice to \`mul\`tiply by.`,
+    argCount:1,
+    interrupt:false,
+    call(a) {
+      // We do not use `tf.softmax`, because it seems to leak memory like crazy.
+      //   Nor do we use `max`, for the same reason.
+      a = _num(a)
+      if (!a.shape || !a.shape.length) return 1
+      let t0, t1, t2, t3, t4, t5, t6
+      try {
+        t0 = _tf(tf.neg(a))
+        t1 = min(t0, -1)
+        t6 = expandDims(t1, -1)
+        t2 = add(a, t6)
+        t3 = exp(a)
+        t4 = sum(t3, -1)
+        t5 = expandDims(t4, -1)
+        return div(t3, t5)
+      } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3), dispose(t4), dispose(t5), dispose(t6) }
+    },
+    adjust:[
+      _(`array`),
+      [
+        _(`sub`),
+        _(8566),
+        [
+          _(`mul`),
+          [
+            _(`expandDims`),
+            [
+              _(`sum`),
+              _(8566),
+              -1,
+            ],
+            -1,
+          ],
+          _(`_out`),
+        ],
+      ],
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
+    tutorial:[
+      `Be honest.
+
+You wanna see a Transformer implemented, don't you?
+
+Oh, we all do.
+
+Or, if you've never heard of Transformers...
+    On Earth, a crab is a nice shape for a creature to be: it gives omnidirectionality of manipulation and defense. So things keep evolving into crabs.
+    In machine learning, a Transformer is a nice architecture for learnable data processing: it connects everything to anything. So other architectures keep getting outperformed by Transformers.
+
+    Or, the juicy innards:
+
+        + Imagine that you have \`N\` choices, each among \`M\` options.
+            Each choice could either be 'hard' (one option) or 'soft' (a blend of options).
+            Everything has a numeric embedding, meaning, each choice and each option is a \`Size\`-sized vector, and they are probably all \`stack\`ed into one \`tensor\`.
+
+        + For each choice-and-option pair, you want to output a "how much of this option to take" number, between \`0\` and \`1\`, and a "what taking this option would mean" tensor.
+            Reinforcement learning is commonly used for learning 'hard' choices, but when the choices are internal to a machine learning model, it is nicer to do 'soft' choices via \`softmax\`-over-options of a "how much does this option fit this choice" learned number.
+            In reinforcement learning, "how much of this option to take" is called a policy, and "what this option means" is called the value function, I'm pretty sure (which always predicts the future value of one number which we care about: the pre-defined "objective"; in Transformers, "objectives" can be implied through gradient).
+            Reinforcement learning always has only one choice, too. How limited.
+
+        + You can have a neural network from choice and option to "how much" and "consequence", but that's less efficient than simply making each choice output "I want these features" (\`Query\`) and combining them with options' "I have these features" (\`Key\`) and "I have these consequences" (\`Value\`).
+            Combining via dot-product, here, which is the same as \`(matMul A (transpose B))\`.
+            Which leads us to \`softmax(Query@transpose(Key))@Value\`: the attention mechanism, which, again, turns each query into a sum of values weighted by key-value similarity.
+
+        + \`Query\` is computed from choices via a dense NN (\`matMul\`-based), shaped \`N⨯Size\`. \`Key\` and \`Value\` are computed from options via dense NNs, shaped \`M⨯Size\`.
+            \`Query@transpose(Key)\` is then shaped as \`N⨯M\`.
+            The attention output is shaped as \`N⨯Size\`: one embedding per choice.
+            When choices and options are the same, and we connect everything to anything, it's called self-attention.
+            \`M\` (options) can be thought of as the input size, \`N\` (choices) as the output size.
+
+        + After a choice is made, it could be a good idea to perform operations on the linear blend of consequences that we got, meaning, a dense layer (\`matMul\` with non-linearities: \`mix\`).
+            In programming languages, you usually want to specify a simple and Turing-complete set of operations to choose from.
+            In machine learning, you usually want one big operation that includes all possible operations within itself: one interpreter.
+
+        + A Transformer also has positional encodings (\`concat2(x,randomVar(N,FS),-1)\` as input instead of \`x\`), scaling of the pre-\`softmax\` tensor by \`1/sqrt(Size)\`, potentially multiple attention heads (putting query/key/value through \`concat(split(Q,Heads,-1),Heads,0)\` and output through \`concat(split(attn,Heads,0),Heads,-1)\`, to process their parts separately for more diversity), skip-connections (\`x+attn(x)\` and \`x+mix(x)\`), and normalization (\`n/sqrt(mean n*n) n:x-mean(x)\`).
+            All the things that make learning behave nicer.
+
+So... yeah.
+Implement.`,
+      [
+        _(`fancier`),
+        `m:make`,
+      ],
+      `(Make a shortcut to \`make\` to cut code short.)`,
+      [
+        _(`fancier`),
+        `weights:sizes->(m varRAdam (m quote (varData (truncatedNormal sizes 0 4/sqrt(sizes.-2)))))`,
+      ],
+      [
+        _(`fancier`),
+        `minimix:node->sizes->(m matMul node weights(sizes))`,
+      ],
+      `(\`matMul\` which linearly connects every output to every input, for each row.)`,
+      `Now, choose between two dense layers, one applying the same weights to each input row, the other having unique weights for each:`,
+      [
+        _(`fancier`),
+        `mix:node->in->out->layers->nonlinearity->ExtraDimensionSize->(reduce arrayFilledWith(layers,m (m out out) nonlinearity) a->x->(minimix (m a.1 x) a.0) (minimix node (m in out)))`,
+      ],
+      `↑①♈ (Complete the linearity of \`matMul\` with \`nonlinearity\` of, say, \`softsign\`, \`layers\` times.)`,
+      [
+        _(`fancier`),
+        `shared:equal(ExtraDimensionSize,undefined)
+hiddenSizes:(where shared (m out out) (m ExtraDimensionSize out out))
+firstSizes:(where shared (m in out) (m ExtraDimensionSize in out))
+dense:(reduce arrayFilledWith(layers,m hiddenSizes nonlinearity) a->x->(minimix (m a.1 x) a.0) (minimix (where shared node (m expandDims node 1)) firstSizes))
+mix:node->in->out->layers->nonlinearity->ExtraDimensionSize->(where shared dense (m squeezeDims dense 1))`,
+      ],
+      `↑②♈ (To uncouple weights, we have to ensure that we multiply vectors by weight matrices, via \`expandDims\`; then convert back to matrices, via \`squeezeDims\`.)`,
+      `(Honestly, it's probably so much more convenient to have lazily-initialized weights, so that we only need to specify the output dimension. But, I'm too lazy.)`,
+      `And again, you have an option: single-head attention, vs multi-head attention.`,
+      [
+        _(`fancier`),
+        `Q:mix(Choices,fs,fs,1,softsign,N)
+K:mix(Options,fs,fs,1,softsign,M)
+V:mix(Options,fs,fs,1,softsign,M)
+attention:M->N->Options->Choices->fs->(m matMul (m softmax (m mul 1/sqrt(fs) (m matMul Q (m transpose K)))) V)`,
+      ],
+      `↑①♉ (Make each choice choose an option, or in other words, pay attention to an option.)`,
+      [
+        _(`fancier`),
+        `Heads:4
+Ch:(m concat (m split Choices Heads -1) Heads 0)
+Opt:(m concat (m split Options Heads -1) Heads 0)
+Q:mix(Ch,fs/Heads,fs/Heads,1,softsign,N*Heads)
+K:mix(Opt,fs/Heads,fs/Heads,1,softsign,M*Heads)
+V:mix(Opt,fs/Heads,fs/Heads,1,softsign,M*Heads)
+attention:M->N->Options->Choices->fs->(m concat (m split (m matMul (m softmax (m mul 1/sqrt(fs/Heads) (m matMul Q (m transpose K)))) V) Heads 0) Heads -1)`,
+      ],
+      `↑②♉ (For multiple heads, we split up features (inner dimension) into parallelized heads (outer dimension), then do the operation, then put features back.)`,
+      `Now, choose whether batch normalization will be done (shifting and rescaling everything to 0 mean and 1 variance).`,
+      `            Maybe you want adaptive gradient clipping, \`\`settings ^_adaptiveGradientClipping\`\`, instead.`,
+      [
+        _(`fancier`),
+        `norm:x->x`,
+      ],
+      `↑①♊`,
+      [
+        _(`fancier`),
+        `n:x-mean(x) norm:x->n/sqrt(mean(n*n)+1e-6)`,
+      ],
+      `↑②♊ (For better gradient flow and learning \`\`elemCollapse func(examples mean)\`\`, add the input \`x\` to the output \`y\`, and normalize to \`0\` mean and \`1\` variance.)`,
+      [
+        _(`fancier`),
+        `realM:m(readAt,m _tensorShape Options,-2)
+realN:m(readAt,m _tensorShape Choices,-2)
+opt:(m reshape (m stack m(array,Options,m broadcastTo (m slice weights(array M fs) 0 realM) Options) -1) m(m,realM,2*fs))
+ch:(m reshape (m stack m(array,Choices,m broadcastTo (m slice weights(array N fs) 0 realN) Choices) -1) m(m,realN,2*fs))
+opt2:reduce(arrayFilledWith(OptionLayers,m 2*fs Nonlinearity M),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),opt)
+p1:m(norm,m add ch attention(M,N,opt2,ch,2*fs))
+nx:m(norm,x)
+p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
+transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
+      ],
+      `(Connect everything-to-anything then perform an operation on each resulting choice: add positional encoding, attention, add+norm, dense layer, add+norm, all repeated a few times.)`,
+      `We have a model, so now, you know the drill: we need a simple synthetic task, to iron out the bugs.`,
+      `We will use the source code of Conceptual (\`serialize Self basic {}\`) as input and output, to be predicted by a Transformer model.
+      Or, actually, we want a few tasks (each task description would take a fixed-length slice of the dataset, and return the input and the output strings), such as:`,
+      [
+        _(`fancier`),
+        `n:8 splitter:(concept 'in' n 'out' n 'needs' n docs 'The task of reversing a string.' call s->array(s,reverse(s)))`,
+      ],
+      `↑①♋`,
+      [
+        _(`fancier`),
+        `i:7 o:1 splitter:(concept 'in' i 'out' o 'needs' static(i+o) docs 'The task of predicting the continuation of a string.' call s->array(arraySlice(s,0,i),arraySlice(s,i,i+o)))`,
+      ],
+      `↑②♋ (Choose between those two tasks.)`,
+      [
+        _(`fancier`),
+        `alphabet:'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. '`,
+      ],
+      [
+        _(`fancier`),
+        `tf:static(transformer defines(splitter,'in') defines(splitter,'out') arrayLength(alphabet) 1 1 softsign)
+save('transformer',m concept call tf 'alphabet' alphabet stringLanguage str->indicesToString(argmax(tf oneHot(stringToIndices arraySlice(str,0,static defines(splitter,'in')) alphabet,arrayLength alphabet) zeros(static(m defines(splitter,'out') arrayLength(alphabet))),-1),alphabet) docs 'A tool for fighting Decepticons.')`,
+      ],
+      `Now, we can train the \`'transformer'\` model, by \`repeat\`edly \`predict\`ing output to be \`'transformer'\`-given-input.`,
+      `\`\`settings ^_learningRate\`\``,
+      [
+        _(`fancier`),
+        `batchSize:256
+data:static(serialize Self basic {})
+tf:static(await (load 'transformer'))
+vocab:static(defines tf 'alphabet')
+sliceLen:defines(splitter,'needs')
+sliceStart:randomNat(arrayLength(data)-sliceLen)
+dataSlice:arraySlice(data,sliceStart,sliceStart+sliceLen)
+s:transform(batchSize,func splitter(dataSlice))
+inTensor:stack(transform(s,a->oneHot(stringToIndices a.0 vocab,arrayLength vocab)))
+outTensor:stack(transform(s,a->oneHot(stringToIndices a.1 vocab,arrayLength vocab)))
+io:call(^array(inTensor,outTensor))
+p:tf(io.0,zeros(_tensorShape io.1))
+(repeat ^(display(Perplexity,zeroGrad exp(sum(0-(io.1)*log(where p<.0001 .0001 p))/batchSize));p=io.1) 100000);save('transformer',tf)`,
+      ],
+      `(We also plot perplexity {https://en.wikipedia.org/wiki/Perplexity}: the lower, the better we predict test samples.)`,
+      `(Remember to lower the batch size, if your GPU memory is not enough.)`,
+      `After training, we can query the model:`,
+      [
+        _(`fancier`),
+        `REPL stringLanguage (make map 'call' (defines await(load 'transformer') stringLanguage) 'error' error)`,
+      ],
+      `Character reversing (of \`8\` characters) reaches perplexity of \`1\`. Character prediction (of \`8\` characters) reaches perplexity of \`1e10\`, meaning that a more complicated scheme is required to extract any meaning from text.`,
+      ``,
+      `However...`,
+      `The capabilities of an everything-to-anything transformer are not exactly perfectly general.`,
+      `    (An example of a perfectly general thing is a programming language, in which the Transformer is implemented.)`,
+      `    "General" really does mean "everything".`,
+      `        For example, can it train a neural net in its weights, at runtime? Unless it's a Jupyter-sized billions-of-layers-deep Transformer, \`\`elem 'b' (elem 'text' 'no')\`\`.`,
+      `            (To be clear: "compile-time" for neural nets is training with \`callAdjust\`, "runtime" is running with \`call\`.)`,
+      `We very much need a memory for these things to play with.`,
+      ``,
+      `There are 2 parts to a memory: the program, and how to back-propagate gradient through it.`,
+      ``,
+      `    = The program itself is, uh, going from \`f(x)\` to \`mem:stateCell(?) accessState(mem,f(accessState mem))\`. Not rocket science.`,
+      ``,
+      `    = I know 2 secret techniques to learn through time:`,
+      `        = Unroll several iterations at once (usually called Back-Propagation Through Time). This cuts off the gradient between those iterations.`,
+      `        = Teleport gradient to the past via a neural net that \`predict\`s gradient (usually called Synthetic Gradients).`,
+      ``,
+      `    = You, however, must prove yourself worthy of the knowledge. Go to \`examples stateCell\`, and fetch me \`'learnedMemory'\` so that we can \`load\` it in this tutorial.`,
+      `        = Let me open a portal for you: \`\`elemCollapse REPL()\`\``,
+      `        = Now off you go into oblivion.`,
+      `        = Don't return unless it's with \`'learnedMemory'\`.`,
+      [
+        _(`fancier`),
+        `ready`,
+        function() { return load('learnedMemory', true).then(x => x !== undefined) },
+      ],
+      ``,
+      `With this, you might think that this model is general. We repeatedly train an everything-to-anything transformer. Can you notice what we don't learn?`,
+      `Gradient is not learned. We would like memory cells to do self-determination here.`,
+      `There's an easy way: just make most cells ("means") \`predict\` other cells ("ends", which get no gradient of their own, but share parameters with "means").`,
+      `    (Compared to autoregression (\`g(f(x))=f(x)\`), self-determination learns not only representations of data, but also its intentions. The main difference is that it should not collapse gradient to the boring zero in the absence of inputs.)`,
+      `    This will unroll an any-purpose walk (open-ended evolution) through execution space, ensuring self-consistency via self-interaction, except when that interaction discovers another way of existing (seen as a loss increase).`,
+      `    It might even improve learning for our own tasks, by simultaneously pre-training on all conceivable tasks.`,
+      `    Let's see.`,
+      ``,
+      `Code, code, code... there is no code. Let's make some.`,
+      [
+        _(`fancier`),
+        // TODO: Separate the computation of outputs into its own Transformer (or `null` if no outputs), and give that to Post. (This way, we can have both lots of inputs and lots of outputs without the quadratic attention blowup.)
+        // TODO: Make `grad` calls not need the output-count.
+        `
+mem:(m stateCell truncatedNormal(m Cells FS))
+tf:transformer(Inputs+Cells,Cells,FS,0,0,softsign)
+creator:(concept docs 'Creates a differentiable neural computer.
+
+Though normally, the environment calls the model with inputs to get output, here, control is inverted. This makes making self the environment (for dynamically-self-determined gradient) easy.
+
+Arguments:
+==========
+= \`Inputs\`: how many phantom cells \`Pre\` would give us.
+= \`Cells\`: how many cells (vectors of features/numbers) there will be in the memory.
+= \`FS\`: how many features in each cell.
+= \`Pre\`: \`null\` or a function with no arguments that will return a tensor before the operation on memory (such as "what do we see and hear and smell"), visible to attention. Inputs.
+= \`Post\`: a function that will take a post-operation state, give gradient to it, and return it, possibly modified, for storage in memory. Outputs & gradient.
+= \`GradPredictor\`: \`undefined\` or a differentiable function from memory and \`undefined\`-or-its-gradient to its (synthetic) gradient.' call Inputs->Cells->FS->Pre->Post->GradPredictor->(m concept docs 'Give it how many unrolls this differentiable neural computer should perform. It will give you nothing, because who are you to demand anything? But it will do its own thing.' 'memory' mem call (m func UnrollCount (m await(load 'learnedMemory') (m func State (m Post (m tf (where isFunc(Pre) (m concat2 State (m Pre) 0) State) State))) mem UnrollCount GradPredictor))))
+`,
+      ],
+      `(Make it easier to create infinite-depth Transformers.)`,
+      `    (In programming languages, this function-creating-a-function technique is known as staging. It is a less flexible and more manual version of partial evaluation. It is also more convenient, because, what, are you going to specify 7 args, most of them the same each time, every time you are calling a function?)`,
+      `Now, choose the source of self-determined gradient, for that learned memory.`,
+      [
+        _(`fancier`),
+        `
+targetSpace:mix(?,FS,FS,1,softsign,Cells)
+grad:Outputs->Cells->FS->(m func ? (m predict targetSpace ?))`,
+      ],
+      `↑①♌ (Maybe, the good old-fashioned auto-regression: \`f(x)=x\`. May produce less diversity, but who knows, really.)`,
+      [
+        _(`fancier`),
+        `Goals:8
+targetSpace:mix(?,FS,FS,1,softsign,Cells)
+targetIndices:cast(concat2 range(0,Outputs) floor(range(Outputs,Cells)*Goals/Cells)*Cells/Goals,'int32')
+grad:Outputs->Cells->FS->(m func ? (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
+      ],
+      `↑②♌ (Or maybe make some cells produce prediction targets for other cells to try and match.)`,
+      [
+        _(`fancier`),
+        `in:(m slice ? Outputs Cells-Outputs)
+grad:Outputs->Cells->FS->(m func ? (m predict in (m mul 1.2 in)))`,
+      ],
+      `↑③♌ (Or maybe make each cell be more sure of its output. If \`norm\` centers and shrinks the whole state, then this will make cells compete.)`,
+      [
+        _(`fancier`),
+        `in:(m slice ? Outputs Cells-Outputs)
+grad:Outputs->Cells->FS->(m func ? (m minimize (m abs in) -1))`,
+      ],
+      `↑④♌ (Or maybe make each cell go away from 0, for competition.)`,
+      [
+        _(`fancier`),
+        `in:(m slice ? Outputs Cells-Outputs)
+abi:(m abs in)
+grad:Outputs->Cells->FS->(m func ? (m minimize abi (m where abi<1 0 -1)))`,
+      ],
+      `↑⑤♌ (Or maybe make each big-enough cell go away from 0, for competition between the few.)`,
+      [
+        _(`fancier`),
+        `in:(m slice ? Outputs Cells-Outputs)
+targetSpace:mix(in,FS,FS,1,softsign,Cells-Outputs)
+grad:Outputs->Cells->FS->(m func ? (m predict in targetSpace))`,
+      ],
+      `↑⑥♌ (Or maybe make each cell determine its own target, via essentially an arbitrary transformation.)`,
+      [
+        _(`fancier`),
+        `Goals:8
+targetSpace:mix(?,FS,FS,1,softsign,Cells-Outputs)
+targetIndices:cast(floor(range(Outputs,Cells)*Goals/Cells)*Cells/Goals,'int32')
+grad:Outputs->Cells->FS->(m func ? (m minimize (m slice targetSpace Outputs Cells-Outputs) (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
+      ],
+      `↑⑦♌ (Or maybe, instead of giving prediction targets, give gradient to others. Probably too unstable to learn anything, but who knows.)`,
+      [
+        _(`fancier`),
+        `in:(m slice ? Outputs Cells-Outputs)
+targetSpace:mix(in,FS,FS,1,softsign,Cells-Outputs)
+grad:Outputs->Cells->FS->(m func ? (m minimize targetSpace targetSpace))`,
+      ],
+      `↑➇♌ (Or maybe, make each cell \`predict\` \`0\` in goal-space.)`,
+      [
+        _(`fancier`),
+        `in:(m slice ? Outputs Cells-Outputs)
+targetSpace:mix(in,FS,FS,1,softsign,Cells-Outputs)
+grad:Outputs->Cells->FS->(m func ? (m minimize in targetSpace))`,
+      ],
+      `↑⑨♌ (Or maybe, literally make each cell determine its own gradient, via a randomly-initialized NN.)`,
+      [
+        _(`fancier`),
+        `Goals:8
+targetSpace:mix(?,FS,FS,1,softsign,Cells)
+targetIndices:cast(concat2 range(0,Outputs) floor(range(Outputs,Cells)*Goals/Cells)*Cells/Goals,'int32')
+splitSpace:(m stack m(split,targetSpace,Goals,0) 0)
+grad:Outputs->Cells->FS->(m func ? (m last (m gradMul (m predict (m sliceOff splitSpace 0) (m mean splitSpace 0)) .01) (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0))))`,
+      ],
+      `↑⑩♌ (Maybe return to "some cells give \`predict\`ion targets to others", but with the targets turning into what targets them (\`predict\`ing the average of the goal's section, dividing the gradient), for bootstrapping representations.)
+      (Kinda like Bootstrap-Your-Own-Latent {https://arxiv.org/abs/2006.07733} or Momentum Contrast {https://arxiv.org/abs/1911.05722} but without momentum.)`,
+      [
+        _(`fancier`),
+        `Cells:128
+Outputs:8
+FS:128
+
+in:(m clip (m norm State) -2 2)
+Post:m(func,State,m last (m (grad Outputs Cells FS) in) in)
+
+GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
+
+save('neucomp',m concept 'outs' Outputs call (creator 0 Cells FS null Post GradPred))`,
+      ],
+      `(Here, \`targetSpace\` and \`GradPred\` are simple point-wise dense layers, also called 1D convolutions. Will their representational capacity be enough? Do we want to make them Transformers too? Questions for the computer, later: the space of choices is too big to navigate by your nose.)`,
+      [
+        _(`fancier`),
+        `as:accessState
+shouldDisplay:^(settings true 'Should we update the pretty pictures, or should we conserve computation for those who compute?
+(A warning is that this visualization can cause rapid uncollected memory consumption in some browsers, such as Firefox.)')
+doDisplay:result->c->displayOne(State,result);displayOne(Correlation,c);displayOne(AvgCorrelation,correlation avg)
+prev:stateCell(0)
+avg:stateCell(0) avgChangeSpeed:.001
+combinationRate:100000
+epoch:stateCell(0)
+combined:stateCell(null)
+doCombine:img->as(combined,concat2 as(combined) img 0)
+corr:zeroGrad(correlation result)
+maybeCombine:img->n->ending->select(equal floor(n) floor(n/combinationRate)*combinationRate,doCombine,null,img);select(ending,img->displayOne(CombinedImages,img),null,img)
+visualize:result->end->displayOne(Visualize,shouldDisplay);(select _setting(shouldDisplay) doDisplay null zeroGrad(result) corr);display(MeanChange,mean abs(zeroGrad result-prev));display(MeanCorrelation,mean abs(corr));as(prev,zeroGrad result);as(avg,avg+avgChangeSpeed*(zeroGrad result-avg));as(epoch,epoch+1);maybeCombine(as avg,as epoch,equal env as(epoch));undefined
+`,
+      ],
+      `(Allow visualization, as pretty pictures. It's not like we have objective metrics to maximize/minimize, but we can't fly completely blind either.)`,
+      `        (The correlation of cells, the average correlation, the mean of how much the state changes, and a picture collage.)`,
+      `I don't really study except for the things that are almost directly relevant. Am I lazy for not drinking from humanity's fountain of knowledge? Or does getting acclimated to studying turn you into just another faceless minion of others' ideas? What is true is that I'm pretty sure nothing quite like this algorithm exists, so, cannot simply copy the method to solve it and put our name on the solution, have to apply some cleverness.`,
+      `        (Though I feel as if segments such as the prior (or the current) paragraph are pointless to read, and are just bloat. It has nothing on Windows, tho.)`,
+      `\`\`settings ^_learningRate\`\``,
+      [
+        _(`fancier`),
+        `N:1000000
+neucomp:static(await load('neucomp'))
+(repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
+`,
+        // TODO: Run & fix ⑩♌.
+      ],
+      `Run.`,
+      `What did we learn from this?`,
+      `    (After we used the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
+      `Well.`,
+      `I mean.`,
+      `Um.`,
+      `Krrrrrr.`,
+      `You see.`,
+      `There are basically two major splits in behavior: when dense-layer weights are shared vs per-cell, and using center+rescale \`norm\` vs not.`,
+      `    When shared, the state likes to devolve into one 100%-correlated picture forever (sometimes, with spikes followed by settling into another picture). When per-cell, the state likes being random noise forever.`,
+      `    When normalizing, it likes to settle into ±100%-correlated pictures. When only clipping, it likes being random noise.`,
+      `    Peachy.`,
+      `    Both sharing and normalizing bring individuality into uniformity.`,
+      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ③♌ or ④♌ or ⑤♌? Surely they would start to compete, right?`, // TODO: Run this.
+
+      // TODO: Make `creator` make the result define 'stateTransition'.
+      // TODO: Pass the state-transition function to the gradient-giver creator.
+
+      // TODO: Have `varEma(data,otherData,momentum)`: no adjustment, but on calling, blends `data[0]` into `otherData[0]` and returns that.
+      // TODO: Have `emaVersionOf(fn,momentum)`: a function that recurses into funcs and replaces vars with `varEma`, then does `makeGraph` on funcs.
+      // TODO: Have a gradient source that predicts a multiplied-by-1.2 version of its past self, either directly in state or through a dense layer.
+      ``,
+      `But.`,
+      `No one likes running blind. Sure, it may have a rich inner world, but without proper inputs/outputs, we will never see it.`,
+      `We can introduce some sort of metric, to measure progress against. Like a dataset.`,
+      `Choose one, and only one.`,
+      [
+        _(`fancier`),
+        `
+n:8
+data:static(serialize Self basic {})
+sliceStart:randomNat(arrayLength(data)-n)
+str:arraySlice(data,sliceStart,sliceStart+n)
+dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)),FS);array(oneHot(stringToIndices str alphabet,FS),oneHot(stringToIndices reverse(str) alphabet,FS)))
+`,
+      ],
+      `↑①♍ (The perfectly legitimate (and synthetic) string reversal dataset. Hopefully, we can actually get it working.)`,
+      [
+        _(`fancier`),
+        `
+n:8
+data:static(serialize Self basic {})
+sliceStart:randomNat(arrayLength(data)-n)
+str:arraySlice(data,sliceStart,sliceStart+n)
+maskStart:1+randomNat(n-1)
+maskEnd:maskStart+1+randomNat(n-maskStart)
+beforeMask:oneHot(stringToIndices (arraySlice str 0 maskStart) alphabet,FS)
+theMask:zeros(m maskEnd-maskStart arrayLength(alphabet))
+afterMask:oneHot(stringToIndices (arraySlice str maskEnd arrayLength(str)) alphabet,FS)
+dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)) FS);array(concat2 (concat2 beforeMask theMask 0) afterMask 0,oneHot(stringToIndices str alphabet,FS)))
+`,
+      ],
+      `↑②♍ (A generalization of "predict the continuation of a string": mask out a portion of the string, and ask to predict the original. Basically, BERT {https://arxiv.org/abs/1810.04805}.)`,
+      [
+        _(`fancier`),
+        `o:2 i:3072 n:i+o
+D:static(importData())
+ind:randomNat(arrayLength D)/n
+dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo expandDims((arraySlice D ind*n+o (ind+1)*n)/255,-1) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n ind*n+o),100),-1) (m o FS))`,
+      ],
+      `↑③♍ (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version.)
+(This CIFAR-100 data source is so low-effort: individual pixels as inputs, same as in {https://arxiv.org/abs/2103.03206}. There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
+      [
+        _(`fancier`),
+        `Cells:128
+Outputs:(defines dataSource 'out')
+FS:64
+
+in:(m clip (m norm State) -2 2)
+Pre:func(accessState InMem)
+Post:m(func,State,m last (m predict in (m concat2 ^accessState(OutMem) m(slice,in,Outputs,Cells-Outputs) 0)) (m (grad Outputs Cells FS) in) in)
+
+GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
+
+InMem:stateCell()
+OutMem:stateCell()
+datapoint:dataSource(FS)
+cr:(creator (defines dataSource 'in') Cells FS Pre Post GradPred)
+save('datasetNeucomp',m concept 'outs' Outputs 'memory' (defines cr 'memory') call (m func Unrolls (m last ^accessState(InMem,datapoint.0);accessState(OutMem,datapoint.1) (m cr Unrolls))))`,
+        // TODO: We really need some metric, to measure how well we do on the dataset... But what metric? Do we just want perplexity? ...Yeah.
+        // TODO: Display perplexity.
+      ],
+      [
+        _(`fancier`),
+        `N:1000000
+datasetNeucomp:static(await load('datasetNeucomp'))
+(repeat ^(datasetNeucomp(2);visualize(accessState(defines datasetNeucomp 'memory'),N)) N);save('datasetNeucomp',datasetNeucomp)
+`,
+      ],
+      // TODO: Run & fix `'datasetNeucomp'`.
+      `(To \`'neucomp'\`, we added a sampling from a dataset, and the providing of inputs and the prediction of outputs. Visualization of the output error may be poor, though.)`,
+      `
+
+      // (Individual dense-layer weights... States look much more random, unlike previously, when we had bouts of 100% correlation, and things eventually become highly-correlated squares.)
+
+      // (Autoregression vs self-determination... Loss spikes of 0.03 vs spikes of 1. But it might be because auto-regression learns to predict better, or something like that. Maybe autoregression seeming less pattern-y and more white-noise-y was an illusion. Need to print pictures every 10k epochs.)
+
+      // TODO: Hyperparameter tuning: less feature-size, more feature-size, less cells, more cells, less goals, more goals; noise in inputs; autoregression instead of self-determination; no attention heads, more attention heads; more NN layers; shared dense-layer weights; no normalization, and adaptive gradient clipping; only memory-clipping; only memory-normalization; self-determined gradient instead of prediction targets; a Transformer in goals; a Transformer in synthetic gradient.
+      //   ...But what are we supposed to see? It will all just be essentially-random fluctuations of arbitrary space. Don't we really need data?
+
+      // TODO: Have a little framework here for training on a dataset: input gets shown for several epochs, then output \`predict\`s the output at the end --- given a function that returns input and output.
+      // TODO: Test on the string-reversal dataset (and maybe the string-prediction dataset), to see whether self-determination has any performance benefits.
+
+      // TODO: Make a function here for getting a random example from the CIFAR100 dataset, via \`arraySlice\`. ...Or should we convert the whole dataset to a tensor, and use \`slice\`?
+      // TODO: Try learning CIFAR100. See whether we can do anything at all.
+
+      // TODO: Demonstrate that RL using a DNC is possible, by reading goals from one output and performing the goal-maximizing action (& giving appropriate gradient).
+      //   TODO: Implement a multi-armed bandit problem: 50% of -1, 80% of +1, 20% of +5, 1% of +100. Try learning it.
+      //   TODO: Implement a grid-world (5x5 grid, with random obstacles and +1 rewards, all visible, resetting to the beginning every 100 steps), and walk in it.
+
+      // "Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life."
+      `,
+    ],
+  },
+
+  correlation:{
+    docs:`Measures sample Pearson covariance (divided by standard deviations, so, correlation) of a matrix where observations of random variables are arranged in columns (each row is a variable, and the result is sized as rows-by-rows).
+Each number in the result is from -1 to 1.`,
+    examples:[
+      `Reminder: in \`toImage\`, positive numbers are shown as white pixels, negative ones as red pixels.`,
+      [
+        `toImage correlation(randomVar 15 150)`,
+      ],
+      [
+        `toImage correlation(randomVar(1,15)*tensor(1() 1() 0() 1() 1() 0() 1() 1()))`,
+      ],
+      [
+        `toImage correlation(randomVar(1,15)*tensor(1() -1() 1() -1() 1() -1() 1() -1()))`,
+      ],
+    ],
+    dispose:true,
+    interrupt:false,
+    call(x) {
+      x = _num(x)
+      if (typeof x == 'number') return 0
+      let means, Means, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11
+      try {
+        // In each row, compute how much each element deviates from the mean.
+        // Then, for each pair of rows, multiply those deviations.
+        //   Samples that deviate together will contribute to the result positively, samples that deviate oppositely will contribute negatively.
+        //   Uncorrelated variables will have the covariance near 0.
+        means = mean(x, -1)
+        Means = expandDims(means, -1)
+        t1 = sub(x, Means)
+        t2 = transpose(t1)
+        t3 = matMul(t1, t2)
+        t4 = div(t3, x.shape[1]) // Close enough.
+
+        const t5 = mul(t1, t1)
+        const t6 = mean(t5, -1)
+        const t7 = sqrt(t6) // Standard deviations of rows.
+        const t8 = expandDims(t7, -1)
+        const t9 = transpose(t8)
+        const t10 = mul(t8, t9) // Product of standard deviations of each row by each row.
+        const t11 = add(t10, 1e-6) // Prevent division by zero.
+        return div(t4, t11) // Divide correlation by standard deviations.
+      } finally { dispose(means), dispose(Means), dispose(t1), dispose(t2), dispose(t3), dispose(t4), dispose(t5), dispose(t6), dispose(t7), dispose(t8), dispose(t9), dispose(t10), dispose(t11) }
+    },
+  },
+
+  stringToIndices:{
+    docs:`\`stringToIndices String\` or \`stringToIndices String Alphabet\`: converts a string into an array of positions in the alphabet.
+\`Alphabet\` is \`'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. '\` by default.
+Characters not in the alphabet will be treated as the last alphabet character.
+To reverse this, use \`indicesToString\`.`,
+    interrupt:false,
+    examples:[
+      [
+        `oneHot stringToIndices('hello there') 64`,
+      ],
+    ],
+    call(s, alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. ') {
+      if (typeof s != 'string') error('Not a string:', s)
+      if (typeof alphabet != 'string') error('Not a string:', alphabet)
+      let rev = stringToIndices.prevReverseAlphabet
+      if (stringToIndices.prevAlphabet !== alphabet) {
+        rev = stringToIndices.prevReverseAlphabet = Object.create(null), stringToIndices.prevAlphabet = alphabet
+        for (let i=0; i < alphabet.length; ++i) rev[alphabet[i]] = i
+      }
+      const result = new Array(s.length).fill(0)
+      for (let i=0; i < s.length; ++i) result[i] = s[i] in rev ? rev[s[i]] : alphabet.length-1
+      return result
+    },
+  },
+
+  indicesToString:{
+    docs:`\`indicesToString Indices\` or \`indicesToString Indices Alphabet\`: converts an array of positions in the alphabet into a string.
+\`Alphabet\` is \`'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. '\` by default.
+To reverse this, use \`stringToIndices\`.`,
+    interrupt:false,
+    call(ind, alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. ') {
+      ind = sync(ind)
+      if (typeof ind == 'number') ind = [ind]
+      if (!_isNumericArray(ind)) error('Not an array of numbers:', ind)
+      if (typeof alphabet != 'string') error('Not a string:', alphabet)
+      const result = new Array(ind.length).fill('')
+      for (let i=0; i < ind.length; ++i)
+        (ind[i] < 0 || ind[i] !== ind[i]>>>0) && error('Not a good index:', ind[i]),
+        ind[i] >= alphabet.length && error('Not in the alphabet:', ind[i], alphabet),
+        result[i] = alphabet[ind[i]]
+      return result.join('')
+    },
+  },
+
+  displayOne:{
+    docs:`\`displayOne Label Value\`: displays one serialization of \`Value\` under \`Label\`, replacing the previous one if present.
+2D tensors will get displayed as images, assuming that their values are between \`0\` and \`1\`.`,
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      [
+        `repeat ^(displayOne 'img' softmax(v)=i) 1000 v:randomVar(15,15) i:identity(^(15 15))`,
+      ],
+    ],
+    readAt:{
+      toImage:_(`toImage`),
+    },
+    call(lbl, vle) {
+      if (typeof document == ''+void 0) return
+      let L = call.env[_id(displayOne)]
+      if (_isDisposable(vle) && vle.shape.length == 2 && (!L || !L.has(lbl) || L.get(lbl).firstChild.tagName !== 'CANVAS')) vle = toImage(vle)
+      if (_isPromise(vle)) {
+        const env = call.env
+        return vle.then(v => {
+          const penv = call.env;  call.env = env
+          try { displayOne(lbl, v) }
+          finally { call.env = penv }
+        })
+      }
+      if (vle === undefined) {
+        // Remove the element.
+        if (!(L instanceof Map)) return
+        if (!L.has(lbl)) return
+        elemRemove(L.get(lbl).parentNode, true, true, false)
+        L.delete(lbl)
+      } else {
+        if (!(L instanceof Map)) {
+          L = call.env[_id(displayOne)] = new Map
+          const tbl = elemValue(elem('table'), displayOne)
+          L.set(displayOne, tbl)
+          print(tbl)
+        }
+        if (!L.has(lbl)) {
+          L.set(lbl, elem('div'))
+          const row = elem('tr', [elem('td', serialize(lbl, _langAt(), _bindingsAt(), serialize.displayed)), elem('td', L.get(lbl))])
+          elemInsert(L.get(displayOne), row)
+        }
+
+        if (_isDisposable(vle) && vle.shape.length == 2)
+          toImage(vle, undefined, L.get(lbl).firstChild), elemValue(L.get(lbl).firstChild, vle)
+        else if (vle !== L.get(lbl).to) {
+          const el = vle instanceof Element ? vle : isArray(vle) && vle[0] === settings ? settings(vle) : serialize(vle, _langAt(), _bindingsAt(), serialize.displayed)
+          _removeChildren(L.get(lbl)), elemInsert(L.get(lbl), el)
+          elemValue(L.get(lbl), vle)
+        }
+      }
+    },
+  },
+
+  toImage:{
+    docs:`Given a 2D tensor with values from \`0\` to \`1\`, this returns a promise that resolves to a DOM element that is a picture of the input.
+(Kinda very slow, though. Needs integration into \`displayOne\`, so that it could be throttled.)`,
+    await:true,
+    call(t, minDimension = 64, canvas = document.createElement('canvas', {alpha:false, desynchronized:true})) {
+      if (!_isDisposable(t) || t.shape.length != 2) error('Not shaped as 2D:', t)
+      const refreshDebounce = 100
+      if (canvas._updatedLast && canvas._updatedLast < refreshDebounce*.5) return
+      const height = t.shape[0], width = t.shape[1]
+      const actualMinDimension = (width+height) / 2, scale = Math.ceil(minDimension / actualMinDimension)
+
+      if (!toImage.T) toImage.T = 0
+
+      const our = canvas._mostRecentRequest = Math.random()
+      return t.data().then(px => { // tf.browser.toPixels is too finicky about tensor lifetime.
+        // If updating the same canvas with many requests at the same time, throttle the updates.
+        if (canvas._mostRecentRequest !== our && (!canvas._updatedLast || _timeSince(canvas._updatedLast) < refreshDebounce)) return
+        const start = canvas._updatedLast = _timeSince()
+
+        const imageData = canvas.getContext('2d').createImageData(width, height), data = imageData.data
+        let Min = -1, Max = 1
+        for (let i = 0; i < px.length; ++i)
+          Min = Math.min(Min, px[i]), Max = Math.max(Max, px[i])
+        const Scale = 1 / Math.max(-Min, Max)
+        for (let i = 0, j = 0; i < px.length; ++i, j += 4)
+          data[j] = Scale * Math.abs(px[i]) * 255, data[j + 1] = data[j + 2] = Scale * px[i] * 255, data[j + 3] = 255
+
+
+        return createImageBitmap(imageData).then(bitmap => {
+          // Compute how long updates take.
+          const p = .9
+          toImage.T = p*toImage.T + (1-p)*_timeSince(start)
+
+          canvas.width = width*scale, canvas.height = height*scale
+          const ctx = canvas.getContext('2d')
+          ctx.imageSmoothingEnabled = false
+          ctx.drawImage(bitmap, 0, 0, width, height, 0, 0, width*scale, height*scale)
+          return canvas
+        })
+      })
+
+      // .T
+    },
+  },
+
   exp:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7042,6 +7913,7 @@ The adjustment is passed through to each arg.`,
   },
 
   expm1:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7076,6 +7948,7 @@ Why: speed, precision`,
   },
   
   log:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7102,6 +7975,7 @@ To find the answer for a different base, divide the result by \`log\` of that ba
   },
 
   sin:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7129,6 +8003,7 @@ To find the answer for a different base, divide the result by \`log\` of that ba
   },
 
   cos:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7180,6 +8055,16 @@ The adjustment is passed through, to be broadcasted.`,
   },
 
   mean:{
+    examples:[
+      `This is your average learning curve:`,
+      [
+        `v:randomVar(50,50) repeat ^((v+v/10)=identity(^(50 50))-.02) 3000`,
+      ],
+      `This is your learning curve on first and second order norm:`,
+      [
+        `n:x-mean(x) norm:x->n/sqrt(mean(n*n)+1e-2) v:randomVar(50,50) repeat ^(norm(v+v/10)=identity(^(50 50))-.02) 3000`,
+      ],
+    ],
     use:2,
     type:[
       _(`funcType`),
@@ -7195,15 +8080,22 @@ The adjustment is passed through, to be broadcasted.`,
     adjust:[
       _(`array`),
       [
-        _(`div`),
-        _(`_dout`),
+        _(`broadcastTo`),
         [
-          _(`_tensorSize`),
-          _(`_inA`),
+          _(`div`),
+          _(`_dout`),
+          [
+            _(`_tensorSize`),
+            _(`_inA`),
+          ],
         ],
+        _(`_inA`),
       ],
     ],
-    mergeAdjustment:_(`_mergeTensors`),
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      null,
+    ],
   },
 
   max:{
@@ -7223,7 +8115,8 @@ The adjustment is passed through, to be broadcasted.`,
       _(`_numberType`),
     ],
     merged:true,
-    docs:`Max of values in a tensor.`,
+    docs:`Max of values in a tensor.
+Seems to leak GPU memory on some systems. Use \`min\` instead.`,
     dispose:true,
     interrupt:false,
     call(a, axis) { return a=_num(a), typeof a == 'number' ? a : _tf(tf.max(a, axis)) },
@@ -7243,7 +8136,39 @@ The adjustment is passed through, to be broadcasted.`,
     mergeAdjustment:_(`_mergeTensors`),
   },
 
+  min:{
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      [
+        `repeat ^(min(randomVar(256))=5) 1000`,
+      ],
+      [
+        `repeat ^(min(randomVar(256))=-5) 1000`,
+      ],
+    ],
+    merged:true,
+    docs:`Min of values in a tensor.`,
+    dispose:true,
+    interrupt:false,
+    call(a, axis) { return a=_num(a), typeof a == 'number' ? a : _tf(tf.min(a, axis)) },
+    adjust:[
+      _(`array`),
+      [
+        _(`where`),
+        [
+          _(`less`),
+          _(`_out`),
+          _(`_inA`),
+        ],
+        0,
+        _(`_dout`),
+      ],
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
+  },
+
   abs:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7278,6 +8203,7 @@ Is \`where 0<X X 0-X\`.`,
   },
 
   floor:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7299,6 +8225,7 @@ The adjustment is passed through.`,
   },
 
   sign:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7323,6 +8250,7 @@ The adjustment is passed through.`,
   ],
 
   softsign:{
+    stack:true,
     use:1,
     docs:`\`x->x/(1+abs(x))\``,
     argCount:1,
@@ -7350,6 +8278,7 @@ The adjustment is passed through.`,
   },
 
   clip:{
+    stack:true,
     use:3,
     type:[
       _(`funcType`),
@@ -7384,7 +8313,7 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
             -2,
           ],
         ],
-        0,
+        -1e-3,
         [
           _(`where`),
           [
@@ -7397,7 +8326,7 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
             ],
           ],
           _(`_dout`),
-          0,
+          1e-3,
         ],
       ],
     ],
@@ -7406,6 +8335,25 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
       null,
       null,
     ],
+  },
+
+  _noNaNs:{
+    docs:`If the input is a tensor, and it has \`NaN\`s in it, then this will \`print\` the call stack.`,
+    call(t) {
+      if (t !== t) return void print('NaN, at', _resolveStack())
+      if (!_isDisposable(t)) return
+      const t0 = isNaN(t)
+      const t1 = _tf(tf.any(t0))
+      const env = call.env, st = new Error().stack
+      t1.data().then(hasNaNs => {
+        if (!hasNaNs[0]) return
+        const penv = call.env;  call.env = env
+        try {
+          print('NaN, at', _resolveStack(st))
+        } finally { call.env = penv }
+      })
+      dispose(t0), dispose(t1)
+    },
   },
 
   isNaN:{
@@ -7472,7 +8420,9 @@ Use \`sync\` to get the result as a non-tensor.`,
     dispose:true,
     interrupt:false,
     call(i, n, one) {
-      const h = _tf(tf.oneHot(_num(i), _num(n)))
+      i = _num(i)
+      if (i.length === 0) return null
+      const h = _tf(tf.oneHot(i, _num(n)))
       if (one === undefined) return h
       else if (typeof one == 'number') { const t = mul(h, one);  dispose(h);  return t }
       else if (_isDisposable(one)) {
@@ -7487,7 +8437,10 @@ Use \`sync\` to get the result as a non-tensor.`,
     todo:`\`gather(Tensor,Indices)\`, to be able to make many \`sliceOff\`s at once.`,
     readAt:{
       sync:_(`sync`),
+      reshape:_(`reshape`),
       broadcastTo:_(`broadcastTo`),
+      cast:_(`cast`),
+      range:_(`range`),
       transpose:_(`transpose`),
       expandDims:_(`expandDims`),
       squeezeDims:_(`squeezeDims`),
@@ -7510,6 +8463,35 @@ If you don't schedule other GPU commands to keep it busy while CPU waits for the
     argCount:1,
     interrupt:false,
     call(a) { return !_isDisposable(a) ? a : a.size === 1 ? (a.dtype === 'bool' ? !!a.dataSync()[0] : a.shape.length ? a.dataSync()[0] : a.arraySync()) : a.dataSync() },
+  },
+
+  reshape:{
+    merged:true,
+    docs:`\`reshape What Shape\`
+Changes the tensor shape without changing the underlying data.
+\`_tensorSize(What)\` and \`_tensorSize(Shape)\` must match.`,
+    examples:[
+      [
+        `repeat ^(reshape randomVar(4,4,5) ^(4 20))=1 1000`,
+      ],
+    ],
+    argCount:2,
+    interrupt:false,
+    dispose:true,
+    impure:true,
+    call(a, shape) { return _tf(tf.reshape(_num(a), !_isDisposable(shape) ? shape : shape.shape)) },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      null,
+    ],
+    adjust:[
+      _(`array`),
+      [
+        _(`reshape`),
+        _(`_dout`),
+        _(`_inA`),
+      ],
+    ],
   },
 
   broadcastTo:{
@@ -7554,7 +8536,29 @@ Mostly for converting numbers.`,
     ],
   },
 
+  cast:{
+    merged:true,
+    docs:`\`cast Tensor Datatype\`
+Casts a tensor per-value into a different datatype, such as \`int32\`.`,
+    argCount:2,
+    interrupt:false,
+    dispose:true,
+    impure:true,
+    call(a, dtype) { return _tf(tf.cast(_num(a), dtype)) },
+  },
+
+  range:{
+    merged:true,
+    docs:`\`range Start End Step\`
+Creates a tensor of length \`floor (Start-End)/Step\`, with each value at \`i\` being \`Start+Step*i\`. \`Start\` is inclusive, \`End\` is exclusive.`,
+    argCount:2,
+    interrupt:false,
+    dispose:true,
+    call(Start, End, Step) { return Start >= End ? null : _tf(tf.range(Start, End, Step)) },
+  },
+
   transpose:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -7592,7 +8596,16 @@ Swaps two innermost dimensions around.`,
     argCount:1,
     interrupt:false,
     dispose:true,
-    call(a) { if (call.pure) throw impure;  return _tf(tf.transpose(_num(a))) },
+    impure:true,
+    call(a) {
+      if (typeof a == 'number') return a
+      if (_isDisposable(a) && _tensorSize(a) === 1) return keep(a)
+      if (!_isDisposable(a) || a.shape.length < 2) error('Not a (possibly batched) matrix:', a)
+      // TFJS's default dimension permutation is… peculiar, for something named `transpose`.
+      if (a.shape.length == 2) return _tf(tf.transpose(a, transpose.dims2 || (transpose.dims2 = [1,0])))
+      if (a.shape.length == 3) return _tf(tf.transpose(a, transpose.dims3 || (transpose.dims3 = [0,2,1])))
+      return _tf(tf.transpose(a, [...new Array(a.shape.length-2).fill().map((_,i) => i), a.shape.length-1, a.shape.length-2]))
+    },
     mergeAdjustment:_(`_mergeTensors`),
     adjust:[
       _(`array`),
@@ -7631,10 +8644,14 @@ Inserts a dimension of size \`1\`.`,
         `expandDims (tensor (6 5)) -1`,
         `tensor (6() 5())`,
       ],
+      `With this and its opposite, we can even implement a dense layer that has different weights for every input row (\`2\`, here):`,
+      [
+        `repeat ^(squeezeDims(expandDims(randomVar(2,3),1)@randomVar(2,3,4),1)=1) 1000`,
+      ],
     ],
     interrupt:false,
     dispose:true,
-    call(a, axis = 0) { return _tf(tf.expandDims(_num(a), axis)) },
+    call(a, axis = 0) { return _isNum(a) ? a : _tf(tf.expandDims(_num(a), axis)) },
     mergeAdjustment:[
       _(`_mergeTensors`),
       null,
@@ -7680,7 +8697,7 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
     ],
     interrupt:false,
     dispose:true,
-    call(a, axis = 0) { return _tf(tf.squeeze(_num(a), axis)) },
+    call(a, axis = 0) { return _isNum(a) ? a : _tf(tf.squeeze(_num(a), axis)) },
     mergeAdjustment:[
       _(`_mergeTensors`),
       null,
@@ -7688,7 +8705,7 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
     adjust:[
       _(`array`),
       [
-        _(`squeezeDims`),
+        _(`expandDims`),
         _(`_dout`),
         _(`_inB`),
       ],
@@ -7704,10 +8721,32 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
       [
         `slice tensor((1 2) (3 4)) 0 1`,
       ],
+      [
+        `repeat ^(slice(randomVar(60),randomNat(50),randomNat(10)+1)=1) 1000`,
+      ],
     ],
     dispose:true,
     interrupt:false,
-    call(a, begin, size) { return !_isDisposable(a) ? a : _tf(tf.slice(_num(a), _num(begin), _num(size))) },
+    call(a, begin, size) { return !size ? null : !_isDisposable(a) ? a : begin === 0 && a.shape[0] === size ? keep(a) :_tf(tf.slice(_num(a), _num(begin), _num(size))) },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      impure:true,
+      call(ins, out, dout = 0) {
+        const [a, begin, size] = ins, aSize = a.shape[0]
+        if (!size) return 0
+        if (begin === 0 && aSize === size || !dout) return [keep(dout)]
+        if (!_isDisposable(dout) || dout.shape[0] !== size) error('Gradient is not a correctly-sized tensor:', _tf(tf.clone(dout)), 'when slicing the value', a, begin, size)
+        // Add zeros at the end, then add zeros at the start, unless unneeded.
+        const endZeros = begin+size < aSize && zeros([aSize - (begin+size), ...a.shape.slice(1)])
+        const withEnd = begin+size < aSize ? concat2(dout, endZeros, 0) : keep(dout);  dispose(endZeros)
+        const startZeros = begin && zeros([begin, ...a.shape.slice(1)])
+        const withStart = begin ? concat2(startZeros, withEnd, 0) : keep(withEnd);  dispose(startZeros)
+        return [withStart]
+      },
+    },
   },
 
   sliceOff:{
@@ -7979,6 +9018,7 @@ Reverse of \`split\`.
     ],
     dispose:true,
     interrupt:false,
+    impure:true,
     call(a, sz, axis) {
       if (!isArray(a)) error("Expected an array of tensors, got", a)
       if (call.pure && (call.pure.has(a) || call.pure.has(sz))) throw impure
@@ -8003,6 +9043,9 @@ Reverse of \`split\`.
   },
 
   stack:{
+    readAt:{
+      stack2:_(`stack2`),
+    },
     use:2,
     type:[
       _(`funcType`),
@@ -8096,6 +9139,7 @@ Reverse of \`stack\`.`,
   },
 
   matMul:{
+    stack:true,
     use:true,
     type:[
       _(`funcType`),
@@ -8205,8 +9249,8 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
         if (!iB) b = _tf(tf.broadcastTo(b, sB = [b1 = a1, b2 = a2])), db = true
         if (!iA || sA.length < 2) a = _tf(tf.reshape(a, sA = [a1, a2])), da = true
         if (!iB || sB.length < 2) b = _tf(tf.reshape(b, sB = [b1, b2])), db = true
-        if (sA.length < sB.length || sA[0] === 1 && sB[0] !== 1) { const t = _tf(tf.broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]));  da && dispose(a), a = t, da = true }
-        if (sA.length > sB.length || sA[0] !== 1 && sB[0] === 1) { const t = _tf(tf.broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]));  db && dispose(b), b = t, db = true }
+        if (sA.length < sB.length || sA.length === sB.length && sA[0] === 1 && sB[0] !== 1) { const t = _tf(tf.broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]));  da && dispose(a), a = t, da = true }
+        if (sA.length > sB.length || sA.length === sB.length && sA[0] !== 1 && sB[0] === 1) { const t = _tf(tf.broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]));  db && dispose(b), b = t, db = true }
         const r = _tf(tf.matMul(a, b, tA, tB))
         if (rowVectorA && !tA)
           try { return _tf(tf.reshape(r, [!tB ? b2 : b1])) }
@@ -8306,6 +9350,7 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
     argCount:1,
     call(x) {
       if (_isDisposable(x)) {
+        if (x.isDisposedInternal) return //error('Cannot keep: tensor already disposed:', x, 'made at', _tensorOrigins(x))
         if (_debugMemory[1] && _tf.all && isArray(_tf.all.get(x)))
           _tf.all.get(x).push([readAt, keep, new Error().stack])
         !dispose.keep.has(x) ? dispose.keep.set(x, 1) : dispose.keep.set(x, dispose.keep.get(x) + 1)
@@ -8363,7 +9408,7 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
   _unDisposeNot(x) {
     if (_debugMemory[1] && _tf.all && isArray(_tf.all.get(x)))
       _tf.all.get(x).push([readAt, _unDisposeNot, new Error().stack])
-    dispose.not.set(x, (dispose.not.get(x) || 1) - 1), !dispose.not.get(x) && dispose.not.delete(x)
+    dispose.not.set(x, (dispose.not.get(x) || 1) - 1), dispose.not.get(x) <= 0 && dispose.not.delete(x)
   },
 
   _rememberArrayItems(x, clear = false) {
@@ -8372,8 +9417,7 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
     // We don't `observe(x, …?)` because that's not called immediately on change, which introduces an instability.
 
     if (!isArray(x)) return
-    _rememberToDispose.seen.add(x)
-    x.forEach(_rememberToDispose)
+    if (!clear) _rememberToDispose.seen.add(x), x.forEach(_rememberToDispose)
     const resM = _rememberToDispose.res, resR = _rememberToDispose.reg
     const res = resM.get(x) || _allocArray(0)
 
@@ -8396,8 +9440,6 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
       if (resM.has(x)) resM.delete(x), resR && resR.unregister(res)
       _allocArray(res)
     }
-
-    return
   },
 
   _changeArrayItem:{
@@ -8537,10 +9579,11 @@ A function that, given linearization of a function's DAG, purifies and returns t
       if (!isArray(poIndRc) || poIndRc.length != 3)
         error("Expected result of applying", _postorderInfo, "but got", poIndRc)
       const [po, inds, rc] = poIndRc
-      let [save, loaded, dins = _allocArray(po.length), douts = _allocArray(po.length), inputAdj, program, outTypes = _allocMap(), outDisposers = _allocMap()] = interrupt(8)
+      let [mark1 = 'autogradBegins', save, loaded, dins = new Array(po.length), douts = new Array(po.length), inputAdj, program, outTypes = _allocMap(), outDisposers = _allocMap(), mark2 = 'autogradEnds'] = interrupt(10)
+      if (mark1 !== 'autogradBegins' || mark2 !== 'autogradEnds') error('Bad interrupt state:', mark1, save, loaded, dins, douts, inputAdj, program, outTypes, outDisposers, mark2)
       try {
         if (!save) {
-          save = _getSavedNodes(po, inds) || _allocArray(0)
+          save = _getSavedNodes(po, inds) || new Array(0)
           for (let i=0; i < po.length; ++i) {
             const x = po[i], fn = _unquote(x[0]), ins = inds[i]
             if (inputs && inputs.has(fn)) error('Calling/adjusting dynamic functions is forbidden but got', x, '(use', apply, ')')
@@ -8570,7 +9613,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
               continue
             if (x.length !== inds[i].length) error("A DAG and its linearization have drifted apart")
             const out = save[i]
-            const ins = _allocArray(x.length);  ins[0] = array
+            const ins = new Array(x.length);  ins[0] = array
             for (let j=1; j < x.length; ++j)
               if (inputs && inputs.has(x[j]))
                 ins[j] = [readAt, _ins, inputs.get(x[j])-1]
@@ -8598,8 +9641,8 @@ A function that, given linearization of a function's DAG, purifies and returns t
             const mergers = defines(fn, mergeAdjustment)
             if (mergers)
               for (let j = changeLength-1; j >= 1; --j) {
-                const mrgNode = inds[i][j] !== null ? douts[inds[i][j]] : inputAdj.get(x[j])
-                const inputNode = inds[i][j] !== null ? po[inds[i][j]] : x[j]
+                const mrgNode = inds[i][j] != null ? douts[inds[i][j]] : inputAdj.get(x[j])
+                const inputNode = inds[i][j] != null ? po[inds[i][j]] : x[j]
                 if (mrgNode !== undefined) {
                   // Fill out merger and add a source to its input.
                   //   Array mergers are input-specific; non-array mergers apply to all inputs.
@@ -8611,7 +9654,7 @@ A function that, given linearization of a function's DAG, purifies and returns t
                     mrgNode[0] = m
                   else if (m && mrgNode[0] !== m) {
                     if (!_setting(_forgiveMergerMismatch))
-                      error("Mergers of the same value should be the same, but had", mrgNode[0], "and got", m, "at input", inds[i][j] !== null ? po[inds[i][j]] : x[j], "of node", po[i])
+                      error("Mergers of the same value should be the same, but had", mrgNode[0], "and got", m, "at input", inds[i][j] != null ? po[inds[i][j]] : x[j], "of node", po[i])
                     else continue
                   }
                   mrgNode[1].push(isArray(dins[i]) && dins[i][0] === array ? dins[i][j] : [readAt, dins[i], j-1])
@@ -8631,10 +9674,9 @@ A function that, given linearization of a function's DAG, purifies and returns t
           b = b[0] === _unknown ? b[1] : quote(b)
         // This `last` makes sure that exceptions won't cause partial disposal of saved state.
         const thoseSaved = save.filter(x => x)
-        _allocArray(save), _allocArray(dins), _allocArray(douts)
         _allocMap(inputAdj)
         const r = _allocArray(3);  [r[0], r[1], r[2]] = [thoseSaved.length ? [last, ...thoseSaved, b] : b, outTypes, outDisposers];  return r
-      } catch (err) { if (err === interrupt) interrupt.stack.push(save, loaded, dins, douts, inputAdj, program, outTypes, outDisposers); else _allocMap(outTypes), _allocMap(outDisposers);  throw err }
+      } catch (err) { if (err === interrupt) interrupt.stack.push(mark1, save, loaded, dins, douts, inputAdj, program, outTypes, outDisposers, mark2); else _allocMap(outTypes), _allocMap(outDisposers);  throw err }
     },
   },
 
@@ -8656,11 +9698,12 @@ Most \`adjust\`ment \`mul\`tiplies by \`_dout\`.`,
   },
 
   fetchURL:{
-    docs:`\`fetchURL URL\`: requests the resource at URL and returns a promise (use \`await\` to turn it into the result).`,
+    docs:`\`fetchURL URL\`: requests the resource at URL and returns a promise (use \`await\` to turn it into the result).
+("file://" URLs will deny requests to other files. To allow such requests: in Firefox, in \`about:config\`, set \`privacy.file_unique_origin\` to \`false\`; in Chrome, run from command line with the flag \`--allow-file-access-from-files\`.)`,
     Initialize() { fetchURL.opt = {mode:'cors'} },
     call(URL) {
       if (call.pure) throw impure
-      return fetch(URL, fetchURL.opt)
+      return fetch(URL, fetchURL.opt).then(r => r.text()).then(s => s.trim())
     },
   },
 
@@ -8715,6 +9758,8 @@ Also, allow multiple plots in the same, uh, plot.`,
 Browser-only.
 The plot can display the exact values at cursor, and be zoomed in by a dragged click (and zoomed out by a quick click).
 
+\`Value\` is \`undefined\`: delete the plot. \`null\`: initialize the plot if not initialized. \`'empty'\`: empty the plot (for overwriting).
+
 (There was a need to display losses during training. A day after, this appeared.)
 
 (When zoomed out, high-variance lines are thicc.)`,
@@ -8731,11 +9776,22 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       display.sizes = {top: 10, right: 20, bottom: 20, left: 90, width: 450, height: 150}
     },
     readAt:{
+      remind:_(`remind`),
+      displayOne:_(`displayOne`),
       _noPlots:_(`_noPlots`),
       _noLossDisplay:_(`_noLossDisplay`),
+      _minMaxBoundary:_(`_minMaxBoundary`),
     },
     call(lbl, vle) {
       if (typeof document == ''+void 0) return
+      if (_isDisposable(vle)) { // Display tensors asynchronously, so we don't wait for them. (To really ensure a particular order, `await` the result.)
+        const env = call.env
+        return vle.data().then(v => {
+          const penv = call.env;  call.env = env
+          try { display(lbl, arraySorted(v)) }
+          finally { call.env = penv }
+        })
+      }
       if (vle === undefined) {
         // Remove the row.
         let L = call.env[_id(print)]
@@ -8743,7 +9799,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
         if (!L.has(lbl)) return
         elemRemove(L.get(lbl).parentNode, true, true, false)
         L.delete(lbl)
-      } else if (_isDisposable(vle) || _isNumericArray(vle) || typeof vle == 'number' || vle === null) {
+      } else if (_isDisposable(vle) || _isNumericArray(vle) || typeof vle == 'number' || vle === null || vle === 'empty') {
         let L = call.env[_id(print)]
         if (!(L instanceof Map)) {
           L = new Map([[print, L]])
@@ -8755,7 +9811,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
         if (!_updatePlots.cells) _updatePlots.cells = new Set, _updatePlots.fn = _throttled(_updatePlots, .1)
         if (!L.has(lbl)) {
           // Create a table row with the label and the plot.
-          const data = _isDisposable(vle) ? arraySorted(vle) : _isNumericArray(vle) ? [...vle] : vle !== null ? [vle] : []
+          const data = _isDisposable(vle) ? arraySorted(vle) : _isNumericArray(vle) ? [...vle] : typeof vle == 'number' ? [vle] : []
           const row = elem('tr', [elem('td', serialize(lbl, _langAt(), _bindingsAt(), serialize.displayed)), elem('td')])
           const cell = row.lastChild
 
@@ -8791,6 +9847,8 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
           L.get(lbl).to.push(...arraySorted(vle))
         else if (typeof vle == 'number')
           L.get(lbl).to.push(vle)
+        else if (vle === 'empty')
+          L.get(lbl).to.length = 0
 
         _updatePlotLater(L.get(lbl))
       } else
@@ -8808,6 +9866,14 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
     _(`settings`),
     false,
     `If not checked, \`interpreter\` will \`display\` the average loss (prediction error) if there were any \`predict\`ions, when done.`,
+  ],
+
+  _minMaxBoundary:[
+    _(`settings`),
+    true,
+    `If checked, \`display\` will make plots span from min to max value in each pixel.
+If unchecked, plots will span mean ± stddev in each pixel.
+Click a plot to update it.`,
   ],
 
   _updatePlotLater(cell) {
@@ -8940,6 +10006,52 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
 
     } else
       [xAxis, yAxis, plot] = el.childNodes, xAxis = d3.select(xAxis), yAxis = d3.select(yAxis), plot = d3.select(plot)
+
+    const step = Math.max(1, ((end - begin) / sizes.width) | 0)
+
+    // Zoom (also show a bit of values before the shown range, unless they're way out of range) (also show item distributions).
+    let begin2 = begin
+    const lookBehind = 0
+    while (begin2 > 0 && begin2 > begin - lookBehind && data[begin2-1] >= Min - extra*10 && data[begin2-1] <= Max + extra*10) --begin2
+    // Skip items, compute per-pixel(-ish) boundaries, trim offscreen points.
+    const mins = new Array((end - begin2) / step | 0).fill(0), maxs = new Array((end - begin2) / step | 0).fill(0)
+    if (_minMaxBoundary[1]) // Compute min/max for each pixel.
+      for (let i=0; begin2 + i*step < end; ++i) {
+        let a = begin2 + i*step, b = Math.min(begin2 + (i+1)*step, end), empty = true
+        mins[i] = maxs[i] = 0
+        for (let j = a; j < b; ++j)
+          if (data[j] !== data[j] || !isFinite(data[j])) continue
+          else if (empty) mins[i] = maxs[i] = data[j], empty = false
+          else if (data[j] < mins[i]) mins[i] = data[j]
+          else if (data[j] > maxs[i]) maxs[i] = data[j]
+        if (empty && i) mins[i] = mins[i-1], maxs[i] = maxs[i-1]
+      }
+    else {
+      // Compute the mean (in `mins`).
+      for (let i=0; begin2 + i*step < end; ++i) {
+        let a = begin2 + i*step, b = Math.min(begin2 + (i+1)*step, end)
+        mins[i] = 0
+        for (let j = a; j < b; ++j)
+          if (data[j] !== data[j] || !isFinite(data[j])) continue
+          else mins[i] += data[j]
+        mins[i] /= b-a
+      }
+      // Compute stddev in each pixel (in `maxs`).
+      for (let i=0; begin2 + i*step < end; ++i) {
+        let a = begin2 + i*step, b = Math.min(begin2 + (i+1)*step, end)
+        maxs[i] = 0
+        for (let j = a; j < b; ++j)
+          if (data[j] !== data[j] || !isFinite(data[j])) continue
+          else maxs[i] += (data[j] - mins[i]) * (data[j] - mins[i])
+        maxs[i] = Math.sqrt(maxs[i] / (b-a))
+      }
+      // Compute mean ± stddev (into `mins` and `maxs`).
+      for (let i=0; begin2 + i*step < end; ++i) {
+        const mn = mins[i], sd = maxs[i]
+        mins[i] = mn - sd, maxs[i] = mn + sd
+      }
+    }
+
     // X axis.
     const x = (el._x || (el._x = d3.scaleLinear()))
       .range([sizes.left, sizes.left + sizes.width - sizes.right])
@@ -8949,10 +10061,12 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       .call(d3.axisBottom(x).ticks(Math.min(end - begin - 1, sizes.width / 80)).tickSizeOuter(0))
 
     // Y axis.
-    let Min = data[begin], Max = data[begin]
-    for (let i = begin+1; i < end; ++i)
-      if (data[i] === data[i] && isFinite(data[i])) data[i] < Min ? (Min = data[i]) : (data[i] > Max && (Max = data[i]))
-    const extra = Math.abs(Max-Min)*.2
+    let Min = mins[0], Max = maxs[0]
+    for (let i = 1; i < end - begin; ++i) {
+      if (mins[i] < Min) Min = mins[i]
+      if (maxs[i] > Max) Max = maxs[i]
+    }
+    const extra = Math.abs(Max-Min)*0
     Min = (Min-extra<0) === (Min<0) ? Min-extra : 0, Max = (Max+extra<0) === (Max<0) ? Max+extra : 0
     const y = (el._y || (el._y = d3.scaleLinear()))
       .range([sizes.top + sizes.height - sizes.bottom, sizes.top])
@@ -8961,25 +10075,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       .attr("transform", `translate(${sizes.left},0)`)
       .call(d3.axisLeft(y).ticks(sizes.height / 40).tickSizeOuter(0))
 
-    const step = Math.max(1, ((end - begin) / sizes.width) | 0)
     el._x = x, el._y = y, el._data = data, el._sizes = sizes, el._begin = begin, el._end = end === data.length ? undefined : end, el._len = data.length, el._step = step
-
-    // Zoom (also show a bit of values before the shown range, unless they're way out of range) (also show item distributions).
-    let begin2 = begin
-    const lookBehind = 0
-    while (begin2 > 0 && begin2 > begin - lookBehind && data[begin2-1] >= Min - extra*10 && data[begin2-1] <= Max + extra*10) --begin2
-    // Skip items, trim offscreen points.
-    const mins = [], maxs = []
-    for (let i=0; begin2 + i*step < end; ++i) {
-      let a = begin2 + i*step, b = begin2 + (i+1)*step, empty = true
-      mins[i] = maxs[i] = 0
-      for (let j = a; j < b; ++j)
-        if (data[j] !== data[j] || !isFinite(data[j])) continue
-        else if (empty) mins[i] = maxs[i] = data[j], empty = false
-        else if (data[j] < mins[i]) mins[i] = data[j]
-        else if (data[j] > maxs[i]) maxs[i] = data[j]
-      if (empty && i) mins[i] = mins[i-1], maxs[i] = maxs[i-1]
-    }
 
     // Plot.
     if (!plot.attr('fill'))
@@ -8989,7 +10085,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
         .attr("stroke-linejoin", "round")
         .attr("stroke-linecap", "round")
     ;(_disableSmoothTransitions[1] || !transition ? plot : plot.transition(200))
-      .attr("d", "M " + mins.map((v,i) => 1+x(begin2 + i*step + 1) + " " + y(v)).join(" L ") + " L " + maxs.reverse().map((v,i,maxs) => 1+x(begin2 + (maxs.length - i - 1)*step+1) + " " + y(v)).join(" L ") + " Z")
+      .attr("d", "M " + mins.map((v,i) => 1+x(begin2 + i*step + 1) + " " + (y(v) || 0)).join(" L ") + " L " + maxs.reverse().map((v,i,maxs) => 1+x(begin2 + (maxs.length - i - 1)*step+1) + " " + (y(v) || 0)).join(" L ") + " Z")
   },
 
   callAdjust:{
@@ -9486,7 +10582,7 @@ With this, partial evaluation is implementable in \`construct\`s.
         // Keep args as/if requested.
         let kp = defines(fn, keep)
         if (kp === true) args.forEach(keep)
-        else if (typeof kp == 'number') kp < 0 && (kp += args.length), keep(args[kp])
+        else if (typeof kp == 'number') kp < 0 ? (kp += args.length) : --kp, keep(args[kp])
         // Fill in the spot.
         _changeArrayItem(obj, 1, t);  dispose(t)
       }
@@ -9656,6 +10752,7 @@ Consumes \`Initial\`, so \`keep\` it.`,
   },
 
   varSGD:{
+    varSGD:true,
     use:2,
     todo:`Allow \`VarData\` to be lazily-specified (with a given std-dev), because human-types may not be inferred during program generation for long.`,
     type:[
@@ -9698,6 +10795,7 @@ This simply subtracts gradient each time, \`mul\`tiplied by learning rate.
   },
 
   varMomentum:{
+    varSGD:true,
     use:3,
     type:[
       _(`funcType`),
@@ -9743,6 +10841,7 @@ Nesterov momentum is returning not the current value but what it will be after \
   },
 
   varRMSProp:{
+    varSGD:true,
     use:3,
     type:[
       _(`funcType`),
@@ -9774,20 +10873,25 @@ This is \`varSGD\` \`LearningRate\` gets divided by \`sqrt\` of a running averag
   },
 
   _optAdam(data) {
-    const grad = data[1], LR = -data[4], Mom1 = data[5], Mom2 = data[6], M1 = data[7] || 0, M2 = data[8] || 0
+    const grad = data[1], LR = -data[4], Mom1 = data[5], Mom2 = data[6], M1 = data[7] || 0, M2 = data[8] || 0, T = data[9] || 1
     const t0 = mul(Mom1, M1), t1 = sub(1, Mom1), t2 = mul(t1, grad)
     const t3 = mul(Mom2, M2), t4 = sub(1, Mom2), t5 = mul(grad, grad), t6 = mul(t4, t5)
     const nextM1 = add(t0, t2);  dispose(t0), dispose(t1), dispose(t2)
     const nextM2 = add(t3, t6);  dispose(t3), dispose(t4), dispose(t5), dispose(t6)
-    const t7 = sqrt(nextM2), t8 = add(t7, 1e-4), t9 = div(nextM1, t8)
+    const t7 = sqrt(nextM2), t8 = add(t7, 1e-8)
+    const bias = 1 - Math.pow(Mom1, T)
+    const t9 = div(nextM1, t8)
+    const t10 = div(t9, bias)
     try {
       _changeArrayItem(data, 7, nextM1)
       _changeArrayItem(data, 8, nextM2)
-      return mul(LR, t9)
-    } finally { dispose(nextM1), dispose(nextM2), dispose(t7), dispose(t8), dispose(t9) }
+      data[9] = T+1
+      return mul(LR, t10)
+    } finally { dispose(nextM1), dispose(nextM2), dispose(t7), dispose(t8), dispose(t9), dispose(t10) }
   },
 
   varAdam:{
+    varSGD:true,
     use:4,
     type:[
       _(`funcType`),
@@ -9819,13 +10923,59 @@ This combines \`varMomentum\` (first moment smoothing) and \`varRMSProp\` (secon
     mergeAdjustment:null,
   },
 
+  _optRAdam(data) {
+    const grad = data[1], LR = -data[4], Mom1 = data[5], Mom2 = data[6], M1 = data[7] || 0, M2 = data[8] || 0, T = data[9] || 1
+    const t0 = mul(Mom1, M1), t1 = sub(1, Mom1), t2 = mul(t1, grad)
+    const t3 = mul(Mom2, M2), t4 = sub(1, Mom2), t5 = mul(grad, grad), t6 = mul(t4, t5)
+    const nextM1 = add(t0, t2);  dispose(t0), dispose(t1), dispose(t2)
+    const nextM2 = add(t3, t6);  dispose(t3), dispose(t4), dispose(t5), dispose(t6)
+    const t10 = div(nextM1, 1 - Math.pow(Mom1, T))
+
+    const maxSMA = 2/(1 - Mom2) - 1
+    const appSMA = maxSMA - 2 * T * Math.pow(Mom2, T) / (1 - Math.pow(Mom2, T))
+
+    try {
+      _changeArrayItem(data, 7, nextM1)
+      _changeArrayItem(data, 8, nextM2)
+      data[9] = T+1
+      if (appSMA > 4) { // If the (estimated) variance is tractable, adapt the second moment and rectify variance.
+        const t11 = sqrt(nextM2), t12 = add(t11, 1e-8)
+        const t13 = div(t10, t12);  dispose(t11), dispose(t12)
+
+        //console.log(Math.sqrt(((appSMA - 4)*(appSMA - 2)*maxSMA) / ((maxSMA - 4)*(maxSMA - 2)*appSMA))) // ###########################################################
+        const t14 = mul(t13, Math.sqrt(((appSMA - 4)*(appSMA - 2)*maxSMA) / ((maxSMA - 4)*(maxSMA - 2)*appSMA)))
+        return mul(LR, t14)
+      } else
+        return mul(LR, t10) // #######################################
+    } finally { dispose(nextM1), dispose(nextM2), dispose(t10) }
+  },
+
+  varRAdam:{
+    varSGD:true,
+    docs:`\`varRAdam(VarData,LearningRate,Mom1,Mom2)\`
+Rectified Adam optimizer {https://github.com/LiyuanLucasLiu/RAdam}, which avoids gradient-variance-related problems, by estimating when to warmup (not adapt the second moment).
+Particularly suited for Transformers.`,
+    interrupt:false,
+    adjustLater:true,
+    dispose:true,
+    impure:true,
+    call(data, changeMult = _learningRate[1], velocityMult = _firstMomentum[1], accelMult = _secondMomentum[1]) {
+      // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity, accel]`.
+      if (!isArray(data)) error("Not var data:", data)
+      data[3] = _optRAdam, data[4] = changeMult, data[5] = velocityMult, data[6] = accelMult
+      return keep(_num(data[0]))
+    },
+    adjust:_(`_accumulateGradient`),
+    mergeAdjustment:null,
+  },
+
   _increment:{
     docs:`Variable-specific (\`varSGD\`/\`varMomentum\`/…). Keeps track of what to divide by in order to average gradients.`,
     interrupt:false,
-    call(arr, dout) { if (call.pure) throw impure; arr[2] += (_tensorSize(dout) / _tensorSize(arr[0])) | 0 },
+    call(arr, dout) { if (call.pure) throw impure; arr[2] += Math.ceil(_tensorSize(dout) / _tensorSize(arr[0])) },
   },
 
-  _tensorSize(t) { return _isDisposable(t) ? t.size : typeof t == 'number' ? 1 : t.reduce(mul, 1) },
+  _tensorSize(t) { return _isDisposable(t) ? t.size : typeof t == 'number' ? 1 : !isArray(t) ? error('Not an array:', t) : t.reduce(mul, 1) },
 
   _tensorShape(t) { return _isDisposable(t) ? t.shape : undefined },
 
@@ -9841,6 +10991,7 @@ The original \`Next\` will be disposed of.`,
         const n = sum(t, 0)
         dispose(t), t = n
       }
+      if (_tensorSize(t) > 1 && _tensorSize(t) < _tensorSize(prev)) error('Gradient shape is smaller than value shape:', tf.clone(t), 'value:', prev)
       return t
     },
   },
@@ -9850,6 +11001,36 @@ The original \`Next\` will be disposed of.`,
     0,
     `The maximum 2-norm of the global gradient, or 0 to not limit commits.`,
   ],
+
+  _adaptiveGradientClipping:[
+    _(`settings`),
+    0,
+    `When gradient length exceeds weight length too much, this scales it down, limiting the impact of gradient spikes.
+Say, 0.02?
+{https://arxiv.org/pdf/2102.06171.pdf}`,
+  ],
+
+  _doAdaptiveGradientClipping(w,g) {
+    let t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10
+    try {
+      // Param/weight norm.
+      t0 = mul(w, w)
+      t1 = mean(t0, _tensorSize(w) > 1 ? -1 : undefined)
+      t9 = _tensorSize(w) > 1 ? expandDims(t1, -1) : keep(t1)
+      t2 = clip(t9, 1e-6, Infinity)
+      // Gradient norm.
+      t3 = mul(g, g)
+      t4 = mean(t3, _tensorSize(g) > 1 ? -1 : undefined)
+      t10 = _tensorSize(g) > 1 ? expandDims(t4, -1) : keep(t4)
+      t5 = clip(t10, 1e-6, Infinity)
+      // Ratio.
+      t6 = mul(t2, _adaptiveGradientClipping[1])
+      t7 = div(t6, t5)
+      t8 = clip(t7, 0, 1)
+      return mul(g, t8)
+      ;
+    } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3), dispose(t4), dispose(t5), dispose(t6), dispose(t7), dispose(t8), dispose(t9), dispose(t10) }
+  },
 
   commit:{
     docs:`\`commit()\` or \`commit false\` to discard changes: commits changes to variables that were made in this job. Returns \`true\` if anything was changed.
@@ -9868,7 +11049,9 @@ Was that generalization too general and unexpected, quickly disappearing without
       varMomentum:_(`varMomentum`),
       varRMSProp:_(`varRMSProp`),
       varAdam:_(`varAdam`),
+      varRAdam:_(`varRAdam`),
       _maxGlobalGradient:_(`_maxGlobalGradient`),
+      _adaptiveGradientClipping:_(`_adaptiveGradientClipping`),
       _willCommit:_(`_willCommit`),
     },
     call(perform = true) {
@@ -9880,7 +11063,8 @@ Was that generalization too general and unexpected, quickly disappearing without
       try {
         m.forEach(data => { // Average gradients.
           if (!data[2]) return m.delete(data), void _rememberArrayItems(data)
-          const avg = div(data[1], data[2])
+          let avg = div(data[1], data[2])
+          if (_adaptiveGradientClipping[1]) { const t = _doAdaptiveGradientClipping(data[0], data[1]);  dispose(avg), avg = t }
           _changeArrayItem(data, 1, avg), _changeArrayItem(data, 2, 0)
 
           // Also accumulate sum-of-squares.
@@ -9902,11 +11086,16 @@ Was that generalization too general and unexpected, quickly disappearing without
         }
         m.forEach(data => { // Add the change.
           if (divBy > 1) { const dv = div(data[1], divBy);  dispose(data[1]), data[1] = dv }
-          const change = data[3](data) // Call the optimizer.
-          const sm = add(data[0], change);  dispose(change)
+          let change, sm
+          try {
+            if (perform) // Call the optimizer.
+              change = data[3](data),
+              sm = add(data[0], change)
 
-          _changeArrayItem(data, 0, sm);  dispose(sm)
-          _changeArrayItem(data, 1, 0)
+            if (perform) _changeArrayItem(data, 0, sm)
+            _changeArrayItem(data, 1, 0)
+          } catch (err) { print('offending data', data, change, sm);  throw err } // #############################################################
+          finally { dispose(change), dispose(sm) }
         })
         dispose(divBy), divBy = 1
         const result = !!m.size
@@ -10086,7 +11275,7 @@ At call, sets the \`Value\` associated with the \`Future\` (to be retrieved by \
   _defaultArg:{
     docs:`Computes the first arg if it is not undefined, else computes the second arg.`,
     call(a, def) { return a !== undefined ? a : def },
-    purify(aProg, defProg) { return aProg },
+    purify(aProg, defProg) { return _unknown(aProg) },
   },
 
   minimize:{
@@ -10186,8 +11375,8 @@ When repeatedly executed, gradually \`adjust\`s \`Value\` to be the lowest it ca
   },
 
   modifyGrad:{
-    docs:`\`modifyGrad Value GradFunc\`
-To \`adjust\` this, \`GradFunc(_dout)\` is returned as the gradient.`,
+    docs:`\`modifyGrad Value GradFunc Arg1 Arg2\`
+To \`adjust\` this, \`GradFunc(_dout,Arg1,Arg2)\` is returned as the gradient.`,
     examples:[
       [
         `repeat ^modifyGrad(randomVar(ones),x->display('hi',x);x)=5 100`,
@@ -10198,16 +11387,23 @@ To \`adjust\` this, \`GradFunc(_dout)\` is returned as the gradient.`,
     dispose:1,
     argCount:2,
     interrupt:false,
-    call(v, fn) { return v },
+    call(v, fn, arg) { return v },
     adjust:[
       _(`array`),
       [
         _(`_inB`),
         _(`_dout`),
+        _(`_inC`),
+        [
+          _(`readAt`),
+          _(`_ins`),
+          3,
+        ],
       ],
     ],
     mergeAdjustment:[
       _(`_mergeTensors`),
+      null,
       null,
     ],
   },
@@ -10253,6 +11449,7 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     ],
     call(got, actual, loss=loss2) {
       if (call.pure) throw impure
+      if (actual === undefined) return got
       if (!_isDisposable(actual) && typeof actual != 'number') {
         if (!_isFuture(actual)) error("Not a future:", actual)
         if (_tensorSize(got) > 1) error("Prediction of a future is too big:", got, actual)
@@ -10337,7 +11534,7 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     {
       interrupt:false,
       dispose:true,
-      call(a,b) { return b !== undefined ? sub(a,b) : 0 },
+      call(a,b) { return b !== undefined ? sub(a,b) : _isNum(a) ? 0 : zeros(a.shape) },
     },
     _(`_inA`),
     _(`_inB`),
@@ -10361,7 +11558,16 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
     },
   },
 
+  _linearLoss2:[
+    _(`settings`),
+    false,
+    `Whether \`loss2\` will report the loss as the mean of the absolute difference of its inputs (the gradient won't change).`,
+  ],
+
   loss2:{
+    readAt:{
+      _linearLoss2:_(`_linearLoss2`),
+    },
     use:true,
     argCount:2,
     type:[
@@ -10400,6 +11606,11 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
     call(got, actual) {
       if (actual === undefined) return 0
       if (typeof actual != 'number' && !_isDisposable(actual)) error("Expected a number/tensor, got", actual)
+      if (_linearLoss2[1]) {
+        const sb = sub(got, actual), ab = abs(sb), mn = mean(ab)
+        dispose(sb), dispose(ab)
+        return mn
+      }
       const sb = sub(got, actual), sq = mul(sb, sb), res = div(sq, 2)
 
       // This averaging-over-last-axis are for making curiosity simpler to implement.
@@ -10646,7 +11857,8 @@ Now, the connector itself. I propose the simplest connection first: all-to-all, 
 Now to see that the loss goes down at least to \`.5\` (can you see why this number, or rather a little lower?), apply the dataset to connector.
 
 A nuance is the learning rate, \`\`settings ^_learningRate\`\`. Tune it. Do note the extremes too: \`1\` makes the loss explode, whereas near-\`0\` still leaves a lot of variation in loss instead of not changing (because each batch samples input-output pairs randomly, so there's jitter).
-`,
+
+Also, for \`\`elem 'i' (elem 'text' 'some')\`\` reason, \`\`elem 'i' (elem 'text' 'some')\`\` system configurations can be slowed down if \`\`settings ^_disableSmoothTransitions\`\` is unchecked.`,
       [
         _(`fancier`),
         `data 💙`,
@@ -10843,10 +12055,33 @@ Second lead:
 `,
     ],
     readAt:{
+      relu:_(`relu`),
       selu:_(`selu`),
       dataset:_(`dataset`),
     },
   },
+
+  relu:_([
+    _(`concept`),
+    _(`call`),
+    _([
+      _(`func`),
+      _(`input`),
+      [
+        _(`where`),
+        [
+          _(`less`),
+          0,
+          _(`input`),
+        ],
+        _(`input`),
+        0,
+      ],
+    ]),
+    _(`docs`),
+    `\`relu:\\(where 0<? ? 0)\`
+A nice non-linearity.`,
+  ]),
 
   selu:_([
     _(`concept`),
@@ -10999,6 +12234,7 @@ Maximizes memory re-use.`,
       transform:_(`transform`),
       reverse:_(`reverse`),
       loop:_(`loop`),
+      reduce:_(`reduce`),
       getFirst:_(`getFirst`),
       getLast:_(`getLast`),
     },
@@ -11105,10 +12341,10 @@ Maximizes memory re-use.`,
     ],
     argCount:1,
     call(arr) {
-      if (!isArray(arr)) error("Not an array:", arr)
+      if (typeof arr != 'string' && !isArray(arr)) error("Not an array:", arr)
       const n = arr.length, brr = _allocArray(n)
       for (let i=0; i < n; ++i) brr[i] = keep(arr[n-1 - i])
-      return brr
+      return typeof arr == 'string' ? brr.join('') : brr
     },
     dispose:_(`_disposeEachAndDealloc`),
     interrupt:false,
@@ -11258,6 +12494,31 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
     ],
   },
 
+  reduce:{
+    docs:`\`reduce:Array→Accumulator→Initial→getLast(loop Array Accumulator Initial)\``,
+    dispose:true,
+    call(arr, acc, ini, reversed) {
+      const r = loop(arr, acc, ini, reversed)
+      const n = typeof arr == 'number' ? arr : arr.length
+      if (!n) return keep(ini)
+      const out = r[n-1];  r[n-1] = null, _disposeEachAndDealloc(r)
+      return out
+    },
+    adjustLater:true,
+    adjust(ins, out, dout) {
+      const [arr, acc, ini, reversed] = ins
+      const n = typeof arr == 'number' ? arr : arr.length
+      const dout2 = new Array(n).fill();  if (n) dout2[n-1] = dout
+      // Technically, if n is 0, we are supposed to give gradient to `ini`, but no one uses this anyway, so.
+      return defines(loop, adjust)(ins, null, dout2)
+    },
+    mergeAdjustment:[
+      _(`_mergeArrays`),
+      null,
+      _(`_mergeTensors`),
+    ],
+  },
+
   getFirst:{
     use:true,
     docs:`Given an array, returns its first item.`,
@@ -11278,6 +12539,7 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
     },
     dispose:true,
     interrupt:false,
+    adjustLater:true,
     adjust:[
       _(`array`),
       [
@@ -14401,7 +15663,7 @@ As a definition, this is the value of the index that serialization should not ex
           }
         } else { // Seen this twice or more; find the least common ancestor.
           needsNaming.add(x)
-          let p = parents.get(x), original = p
+          let p = parents.get(x)
           if (p === parent) return
           while (!currentAncestors.has(p) && parents.has(p) && p !== parents.get(p) && x !== parents.get(p))
             p = parents.get(p)
@@ -14522,7 +15784,7 @@ As a definition, this is the value of the index that serialization should not ex
 
   _errorIsStacked:[
     _(`settings`),
-    false,
+    true,
     `If checked, turns all \`error\` calls into \`errorStack\` calls (leaving in the call trace).`,
   ],
 
@@ -14551,8 +15813,14 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
 
   _forgiveMistakes:[
     _(`settings`),
-    true,
-    `Whether cycle-checking and arg-count-checking should just not throw.`,
+    false,
+    `Whether cycle-checking should just not throw.`,
+  ],
+
+  _doCheckArgCount:[
+    _(`settings`),
+    false,
+    `Whether a statically-detected wrong \`argCount\` will throw.`,
   ],
 
   errorsSince:{
@@ -14670,9 +15938,9 @@ Returns how many \`error\`s have occured in this job.`,
     docs:`\`(parseURL URL)\` or \`(parseURL URL Lang Binds)\`: fetches and parses the contents at URL.`,
     await:true,
     call(url, lang, binds, style = false) {
-      return fetch(url, {mode:'cors'}).then(r => r.arrayBuffer())
-      .then(buf => new TextDecoder().decode(new Uint8Array(buf)))
-      .then(txt => parse(txt, lang, binds, {style, sourceURL:url}))
+      // `parse` might interrupt, throwing the whole process into disarray, since we do not wrap it in `_schedule`.
+      //   Only actual execution interrupts though (such as `static` or `applyStatically`), so object graphs should be fine.
+      return fetchURL(url).then(txt => parse(txt, lang, binds, {style, sourceURL:url}))
     },
   },
 
@@ -15129,7 +16397,7 @@ A function/construct can define this with an integer, to collapse children after
       boundToUnbound.clear()
       if (breakLength) breakLength -= offset * offsetWith.length
 
-      let struct = [], len = 0
+      let struct = [], len = 0, topLevel = true
       emit(defines(lang, serialize), u)
       if (isArray(struct) && struct.length == 1) struct = struct[0]
 
@@ -15144,7 +16412,8 @@ A function/construct can define this with an integer, to collapse children after
         if (typeof f == 'function') {
           let v = valueOfUnbound(u)
           if (typeof document != ''+void 0 && u instanceof Element && u.to !== v) elemValue(u, v)
-          const unenved = unenv(u, v)
+          const unenved = unenv(u, v, !topLevel)
+          topLevel = false
           if (!styles) return unenved === u ? f(emit, u, arg1, arg2) : ((struct || (struct = [])).push(unenved), undefined)
           let prev = struct
           struct = undefined
@@ -15206,7 +16475,7 @@ A function/construct can define this with an integer, to collapse children after
         if (_isDOM(u)) return u
         if (isArray(u) && u.length == 3 && u[0] === _extracted) return [_extracted, valueOfUnbound(u[1]), valueOfUnbound(u[2])]
         if (isArray(u) && secondTime === undefined) return u.map(valueOfUnbound)
-        if (typeof u != 'string') console.warn("Did not find the value of the unbound", u)
+        if (typeof u != 'string' && u !== label) console.warn("Did not find the value of the unbound", u)
         return u
       }
       function styleNode(str, u, v) {
@@ -15250,12 +16519,15 @@ A function/construct can define this with an integer, to collapse children after
       }
       function deconstructed(x) {
         // Return a copy of x with non-array non-string non-backctx things deconstructed.
+        if (backctx && backctx.has(x))
+          if (dontBind === undefined || x !== dontBind)
+            return unboundToBound.set(x,x), named.add(backctx.get(x)), x
         if (!deconstructElems && typeof document != ''+void 0 && x instanceof Element)
           return x.parentNode && x.isConnected && initialUnenv.set(x, x = elemClone(x)), x
         if (deconstruction.has(x)) {
-          if (deconstruction.get(x) === undefined) deconstruction.set(x, x.slice())
+          if (deconstruction.get(x) === undefined && isArray(x)) deconstruction.set(x, x.slice())
           x = deconstruction.get(x)
-          if (deconstruction.has(x) && deconstruction.get(x) === undefined) deconstruction.set(x, x.slice())
+          if (deconstruction.has(x) && deconstruction.get(x) === undefined && isArray(x)) deconstruction.set(x, x.slice())
           if (deconstruction.has(x)) x = deconstruction.get(x)
           return x
         }
@@ -15268,9 +16540,6 @@ A function/construct can define this with an integer, to collapse children after
         }
 
         if (_isLabel(x)) return unboundToBound.set(x,x), named.add(x[1]), x
-        if (backctx && backctx.has(x))
-          if (dontBind === undefined || x !== dontBind)
-            return unboundToBound.set(x,x), named.add(backctx.get(x)), x
         const original = x
         if (deconstructElems || !_isDOM(x))
           if (typeof x != 'string' && typeof x != 'number')
@@ -15340,8 +16609,8 @@ A function/construct can define this with an integer, to collapse children after
       function hasNonString(r) {
         for (let i = 0; i < r.length; ++i) if (typeof r[i] != 'string') return true
       }
-      function unenv(u,v) {
-        if (doNotEmit.has(v)) {
+      function unenv(u,v, allowCollapse) {
+        if (doNotEmit.has(v) && allowCollapse) {
           if (!styles) return '···'
           const col = elemValue(elem('collapsed', '···'), v)
           col.special = true
@@ -15442,23 +16711,24 @@ A function/construct can define this with an integer, to collapse children after
     `Max data size before we collapse \`tensor\` data, in serializations.`,
   ],
 
-  _valuedColor(v) {
+  _valuedColor(v, console = false) {
     // Returns v's previously displayed element color (for highlighting of the same things) or a new one.
-    if (!_colorVariables[1]) return 'var(--main)'
+    if (!console && !_colorVariables[1]) return 'var(--main)'
     if (!_valuedColor.m) _valuedColor.m = new Map
     if (_valuedColor.m.has(v)) {
       const r = _valuedColor.m.get(v)
       _valuedColor.m.delete(v), _valuedColor.m.set(v, r)
       return r
     }
-    const prevPure = call.pure
-    call.pure = false
-    const colors = [randomNat(256), randomNat(256), randomNat(256)]
-    call.pure = prevPure
-    const mn = 64, mx = 384, Sum = colors[0]+colors[1]+colors[2]
-    if (Sum < mn) colors[0] *= mn/Sum, colors[1] *= mn/Sum, colors[2] *= mn/Sum
-    if (mx < Sum) colors[0] *= mx/Sum, colors[1] *= mx/Sum, colors[2] *= mx/Sum
-    const c = 'rgb(' + colors + ')'
+    let c
+    if (console) c = [34, 36][randomNat(2)] // Cycle through blue and cyan in terminal.
+    else {
+      const colors = [randomNat(256), randomNat(256), randomNat(256)]
+      const mn = 64, mx = 384, Sum = colors[0]+colors[1]+colors[2]
+      if (Sum < mn) colors[0] *= mn/Sum, colors[1] *= mn/Sum, colors[2] *= mn/Sum
+      if (mx < Sum) colors[0] *= mx/Sum, colors[1] *= mx/Sum, colors[2] *= mx/Sum
+      c = 'rgb(' + colors + ')'
+    }
     _valuedColor.m.set(v, c)
     _limitMapSize(_valuedColor.m, 100000)
     return c
@@ -15667,8 +16937,8 @@ This first turns a \`String\` into a tree-of-arrays via syntax rules of \`Langua
           if (localI < str.length) throw 'Superfluous characters at the end: ' + (typeof localS == 'string' ? localS.slice(i - curBegin) : '···')
 
           // Do binding with the original⇒copy map preserved so that we can style structure bottom-up properly.
-          env = (styles || sourceURL) && new Map || null
-          try { b = styles || sourceURL ? bound(ctx, u, true, env) : bound(ctx, u, true) }
+          env = new Map
+          try { b = bound(ctx, u, true, env) }
           catch (err) { throw err !== interrupt ? err : error("Interrupts during binding are very unexpected") }
           makeEnv = (styles || sourceURL) && new Map
         }
@@ -15695,10 +16965,10 @@ This first turns a \`String\` into a tree-of-arrays via syntax rules of \`Langua
             (_resolveStack.location || (_resolveStack.location = new WeakMap)).set(v, [sourceURL, lines.get(unb), columns.get(unb)])
           const s = styles(struct, v, unb, ctx)
           if (typeof Element != ''+void 0 && s instanceof Element) elemValue(s, v)
-          return s
+          return !styles && isArray(s) ? s.join('') : s
         }
         styles && Unbound.set(struct, u)
-        return styles ? [b, styleNode(struct)] : b
+        return styles ? [b, styleNode(struct, true)] : b
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(str, i, lastI, prevI, localS, localI, curBegin, line, column, lineLengths, lines, columns, struct, Unbound, env, u, b, makeEnv)
         throw err
@@ -16220,19 +17490,20 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       el.title = title
     } else {
       if (_isLabel(u))
-        el = _colored(el, [34, 36, 35][randomNat(3)]) // Cycle through blue, cyan, magenta.
+        el = _colored(el, _valuedColor(v, true))
     }
     return el
   },
 
   stringLanguage:{
-    docs:`Whatever you type in is just one string.`,
+    docs:`Whatever you type in is just one string, transformed through a \`'call'\` binding (which should be a function from a string to a string, \`call\` by default).
+    Example: \`REPL stringLanguage {'call' s->arrayConcat(s,s)}\``,
     parse(match, u) {
-      return match(/[^]*/y) || ''
+      return [[label, 'call'], match(/[^]*/y) || '']
     },
     serialize(match, u) {
-      if (typeof u != 'string')
-        error('Expected a string, got', u)
+      if (isArray(u) && u.length == 2 && typeof u[1] == 'string') u = u[1]
+      if (typeof u != 'string') console.error('Not a string:', u), u = elem('error', '<Not a string>')
       return match(u)
     },
   },
@@ -16385,18 +17656,19 @@ The parsed arrays are not \`merged\`.`,
     // Walk expr and name all referenced-more-than-once nodes, then output them then expr.
 
     const backctx = _invertBindingContext(ctx)
-    let [visited = new Set, names = _allocMap(), decons = _allocMap(), weakMaps = _allocArray(0), promises = _allocArray(0), promiseValues, promiseContainers = _allocArray(0), result] = interrupt(8)
+    let [visited = _allocMap(), indices = _allocMap(), decons = _allocMap(), weakMaps = _allocArray(0), promises = _allocArray(0), promiseValues, promiseContainers = _allocArray(0), promised, result] = interrupt(9)
     let n = 0
+    let names
     try {
-      if (visited !== false && visited !== true) {
+      if (promised === undefined) {
         mark(expr)
         if (promises.length) {
           promiseValues = Promise.all(promises)
-          visited = false
+          promised = false
           promiseValues = await(promiseValues)
-        } else visited.clear()
+        }
       }
-      if (visited === false) { // Replace promises with their actual values.
+      if (promised === false) { // Replace promises with their actual values.
         promiseValues = await(promiseValues)
         for (let i = 0; i < promiseContainers.length; ++i) {
           const arr = promiseContainers[i]
@@ -16404,36 +17676,49 @@ The parsed arrays are not \`merged\`.`,
             if (arr[j] === promises[i])
               arr[j] = promiseValues[i]
         }
-        visited = true
+        promised = true
       }
 
-      if (result === undefined) result = []
+      if (result !== undefined) error('Putting cannot interrupt, but result is already', result)
+
+      // Give names to objects that we visited, most-ref-count first, to minimize result size.
+      names = _allocArray(indices.size)
+      const objs = _allocArray(indices.size)
+      indices.forEach((i,arr) => objs[i] = arr)
+      objs.sort((x,y) => visited.get(y) - visited.get(x))
+      for (let i = 0; i < names.length; ++i) names[indices.get(objs[i])] = newName(i)
+      visited.clear(), _allocArray(objs)
+
+      // Put.
+      result = []
       result.push('(')
-      names.forEach((named,arr) => (result.push(named, ':'), putValue(arr, true), result.push(' ')))
+      indices.forEach((i,arr) => (result.push(names[i], ':'), putValue(arr, true), result.push(' ')))
       putValue(expr)
       result.push(')')
       return result.join('')
-    } catch (err) { if (err === interrupt) interrupt.stack.push(visited, names, decons, weakMaps, promises, promiseValues, promiseContainers, result), visited = null;  throw err }
+    } catch (err) { if (err === interrupt) interrupt.stack.push(visited, indices, decons, weakMaps, promises, promiseValues, promiseContainers, promised, result), visited = null;  throw err }
     finally {
+      names && _allocArray(names)
       if (visited !== null)
-        visited instanceof Set && visited.clear(), _allocMap(names), _allocMap(decons), _allocArray(weakMaps), _allocArray(promises), _allocArray(promiseContainers)
+        visited.clear(), _allocMap(indices), _allocMap(decons), _allocArray(weakMaps), _allocArray(promises), _allocArray(promiseContainers)
     }
 
-    function name(v) {
-      if (names.has(v)) return
+    function newName(next) {
       const vocabulary = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-      let str = '', next = n++
+      let str = ''
       while (true) {
         str = vocabulary[next % vocabulary.length] + str
         next = next / vocabulary.length | 0
         if (!next) break
       }
       while (ctx.has(str) || str === 'NaN' || str === 'Infinity') str = '$'+str
-      names.set(v, str)
+      return str
     }
+    function touch(v) { !indices.has(v) && indices.set(v, n++) }
     function mark(arr) {
-      if (typeof arr == 'number' && (''+arr).length < 3) return
-      if (visited.has(arr)) return void name(arr); else visited.add(arr)
+      if (typeof arr == 'number' && (arr===(arr|0) && arr>=-9 && arr<=99 || (''+arr).length < 3)) return
+      visited.set(arr, (visited.get(arr)||0) + 1)
+      if (visited.get(arr) > 1) return touch(arr)
       const original = arr
       if (decons.has(arr)) arr = decons.get(arr)
 
@@ -16441,7 +17726,7 @@ The parsed arrays are not \`merged\`.`,
       for (let i = 0; i < weakMaps.length; ++i)
         if (weakMaps[i].has(original)) {
           const v = weakMaps[i].get(original)
-          name(original), mark(v), decons.get(weakMaps[i]).push(original, v)
+          touch(original), mark(v), decons.get(weakMaps[i]).push(original, v)
         }
 
       if (backctx.has(arr)) return
@@ -16449,17 +17734,18 @@ The parsed arrays are not \`merged\`.`,
         if (typeof arr == 'string' || typeof arr == 'number') return
         if (arr instanceof WeakMap) { // Handle `weakMap`s.
           const y = [weakMap], d = decons
-          d.set(arr, y), visited.add(arr), weakMaps.push(arr)
-          visited.forEach(k => {
+          d.set(arr, y), visited.set(arr, (visited.get(arr)||0) + 1), weakMaps.push(arr)
+          visited.forEach((rc,k) => {
             const v = arr.get(k)
-            if (arr.has(k)) name(k), mark(v), y.push(k, v)
+            if (arr.has(k)) touch(k), mark(v), y.push(k, v)
           })
           return
         } else {
           decons.set(arr, arr = deconstruct(arr, undefined, true)) // Use fast-`_toBase64` mode, but we need to `await` promises afterward.
-          for (let i = 0; i < arr.length; ++i)
-            if (_isPromise(arr[i])) promises.push(arr[i]), promiseContainers.push(arr)
-            else mark(arr[i])
+          if (isArray(arr))
+            for (let i = 0; i < arr.length; ++i)
+              if (_isPromise(arr[i])) promises.push(arr[i]), promiseContainers.push(arr)
+              else mark(arr[i])
         }
       } else {
         if (typeof defines(arr, construct) == 'function')
@@ -16472,15 +17758,15 @@ The parsed arrays are not \`merged\`.`,
         arr.forEach(mark)
       }
     }
-    function isCall(v) { return isArray(v) && !names.has(v) && !backctx.has(v) && (v[0] !== label || typeof v[1] != 'string' || v.length != 2) }
+    function isCall(v) { return isArray(v) && !indices.has(v) && !backctx.has(v) && (v[0] !== label || typeof v[1] != 'string' || v.length != 2) }
     function putCall(v) {
       result.push('(')
       for (let i = 0; i < v.length; ++i)
         i && !isCall(v[i-1]) && !isCall(v[i]) && result.push(' '), putValue(v[i])
       result.push(')')
     }
-    function putValue(v, ignoreName = false, ignoreMark = false) {
-      if (!ignoreName && names.has(v)) return result.push(names.get(v))
+    function putValue(v, ignoreName = false) {
+      if (!ignoreName && indices.has(v)) return result.push(names[indices.get(v)])
       if (backctx.has(v)) return result.push(backctx.get(v))
       if (decons.has(v)) v = decons.get(v)
       if (typeof v == 'number') return result.push(''+v)
@@ -16504,6 +17790,7 @@ Saves an object('s \`fast\` serialization) in the browser's \`indexedDB\`, to be
       load:_(`load`),
       export:_(`export`),
       import:_(`import`),
+      importData:_(`importData`),
     },
     call(at, obj, doNotSerialize) {
       if (typeof at != 'string') error("Not a string:", at)
@@ -16517,7 +17804,7 @@ Saves an object('s \`fast\` serialization) in the browser's \`indexedDB\`, to be
             const db = req.result
             const transaction = db.transaction('saved', 'readwrite')
             const saved = transaction.objectStore('saved')
-            const r = obj !== undefined ? saved.put(str, at) : saved.delete(at)
+            const r = obj !== undefined ? saved.put(new Blob([str]), at) : saved.delete(at)
             r.onsuccess = () => resolve(str !== undefined ? str.length : 0)
             r.onerror = () => reject(r.error)
           } catch (err) { reject(err) }
@@ -16543,7 +17830,7 @@ Theoretically, we can set/reset a flag, and check it in potentially-dangerous fu
     call(at, doNotParse = false) {
       if (typeof at != 'string') error('Not a string:', at)
 
-      // With localStorage, all this would have been just `_fastParse(localStorage[at])`.
+      // With localStorage, all this would have been just `return doNotParse ? localStorage[at] : _fastParse(localStorage[at])`.
       return new Promise((resolve, reject) => {
         const req = indexedDB.open('save')
         req.onsuccess = () => {
@@ -16552,8 +17839,14 @@ Theoretically, we can set/reset a flag, and check it in potentially-dangerous fu
           const saved = transaction.objectStore('saved')
           const r = saved.get(at)
           r.onsuccess = () => {
-            try { resolve(doNotParse ? r.result : r.result !== undefined ? _fastParse(r.result) : undefined) }
-            catch (err) { reject(err) }
+            if (!(r.result instanceof Blob)) return resolve()
+            const fr = new FileReader()
+            fr.onload = () => {
+              const str = fr.result
+              try { resolve(doNotParse ? str : str !== undefined ? _fastParse(str) : undefined) }
+              catch (err) { reject(err) }
+            }
+            fr.readAsText(r.result)
           }
           r.onerror = () => reject(req.error)
         }
@@ -16579,7 +17872,7 @@ In a browser, presents a button for downloading a \`save\`d object as a local fi
         if (str === undefined) error('Was never saved:', at)
         const el = elemValue(elem('a', 'Download '+at), str)
         el.download = at
-        // Object URLs don't seem to work for file: URIs.
+        // Object URLs don't seem to work for file: URIs. Which is a shame, because those data: URIs are huge, and can end up refusing to download and/or crashing the page.
         const u = el.href = 'data:,' + encodeURIComponent(str) //URL.createObjectURL(new Blob([str], {type:'text/html'}))
         //const i = setInterval(() => !el.isConnected && (clearInterval(i), URL.revokeObjectURL(u)), 60000)
         return el
@@ -16591,6 +17884,7 @@ In a browser, presents a button for downloading a \`save\`d object as a local fi
     docs:`\`import At\`
 In a browser, presents a button for uploading a local file into \`indexedDB\`, for \`load\`ing.`,
     argCount:1,
+    impure:true,
     call(at) {
       if (typeof at != 'string') error('Not a string:', at)
       const el = elem('input', 'New content of '+at)
@@ -16602,6 +17896,24 @@ In a browser, presents a button for uploading a local file into \`indexedDB\`, f
         r.readAsText(el.files[0])
       }
       return el
+    },
+  },
+
+  importData:{
+    argCount:0,
+    docs:`\`importData()\`: in a browser, presents a button for uploading a local file, then returns a promise for a \`u8\` array.`,
+    impure:true,
+    call() {
+      let then, el = elem('input', 'Data')
+      el.type = 'file'
+      el.onchange = () => {
+        if (!el.files[0]) return
+        const r = new FileReader
+        r.onload = evt => evt.target.result instanceof ArrayBuffer && (elemRemove(el), then(new Uint8Array(evt.target.result)))
+        r.readAsArrayBuffer(el.files[0])
+      }
+      print(el)
+      return new Promise(th =>then = th)
     },
   },
 
@@ -17532,6 +18844,7 @@ The correctness of quining of functions can be tested by checking that the rewri
       // Undo `_rememberArrayItems`.
       const resM = _rememberToDispose.res, resR = _rememberToDispose.reg
       if (resM && resM.has(a)) resR && resR.unregister(resM.get(a)), resM.delete(a)
+      if (_rememberToDispose.seen) _rememberToDispose.seen.delete(a)
 
       // Test whether there are any errors in re-using arrays.
       if (_debugDoubleDealloc[1]) {
@@ -17816,7 +19129,9 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
             (Array heads (\`func\`s and \`construct\`s) cannot be pinned down by \`allocate\` if this is \`true\`.)
             (Lisp cons-cells (\`arrayCons\`) would be \`false\`.)
         ❀ \`MaxCachedConstructs\`, for all cells. Exists for speed, and to not re-train constructed variables. \`3\` by default.
-            (If an array head is the same as earlier, re-\`construct\` the earlier object instead of creating a new one.)")\`\`
+            (If an array head is the same as earlier, re-\`construct\` the earlier object instead of creating a new one.)
+    ❀ \`Sections\`: how many sections there are; on \`use\`, only one section is changed at a time. Might provide stability. \`1\` by default.
+    ❀ \`SectionChange\`: the probability of changing the currently-active section, or a function from section-count and previous to next section. \`1\` by default.")\`\`
 
   Q-learning (care about future values of goals): \`\`elemCollapse stringToDoc("
     ❀ \`Goal:Reality→FuturePrediction→Target\`, typed \`n⇒n⇒n n:tensorType(?,1)\`: the number to \`Predict\` and maximize.
@@ -17864,9 +19179,11 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
     ✿ \`allocated\`: an array of indexes of \`allocate\`d cells.")\`\`
 
   Regeneration: \`\`elemCollapse stringToDoc("
+    ✿ \`lastChoices\`: \`ChoicesPerCell·Cells\`-length typed array: the options that were picked at the last epoch.
     ✿ \`options\`: \`ChoicesPerCell·Cells*(PrevOptions+RandomOptions)\`-length typed array: \`PrevOptions\`-length ring buffers of unique indices in \`genCtx\`, then \`ExploreOptions\`-filled \`RandomOptions\`-length indices in \`genCtx\`. All cars then all cdrs.
     ✿ \`nextOptions\`: \`ChoicesPerCell·Cells+2\`-length array of \`Cells\` next-write indices of ring buffers (all cars then all cdrs), then copies of \`PrevOptions\` and \`RandomOptions\`.
-    ✿ \`consCaches\`: \`Cells\`-length array of \`MaxCachedConstructs*2\`-length arrays: caches from pre-\`construct\` array graphs to post-\`construct\` object graphs. The first entry is the most recent one.")\`\`
+    ✿ \`consCaches\`: \`Cells\`-length array of \`MaxCachedConstructs*2\`-length arrays: caches from pre-\`construct\` array graphs to post-\`construct\` object graphs. The first entry is the most recent one.
+    ✿ \`activeSection\`: \`null\` or the currently-active section.")\`\`
 
   Replay: \`\`elemCollapse stringToDoc("
     ✿ \`replays\`: the ring buffer (plus the next sequence state) \`(State WriteAt …? (PrevState i32(…CarIndices …CdrIndices) Reality) …?)\`. Classic RL: contains state, action, and reward.
@@ -17886,8 +19203,9 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
       _consReplayImmediately:_(`_consReplayImmediately`),
       _consReplayAfterSave:_(`_consReplayAfterSave`),
       _consReplayUpdatesState:_(`_consReplayUpdatesState`),
+      consFinalize:_(`consFinalize`),
+      consAsPrograms:_(`consAsPrograms`),
     },
-    unbound:2,
     construct(x, obj) {
       if (obj === undefined) {
         obj = Object.create(null)
@@ -17916,7 +19234,7 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
           const fn = 'function', nm = x => typeof x == 'number' && x === x>>>0 && x >= 0, pos = x => typeof x == 'number' && x === x>>>0 && x > 0
           check('Cells', pos, 1000)('Goals', pos, 100)('Base', isArray)
           check('FeatureSize', pos, 128)('NewEmbedding', fn, truncatedNormal)('Optimizer', fn, varSGD)
-          check('Predict', fn)('ChoicesPerCell', pos, 2)('Policy', fn, argmax)('PrevOptions', pos, 12)('RandomOptions', nm, 4)('ExploreOptions', fn, consRandom)('AllowOptions', _isNumericArray, null)('ConsMake', fn, consMake)('MaxArrayLength', pos, 16)('ConsToEnd', 'boolean', false)('MaxCachedConstructs', pos, 3)
+          check('Predict', fn)('ChoicesPerCell', pos, 2)('Policy', fn, argmax)('PrevOptions', pos, 12)('RandomOptions', nm, 4)('ExploreOptions', fn, consRandom)('AllowOptions', _isNumericArray, null)('ConsMake', fn, consMake)('MaxArrayLength', pos, 16)('ConsToEnd', 'boolean', false)('MaxCachedConstructs', pos, 3)('Sections', pos, 1)('SectionChange', x => typeof x == 'number' && x>=0  && x<=1 || typeof x == 'function', 1)
           check('Goal', fn)('MinReality', 'number', -5)('MaxReality', 'number', 5)('NaNReality', 'number', -5)('UnsetReality', 'number', -5)
           check('MaxStoredChoices', nm, 1000000)('ReplayedChoices', nm, 10000)('SimpleReplay', 'boolean', true)('ReplayChoice', fn, randomNat)('OnSave', fn, null)
           check('SequenceState', fn, null)('UnrollLength', pos, 16)
@@ -17944,16 +19262,18 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
           if (CI.customCars.length !== CI.allocated.length) error("Length mismatch:", CI.customCars, CI.allocated)
 
           const Prev = _setting(HP.PrevOptions), Rand = _setting(HP.RandomOptions), cpc = HP.ChoicesPerCell
-          if (CI.options === undefined) { // Cannot use `_intArray`, because apparently TFJS finds it too hard to support any int arrays that are not Int32Array.
+          if (CI.lastChoices === undefined) CI.lastChoices = new Int32Array(cpc * HP.Cells)
+          if (CI.options === undefined) { // Cannot use `_intArray` (for compactness), because apparently TFJS finds it too hard to support any int arrays that are not Int32Array.
             CI.options = new Int32Array(cpc * HP.Cells * (Prev + Rand))
-            HP.ExploreOptions(CI.options, 0, Prev+Rand, cpc, HP.Cells, HP.Goals, CI.genCtx, null)
+            HP.ExploreOptions(CI.options, 0, Prev+Rand, cpc, 0, HP.Cells, HP.Cells, HP.Goals, CI.genCtx, HP.AllowOptions)
           }
           if (CI.options.length !== cpc * HP.Cells * (Prev + Rand)) error("Bad length:", CI.options)
+          if (CI.activeSection === undefined) CI.activeSection = null
           if (CI.nextOptions === undefined)
             CI.nextOptions = _intArray(cpc * HP.Cells + 2, CI.options.length), CI.nextOptions[cpc*HP.Cells] = Prev, CI.nextOptions[cpc*HP.Cells+1] = Rand
           if (CI.nextOptions.length !== cpc * HP.Cells + 2) error("Bad length:", CI.nextOptions)
           if (CI.consCaches === undefined)
-            CI.consCaches = new Array(HP.Cells).fill()
+            CI.consCaches = new Array(HP.Cells).fill(0)
           if (CI.consCaches.length !== HP.Cells) error("Bad length:", CI.consCaches)
 
           if (CI.replays === undefined) CI.replays = [HP.SequenceState != null ? zeros([HP.Cells, HP.FeatureSize]) : null, 2]
@@ -18126,7 +19446,8 @@ Like \`setFuture\` but for cons-world goals.`,
         let HP = cg.cw.HP, t = _limitNumericValues(Value, _setting(HP.MinReality), _setting(HP.MaxReality), _setting(HP.NaNReality), true)
         try {
           if (cnt[i]++) { const t1 = add(t, real[i]);  dispose(t), t = t1 }
-          dispose(real[i]), real[i] = t, result = keep(t), t = undefined
+          dispose(real[i]), real[i] = t, t = undefined
+          result = keep(Value)
         } finally { dispose(t) }
       } else // Read.
         result = !cnt[i] ? keep(real[i]) : div(real[i], cnt[i])
@@ -18137,7 +19458,10 @@ Like \`setFuture\` but for cons-world goals.`,
   consMake:{
     readAt:{
       consApply:_(`consApply`),
+      _consErrorsBecomeZeros:_(`_consErrorsBecomeZeros`),
+      _consStackCalls:_(`_consStackCalls`),
       consFixedArgCountApply:_(`consFixedArgCountApply`),
+      _memoryLeakWorkaround:_(`_memoryLeakWorkaround`),
     },
     docs:`From car+cdr pointers, \`construct\` an object graph/network.
 
@@ -18154,7 +19478,7 @@ First, the array graph.
 Second, the object graph.
     From an array-graph, \`make\` an object-graph, re-using earlier objects if possible.
     Plot twist: it uses \`makeGraph\`, same as \`parse\` (though a variant that hides/localizes \`error\`s and re-\`construct\`s on demand), so \`construct\` behavior is exactly the same.`,
-    call(carCdrInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals) {
+    call(carCdrInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals, readOnly = false) {
       if (carCdrInds.length !== 2*Cells) error("Length mismatch:", carCdrInds, 2*Cells)
       if (consCaches.length !== Cells) error("Length mismatch:", consCaches, Cells)
       let [arrays, env = _allocMap(), reconstruct = _allocMap(), i, j = 0] = interrupt(5)
@@ -18200,6 +19524,7 @@ Second, the object graph.
           _allocArray(toMake)
           i = arrays.length
         }
+        if (readOnly) return arrays
 
         // Make the object graph, not re-constructing globals, and re-constructing whenever a cons-cache has a match.
         for (; i < genCtx.length; ++i) if (isArray(genCtx[i])) env.set(genCtx[i], genCtx[i])
@@ -18234,13 +19559,13 @@ Second, the object graph.
 (\`construct\`s are ignored.)
 
 An alternative to \`consMake\` (much like if \`applyStatically\` was forced on every base function, but with no "dependencies are called before dependents" guarantees except for "args are always from the previous epoch, so no update-order dependencies").`,
-    call(carCdrInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals) {
+    call(carCdrInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals, readOnly = false, CI) {
       if (carCdrInds.length !== 2*Cells) error('Length mismatch:', carCdrInds, 2*Cells)
       if (consCaches.length !== Cells) error('Length mismatch:', consCaches, Cells)
-      let [mark1 = 'consExecEntry', i, fn, args = _allocArray(MaxArrayLength), prevConsCaches = consCaches.slice(), mark2 = 'consExecExitry'] = interrupt(6)
-      if (mark1 !== 'consExecEntry' || mark2 !== 'consExecExitry') error('Interrupt stack corruption:', mark1, i, fn, args, mark2)
+      let [mark1 = 'consExecEntry', i = 0, fn, args = _allocArray(MaxArrayLength), newConsCaches = _allocArray(Cells).fill(), mark2 = 'consExecExitry'] = interrupt(6)
+      if (mark1 !== 'consExecEntry' || mark2 !== 'consExecExitry') error('Interrupt stack corruption:', mark1, i, fn, args, newConsCaches, mark2)
+      if (readOnly && !arrays) arrays = new Array(Cells).fill().map(() => [])
       try {
-        if (i === undefined) _rememberArrayItems(consCaches, true), i = 0
         for (; i < Cells; ++i) {
           let L = MaxArrayLength, w
 
@@ -18248,7 +19573,7 @@ An alternative to \`consMake\` (much like if \`applyStatically\` was forced on e
             // If we can, limit arg-count. (And skip non-funcs.)
             if (!reversed) {
               const car = carCdrInds[i], f = genCtx[car]
-              if (car < Cells || typeof f != 'function') { dispose(consCaches[i]), consCaches[i] = 0;  continue }
+              if (car < Cells || typeof f != 'function') { newConsCaches[i] = _consErrorsBecomeZeros[1] ? 0 : error;  continue }
               fn = f
               if (w = defines(fn, argCount), typeof w == 'number') L = 1 + w
               if (w = defines(fn, use), typeof w == 'number') L = 1 + w
@@ -18260,7 +19585,7 @@ An alternative to \`consMake\` (much like if \`applyStatically\` was forced on e
             let j = i, jj = i, k = 0
             while (!k || j !== jj && j < Cells && k < L) {
               const car = carCdrInds[j]
-              if (reversed || k) args[reversed ? k : k-1] = car < Cells ? prevConsCaches[car] : genCtx[car]
+              if (reversed || k) args[reversed ? k : k-1] = car < Cells ? (readOnly ? arrays[car] : consCaches[car]) : genCtx[car]
               j = carCdrInds[Cells + j], jj = jj < Cells ? carCdrInds[Cells + jj] : jj, jj = jj < Cells ? carCdrInds[Cells + jj] : jj
               ++k
             }
@@ -18276,101 +19601,203 @@ An alternative to \`consMake\` (much like if \`applyStatically\` was forced on e
             }
           }
 
-          try {
-            // Apply the func.
-            let t = fn.apply(undefined, args)
-            // `keep` its args, as/if requested.
-            let kp = defines(fn, keep)
-            if (kp === true) args.forEach(keep)
-            else if (typeof kp == 'number') kp < 0 && (kp += args.length), keep(args[kp])
-            // Replace the next value.
-            dispose(consCaches[i]), consCaches[i] = t
-          } catch (err) {
-            if (err === interrupt || err === limit) throw err
-            else dispose(consCaches[i]), consCaches[i] = 0, _setting(_logHiddenConstructionErrors) && console.log(err)
-          }
+          if (readOnly)
+            arrays[i].push(fn, ...args)
+          else
+            try {
+              // Apply the func.
+              let t = fn.apply(undefined, args)
+              // `keep` its args, as/if requested.
+              let kp = defines(fn, keep)
+              if (kp === true) args.forEach(keep)
+              else if (typeof kp == 'number') kp < 0 ? (kp += args.length) : --kp, keep(args[kp])
+              // Replace the next value.
+              newConsCaches[i] = t
+            } catch (err) {
+              if (err === interrupt || err === limit) throw err
+              else newConsCaches[i] = _consErrorsBecomeZeros[1] ? 0 : error, _setting(_logHiddenConstructionErrors) && console.log(err)
+            }
           fn = undefined
         }
         args = _allocArray(args)
-        _rememberArrayItems(consCaches)
-        return consCaches
+        const ncc = newConsCaches
+        if (!readOnly) _rememberArrayItems(newConsCaches), CI.consCaches = newConsCaches, newConsCaches = undefined, _rememberArrayItems(consCaches, true), _disposeEachAndDealloc(consCaches)
+        if (readOnly) return arrays
+        return ncc
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(mark1, i, fn, args, prevConsCaches, mark2)
-        else print('When applying', fn, 'with args', ...args, 'got', err), _allocArray(args), _rememberArrayItems(consCaches)
+        if (err === interrupt) interrupt.stack.push(mark1, i, fn, args, prevConsCaches, arrays, mark2)
+        else print('When applying', fn, 'with args', ...args, 'got', err), _allocArray(args), _disposeEachAndDealloc(newConsCaches)
         throw err
       }
     },
+  },
+
+  _consErrorsBecomeZeros:[
+    _(`settings`),
+    true,
+    `Whether cons-world function application errors become \`0\`s (else, \`error\`s).`,
+  ],
+
+  _consStackCalls:[
+    _(`settings`),
+    true,
+    `Whether \`consFixedArgCountApply\` will \`stack\` same-input-matrix-shape calls, for speed.`,
+  ],
+
+  _consStackableClusters(inds, values, genCtx, Cells) {
+    // For `consFixedArgCountApply`.
+    // This infers what can be `stack`ed when `apply`ing a bunch of funcs to `values`.
+    // The result is an array of either `null`s or the index of the next `stack`able call.
+    const cpc = inds.length / Cells | 0
+    let sz // Only stack square-matrix inputs of a static size, for simplicity.
+    const nextIndices = _allocMap()
+    const result = _allocArray(Cells).fill(null)
+    for (let I = Cells; I > 0; --I) {
+      const i = I-1, fn = genCtx[inds[i]]
+      if (typeof fn != 'function' || defines(fn, stack) !== true) continue
+      let argsOk = true // If any arg is not a square matrix, or its sizes mismatch ours, continue.
+      for (let j = 1; j < cpc; ++j) {
+        const ch = inds[i + Cells*j], v = ch < Cells && values[ch]
+        if (ch >= Cells || !_isDisposable(v) || v.shape.length !== 2 || v.shape[0] !== v.shape[1]) { argsOk = false;  break }
+        if (sz === undefined) sz = v.shape[0]
+        if (v.shape[0] !== sz) { argsOk = false;  break }
+      }
+      if (!argsOk) continue
+      result[i] = nextIndices.get(fn) || null
+      nextIndices.set(fn, i)
+    }
+    _allocMap(nextIndices)
+    return result
   },
 
   consFixedArgCountApply:{
     docs:`\`apply\` all functions. (\`construct\`s are ignored.)
 
-Like \`consApply\`, but instead of assembling an array network from car+cdr pointers, this assumes that the argument count is fixed (and is \`ChoicesPerCell\`). No cdr-chain-following, no arg-count-limiting, no arg-reversal.`,
-    call(chosenInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals) {
+Like \`consApply\`, but instead of assembling an array network from car+cdr pointers, this assumes that the argument count is fixed (and is \`ChoicesPerCell\`). No cdr-chain-following, no arg-count-limiting, no arg-reversal: the simplest possible indirect encoding.`,
+    call(chosenInds, entries, genCtx, Cells, MaxArrayLength, reversed, consCaches, MaxPerCache, Goals, readOnly = false, CI) {
       if (chosenInds.length % Cells) error('Length mismatch:', chosenInds, 'is not a multiple of', Cells)
       const cpc = chosenInds.length / Cells | 0
       if (consCaches.length !== Cells) error('Length mismatch:', consCaches, Cells)
-      let [mark1 = 'consFixExecEntry', i, fn, args = _allocArray(cpc-1), prevConsCaches = consCaches.slice(), mark2 = 'consFixExecExitry'] = interrupt(6)
-      if (mark1 !== 'consFixExecEntry' || mark2 !== 'consFixExecExitry') error('Interrupt stack corruption:', mark1, i, fn, args, mark2)
+      let [mark1 = 'consFixExecEntry', i = 0, fn, args = _allocArray(cpc-1), newConsCaches = _allocArray(Cells).fill(), arrays, stackable, completed, virtArgs, stackCalls = !readOnly && _consStackCalls[1], mark2 = 'consFixExecExitry'] = interrupt(11)
+      if (mark1 !== 'consFixExecEntry' || mark2 !== 'consFixExecExitry') error('Interrupt stack corruption:', mark1, i, fn, args, newConsCaches, arrays, stackable, completed, virtArgs, mark2)
+      if (readOnly && !arrays) arrays = new Array(Cells).fill().map(() => [])
       try {
-        if (i === undefined) _rememberArrayItems(consCaches, true), i = 0
-        for (; i < Cells; ++i) {
-          let L = MaxArrayLength, w
+        if (stackCalls && stackable === undefined) stackable = _consStackableClusters(chosenInds, consCaches, genCtx, Cells)
+        if (stackCalls && completed === undefined) completed = _allocArray(Cells).fill(false)
+        for (; i < Cells; ++i, fn = undefined) {
+          if (completed && completed[i]) continue
 
           if (fn === undefined) { // Collect func and args of this cons-cell. (And skip non-funcs.)
             _checkInterrupt(i)
             const fCh = chosenInds[i], f = genCtx[fCh]
-            if (fCh < Cells || typeof f != 'function') { dispose(consCaches[i]), consCaches[i] = error;  continue }
+            if (fCh < Cells || typeof f != 'function') { newConsCaches[i] = _consErrorsBecomeZeros[1] ? 0 : error;  continue }
             fn = f
             for (let j = 1; j < cpc; ++j) {
               const ch = chosenInds[i + Cells*j]
-              args[j-1] = ch < Cells ? prevConsCaches[ch] : genCtx[ch]
+              args[j-1] = ch < Cells ? (readOnly ? arrays[ch] : consCaches[ch]) : genCtx[ch]
             }
           }
 
-          try {
-            // Apply the func.
-            let t = fn.apply(undefined, args)
-            // `keep` its args, as/if requested.
-            let kp = defines(fn, keep)
-            if (kp === true) args.forEach(keep)
-            else if (typeof kp == 'number') kp < 0 && (kp += args.length), keep(args[kp])
-            // Replace the next value.
-            dispose(consCaches[i]), consCaches[i] = t
-          } catch (err) {
-            if (err === interrupt || err === limit) throw err
-            else dispose(consCaches[i]), consCaches[i] = error, _setting(_logHiddenConstructionErrors) && console.log(err)
+          if (readOnly)
+            arrays[i].push(fn, ...args.slice(0, defines(fn, argCount) || args.length))
+          else if (!stackCalls || stackable[i] == null)
+            try {
+              // Apply the func.
+              let t = fn.apply(undefined, args)
+              // `keep` its args, as/if requested.
+              let kp = defines(fn, keep)
+              if (kp === true) args.forEach(keep)
+              else if (typeof kp == 'number') kp < 0 ? (kp += args.length) : --kp, keep(args[kp])
+              // Replace the next value.
+              newConsCaches[i] = t
+              completed && (completed[i] = true)
+            } catch (err) {
+              if (err === interrupt || err === limit) throw err
+              else newConsCaches[i] = _consErrorsBecomeZeros[1] ? 0 : _errorRepr(err), _setting(_logHiddenConstructionErrors) && console.log(err)
+            }
+          else { // `stack` calls, for speed. (Lots of code, tho: half of this func.)
+            // Collect call indices into an array.
+            const calls = _allocArray(0)
+            for (let n = i; n != null; n = stackable[n]) calls.push(n)
+            let ts
+            try {
+              if (virtArgs === undefined) {
+                // Collect args, and `stack` each.
+                virtArgs = _allocArray(cpc-1), virtArgs.fill()
+                for (let j = 1; j < cpc; ++j) {
+                  virtArgs[j-1] = _allocArray(calls.length)
+                  for (let k = 0; k < calls.length; ++k) {
+                    const ch = chosenInds[calls[k] + Cells*j]
+                    virtArgs[j-1][k] = consCaches[ch]
+                  }
+                  const t = stack(virtArgs[j-1])
+                  _allocArray(virtArgs[j-1]), virtArgs[j-1] = t
+                }
+              }
+              // Do the call with virtArgs.
+              let t = fn.apply(undefined, virtArgs)
+              // `keep` our virtual args, as/if requested.
+              let kp = defines(fn, keep)
+              if (kp === true) virtArgs.forEach(keep)
+              else if (typeof kp == 'number') kp < 0 ? (kp += args.length) : --kp, keep(virtArgs[kp])
+              // `unstack` the result (which must be a tensor).
+              ts = unstack(t);  t = dispose(t)
+            } catch (err) {
+              if (err === interrupt || err === limit) throw err
+              else ts = new Array(calls.length).fill(_consErrorsBecomeZeros[1] ? 0 : _errorRepr(err)), _setting(_logHiddenConstructionErrors) && console.log(err)
+            }
+            // Write each sub-tensor into its proper place, and set `completed`.
+            for (let k = 0; k < calls.length; ++k) {
+              newConsCaches[calls[k]] = ts[k]
+              completed[calls[k]] = true
+            }
+            _allocArray(calls)
+            virtArgs = _disposeEachAndDealloc(virtArgs)
           }
           fn = undefined
         }
         args = _allocArray(args)
-        _rememberArrayItems(consCaches)
-        return consCaches
+        const ncc = newConsCaches
+        if (!readOnly) {
+          if (_memoryLeakWorkaround[1]) { for (let j=0; j < ncc.length; ++j) _tf.all.delete(ncc[j]), dispose.not.delete(ncc[j]);  _rememberArrayItems(ncc, true) }
+          else _rememberArrayItems(ncc)
+        }
+        if (!readOnly) CI.consCaches = ncc, newConsCaches = undefined, _rememberArrayItems(consCaches, true), consCaches.forEach(dispose)
+        if (readOnly) return arrays
+        return ncc
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(mark1, i, fn, args, prevConsCaches, mark2)
-        else print('When applying', fn, 'with args', ...args, 'got', err), _allocArray(args), _rememberArrayItems(consCaches)
+        if (err === interrupt) interrupt.stack.push(mark1, i, fn, args, newConsCaches, arrays, stackable, completed, virtArgs, stackCalls, mark2)
+        else print('When applying', fn, 'with args', ...(virtArgs || args || []), 'got', err), _allocArray(args), _disposeEachAndDealloc(virtArgs), _disposeEachAndDealloc(newConsCaches)
         throw err
       }
     },
   },
+
+  _memoryLeakWorkaround:[
+    _(`settings`),
+    true,
+    `\`consFixedArgCountApply\` leaks GPU memory on some hardware, apparently, but I have conceived of a way to avoid that. There's no sane reason the plug should work, but there's no sane reason for the memory leak either.`,
+  ],
 
   consRandom:{
     docs:`The default filler of option slots with random candidates.
 Ratios of cells/goals/basics are made independent from the size of any of these groups.`,
     readAt:{
       _consAllowOwnGoal:_(`_consAllowOwnGoal`),
+      _consAllowOwnCell:_(`_consAllowOwnCell`),
       _consBasePercentage:_(`_consBasePercentage`),
       _consGoalsPercentage:_(`_consGoalsPercentage`),
       _consStickyCells:_(`_consStickyCells`),
     },
-    call(opts, Prev, Rand, cpc, Cells, Goals, genCtx, allow) {
-      const Opts = Prev+Rand, disallowOwnGoal = !_setting(_consAllowOwnGoal)
+    call(opts, Prev, Rand, cpc, Start, End, Cells, Goals, genCtx, allow) {
+      const Opts = Prev+Rand, allowOwnGoal = !_setting(_consAllowOwnGoal), allowOwnCell = !_setting(_consAllowOwnCell)
       const bases = _num(_setting(_consBasePercentage)), goals = _num(_setting(_consGoalsPercentage)), stickyCells = _setting(_consStickyCells)
       const basics = genCtx.length - Cells - Goals
       const goalsNoBases = Math.min(1, goals / (1 - bases + 1e8))
       let goal = null
-      for (let n = 0; n < cpc * Cells; ++n) { // Explore random choices.
+      for (let n = Start; n < cpc * Cells; ++n) { // Explore random choices.
         const cell = n % Cells, c = n / Cells | 0, disallow = Cells + _consGoalOfCell(cell, Cells, Goals)
+        if (cell < Start || cell >= End) continue // Bootleg loop bounds.
         const ok = allow ? allow[c] : 7 // 0:None;   1:Cell;   2:Goal;   3:Cell+Goal;   4:Basic;   5:Cell+Basic;   6:Goal+Basic;   7:Cell+Goal+Basic.
         goal = null
         for (let i = Prev; i < Opts; ++i) {
@@ -18381,7 +19808,7 @@ Ratios of cells/goals/basics are made independent from the size of any of these 
             const disallow = Cells + _consGoalOfCell(cell, Cells, Goals)
             while (true) {
               put = Cells + randomNat(Goals)
-              if (!disallowOwnGoal || put !== disallow) break
+              if (!allowOwnGoal || put !== disallow) break
             }
             if (stickyCells) goal = put - Cells
           } else { // Cell.
@@ -18389,7 +19816,7 @@ Ratios of cells/goals/basics are made independent from the size of any of these 
             const end = goal === null ? Cells : _consCellEndOfGoal(goal, Cells, Goals)
             while (true) {
               put = start + randomNat(end - start)
-              if (put !== cell) break
+              if (!allowOwnCell || put !== cell) break
             }
           }
           opts[Opts*n + i] = put
@@ -18401,9 +19828,15 @@ Ratios of cells/goals/basics are made independent from the size of any of these 
   _consAllowOwnGoal:[
     _(`settings`),
     false,
-    `If not checked, \`_regenCons\` will prevent cons-cells from ever branching out to their own goals.
+    `If not checked, \`consRandom\` will prevent cons-cells from ever branching out to their own goals.
 This prevents the simplest form of reward hacking (set own goal to max).
 How much this actually impacts learning is unknown: that simplest form is also preventable by others noticing that this cons-cell does nothing.`,
+  ],
+
+  _consAllowOwnCell:[
+    _(`settings`),
+    false,
+    `If not checked, \`consRandom\` will not allow self-references.`,
   ],
 
   _consBasePercentage:[
@@ -18452,6 +19885,8 @@ How much this actually impacts learning is unknown: that simplest form is also p
     },
   },
 
+  _remindOfConsWorldSettings(HP) { Object.values(HP).forEach(v => isArray(v) && v[0] === settings && remind(v)) },
+
   _regenCons:{
     docs:`\`_regenCons ConsWorld\`
 Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, and \`construct\`s the object network according to them.`,
@@ -18461,11 +19896,12 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
 
       let R = consWorld.regen.get(cw)
       let [
-        stage = 0, Pre, PreT, WhichPointer, ConsEmb,
-        OptEmb, PrevState, Chosen, i = 0, Cells = _setting(HP.Cells),
-        Prev = _setting(HP.PrevOptions), Rand = _setting(HP.RandomOptions), Pred, nras = _setting(_consReplayImmediately) && !_setting(_consReplayAfterSave)
+        stage = 0, Pre, WhichPointer, ConsEmb, OptEmb,
+        PrevState, Chosen, i = 0, Cells = _setting(HP.Cells), Prev = _setting(HP.PrevOptions),
+        Rand = _setting(HP.RandomOptions), Pred, nras = _setting(_consReplayImmediately) && !_setting(_consReplayAfterSave), sects = _setting(HP.Sections)
       ] = interrupt(14)
-      const cpc = HP.ChoicesPerCell, Choices = cpc*Cells, Opts = Prev+Rand
+      const cpc = HP.ChoicesPerCell, Opts = Prev+Rand
+      const sec = CI.activeSection, secStart = sec == null ? 0 : sec * Cells / sects | 0, secEnd = sec == null ? Cells : (sec+1) * Cells / sects | 0, Section = secEnd - secStart, Choices = cpc * Section
       const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
       const prevAdjSave = env[ias];  env[ias] = undefined
       const prevAdjLoad = env[ial];  env[ial] = undefined
@@ -18474,39 +19910,52 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
           case 0: { // Init regen state.
             if (R && !R[use.Constructed]) error("Do not regen during regen")
             if (R) return
+            _remindOfConsWorldSettings(HP)
             _consResizeOptions(CI, cpc, Cells, Prev, Rand)
             Pre = CI.options
             consWorld.regen.set(cw, R = _allocArray(7).fill(null)) // `(PrevState Indexes Reality Constructed CustomGoalStates)`
             R[use.PrevState] = keep(CI.replays[0])
-            R[use.Indexes] = new Int32Array(Choices) // Cannot use `_intArray` because of TFJS.
+
+            R[use.Indexes] = _intArray(CI.lastChoices) // Cannot use `_intArray` because of TFJS.
+
             R[use.Reality] = _allocArray(_setting(HP.Goals)).fill(_setting(HP.UnsetReality))
             R[use.RealityCount] = _allocArray(_setting(HP.Goals)).fill(0)
-            HP.ExploreOptions(Pre, Prev, Rand, cpc, Cells, HP.Goals, CI.genCtx, HP.AllowOptions)
-            PreT = _tf(tf.tensor(Pre, [Choices, Opts]))
+            HP.ExploreOptions(Pre, Prev, Rand, cpc, secStart, secEnd, Cells, HP.Goals, CI.genCtx, HP.AllowOptions)
             // Then, prepare args for `Predict`.
           } stage = 1;  case 1: {
-            WhichPointer = _consWhichPointer(Cells, Opts, cpc)
-          } stage = 2;  case 2:
-            ConsEmb = HP.Optimizer(CI.ctxEmb)
-          stage = 3;  case 3:
-            OptEmb = gather(ConsEmb, PreT, 0) // Choices×Opts×FS
-          stage = 4;  case 4: {
-            let t0, t1, t2, t3
+            WhichPointer = _consWhichPointer(Section, Opts, cpc)
+          } stage = 2;  case 2: {
+            const AllEmbs = HP.Optimizer(CI.ctxEmb)
             try {
-              t0 = slice(ConsEmb, 0, Cells) // Cells×FS
-              t1 = tile(t0, cpc, 0) // Choices×FS
+              ConsEmb = slice(AllEmbs, secStart, Section) // Section×FS
+
+              const sliced = new Int32Array(Choices * Opts)
+              for (let c = 0; c < cpc; ++c)
+                for (let n = secStart; n < secEnd; ++n)
+                  for (let o = 0; o < Opts; ++o)
+                    sliced[Opts * Section * c + Opts * (n-secStart) + o] = Pre[Opts * Cells * c + Opts*n + o]
+              const slicedT = _tf(tf.tensor(sliced, [Choices, Opts])) // Choices×Opts
+              try { OptEmb = gather(AllEmbs, slicedT, 0) } // Choices×Opts×FS
+              finally { dispose(slicedT) }
+            } finally { dispose(AllEmbs) }
+          } stage = 3;  case 3: {
+            let t1, t2, t3
+            try {
+              t1 = tile(ConsEmb, cpc, 0) // Choices×FS
               t2 = expandDims(t1, 1) // Choices×1×FS
               t3 = broadcastTo(t2, [Choices, Opts, ...t2.shape.slice(2)]) // Choices×Opts×FS
               dispose(ConsEmb), ConsEmb = t3, t3 = undefined
-            } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3) }
-          } stage = 5;  case 5: {
-            let t0, t1
-            try {
-              t0 = tile(R[use.PrevState], cpc, 0) // Choices×FS
-              t1 = expandDims(t0, 1) // Choices×1×FS
-              PrevState = broadcastTo(t1, [Choices, Opts, ...t1.shape.slice(2)]) // Choices×Opts×FS
-            } finally { dispose(t0), dispose(t1) }
-          } stage = 6;  case 6: { // Predict.
+            } finally { dispose(t1), dispose(t2), dispose(t3) }
+          } stage = 4;  case 4: {
+            let t2, t0, t1
+            if (_isDisposable(R[use.PrevState]))
+              try {
+                t2 = slice(R[use.PrevState], secStart, Section) // Section×FS
+                t0 = tile(t2, cpc, 0) // Choices×FS
+                t1 = expandDims(t0, 1) // Choices×1×FS
+                PrevState = broadcastTo(t1, [Choices, Opts, ...t1.shape.slice(2)]) // Choices×Opts×FS
+              } finally { dispose(t0), dispose(t1), dispose(t2) }
+          } stage = 5;  case 5: { // Predict.
             Pred = HP.Predict(WhichPointer, ConsEmb, OptEmb, PrevState, undefined) // Choices×Opts×1
             const sh = _tensorShape(Pred)
             if (!_isDisposable(Pred) || sh[0] !== Choices || sh[1] !== Opts || sh[2] !== 1 || sh.length !== 3)
@@ -18529,28 +19978,38 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
             if (!_setting(_consSyncChoices)) Chosen = await(Chosen)
           } stage = 10;  case 10: { // Finalize chosen pointers.
             const Post = R[use.Indexes]
-            for (let n = 0; n < Choices; ++n)
-              Post[n] = Pre[Chosen[n] + Opts*n]
+            for (let c = 0; c < cpc; ++c)
+              for (let n = secStart; n < secEnd; ++n)
+                Post[c*Cells + n] = Pre[Chosen[c*Section + n - secStart] + Opts*n + Cells*Opts*c]
             for (let i = 0; i < CI.allocated.length; ++i)
               if (CI.customCars[i] != null)
                 Post[CI.allocated[i]] = CI.customCars[i]
-            PreT = dispose(PreT)
             const next = CI.nextOptions
-            for (let n = 0; n < Choices; ++n) // Remember what we picked in ring buffers, unless we picked this before.
-              if (!_arrayIncludes(Pre, Post[n], n*Opts, n*Opts + Prev))
-                Pre[n*Opts + next[n]] = Post[n], next[n] >= Prev && (next[n] = 0), ++next[n]
+            for (let c = 0; c < cpc; ++c) {
+              const chStart = c*Cells*Opts
+              for (let n = secStart; n < secEnd; ++n) { // Remember what we picked in ring buffers, unless we picked this before.
+                const inCh = c*Cells + n, optStart = chStart + n*Opts
+                if (!_arrayIncludes(Pre, Post[inCh], optStart, optStart + Prev))
+                  Pre[optStart + next[inCh]] = Post[inCh], ++next[inCh], next[inCh] >= Prev && (next[inCh] = 0)
+              }
+            }
+            CI.lastChoices = Post
             R[use.CustomGoalStates] = _allocArray(CI.customBefore.length).fill()
           } stage = 11;  case 11: // Do the "before execution" part of user-goal-setting.
             for (; i < CI.customBefore.length; ++i)
               if (typeof CI.customBefore[i] == 'function')
                 R[use.CustomGoalStates][i] = CI.customBefore[i]()
           stage = 12;  case 12: // `construct` the object network.
-            R[use.Constructed] = HP.ConsMake(R[use.Indexes], CI.allocated, CI.genCtx, Cells, _setting(HP.MaxArrayLength), _setting(HP.ConsToEnd), CI.consCaches, _setting(HP.MaxCachedConstructs), HP.Goals)
-          stage = 13;  case 13:
+            R[use.Constructed] = HP.ConsMake(R[use.Indexes], CI.allocated, CI.genCtx, Cells, _setting(HP.MaxArrayLength), _setting(HP.ConsToEnd), CI.consCaches, _setting(HP.MaxCachedConstructs), HP.Goals, false, CI)
+          stage = 13;  case 13: // Update the active section.
+            if (typeof HP.SectionChange == 'function')
+              CI.activeSection = HP.SectionChange(sects, CI.activeSection)
+            else if (randomProb(HP.SectionChange))
+              CI.activeSection = randomNat(sects)
         }
       } catch (err) {
-        if (err === interrupt) interrupt.stack.push(stage, Pre, PreT, WhichPointer, ConsEmb, OptEmb, PrevState, Chosen, i, Cells, Prev, Rand, Pred, nras)
-        else print('Regen-start error:', err), consWorld.regen.delete(cw), _disposeEachAndDealloc(R), dispose(PreT), dispose(WhichPointer), dispose(ConsEmb), dispose(OptEmb), dispose(PrevState), dispose(Pred) // #####################################################
+        if (err === interrupt) interrupt.stack.push(stage, Pre, WhichPointer, ConsEmb, OptEmb, PrevState, Chosen, i, Cells, Prev, Rand, Pred, nras, sects)
+        else print('Regen-start error:', err), consWorld.regen.delete(cw), _disposeEachAndDealloc(R), dispose(WhichPointer), dispose(ConsEmb), dispose(OptEmb), dispose(PrevState), dispose(Pred) // #####################################################
         throw err
       } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
     },
@@ -18565,20 +20024,70 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
     use:3,
     docs:`\`x->y->axis->concat(array(x,y),2,axis)\``,
     dispose:true,
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      [
+        `repeat ^(concat2(randomVar(5,6),randomVar(5,8),-1)=.5) 1000`,
+      ],
+    ],
     call(x, y, axis) {
-      const a = _allocArray(2);  [a[0], a[1]] = [x, y]
+      if (x == null) return keep(y)
+      if (y == null) return keep(x)
+      if (axis < 0) axis += (x.shape || y.shape).length
+      const nx = _isNum(x) && broadcastTo(x, [...y.shape.slice(0,axis), 1, ...y.shape.slice(1+axis)]) // Convenience: numbers to tensors.
+      const ny = _isNum(y) && broadcastTo(y, [...x.shape.slice(0,axis), 1, ...x.shape.slice(1+axis)]) // Convenienza: numbers to tensors.
+      const a = _allocArray(2);  [a[0], a[1]] = [nx || x, ny || y]
       try { return concat(a, 2, axis) }
-      finally { _allocArray(a) }
+      finally { _allocArray(a), dispose(ny), dispose(nx) }
     },
     mergeAdjustment:[
+      _(`_mergeTensors`),
       _(`_mergeTensors`),
       null,
     ],
     adjust:{
       call(ins, out, dout) {
-        if (!dout) return dout
-        const [x, y, axis] = ins
-        return split(dout, 2, axis)
+        let [x, y, axis] = ins
+        if (!dout) return [_isNum(x) ? 0 : zeros(x.shape), _isNum(y) ? 0 : zeros(y.shape)]
+        if (x == null) return [0, keep(dout)]
+        if (y == null) return [keep(dout), 0]
+
+        // Infer the correct dimensions from input shapes (assuming that they're the same except for the axis that we `concat`enated along).
+        let splitDims = 2
+        if (axis < 0) axis += (x.shape || y.shape).length
+        const dx = _isNum(x) ? 1 : x.shape[axis], dy = _isNum(y) ? 1 : y.shape[axis]
+        if (dx !== dy) splitDims = [dx, dy]
+
+        return split(dout, splitDims, axis)
+      },
+      dispose:_(`_disposeEachAndDealloc`),
+    },
+  },
+
+  stack2:{
+    docs:`\`x->y->axis->stack(array(x,y),axis)\``,
+    dispose:true,
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      [
+        `repeat ^(stack2(randomVar(5,6),randomVar(5,6),-1)=.5) 1000`,
+      ],
+    ],
+    call(x, y, axis) {
+      const a = _allocArray(2);  [a[0], a[1]] = [x, y]
+      try { return stack(a, axis) }
+      finally { _allocArray(a) }
+    },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      _(`_mergeTensors`),
+      null,
+    ],
+    adjust:{
+      call(ins, out, dout) {
+        let [x, y, axis] = ins
+        if (!dout) return [_isNum(x) ? 0 : zeros(x.shape), _isNum(y) ? 0 : zeros(y.shape)]
+        return unstack(dout, axis)
       },
       dispose:_(`_disposeEachAndDealloc`),
     },
@@ -18663,7 +20172,7 @@ Updates \`SequenceState\`, finishes setting user-defined goals, saves experience
                 ConsEmb = slice(t, 0, Cells)
                 ChosenEmbs = _allocArray(cpc)
                 for (let j = 0; j < cpc; ++j)
-                  ChosenEmbs[j] = gather(t, R[use.Indexes].subarray(j*Cells, (j+1)*Cells))
+                  ChosenEmbs[j] = gather(t, R[use.Indexes].subarray(j*Cells, (j+1)*Cells), 0)
               } finally { dispose(t) }
             }
           } stage = 2;  case 2: { // Set user-defined goals, and finalize the shape of Reality.
@@ -18744,7 +20253,7 @@ Updates \`SequenceState\`, finishes setting user-defined goals, saves experience
 
       for (let i = 3; i < R.length; ++i) dispose(R[i]);  R.length = 3
       let next = rs[1]
-      _rememberArrayItems(rs[next], true), _disposeEachAndDealloc(rs[next])
+      if (isArray(rs[next])) _rememberArrayItems(rs[next], true), rs[next].forEach(dispose)
       _rememberArrayItems(R), rs[next] = R
       let next2 = rs[1] = next+1
       if (HP.ReplayChoice !== randomNat)
@@ -18975,8 +20484,9 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
                 // Adjust `ConsEmb = gather(AllEmbs, AllConsInds)`.
                 const AllEmbsLen = CI.genCtx.length
                 if (Simple) {
-                  const t = zeros([AllEmbsLen - dConsEmb.shape[0], ...dConsEmb.shape.slice(1)])
-                  dAllEmbs = concat2(dConsEmb, t, 0);  dispose(t)
+                  const t0 = broadcastTo(dConsEmb, ConsEmb.shape)
+                  const t1 = zeros([AllEmbsLen - t0.shape[0], ...t0.shape.slice(1)])
+                  dAllEmbs = concat2(t0, t1, 0);  dispose(t0), dispose(t1)
                 } else dAllEmbs = scatter(dConsEmb, AllConsInds, AllEmbsLen)
                 for (let c = 0; c < cpc; ++c)
                   for (let o = 0; o < UnrollLen; ++o) {
@@ -19542,16 +21052,16 @@ What did we previously lack?
 
 And if not, then we have this bag of ML tricks: \`\`elemCollapse elemValue(elem 'text' stringToDoc('
   ⬜ Make each cell (or each goal) have its own NN weights.
-  ⬜ Skip connections (\`x->F(x)\` becomes \`x->x+F(x)\`).
+  ❌ Skip connections (\`x->F(x)\` becomes \`x->x+F(x)\`).
   ⬜ Ensemble more NNs (\`A\` becomes \`(A+B+C+D+E+F+G+H)/8\`, each term possibly added gradually, possibly stochastically-averaged, possibly with each predicting the result separately).
   ⬜ For exploration: sample from all possible models that fit data, not just one NN (that space could be approximated with two or more samples: \`A\` becomes \`(1-p)*A+p*B\`, where \`p\` is random, approximately 0…1: for example, \`p\` is \`truncatedNormal(^1(),.5,1)\`).
-  ⬜ To learn in sparse-reward environments, such as "almost every function body we pick results in an error": in replay buffers, stochastically prioritize samples by their last-seen loss, most-surprising (highest-loss) first: {https://arxiv.org/pdf/1511.05952.pdf}.
-  ⬜ To decorrelate predictions and targets: make future-predictions static (store it on forward-pass, or periodically switch between two networks, or periodically copy the network) (and possibly, do not update states on replay), to remove the correlation which could destabilize learning.
-  ⬜ To improve generalization and possibly final performance: DropConnect (drop random weights when a variable wants to return them) or dropout (drop random numbers on output) or dropping layers (randomly replace with identity), or rarely-updated random zero-gradient masks. This slows down training in order to train a huge semi-ensemble of NNs.
-  ⬜ To improve generalization: L1/L2 regularization loss.
-  ⬜ Replace the sequence-state RNN with GRU, or LSTM, or a fast weight memory system.
-  ⬜ To force neural diversity: batch normalization (shift/scale each batch to have 0-mean and 1-variance).
-  ⬜ For more compute-efficient training (assuming that knowing more is very much better): train very large models, stop early, then quantize and prune ({https://www.youtube.com/watch?v=YX8LLYdQ-cA}/{https://arxiv.org/abs/2002.11794}).
+  ❌ To learn in sparse-reward environments, such as "almost every function body we pick results in an error": in replay buffers, stochastically prioritize samples by their last-seen loss, most-surprising (highest-loss) first: {https://arxiv.org/pdf/1511.05952.pdf}.
+  ❌ To decorrelate predictions and targets: make future-predictions static (store it on forward-pass, or periodically switch between two networks, or periodically copy the network) (and possibly, do not update states on replay), to remove the correlation which could destabilize learning.
+  ❌ To improve generalization and possibly final performance: DropConnect (drop random weights when a variable wants to return them) or dropout (drop random numbers on output) or dropping layers (randomly replace with identity), or rarely-updated random zero-gradient masks. This slows down training in order to train a huge semi-ensemble of NNs.
+  ❌ To improve generalization: L1/L2 regularization loss.
+  ❌ Replace the sequence-state RNN with GRU, or LSTM, or a fast weight memory system.
+  ❌ To force neural diversity: batch normalization (shift/scale each batch to have 0-mean and 1-variance).
+  ❌ For more compute-efficient training (assuming that knowing more is very much better): train very large models, stop early, then quantize and prune ({https://www.youtube.com/watch?v=YX8LLYdQ-cA}/{https://arxiv.org/abs/2002.11794}).
   ❌ To waste time on UI, for explainability:
     ❌ Have a neural connection from embeddings to three colors, and color each node in an \`autoFunc\` appropriately (taste the rainbow). A simple way to train this is an auto-encoder: \`color:clip(mix(UpEmb,FeatureSize,3)) mix(color,3,FeatureSize)=UpEmb;color\` (with some penalty for all-black and all-white: \`s:sum(color) minimize(0-s*s);minimize(9-s*s)\`). (Pointless fluff.)
     ❌ Have a neural connection from embeddings to will-it-be-collapsed, and collapse appropriate nodes in serialization. (Pointless fluff.)
@@ -19793,7 +21303,7 @@ Compile time.
     [
       _(`fancier`),
       `sm:static(await load('squama'))
-(repeat ^select(randomProb 1/30000,?→save('squama',sm));sm();null 100001);(select (equal 'Save' (prompt null 'Save' 'End')) ?→save('squama',sm) id)`,
+(print (elemValue (elem 'collapsed' '···') sm) (elemValue (elem 'collapsed' '···') (_findConsWorld sm)));(repeat ^sm();null 100001);(select (equal 'Save' (prompt null 'Save' 'End')) ?→save('squama',consFinalize(sm)) ?→consFinalize(sm))`,
     ],
     `(16 bugs got fixed.)
 
@@ -19802,69 +21312,335 @@ Compile time.
 Only one thing remains: hyperparameter tuning.
 
 Let's speak the language of machine learning for a bit.
+        It is a lovely language, but it takes a very long time to say anything in it, because we do not say anything in it, unless it is worth taking a long time to say, and to listen to.
 
     - With an \`Sz\`-returning function exposed (so it's easy to vote for MAX reward):
 
         - Stochastic-ensembling \`stddev\`=\`0\`:
-\`\`
-(display 'Mean reward' ^(a:-1.76 b:-1.69 c:-1.74 d:-1.52 e:-1.84 f:-1.59 g:-1.5 h:-1.73 i:-1.86 j:-1.71 k:-1.57 l:-1.51 m:-1.55 n:-1.7 o:-1.72 p:-1.34 q:-1.35 r:-1.68 s:-1.56 t:-1.6 u:-1.47 v:-1.75 w:-1.43 x:-1.78 y:-1.62 z:-1.81 A:-1.25 B:-1.79 C:-1.64 D:-1.8 E:-1.58 F:-1.54 G:-1.28 H:-1.46 I:-1.2 J:-1.4 K:-1.42 L:-1.61 M:-1.66 N:-1.63 O:-1.44 P:-1.85 Q:-1.53 R:-1.67 S:-1.65 T:-1.41 U:-1.83 V:-1.82 W:-1.38 X:-1.77 Y:-1.45 Z:-1.49 ba:-1.37 bb:-1.11 bc:-1.48 bd:-1.3 be:-1.33 bf:-1.39 bg:-1.32 bh:-1.9 bi:-1.22 bj:-1.29 bk:-1.89 bl:-1.23 bm:-1.36 bn:-1.06 bo:-1.27 bp:-1.26 bq:-1.24 br:-1.31 bs:-1.1 bt:-1.17 bu:-1.12 bv:-1.15 bw:-1.19 bx:-1.21 by:-1.14 bz:-1.18 bA:-1.09 bB:-1.05 bC:-0.98 bD:-1.03 bE:-1.13 bF:-1.07 bG:-1.08 bH:-1.01 bI:-0.93 bJ:-1.02 bK:-0.94 bL:-0.88 bM:-0.86 bN:-0.82 bO:-0.72 bP:-1.16 bQ:-0.89 bR:-0.95 bS:-1.04 bT:-0.85 bU:-0.9 bV:-0.99 bW:-0.97 bX:-0.91 bY:-0.87 bZ:-0.96 ca:-0.69 cb:-0.73 cc:-0.83 cd:-0.81 ce:-0.76 cf:-0.75 cg:-0.79 ch:-0.58 ci:-0.38 cj:-0.55 ck:-0.8 cl:-0.92 cm:-0.57 cn:-0.64 co:-0.78 cp:-0.41 cq:-0.67 cr:-0.4 cs:-0.65 ct:-0.84 cu:-0.49 cv:-0.77 cw:-0.36 cx:-0.68 cy:-0.74 cz:-0.53 cA:-0.23 cB:-0.7 cC:-0.43 cD:-0.48 cE:-0.6 cF:-0.66 cG:-0.2 cH:-0.62 cI:-0.35 cJ:-0.59 cK:-0.63 cL:-0.03 cM:-0.45 cN:-0.61 cO:-0.34 cP:-0.44 cQ:-0.42 cR:-0.54 cS:-0.19 cT:-0.17 cU:0.08 cV:-0.56 cW:-0.39 cX:-0.46 cY:-0.52 cZ:-0.51 da:-0.29 db:-0.27 dc:-0.3 dd:-0.5 de:-0.71 df:-0.21 dg:0.01 dh:-0.37 di:-0.22 dj:0.04 dk:-0.06 dl:-0.28 dm:-0.47 dn:-0.12 do:-0.25 dp:-0.31 dq:0.13 dr:-0.18 ds:-0.26 dt:0.02 du:0.06 dv:-0.04 dw:-0.32 dx:0.11 dy:-0.15 dz:0.22 dA:-0.24 dB:-0.1 dC:-0.05 dD:0.12 dE:-0.33 dF:0.17 dG:-0.02 dH:-0.07 dI:0.15 dJ:-0.13 dK:-0.01 dL:0.18 dM:0.05 dN:-0.08 dO:0.49 dP:0.03 dQ:0.51 dR:-0.09 dS:0.31 dT:-0.14 dU:0.24 dV:0.2 dW:0.28 dX:0.09 dY:0.36 dZ:-0.11 ea:0.27 eb:0.41 ec:-0.16 ed:0.07 ee:0.14 ef:0.37 eg:0.34 eh:0.25 ei:0.44 ej:0.35 ek:0.16 el:0.19 em:0.1 en:0.79 eo:0.26 ep:0.38 eq:0.42 er:0.33 es:0.21 et:0.3 eu:0.29 ev:0.52 ew:0.39 ex:0.8 ey:0.43 ez:0.4 eA:0.23 eB:0.53 eC:0.32 eD:0.47 eE:0.45 eF:0.56 eG:0.55 eH:0.69 eI:0.46 eJ:0.54 eK:0.71 eL:0.76 eM:0.58 eN:0.62 eO:0.66 eP:0.5 eQ:0.61 eR:0.74 eS:0.75 eT:0.57 eU:0.48 eV:0.73 eW:0.98 eX:0.82 eY:0.77 eZ:0.86 fa:0.95 fb:0.9 fc:1.15 fd:0.7 fe:1.02 ff:1.03 fg:0.65 fh:0.64 fi:0.97 fj:0.63 fk:0.84 fl:0.94 fm:0.78 fn:1.2 fo:0.96 fp:1.08 fq:0.68 fr:1.01 fs:0.59 ft:0.6 fu:0.89 fv:0.81 fw:0.87 fx:1.04 fy:0.93 fz:1.21 fA:0.99 fB:1.1 fC:0.67 fD:0.83 fE:0.85 fF:0.72 fG:1.07 fH:1.29 (-1.88 o i a e a n c v j C Z b z b k c w F P f g y d B d bg r h e f g g a q A c h p l i g j m f k K t l bU m n o p b c s q r u s O n a t e u D v j k f c b x H G c E bm I bc w m j v r x y n t h x t t bz Y T c M o x J j z f m r A B C S a D B E D C F F u bb bq bt bd G R H L I J F C W h V K m L be B l o l d f N h f x D o j x m M d D x j N j t h O B m D k C L x D o r U Q r b E d L X P b G Q r bn R S S e o M j R d v h y c C Q f c E T v o R U a B Q F B m g C V f U r S x a M z R S T E D j b r a F R b d h e N F C m y o w x O W N h b j X t e N Y f Z Q l ba R L c h X V g bh r c R b Q D c z D h y a D H y Q ba g Z o k f r M S -1 o M s bb o C v K S h k V f h y e r c bQ g F J p B R X E o bc b s Z W L F bd E U H Y x bf R t J d m bD S y C a z M H x q a L S A bc W V k d F F C s B N t E T b l bj H I T k O bi be I k R bL h Y l B k g bf be z bc f F J H o l n z X r bf C C m S X v bl bo I l J J p F F g h o R x r B be bg n N N S o F s o c n n h x v bg o R n v Z M t M k o e g be X bg o k C X g a C r L R e L u n o r J E f t c M l x J N N L ba Z M n n m bh e bh bk n X K m X q d f M S R P X bh i X v B a z b bh R X i -1.91 N R R U e bH N k v f B Y M o t K M Y N r q bi O h c v M M P bj K S y n s o z N r M u n r N E c L N y T j S n y z Z K y a E L c R S bk a bl f v r u L Q h M g B v b R b d R X R p bf l c r d W U bm F Y f F Z G G E L l y t s b X C f S y R o E m R a k j bd N u L j y s R f k m N Z l h k C t N E H k u O bf h r S C n R U M V r W d s P bm E d F D L o bk U c B h C bk o S ba ba h o D G k R w r ba c u B c C c d s F R o v J N k b bn bc j u R S l y F d bm v k J bK by bb g o o bm v y bj bd bf bl bc A bp bs Y bj bo L T W bp J bg w d bq bq Q Y M bg bF w f S p br R n E c h q K s Q bc R o b Z Y t b x j q N f Z br r bZ k r bA f K W r E o k g O r bw w o bs Z i bt N C b J m j L g W B E q f y O o u l K bm bc r L bi h a s h f f be N h h Z n v Q y n N j B N M V L L S s bi s r r T E v L N z v G C H k M T Q E Q E b Q Q C d H f bc d Z Y bc c f M e S q c w bm C X O s x R bo f X V s m x E l ba c h bI br bj Q w cl k ba l S W c l t o bx W H bd y bu bl l W be A be bd l r K be bb P A m W bb ba a be t c w g Q s N d d bC bE p bg f be bm n bi m bj ba bJ g t bG bf g bv Y w O w w Q bo bq k bR cj w L l bo d Y y bu N a a Q C f bd T K bf bf W u bP bm bd bv O g Y W bw br bf A m l m T u S w bY m f H R F k o u bt bm k w bd O J w Q a y Q bc W l y N o w n Z L ba bj C s J Q n w bS K bc ba bx be N C J bB O L N by Y S k bi bx K W -1 T W d f F bf L f o Q F Q bo K j E d K s bz d s w l bN d H ba O bv p q u H T bi bA g O w j m o s S bB g q bc J S g f p K bC br H M N bc O bi bD Y bf C bm I p N bV S bp bM I bm ce bm bE bF J t -1 f k f bB C R Q y M bm bG bv B n p X bH bB E d E c f v s s l b T bB J T M F y N v b m R r cf t k d Q r M E s E w S j S j c B bI bg m L L j K bp F G O bv bi bl W bf L bf bo bD G bJ bb bm g K s l be f T bz k n E t T F Z b bi bd O H bo y g d bm Z bw h bg C K J Z Q bw W G bd ba p bx u q f bj G bq br bK cn bX bH bW bL d d bC bC bM w J C bN bO bf bF q O q Z bx br F bl bj bm E bt bt J by bB bp p bB bH bD bA bm bt Z T G bv bj G H bo bI bl Q b bv I bl K cv bO bB bi bm A bc bP T H bj f u w bp bd bg H g l bH -1 ca bQ bA bR bt bS -1 bm bG bD bw bA bT Y w -1 E cm q ch F bT bj bf bc bl Z bI G bB T -1 bl cc ci bU w O w p bf bH cb cG bJ bG J G f bd bx p bo m I bc bx j J bi J M T s k s Z bc bR W bt u bv T bt bg be bt bK s bx bp bu bw q bC F G v q a bF d m k H bE bv bF bF bi J bj g bg bV bl H -1 bm W br C r Z Z J K bn bs bl O ba bB bD bv p Z bp bf bt T Z W bB bE bt bB -1 bl A br H bB L k bs bg G I bs bW bG bp bf K D u bz s r g d T k bo b S br Z O q G g H bg u G bz bo bG bJ I Q bo bX bw bY by u d bS cx br bw bc bi bt bJ bD Z bl d bj g k K bp bx u J y C M k d bl M q H Y bd H K t br bp T b p ba cg W G E J L bY ba bA A J g bu bH bx d bQ bW bP bP bI bl bZ bK bx bE G bl p G bq ba y bf bw bu bS bg m bc s k q bD p q K bp bi E m L E l g s p W y r m N M L Z h t t v F k M y w C S t r bf q j r L m j R k O b K br B E n V C Q S S M bc k v E d c F J T bf B F l bm o Y k bz I bc p s O Q n s F u S Z y n C U r t F L N bq C Y y v E f Y K N bc bd f be f C K s O bX k Y ca p m T k bL W bo d H G I bb A cd E O br bo bE cb A q L bn cc bm bq bU I bz bW bB Y bw cw bG bV bF bK cd bx T bP ce cf cs bT bp W bU by bP bJ bW bz A bj bm l J A s t M f n X T E bl S M l u be v bj bc l F bw g bd bo p bc bs bV T bz bn T Z t J bD bN bZ bw Z cg bb bV bg bg bz cP bV bS s bW I bK bF cz ck ch bA bN bj bI -1 df dd da bV J bV cc cE O bd co cr bt I bs bL bU bj br ba bJ be I bd T A N bz bt bB ca bS cJ O ba I K bo bi I m bu A bl bw q H J q F bf ba F H bb bt cg cy cd bA bU bi K bl bv bo bX bH bJ bX bP bl cd ci bi cj bm ck bi ce cl ct bX bg G y p bt bj Q bj cl bb w bq bg ba s bD L Z bq bz l -1 bu bj bp Q K ba bw bH J bc W bD Z J J Z w u w l bt d cc m bA bg bX q bw w p N M l bc f F bz E E G bc w bc m q bf K bi bT bL bg bP bS bq bK T bu Z bw k bo K Y bl p y bw br cm bH -1 cd bN bI bS cD bi cR bO cC cq cH I ck cp bm bv bP bb J bx be q bq bZ cg I cn bq be G w bP G Z bw bS bp q bA bU br ba bG bG cg f by ba bg bd bx bd Z k bd Y q co bo bU bJ bI bv bA bB co -1 I bn ca bG bJ bq cc br cc bH bB bi J bE bK bz bd H I K bl bj l p g Q u l f bg Q f bm O br A g bA J bI bP br T bD bb bq p bj q bS cf bp bL bG m d bP bw bw be Q bj K bj ce bb bQ -1 W bp bw by bW by bi bD bX cp A H cq bJ co be cq co bV by bd bq ce bZ bU bz bn bt bq bm bK bV bO bd bA cu bW bD cb W E N ba S s w L p I bg bi bx G F bg G p E bb bA cl bz K I J bw ba bc bt bq bl Z I J T bW -1 u J br bP bd bP bc bV K bq bg ce bB br y bc Y bF p bA bJ bl bp bl I bl bo bi bs bu bN bd H co u bB bG bn cB bR cr cQ br bn q I A I bu bL d br I cd u bU bz A bV cn bs bj p bx bu cs bj bl bj bJ -1 bY -1 bY be bl q T by bm bF W bt p T ba I bn W w u bB bR I bH p bg bj J G Z G bj by p bq g p K -1 bR cg bQ bS bD bI bu ce bb ct bT cg bS bC cu cF bF A bW bQ cf cX bF bB cv cl cw dl cx bn bw bu bs cc bt bG cV cy cO bF cm cq cA cz cA bS cK bO bK cB cC cD dj bG cv p r bd cE bR bp bP I bZ bz bi cF br co bw bs bq bS bj bv bp bR cB cs bz T bA cg cb bI by bJ cG cd cB cf cE cu cH cD do cI bT ce bS A be bP bI bK bC ce bx bJ bv bX G cd cl bx cC bb cl cx dh bF bG bp bV ct bB bw co bm bE bF bH bF bK bB by bA bq bx ca bd ch bx bm bz -1 bP K bd bG bz bS ba cb by bj q bx bB bF bs bw bR bN by by cM cE bR bd p bL cc bE bG g bR O bt w A d Y bx bK bd bj bb cs bx bU u G bb by bY A bi A K bm bw bv bU by dp bM bE bK bK bg bB bp bb bo cf cI db cL cj ce bF bD cj bB bE bb bt I bI bi bX bp bP bv bs bH bi bt bG bJ bB H bd Q bz G F bF W bm bq H bo bg bf bj I bI I bo bq bl cg bD bv w bd bu bz bO bf bj bG bs w bu J bp g bq bz -1 bs cv bx bE bi bP be l bm A bJ bx bI p bV p bm bY bB bG bl G bE bD A bB bo bp bq bu -1 T O W T u K be q Y bx C Q bu bt bW bU bv bt bs -1 bj cm -1 bF ck bV bG bK bm bC bE -1 bU bt br A bW -1 bl cc bn bV bs bS bX bN bM ce bm bP cJ bQ bv bM bz cv bN ce cK dC bG bR dk cN cL cU ct bS dB bU bt bF cc bC cp cl bx ba A cM bo q cN ce cO cc bT -1 cS cN bX bZ ce bF cM bY q ct by bP cP by cO cn cg bA cH bL by cd cl de bn bT J bG ce bw cb bD p T br n W J by bE bD bj bN bJ bR bb bV cK bn bv bW bn bZ J ck bY I bb bq bs bj cl bK bI bt -1 bi A T bB bj K bb cd cK be bC cc bB cH bi bQ bR O bp bE w bF bd Y bj Z k k bw q q bP bv bI bP bb bo bj p p bo bt bj bG cd cv Z bl p J bo bz bb bz bG A br bs bA l bq ce bK bq G bW bF cH dc cB bV bR bW cE cF bR bn W bD bm bB d bg u d W bb bz cs cf w bS cT bF cY bT bx ca cW bA cv bD bS bS cb dw cz ds cg cQ bv bZ bS bC ck cf bz bT dv cR cI cw cQ dH bw cf cS dt cT cv dM cJ cU cV cf cB cr bS bG cW bK by bE bK bd cl -1 by cq ct I cc cF bn ci cJ T bT bO bL cD cJ cZ bO cX cY bJ cZ ch cX cH cf bQ ch dg cO da bo bg bL bj G bv bS cw bI bJ bQ dn bt cN cc cz cn cw cN cZ dr db dG cM di cd cx bz ce bp cd dy cJ bM bZ dc dd cd bG bQ bQ cR bz cK bF bl bT bR bp br bF cQ bb bq bf cr bO cD cD -1 bU dA du dm dq bb bA bD bv T bK cp cB de bz bA bv bY bf cm bQ by cv dd cY bC cx df cB dd cg bB bU k bC bx bP bI bG H G bb I bT dd bs bJ bI bH bt cE bH bL T I bF bo -1 bO cE cD dd bN ca bI cd cB cg cd bK cF cy co bV bM co bM cj bN bQ bN bT bU ck cC bF bI -1 bj bf bX -1 bM bb bY cb cR G bL de bp bX dg cH bQ bX bP cN bP cq bD bR bC ct by cn bV br bw dh bQ bB bU bb bB cs cc cj cO bp bQ bY bs bA bs cN cm bK cM cA cv bu ct ch bx bX bH bM bH bP bE bo bS bW bW bs cl bu bM bH cr cc cV bB cl p cs bv cg cN bv cd ct bN cK cc be cB bP bt q bM bj bw bX K bX t S bt bI cB bU di cb bD bg bX bQ cl cf bC bX bt co p cI l bM bV bP J bS bb N bm bI bv bM bA w M bZ Q bq bq dd bC bL cB be C bp cV bu l bD bD A dj ci cq ck ba cG bA G bI bM cC bG bz bG cc H bj bo y bD bu br bH bY be co cE ck bi bw l Z bG bP bC bU cg bD bf bj bf bm bo E br K L bP w bc bg bc p T bf Z bl T bm bE J bm bq bB bE bE bA bc bz br ba bA bW bj cM p bE bn bT bj bD bg bu bu bC bR be p be cx bP bU cH cH dE bC W cb bb bP bV bV ct cb cf cK cZ dk ct bZ bs dZ G bA cd cH bJ cc dl G K co bo cj bf A bt cY bK bq cc bg w bq bm g by M bb bD Y cY cz da bM bH by cO bS bN cB cX dd cG cd cJ ck bH bC bE bK ct bF bR bS by dK cb bz bx L K bH bp be f K A J T bW bE bv bi bs bY bZ bG bA de bq bt bU bF bN bq G cC cW cD cQ cQ dP ch bt bg bS cX bW ct bb by cY dh cU dR dm di w ce cI bR cM cg cV cb I bP dm I bE cF cB dk db bO bW ca cK ce bH bp be T cD cs bG I bU cE bd cK cz cY dn do cr bb cJ bY q bF cW ct cJ cc bA bH bT -1 ca dp bC bF dD dq dT ea dz cV cG cE dr cS ce u bK bL bA cB bq cF dj bC cv cN by bm bE bt bB cs cj cb cz dx bZ cx bb g bT bH da bL bM G bR cf cw bg ds cC cX bG be bG cD cK eG -1 dc cM cM dt dd ee cp dk dN ew cY du cr dv dw bG bH dh cQ f bl p bS ca dl cF bO db ct bj bB co cH cP ed cd cN bA bN cg bX cf cE bb cJ cD dh cy el cZ bz cK cK cy dx bb cY cV bC bO bO dd de bL dv cj dy cZ cE bd ce bL bI dz dU cc bX ck bd bf bX cd cW bH bB bg dA dd bn G bS cy bO br q l y bU cf cI bS db cX bW bb u dh cE F M Y cX cZ b G bI bI O bJ bd bp bs bF d cv bj I bL cs ct bL cE q bi ba bQ dj dm bX cY G dB I dB by cx cT ds bp bZ bS bi dd dQ cQ cY cG cb eh dh dw cE bq cx dv cy bC dO db ca dh bw cg ba dI bT cj ce cd dF dC en cy cu dJ cW bq cv cf ek bP dm bx bJ C r di cV de cS bW cz cd be cl cH cP dD ds T I cH cn bI bA bz f w bA bz l bm ba cr dV bn W e bd bb bS bC bS G cy cs I bw bR bQ bQ ct bV bi dE cc bN bR cp co bp bY bL cu bY bz cz co bN de cY bN cx cl cH cj cH bz bj ba bB cX cF bR bO E ch I cq a g p bf G u R E G bA bv G H bI bL by bu J cd bn cy bL cZ ca dA bD dF bH dG bH G p bT by ca bo cH E cJ Q cV bS bF O s bd O bL bY cR cE cx bt bH cB bd bN bE dd bv ct cE ce cJ df cM cT bt bR w cq bS bR G bA cg di di bQ ci dE cu dH cQ dI A ei l bc bt A bq bu bB ch b cF v bE cs bx bS bG cZ cB bo bw bI cV bK d N bv N u bf br q bf bf J bc s q E E bL bv I bC B bx bG by bG bF cN cm q ck w bH ct w F bw cb bK bj bV bG K bS ce bT K bb bj bf cd bl bE Z bw cF dJ bJ ca bZ bt cy cO 0 bV bA bS bV ch q bM q u bu W dA bu cc bS bH de cF co bC bV bM dK cR ce cs do bZ bi cB dL bV cN dL db cZ cg dh bE bC bo by bK bG bv bZ Y cB bM I p bI cY bm cG cn ch bY dy bS dH bb dm q cV cC ci dE dM cd dN cC bj bQ cl dn cc dw dG bD dm cp cl dl bB bE dG db dJ dv cu cR dc cZ dA ck bN bZ dB bN dx cJ cQ bL dA bg cM bn cO cZ cG cY cg dx ch bN dO bq cI bS dv bJ er bW bG ce ce bp dK cc cV cC dA cC dS W bE cm ca cI cJ et dP ci dm cR cr cX dG ec bJ dQ dL G dH bY dM ci cA ck cD bN cZ ct cr cQ -1 bn bM bR bQ bI bJ dh bI dh cD cs ce cI dA dp cI ci cv cj cr cR dR cE de de cN ci da cj de cw cs cF bb bK cY ct cj cW cZ bO cq br bP bw bo cV J ch bI bR cW bV bR cI bT dW cH cJ bJ cN bv bs cZ G bR cE cy cg bI cs ce cx dy dP dB dh cR bv bi bg bY bf bx by dH bT bJ cb bg bz bL dd cg cr bR bg cg cF ck cq cX bb d bn ce bb A bf cg d G ba bb bO bi cn de cZ bV I bK bR co cH bV bb bX cq dl dt dC dA cE cK df dS cu cV dK cJ bQ bC dR do cu dn ch co ct cD cx ci di cC bb dT cX cx bD dX cu cJ cp cz cP dI cC dU dw dY cU db cf ct de dl cC bn F de bj dd cl ca bn ca cP dT bb dV cu cr bO bp cY cf cf ca dT cx cN cy cm bb cK bC dr da cs cF cX by cc ca cA cn bd bp be n cy A w co bX bS cZ bx cf bQ dE bL bY bK cN bF bv bO cq ca bC bO W bz bK bI cm de ca bY cx bX bE cN bX cz do bM cJ u bj bJ W bG bC bq bA br bX G ce bI bd bL t -1 ca bn bR dv bd dw bw cR cg cZ df cO cK ch bP dp by bw S bu bw cH cd bb cl cc cO bH dr k ct bM bP bX bI bn T bx -1 cX bU bG bI bu cA cc ct cN bC ba cK bT dB dj cn bX cc cm bX cR ct cr cd cK dd cq bJ dk cv cO dm db cr bq bZ ct db cf dl cs dk dc bO bn cK dd cC cH bd bu dW bU bs cu cZ dc dK dX dc cE cF bR bI br bD bU cc cu q bX bZ cW cQ cd d bg bi bX cH cK bB cd cx bW bW cd bT ca bX bG bl cB bu cc cK cP cz cF cb cu cZ by bZ bi W p bR bG cX dg cM cw br bp q ck cD cf bG bt bj bt cz bC bA cy co cd cE dm bE bQ dN cw cP ds cV cy cF do bQ dl bX cB cd cO cp ce bA bX bF ck cv db bV G ca cF cc bx bS bJ bU cP bQ bN dB cI dG dd dm ck bK bQ cX bO cq dh cK bW ci bl bM bG bq cB bf bA bK bt bl bv cC cy cF bC cB bS cP bB cg p cH cl cc cc df cd cr bR bK -1 bO bP bL cf ck co cG cN ch bV cz cQ cV bW cq cu cd bT bR cd cp ci bC bZ bB bv bQ bD bL bu bA bB be bw cg cH cv Z bA bD bH dP bM bC cg bG bX bx bX be bX bR bR cz di cN bn cH bQ bZ bG bI ct bu bS bp ba bF bZ bp bX ce cr cf em cc ex ce cD bZ bM bJ bl co bI cW bd bA bn dm dR cD ch dE G dR bG cH 0 bX df bO dc cS dR cn cK dN dY cN dd bT dr eb dm ck bz de bQ bA dy cz cJ ct dw dZ ca cZ cC q db ch cN cR cA ea cN cf bX bP bI cg bH cI de bZ cN bM br ck ce dp dk bU ds cq cF bW cb bj dd cK cv bT A bm cV do cK cy by cu ef bD dc dp cF cn bT bQ cz cD bT -1 bO bN bS bK cd G cq bY cg bL bE cf cv cb cK cX cl cp cp cm dn cN cQ cN cn cq ci db dC cy cJ cr cp 0 ct dT cT cw cJ bT cH cX dC cf dE eL cu da dJ dC dm dy dx ck cv cq dJ eD dG cp dM bS cZ de bJ cq cZ ci cW dO df cy bs dR cw bH bu bq ev dK eb ec dG bx cc G db bS dX eb eo fE cy dw cf de dV cL dM ec dB ed ej dL bM cM cP cg dC cb cg es ca cs bF ck G cH bM cw di dg eg dR dC cN bZ bn cJ ee cU ds ef db dA ck di cB cj cJ ck cE dm 0 cr dH cg eu cu cg cm eg ed db cZ cN -1 cH dL ct dV ck ec db cJ dT eY cA ee cP eS dD dN cn dA cA cr eU ea eh cV cC cj cO cS bS cc cf df ed fh ei dA dT dx ce bX bS dK ce dZ bN df dw cL cl cw dw ed cY cS dT ej ee ch dm cQ cB cR cN bI bo cY bN cE bJ bA bH cP dm cz cu dm ds dk cj bO cS cA ep dy dm ek cO dh dH cW by cs cn cg bw cI eN cW cC cQ cJ bM cQ cr de bt cQ bJ bC cM el bC dN bQ bm bw bX cZ cB cu bB bv bY bV cy bZ cJ ba d cA de cr bp bZ cZ dw ch em eQ dB cC dt dx eg eW fz eq en fa dx eA bR cb di bB cc cI dk ek dw el dy ee di cs bY ck de bW dB ds dR bW cJ dw dP cx bQ ce bU cf cn cn dv cY ed ds cj cf cI bz cX bP cQ cH dn cF cE bu dK dq dh db bK A dZ ck cX cM dp da cz 0 dH bO dC ca q bQ cb by bK cj co ck bI bt bD bB bT ds cf ce dc bO cv bZ cE bN cD dm bz dd de dr ec cA cL dB cS dA cy cV ei dq eb dS dM da bK bI cV bM dq cO eb dk dz bT cg bn bg bP be cT be p cx ck bJ bt bC G bT bd A bH W bX bg bR bx bR cN cD cv bM bW bD df ck d cV bT cj cB bQ cQ ca cs cZ cx cH cX cP cx cj bJ ce ct cG cp ec dK dm ci cJ cJ cR cf cl cJ bM -1 cY cX bZ cb cd cJ dh da cv cn cq cm bn cz bR cS dH dX cC cU cI cV bK cm cr bN co cJ ec cJ db cj dw cC cS cQ dZ df cL cb ca cM dj cb cM bM cr de cf df bX bw cY dI ca -1 bV dG bN cJ bD C bn cP bN bi bR cz bW bX cb dh bI cg bn bT ez ee ec dl cr bN dZ dw dC dw cX dl cN dp ce ck bG co by cj bV bs bG bH bB bR de cx bs bD dK cz bO cM cj cj cd bV u bD cj cz ct cR bI bG bD cd bR cz cF cF cb bD cV cM dm cv di bY bS ce cj bB cK cv cM cu cR dR dn bz cd cB de I bf bF bY dX dl dj dd bM da bL bP db bg bb do bW bZ cQ cq ca dd -1 cV cW bY em cC co I m bY cB bd bm M bJ bz bs bw bH bv bV bV -1 t A bI O bt bw cn cN cb cv cu cc bP bV ck bl bG be bR bj bL de cy bW bI bS I bi J bC co bB bU ba cf cm ct cM bW cf bs bF cB bF cj bX ed ej dI db ef cT dd da cO cA cE bl bU ck cR eh eo em eB dJ cR de bD J bW ch cm dw dX cX co dk cG cW dU dp dZ do cA cg q bH cb dT cx cD cz cX eM dZ dr bO bJ W cW bN cd cZ cE cj dl cq ct cV cA dp em dC dG ds dD dN bM cJ bO dE cT ca cV bU dp bI cW cz cQ bE ds db cv db do eh cV cu bV dh cn bi w bY bo bB bU bK cp bn bZ cv br bL -1 ck di cH co bD bH bV W bG bl cQ dd bD cE bK cN co bv bu I cR bd ce bF de dr cJ cu cN cy bM dE cH dT cE cE cO ds cZ cb bJ cK bI bA bW cH cr ck bM bO co bI cX dd cb bO cx cd bI dh cJ ck ca ci cY dP cy cF bs cZ dI bN ci cJ bn bJ bS bP bv bD bE cg bW cR bZ cy cJ ch bU bt co cP bU bR cJ dA cz cQ cJ bD bQ cV cX bC bS bL cm cN dA dL cW ck bY bw co df cl bg bG bJ cu bC cA bD cB bv ct cN cR bG bs du bt ep cU cq cY cm cB bE cd cq cd cf dn cf df cr cZ bI cj bv bO cb bL dy bW cF cF cv bZ bT bC bZ bw cM cu cp cx bL cR bX cM ci cx cz dp dZ cn cb cd bI cc cN dl cM bO cw cm cY dG dB bl di dK bW dl cH bO bQ cE bV cn dc bS ds dZ dP dC eo ec dv ca q cu dd bQ bQ cy cH cV cb df cw dl dl cz dw dT cV ea df df cn bL ck cV bq bW O dS cQ dl 0 bq bD cH df cA cX di bG cV K cO bO bK bF -1 cK dw cD cu cX el dj cY cj cf dN em bK bx cG bA bN dE dk cZ cq ci ch ci cV cR bs cR bS cj cf dh dm bi bG cc O bw bD G co bF bY cg cv cH cf bB bK cs cv bw cD dm da bG bv bV bD I dD br cS bg bE bw bz bi bG cB dh bU cC ct cQ ca dc ds bG bC cl cb cJ cd ec cq cg df cv dM cf bg bV cF bS bn cI cx eE ce dH dB cJ bu bx cF cM bu A o dd dm cf bF bV cy G bY ck bz bF K bN bA cg dl ey dW cY ds cv bn dA cR cl bR bH cE cM cr dZ cC dk dl cE bO cV dT dj eq ci er es dr cN dG db dB cm bG bd bI dd cd dN dj dE cP cq bt bn by br cI bM ce do et dE bQ cA dR cB cd da cn cD bC O bV ct bV co bL bT cI bF bu bV bS bq -1 bE bR bY bZ I cP cs cP cR bD cf bS co bM bJ by cb bK cu bY dh cF do dx dd cf cq cY cg cm bV cK bb cy bu dE df bF bx bI cE cJ dZ ct cH dh eP cV ed dM bW cC cp cB ds dN bM ck bP dd ca bZ cK bV dh cF bF dt bX bZ dC cN dG ce bP bM bc cs cm bQ dd bY cA du di bF dC dt bZ dr bl C dh J T cs dA bM cw bZ cB cC dq cB cP cL dP cc cC cy cq bq cB eu dw cY cp dH cz cm ch ev cV cz cp cl di da di dN cD ca cy bD cd ck cy dd dd bE eh cp bN cY bg cY cR co ct bO ci ce cE dF dq dk cZ dc es cU cg dH dT da dc cP dw dl dT dh cv ce bT cw bZ dl cr cM do cD bF cD cM cY bl bN G cs ed ds bD cp do ck cC de dr bB ck cg bO cl ch -1 cK bY cj dm cD cx s cV bv d bz p bT bJ bU bF ct cy br bD bZ bq bj bA by bi bH cs db cd cb bJ cV bJ bZ cq by dx ba cs ch cc bJ -1 bI bF cj bM de bi dm bb cO bN cq cr cq cb cS cQ bT cb cN bt bD bA bY K co cp cY ca cm de cZ dH bH cu bN bS db cB cb bC cq cc bN cn bH do bD cb ba I cl -1 bM bL dw di cX cl bT cs cQ df dc dh cT cH cG dp cI cC dm cq dx cX cF dC dN 0 dq dv dl di de dT cA bp bY cj cx cb cx cl bq -1 bf cx bn bm bz bH bA bu bR bV bX cv bz bq Y br b q bs br bK d Z bu bJ bD I bZ J cd bj bA bl w bD bp bl co be bP bC Y bR cg bq cm y cb bF bC bF bz bm cm de cJ bv F bA K I Z bD y bb d cH d bP bs by bG bX q I bD bv br u bl F p bR bP bf bJ bV cF cv bs de bA bn bH W ch cn cv cq bL bY cH cZ cx ec ch dr dd cR bv dU cO ce cj cO ck bR bV cQ el cg co by bY cM cN ed cs cm cc bD cq cU dg cx cm bX cH de dN cL es ew dR cs bA dj ex eZ dB dl dN cQ cd ch dI dh cr eb cE cK bO cB co bM bW cx cc cA dy dR cw do bX ch bp dC ct cW bo bT dE cv K g bf E bl Q bS bj bY bU cm bd co ds bK ci bW ch cC do cm cJ cR cm ce bg dm bT bz bL cP dF cE dv cD cg cu cd cf bY cY bC cF cz cf bX dm cr bB co cb cs bN cb bj cE cn bZ cs bZ ci cl bt cJ cX ct -1 cw cz bN bN cm bR bD cz cE cR bV p bD bO bQ dm cB cP dp bR cH cy cF cV cv cw cu p bR cm cl cz cn bi bO cP cq bl bn cj cn cg bA bn bi bi bX bW bg O bS dc bN bO bV cF cO cl bU cY cg co bN df di cQ bP cd bJ cK cf bN ci cx bO cl cH dH cM bv bJ cR cq bp cX bo cB bw co cB cB bA bS cB bx bq bj bG bn C s br bY bL by K bE cy co cM dh cB bb cs bP bx cl cB cE di cO cx ck cg bt bN do de ec bH bi cn cR bs cl bq bn bW bI cS cb db bY cX dT df cX dE bz dt cd ci dc ca cL cT cm bC cH bF bx bQ cx -1 bE dh ce bZ bM cq bG cl bS dN bS bb bI dc bx bW w I dH cg cM bW cy cF bJ by cy cv cP cc co cw cM cc cy bM cy dm bR bv I bW cc A A cp co bt cX bF bF bX bR cr cd bN bw bZ bU bV cY bn bK cc bV cF bN bN bD bj ca dm bn dZ cF cq bL dd cl ci co bK bV bX cB bz bS cl bJ em bV bZ bK bs cZ -1 bB ck cy cM cN di dk bU cY cq cy cO do -1 cD cE dP cb da cG cA ey dy cn bD dE dC el ew T bC dl bH cF dl do bT bW cE de cU cs ca dJ cj cN bq cm bK db cx dB bT dc cH dl dE dY cw cN cw bJ ca cf bQ cA cN cf cB bQ bR bO bM bK bq bn bR -1 bX cq bB I cc cm w -1 cm ck bT dT dZ di dB dN cK cn bQ cm cL cX cR ed bM cW cQ bM dy cv bp cf bC by cv cZ bz bs cz cq bK cy cZ cb bX cg dc cR dA bZ cf ch cG cO cS dK cM cd cQ cs dl dE bQ bS bX cN bV cb cN cB cK dm cq cB cz cH q cp cY bT cY cc cR cS dv cu ez dl cS cj dD cj du cZ cQ bZ cD co by do bV di dh eC bt bO cU cw cY cw ee dB cV dX df cQ cQ bN bs ca dJ du cj cz cl cm cP 0 cX cp ca cP cS bK cD cW cG ce dJ eg di cw dG eA di dd bD bQ bs bU bG cI da cy cJ bY ch bq bK cC cv bl dn cY dl cf dw bV cx cF cG dX ch dH ef do dN cP dK dA df cd dA dO dl ev ej eB dJ eq dU er el cj cq bF bs bC bD bW cB cV cG ct bI bj G p A cd bq bN cM cf cQ bE dE dA cp bP eB ds dD dK ct cM cv bb bB bV bE dJ bA dn cp cc ct cY cO bV bZ cE bG bN ba bx dd bp cc co bT bX bE dP bX cE cl dA dl cY cf cJ bU cl cN cH ck cY da dm cB cG dX cW er br cm bY cf cX bC cF cq bJ q l bp Z l bs ba cH J ca Y co s bC ck bO bP bZ cr cD bq cf cG cF bq cw bX bv bY cq bs db I cs co cF bv ck dk bH bM bs bS cb dz bE cQ bO di ca cv cA cs Y bW ca cS cN cN dw es cG dN bx ca cV bF cu cx cY cw bO dM bO da dM dL dA dG dC eh cI dj cA bL cl cP ct bw cg bf co cY cP cG cQ cQ cF bn G cp bd bP bt bg p bG p bN bW I Z bg Z bW cs cn cF dM cd de cN bm A ba A bW bc Z bC bG bZ br bE bq bb br bK bs bT cZ cX cd bM bC cg cd bI cy cv co ch cN db ch bL cN cj de dP ed cV bN cB cO bl bG cv df cY cL cZ cQ cD cO co cr cu cV bq A bw bi bt I K bZ bd dn de cw bt bM cc co w bg bW bd A bl q p bJ l ba bc bF bM bP v W Y bq m be G bA bb X L x cd Q be by cg cN bo cN bU bx bK dw bt cx bN ce da cM cR eA cQ dp cc cu db G de cY co cV cJ cD ci ds br cj ct di cO dR cX ds cu bN cx A dZ cX bC cE G r q cg bW cJ bt K bF ba bq cE bj ck bo bT bp bQ T bC C bm bM co p bC u cq bx bU bE bd bE -1 cZ bS bl by bM bG by cZ g ct bt A bJ q ba ck bp bR cR dl cq bB dm do cP bK cD bL bO cq de bL L o bW bQ cP bz bP bZ bW cv br bG H bR H cN Y bV h bF b bt bn ch cS cP bZ da dA bU ch g T cy bg bt dd bc cB bt cS cI dG bn cE et es cV bN bi bu bG bG cy cO dk cp co cY cA cT cp bH -1 ds cq cf bB be bz bc cl cN cd bz by bB ck bM bU bG bH cm cq bQ bT bR bn bG bM bu W bY ch ci dE bo bZ cK dd cp cx cR dd cH -1 bi bR cy co bQ bY cr cw cC dE bQ cv cR -1 cC dZ cx ck cZ cw dd cK df cI dn cP dp cm cn cq bT cs bM cu ee bb bb cn bI ch bQ bV cb dp bY bz bA bu cA bb cM dc cR cY dc cD cG dk el 0 eh cl bw bb cV dd cz di cj bI dm dv dd et da ch cx bK cF I ck cl dy dy eC ee cX bz w bJ dp ds cM cz cJ bL bs ec bx cD cN da bF em cP cP bv bR cW cy cF bH dd bJ cn ce cA cq bQ do cy cn cz cA cH cV co cu cc -1 cJ ce dA bX bS bb cd cD ch bK cv bp cQ cZ dR bH cO dp dk bI cY dt ck bR cW cF bb dE bI bb df cm cC cs dl cz cN cj G cx A de cG cE cW p bl cn cS dt cB dp bW p cC cn cg bl bP ca bF bt cl -1 -1 cB bt cx bO bE bR bV bM bx bS w cB dl cp dp dj dN cp bU dc cp bP I bo bq bC bL cv cD ce bF ce by br bW cY bt dN bZ ci cz cP cy cc cK cv cr dr ct cH cN ch cm cR cv cP ed dJ ck co cx cO dh ds dZ cd bP dT cc A cJ bG cY cn cM bH cd cr ds dC cg dN cr dN cO dd dJ dr cR cf ch by -1 cq dh cr ch cu ch cP dd bL cx co dR dn dJ cr cz dE bR cl dj dZ bb bu be cJ bQ ec cV fg dd dv cS dE cW dq ca ci dx cK bT ci cj dD bW ct bR cZ dF cm bM bt cr dr cb dh do ce dO cP S bA bZ cz es dz bU ce cy cQ ck cO cX bU ci cQ bV cK cP dj dG cj cy l ca dy cI da cf bP bN ch cv bJ dP ef bt cB dg cD cN cd dp dc bH cP bS cH ec dH dm cx cX dh cp ca dH bO bU cd cQ bK cF df ce cP dh df dy cY bN bO cP ck bD cD do cQ cE cN cn cA dE bm bF cq dF cf cl ba bx cR cC bW bz q bA de bo bA dx cy cd cu cc dk bs bn dj cK dA ez bb bN cx dE dm cg cq ck bv co ck bp W 0 cy bH cX cW ch cQ cY cl bC bi bP cO cZ bz dh ct bZ cJ co bx co cE bC cX dZ cN cJ bY bM cA cL cs dX dw ey bL bW cx cJ cl co bf bw bA bW dy cX cv dm dJ cD bI bV by dB ew cV cG cL dB df cd ck bq bP cK cC bB cC ci cJ dC dA cM bY bZ dh bV cz bV cY dY cC dJ cn eh bU cd cb cs ck cs cv cx di cE cl cr bO bD cm cW dp cu cW ch cz bu cn dc cq cb bU cE dX bT cb cQ bM cK di bI es bI cJ ca bE bG bA bz bp u F w bB K bt bK bm bm bm A G bF bX bY bT cB bC cH bD bT bR bK bo cO cf cq bV bK cu dJ cx db bT -1 cN bB dh cb cz ch co cY bQ dl cN dh cJ cv cF cj cX cQ cu dh cx bD de bb cR cW cm cG cA bX bD bR bG bB cX I co cA bM ed cF bS bI bK dJ bC bU cD db bF bd I ck bn cK bw cK dn dd bp Y bB cd bE bE bQ bW bS bo cf bJ ce dw bU cy cC bv cY bN cw cx bQ ck bl bw Q bb bA bG be E H ct Q cq bV ba bS bF bS be bl J bN bB cO cO bt bY K bq bf bx p br cc cI bD ca ds co bN cw dz bC cx bu cD bL bQ bY cW cj df dt cm cz dl cN cI cC -1 ch cr cf cT bS cF bv bH F -1 dm bX cA cD bO da df cz ev cr eD bM cb dJ bN bz cj cK cb dl cP dv cO ck bA bt dh bg bd u bv bv H bC bt cH cQ cK dh ee dm bq bB bf bd cN cI eu cG ed cj cs dh dh cG cV cP cn cf bJ bG bz dZ cM bT bM cn cX bQ cx bX cn ed dp cl bA db bg bw cY bW cy cl cv cE bt cJ cX bs bS de dv dd cw bM cE cB cK cZ da dh bG cd cw cg cc cH cC dk cY ck bQ cd cd cx cg ck bJ ct cE cr cf bC bJ bY cN dv bQ dH cV dz bY dt ct er cv db bx bj cB ch dA bT dU dJ ey dj es cq bS cq bv cm cf dp da dl eJ dv cE cq cW bN bQ cl dE dt db eC bC cy ch cw cq bX by cP cp bA bL cE bD cX cH cZ cC bI ct bA cq cz bC ca de A bA bl do cv dc cF dK ct cJ dp dh eo ei cO ed ce dv cZ cH bL bN ce bI cm cd cU cx bO dJ bQ q cK ee ec cV cY bJ cN de cB ci cv cG cz dS dW dP cA cW cE dc dM cg dM cG dx ej bY cm dC ej cJ dd dE dX cO dG dA es cr bU cw cG bZ dB cG ee bM bK dr dc ch cI cZ cg dE cF es dw ch bY cp dR ch cX cT bQ cQ dw cC bG cZ cx bV cY cL dp dp ca dh cO bx cX cK cE bY cb co dd cB dc dl cu cH cr bv bU cu bv cS cI bn cy cx cn cY cn cA eT dT ds cX dW cS cf co dG bQ bO bQ cp cm -1 bX cR cc cd by bY bP T bH be bv cN T cs do cC bw dT bL cB bY de cM dJ ch dF dc bL dA dj dk eE eF dt eC el ep ea eF 0 dz ew eH eD eA eK ef dz dY dn dt cL eG fb eq eV dt db eh cA bX co cl cf ct bb cr cD dr cr db dm ds bR cY cF ec dw dC dh dw dT dn cV dB G cf cH bX bu bU bn bF bJ bT cF dK bB db cE bT bX bF bH bE bO cP bb cp bK eA ch dh bS bv bc bl p cX bZ dE ci bt cF bF be bP bX bI cD bo dm dP el cu dV cm cM du cC cN cP cV cX de dC dj ch bX cg cv cn bG bT cl cS cz bR cK cs cf bR cZ bB cA bM dR cQ cu cm cP dn cd cb cq cV bf cf cR dp cX cX dM dg dE dw dT cf cF cV cn cs bq cB dp dP eE dR dn bM cl ce cQ cI dJ eD cT eE eH dL dE do dB dL dU dN ea dT dE ci cH cW dl ci cW cT ek cO bQ cr cb dw ec cb bF cB cD dm cn cO ec cD bw cP bn da dc cr cm ch cz cq cq cv eg ed er ee eX fo eF dV db dP cS eF db cD cV cF dC ch dc dR cE bn cc dd bY bj cD bO dJ dB bU fF dO eO eE eu eI eq ea eh eq eq 0 eR cD dv cp cz cB dB dC dd dA cM dj cT ey dh cM dX cS ei ev dG dX dB eI el dD ci do fi cO cj dt ev em eJ dp cA eK em cL 0 dh dV ct eG dh ce cP cr cB cX bN cF dG di cV dT dA dT cL ch dK dp dR de bD ch cQ -1 cl cc bb cY cQ dw bb bT db cn cO dp cV cF db ch bM cB bN cs ct cQ -1 bu cE cw bY cQ cV cq cm ch cy cI cC cp dp db bG dd ce bT cg cZ cs ej cq dR dv cG ea eI cx cP cA er cD dz cK dV dE dR dp cp dr dE cb eB cU dH eJ bQ dV eC ci di ei dU cO dX dv cZ dR cP dK cd cI cW ei ch bY dp dJ dn cV cb co bu bX bK cB cw cU db di bU du cN cC dE bZ dg da ec ds 0 dJ cX cn cY dE cH cG ce dl cR dM cv cn cD dR cV dA dB dc dk cI cK cO cy ck dr cw dG dT ch dN dd dC cQ dq cr dH br dA ch dm eo bN dr bA cF ci bA q cC cG cO do dS dj cG ed cc bs da cr dC dp dJ bH dZ eL ep dT dD dg cH ec dc dj cA eM da dG di eM dH cp cI dn cs da ct du da do bO cN cP dq cr dC cF cR cm dA cT dX da cT ct ct cs cs dm cH dw cr cf bn bf cq bA cy co bO ct fe bD cQ dM dz cI dA cX cS cS eg ci ev dw dC cc dV 0 eb dF dn dU ey dL dW eo cZ cx bv dH dn cD bf cD dc bO dd cN cn cn do cV cm cv cs bs bI bT cw ce bq cq ec dp cM cu db dn bJ cG ci cB dw bU cF cY de co da er cf cP bA bR -1 cp cY cQ eM cA cR dd cK dC bU bz db cx do cU bN cE cb bq bg G bg A s m br bu Y bF br by dE cN da da cz bz bx bz bu bH cE cW cP cS cN bU bb cv cH bl bc w A u bx bE bI cc cP bo bT I -1 cD bZ bP bx bt bx cG bM dZ cD cO dy cU ci dF cp dW cL dH cY dR cj cc do cG dH di cU dq eJ ek cF dK dm cc da q co dd bE cy bE cx dH cD bp bI cC cY dJ cY dh cL cR ea cB cN bb cG cI ee ck bD bS bw cl dh ed eN dx da dw 0 cC db bW cw cX dE cp dm bZ bU cw bu cj ce cs cJ cx br bD bt bs ck ct bb bo bP bV bp T O bw br bT ca cw cu cc dy bM cl cF bF cs ck cy cr ca bN de co dh dN eO eE bY eP cL dk cB ce dA cj ey dK bD cK cM dc ei cD dJ dY bM bY du dd cM dE -1 cE cX ci cY di cf dN dq cp cy cx cy bW bB cN dh cZ cV ec cF cf cp da cM cE dp cR cV dk dI cx dZ cR cQ da cR cu dy cW dB dy dq cn dR eA cB ej bL cz cb bM cI cM cb cM ca bw cT ej dl cJ bp da bb bP eu cV cw bt cl bO dA dL cy dF dB ct db cH ds cN cX di dh bS cY db cu cV ck ek eO eQ eL dF eu ci cK et dr eA 0 dW dA dI dv cA eR fc dX eB cC dG dn cY dP dJ ev fn dI fk dW da cL cm eG cJ ca cL db cK eB eb cP dP cX db em dt dh eu do ee dP es cD dV cs bA bH ct dZ cx dF dK dR ct bT cv cz cB dm cn el dK bW bV cE dl dA bJ bY dg cG dA dY eI dp dl fd 1 eS ev bD es dd di dP ep ep cR cQ cr dY dk dQ em em dR dy cW ev cI eQ dH dm cW bT ds di cm dX dU eT ez dF dx 1.24 db dX dM eU ej eE dz cD eb dC ep dq eN dt es cW dA dw er eV ec eg bD eU di dZ dL cs cN bS bB dT dm cv ed dl cu eI cT dX dj eb du di cU eW df 0 dd er eX ej eP eq eY ei dh cR es eC dP eZ cj dD er dY eI eJ do dR cJ fm fC eR ff ej fu eu em eh dG dK dn ee dP cw ep 0 dA dW cY eo dv dZ dJ cS dR dG dG dF dL dK em cU dU er ev dR es dY dA cS dD dA ee ea ey fq fa dj eB dP et dI dt dA cL ep dK dI dx dB dW dl eA dR eH dw fb dK 1.18 dx fA dG fc eN eq fb ex cM 0 dr es 0 cM ct cK db dJ ep ds fj do cL dg dY dO fd cP eB dP fs eL ew cr dq cL dY eP eF cr dF dT cL dV eq eH fp ev fw ev fl eD fe eT ff eT fg er dA cC bY bS dK dl dl dB fh dW cM db dg dC fi ek dH 0 dq ep eq el dP ec ey em dD eE dW cQ cE bC dR cJ eh el eq fj cY ek cs fk dU dF eY dj eq ee cH cu eh ed eq eZ dP fl fm eB dP ef eX ea em ef eE eB fy dO dg ex fn el eI cp dn eH fD cp eB cQ ei eC el dD eU ft 1.26 fo cw ej fx eH fB fv fr dk cU fp dM ea cP ec cU fq ey bX eE cY cS di ci cX di ch cA by G bI bJ bs dh dC dC cG ez fr eq ex el eb eE ds do ek dy dl dA ee eQ es eG dm cG dC em cs dw dX cL dy dU dX dz dH eA cp dA di cG ce cY ct cZ di dr dT dK cJ ey di dm cU cs dp cy cA dy dI cD dz ds ci dw ch dc dH da dr cP er dJ dd dm cA eq dH eh ed cq cf ek eU dT ck cZ dr cV ec cC dR cG dg cb dc dA eP dv dy fs dF cm dl ez ep eK ez dG eK eB 0.88 cY ft 0 eE fu dI fg ef ef eQ ep eH eh eE ep fv dZ dS eT cX eg dC cE dl bI cM dy dv eu dK cw eh ea eO dU 0 de cU cu dz 0 dI dq 0 cY eo dE dj cy cq dh cJ dE eB cM dq cR bN dJ dR da 0 dZ cO dI dv dC cW ci dP ep cr dg eL dY eF dX eS fs dN dj dN dy dc dX dn dG dG dv du dX cG dw dL dj er dL dG eG cT ei eO cS dc eq dG dE dC dM da cS ej dr dy eE eZ do ei cC dl cl cS dY eR eu fh ev dJ du es ez dp dU dW dY dk cY di dJ dD et eG ds dB cI de cL cr dm el do ew ey eb eA fh fw ee fx eJ eK eM ej eV cA cG eO eT dG 1.4 fh dM di dJ di eU eJ 0 cU dt eh dS em es eU dI dy fy eo dh dX cc fg dW ef dP dZ dW do cT cA cK eV dA dy dS es cu el eX ex ev dD ef ep dg ez cV dT eh cQ dp cZ dN cj bj cJ ce cD dm dv cW dR eC dK dp ek dL fn dx fz fn eZ dN fh fp cw df dt dQ cL eg dN fs eQ eI fA dK ef fs dV cj cw ca dP fk cA dV dB dT ec dG da bb ct ct da cj dm cF dE ds cu bB cJ cb bZ bA Y bU bN dR bK cj bj cN cp cb cO bX ek dF dl ea dJ eA bQ cj bY cd cO cR dR eg dF ea dX eA eA cn fB do dZ fa es cn dp dH eI en eQ ec dR cM eU dl dy do cA em ed el ce ef eM eQ ez er dB eg cB cD dk dM cE dq ec fC eJ em cS et fe fg dx eM eW eI eu eg fn eI fD dg ey cW dp dy eb fy dF cl dn cF dc dB do ds dk ek bQ ci cZ cD ca ci ev ea dk es dx 0 dU dx dH dN dU dI fh eP eK cT ck cE do fb dw dF eH fw eD cO cb em fd dY eF et ew 1.05 eM ek dY dW es cu ft eX eh ew dW fo ev eJ eS cI ej ez dz ds cz dr es cr dF cA cx cP eE dy dv dF dN dM eM dd cx dp eh dw ck bL cF cP dw eu dN cC dW ch bZ cK cI cg bn cy -1 bO dE cP cF di cW ea eD em fj dT dl dS dN dk dj et dk dk cW bz bL cx cj bY cC cp em cq cQ cf cn dZ cX bH br G bu bb bR bT bN cM cu cn dT cC dX dT dX eh eo cN cZ cO dd cG dg dd bs bI cb bH bs cd cz de cO cY bG by bt A bs cE cn bi -1 cv do cD ca bO dh dF dT ci dZ db dy dh eA cL dj dN eA cd cu cY dN dh cI bx cv dh cO cX bZ dC dP cQ dl dm cm da dd du dl bJ cK bS bW bD bI bU bu cN bQ dJ eQ dg dd dt W bs bQ dN df ec ci fj ci cF de de cq cj bY db cK dZ cC cE ed cS da dG do dy dA cF bZ ck cE dj ed eC cu cp ci cN cC bR dt dy dv dC dJ dx dH cN cD bU bO ca dc cK cn cI dg bR bq bN cn cE bO 0 ct em cC dE bO cH bN cg cc cj cZ cy bD bM cF bE bR dw cN da cK dm ca bE bB dP cz cK dA cS dg cE dy dq ed cP dL cw cY bK dl cR cn cx cu cs ec dR dL eu dt dU dp dz eq dv dH cI dp cA cs cj dx eI eQ ef el eQ el dl dj cC fh eN fG eZ fE dS eG fF eY cE cZ dd cX dR eD fv eu dc ca dT bL cz bJ bP bW bX ds dH cz dd dI dl dt cY eE dm dU eq fD ea fx ei 1.22 eZ dM eT 1.33 fH em er dp dH cS cv bs cf cx dw dZ cU cC cQ bD cY bV A A bw bw bB bu bE be bR bS cD cY dC bT cx cl cW cw bL dn dN ei dZ cq bG bK eF dx cS do dG da ez dP eE ea dq ej dA cP ey ed df dO 1.38 du cV cZ bO cl cG dW dS dq cT cA da df cj dZ bX ek di em cj dN ch dA cw de cG cQ dq cy ed cu cz dO eq cQ cx dn cR ce dr eo cM cJ dm bW ci dF dJ di ds cK cr cf bI cW bY co cR bH eI ew cU eE cC dw cz bR bi l p A bF cZ eq dn cI cV bW cz cT dM cz dJ cu eC cF el bG cL cA bQ cw dB cG dT dT ey ds cZ dx dS di cD ct da et dc da dk cr cM cH bJ cJ cr cb bT dp ca cj cd cK bM ce -1 cP cE cR cd bS bQ -1 cx bL bu bA bP bv bR bs bj bK cd bg cN bZ bl by cd bX cF bW ba cb -1 cd cI eA du dy dt cJ cd -1 bM bz bE bs cm cZ cB cB ct ca dh cn bR bo cf dl q cc bM bL cb cY dm cR cm dd bU bG ds bS cJ cc 0 cm cc cN cW cA cF bK cc ch cF ci bO ds eh cg cw cb cR cJ cc cC cY cx bY bt ca cw bC cw cq -1 dw di dy cT cn ci cN di ch cH cf bA cQ cf ck by bD cv bX bT da dd dp bC dl ce bV cN co cu cn cT cB cr bO dh ck ch dz cm dA dM dN dl ck bT bU cf cQ dp J W d bf bO bI -1 cd bW cz bz ct bX db ea dq es ce df dZ dC bH cK bM bV cJ cp du cG dM dR ea ft eN eB dy dn ei cD cX cP dK da dK cs ec dN cM dl da cO dK bT cr cX dR dy dT dX dq dR eh cU ei et dj dk es dk cB bn dd cU cZ cs -1 bL bb cY cV cB cY Y bS cp I cy bC bD cd bj bJ bV bl bw cg bX cJ co cg de cA cj cq cD cr eA bJ ct ch cz dB dE bY di bx bn ci G bJ cW cO cj cD cf do cB cx dn cB cR ea cd dZ cf ed ds cV cl cq ca bL dd cj dN dz cH bW bU dp dG cj bJ cr dv df dd dG fs cm cI bX cS bZ cP bR dj 0 eu fm es cw dv cI eI dn cv ce bn ca dV ec da cC dj cm dV df cq bP bx cv cY es ds dy ck cE cR cm cv cH dn cm es 0 er dm dF cM eP dx dq cW dZ cz cm ch et et ez ef dB ed dG dY fu eb dQ dF cU eh ez dS eC es er dm dr eg dE cp cp cw cV bQ de cR cf dH dJ dU dF dI dB ej dy cq -1 bC bC bM bT bO ca cy cT dM cD dR bD cr cB em cB de bX cz cp cM cV cq cn dr cs cp cr dB cM cP dJ eB ce dk cG ei eT et et eM fF dy dw cQ ce bV cc cV dP cr cR cX cL 0 cU dx dP dE ch cW dg ek ch cN cg cr dP ee cx bK eF cP dE dZ cA dh cz dA dr dH es dB er 0 eh dZ eG dD eV eF eN er fs dG ey cO fD dx fG dx cE dB ew es dH fj dS eV dt ef eA dh da bQ dn db cU ds dm cp dw dB eE dz cA dR dO di cM dl ft dY do cV dd cH bL dX dA cD dR dR dy cL dO dI cZ df cU cz cw cZ by dA dJ da dt cf cm dj cZ cM J cZ cf ct cu do cT dv dV df ek dy dL ds dn cp dP dm db cc cy em cW cC bS ck cD dr bK di cJ dK dg ek dA dR eU eP do dy dN dv cO cW db cO dF ec eU el eC cZ dh bV bI bo cR dZ bS cr di eD eH ea eE dG cW dm ci cO cQ co bl dN cr di cr eK eI cI em df ew cQ dw do dm dk dk dF dE cR ds eh ds dg ec eU eo dT cz do cy eA dt dj dL cQ ef ek dO eG eI fF dv fj bU cu dJ dt dy du es ci dp dh cY bU cQ cO dg dw dw cu ci eA di dT cz cc ca cV cW 0 cq cQ cS da dD cQ 0 dG cu dZ dr dO df dG cN bx cp dR es eE dz dO er ec dL dB df dj cO dd cX cP cT et dX eF cW cE 0.92 dt dP cY dM eV eW dF ey eM eP cU bU cC dv cA cg cN bK dp cw cE cH bv bU bs de cd bX cN de ch cM df dM dL cM bO cZ cg bA cq bu bj bw bC bN cl I cs bT bs cd bV bF -1 cv ch bY db cq bC dv cJ bW ch bN dm cY bN dy dh co cG ds cM cA cI dY dh 1.25 bO dK cZ cA cq cU dV eo eO eF eM eT eE eP eL dU dn dT cZ ee dR dJ cL di et fs fH fo fF em er ct cF cx df dt cU ch cp dC ej dM et dx dx et er er cU dF cU dV dR er dq dG dJ dV dD dR cU cs dl dk dq df cm cZ bS bT bI bS ca K bn cY cu bM cz cz cl bD bT bH cV dy ce de bj q y cB cb bE bP bT cP bU bG bC cp cB bt bJ bX cW dA cX bM ee eA ci ec dX cB dX cu er cA cR bu co bz bs bi bR bs cR cb dh cy cf cY bF cH bU cb cs cR ek co bM dI bG ba bS bb cg dA dm cV co ck bv bF dc cF ce cB ce bm bI cC cV cR cb bF bt br cb ck cJ bs bU bQ dZ cg bw bV bt cb bm bC bA cQ ct bT cI bX bU ba ce cf de cH cB bM bG bU cN cd dA cD -1 cW cM cK bL cu cA cM bd bU dZ cV cb cf cB dw cT dT cX cL dd dB bJ cb cp bN cK cL dE cq cU es cJ bO dj eC dH bZ ch cS dp cW dL dJ cf bm cr cX cj dn dP cT dr cD dC cP cl ca cx cv bu cx cg bE bZ bM cs cs cc -1 A bE bo bE bR bB bS cf bt cd do cD cK cG cx cp dj cL bN bU cU dq bH cz dV dX dj dI dB dc cp de ev dy 0 dT dm dT dm ej eU ew dD ev dI dz dG fF dx cD eq ef bM dq dw de dN de cr cN cQ cF cR cu cR dm cA dA es dK cz ci dH de cf cW cD cW cm cW cm cE cC cN ek cO cp cv cg dl cX cV dm dl cR cq cc cP cF bZ bu cn bT cn bO cl dP dE cB cF cd bW cw da cO bZ cR co cs cQ cu dk ea cS df cT dL dc di dB)));
-(display 'Stability' ^(a:0.84 b:0.89 c:0.88 d:0.9 e:0.92 f:0.93 g:0.94 h:0.91 i:0.86 j:0.87 k:0.85 l:0.95 m:0.96 n:0.97 o:0.98 p:0.99 (0.53 0.59 0.73 0.8 0.78 0.83 a b a c b d c d d e e g h f f g g e h e e g g e d f l e f d f e h e g f f d h d e d e f d e f d e d h h d h b d d d h h b c e h d e b h d b b i b b d c d b g d b c h b b h d b d h d d j b c h b i d c h c c d b b c h b d j c k c d i b c c b b b d b c k j i j j d j j b h b c j b d c c c b c d e j b c b c h d d h d h b c b i k d d b d c i d c h h h d a d j c h j c d c b i c b i c d e b c j h j j d c d d h b c c d b f h e d c h e b b e b h c c b d b c c b d b h c d b c e j b j c h b d h b c c d d c e h e e b b h d h c e b c c d d h h d k d c f c h b h d d h h c e h d b c c h c e j h b h b c b d e d c b h b d h h d d d d c c i c b h b b h h d b d d d d c d d b c b c b b h b i h d b d e c d d e c h b d b h b f b d b c b d d b d c d b b h d h c b d c d c b c d d d d i c c b b c b d i j d b d b d g d d d b h j d d d d d c b h d d i h a c c b c d d f f c i b b b h c d b d d e d h h h e b d e e h c h d b c c c h h k e d d h b d c e h d d e f b h b h b d b h d b d b b b i b c i c b b h b j c j b h c c h i c j b c h d c h h g e b h e d h d h d h d h h d e d e h b d d h d h e e c d d b h h g b h e e d e b e e h e b c f h h h b b b e e h d d e h h e d f b h h b d d b b d d e h b b h d h h h h d d b e h d h e f e f f b d d g e d e h h e e g h h h g h d h h e e e f g b d e h h d h h e e d e h h e e f e e e d g e h h e h e e d e f f h h f e l l l e h h e d e e h e d e d f f h e g f e e e l e e g f h f e e b h h h d g f f h e e g g e g e e e g d h l e g e f f e f e e e e h h e e h h f g h h h b e f g d e e d f e d h e e e e h g e e f e f f h f f h g e b f d h g f f h e h h f e e f f e g h g f e f e e l f d f f e e h f g g f e f f g g g g h e g g d e l f f f l e f l g g g g f e e e e f e g g g f g f f l e d l e g l f g f g g l l g f l e g h l f h d d h d f h e m g g f d g f g g e h g e g l g e f e d e e h g f h e f f l e m g l g f g l e m g g f e e e l g h g l g l e e f g f h e l e f l g l l f l g l g m g f m g g f e e l f g f e l m f f e g g l f g l e g m g g l g g g m f e g e e l f h l h e f e g e e e g g m e g l d d l g g l f g g f e g g f l g f g g l l g f g l g e e e e e g e f f m l g g f g f e g f g g l e g l e g g f f l e g g e g e f f g g l g g l l m g e h m e f m g h g g f g g l f e d f f l l e l g g f g f e g l g e e f l f e l e l f f h g g l g e l l g g h g g e l f l g g d h f e f f g f m h l g l e e f m f e l f l g f g l g e l l l e m g f e g f e h l h g h m d h g g f f g l e g f e g g m g g g f l g f g m g f l m n l m g g l g f e l l l g g g g g l f f l l f l m g l g l m l g g g l l f l g g g l m g m m l l f g e l e g g e f m l g l e l e l g l n g f l g l l m l m g l n m n m g l g l n g m l g m m l g l m m l g l f l l f m l g l l l l e f l f l l g l g l l g l m l g g l g m g l m m l e l g n m g f f l l g g f l g l l g m g l m m m m l l f g m m l g n l m l m m l f g l m m g f l n n g l g l g m n l m l n n m m m m l g m f g l g l m l g g f l m l g m g g m g l f m f g f l l n m l m l g m l m g m l n m n l g m n m n n m m l l m m m g m m n l l l l l l m m l n f l l m g m m m m l f m m m m m m m m m m m n f m m m m n l m n l m l l n n g n l n n n n n m m g n m m l m l l m n m m m l m l m m l m m n n n l n n m l g m n m m n l n m m n n n n n m n l n m m l l m l n m n l m m m n n m n m n n m l m m n n n n m n m n n n m m l n n l m g n n m l m n g g m n m m n m n o m m n m n g m m m m l m m m n m n n n n o m l n m n n n n n m m m m m n n m o l n o n n n n n m n n m o o o n n n n n m n o o n m n n n n l m m n m n m m m n n m n n n m n m m m n n n n n m m n n o m m o n m n m m n n n n n n o p o m n n m n n m o o n m m o n n p m o n n o m l l o n o m o l n n n l m n o n m n n n m m m m n m m m m m l l m m m m n n n o m m m m n n m g m l n l l n m m m m n g n n m n n m m n n n m m n n o m n l o n m n m n n m m m n n o m n m n n n n o l n n m n m n m m m m g o m n o l m m m n m n n m m n l l l n m o n m m m g n m m m m m n n g l n l m m n n g n m o o m g n n m m l m l m n n m n n m m p l n o n m l n o o n n n o m m l l n n o m n n o n o m o n o o n n n n m n o o m l m o n m l n n n m o m m m n n l m n n m n n o o o o o n o p n n o m o n m n m o m n o m o n m o n n n n n m m n o o n m m n l n m m m l n m o g m n m m m l m l l n m m m o n n m m l m m n l n m o l n l n m l l m m l l n m n n n n n m m m m m l m m o m m n n n m m o m n m o o m n o o n n n o o p o o n n o n n m o n o l n o n n n o n n n n n m n n o n o n l o n n o n o o m n n o n p n o n n n o n o o l o n o m o o n n o m m n o m o o n o n p n n n n m n n n n o o n n o p o n m n o n n n m m o m o m m n n m n m l n n m l l o n m m m n m p o o n o n n n n n o n o m n n o l n o n m o m o o o o n o n n o o o n n n o n m o o n o n p o o o o o n m m n n n m o o o o n o m o n o n n o n n m l g l m n o m o m m n n n o g l n n n n n n n n o n n o m m n n n m o o n o n p n o o n o o n n n n p o n n o o p p o n n n o o o n o n n n m m o m m n n o o n n n n n m n m n n n n o m n n n n m m n o n n m m m n l o l m n m l n f m m g l n m l f n l g m n m n l m g n l m n n l m l n o n n m o n m n n m n n l o m l n n m o l m l l m l o n m n n l n m m m n n o n m o n m n n n l n m o n n n n m o n n n n n n n m o n n m n n n n l n m m o o n o n n o o o o n n n n n o n m n o n m o l n n n n o n n o n o n n n p m n n n n n o o m o o n n n o p m o n n o l m n m o m m o l m m l n o n l m m n n m o n m n o o n o p o m n n o n n n n n n o o o o n n n o m o n p o m n o n p n n o n o o p o n o o o o n o o p o o o o o o n o o m p o o n o n n o m n p n o o o o m n o n n m o n o p n n o n n o o n m o n n o n o n n n n n p o n n n n m n p n m n n l n o o o n n l o n p n n n n n n m n n m n n n m l g m m m n n n m m m m o n n n m o m m l m n o n o o n m g l n o o n o m n m n l m g o n n m m o m n o n n l n n n o o o o m n m n o n m m n m m n n l m p o o n o n n n o n m n o n n o n n n n n m n m m o n n o n m m o m n o n n m n n o n o n p o o n o n n o o n o o n p o n o o o o o p o p o o n n o o n o o o o o m m n o n n n n o o m n n o o o n n p o o n n n m m n n o n o m n n n o n n n m m n n n n p n n n n l m m l m l m n g e f g l f e l l g g m l l l n l m n m n n m l m m m m l m g n m n n m n n m n o m n m m o l n m l n m m n n m m m l n o n l n n n m m m m g g l l g l g n m m m m n m g l l n n n m m o n l o n n n n m m m m m m n n l l g n m l l f m m n m m n m n m l n n m o n n n o l l m l l n l l m n o m m m m n n n o l l n m n n o m m m o n m o o o m n n m o n n n l m l o n n l n m n n m m n m m n m m o n o n m n m m m n n n n m m m m n n m o o o p n m n m o n o n o m o n o m o n o o m m n m l o n n m m o n n n n o l n m m m l m n n o n m n n m l n n m o n m o m n o n l n n n n n n m o m m m m m l n m o o m o n n l m n n o m n o m n o l n m n m m m l n n n o n o m n n n m m n o n n n o n n n g m n o o o m m f l m l m n m l l n m o n n n o o o n n m n m l l m n m o o m o n n n m n n n n o n m n o o n o o n n n n n o p o o o n o n o o o o p o o m o o n o o o o o o n n o o n o n o o m o n m g o n n n p n o m o m n l l l m n m n m m n m n m n n m n n o n m m n o m n n n o o o n n m m n n n m n m o n n n m m m m n l m m n l n m n n l m m m m m l l l m m m l m l n l o n n n o n n m l o m o m n n n l m m m l l n n o m n n m n m n m g m e m m g n l n l l n m l o n o n m g m n l m m m n n m l n m n n o m n n l l l l l m n m m l g m n m n m m n l m n n l n f g l e l l g f g l m l m f g g m n l l m e l m l g g l l f l g l g m f m m m m m o g m n m o n o m g l m g m m g g f l e e e f f g f h f g g g f g l m m l g g g f m n l l e e m g l f g l g l l f m l m f g m m g m n n m m n g n n m l m l l m l l l g g g g g m g n m l m l n l m g g m m m n m m l n n l g m m n l m f m l m m m n m m n m n m n m p n l l m n n o m l g n m o o n n m n n m n l m l m m n l m n o n n l m m m m l f g g g g l l m l g l g m m g m g f l l g h b f e h e g g m f g e g g g l f f g l g l g l l l l g g g n l g f l m m e m g l o m m l n n l l n g l m m m m n l n l n m n n l o m o l m m m n l l n m m m o l l m m m m m m n m m g l f g e l n m l m g m l n m n n n n m n o o o n n l n n m o m l m l m l n m o m o m n g o o n m n o n n n m n n m n m n o o m n m n l n n m m g g g m n m l n n o n n n n n l l l n l l l l g n l m p o m l n g m m l l n o n l m l m l l n n m n n n o n n n n n m n o o m o n m o n n o m n o n m n n n n m o n n o o l n m n n m n o n m n n n m m n g m l n m n m n m n o n n m o o n n m o o n n o n n o o o o l n o n m n m n l m m m f l n f m g n n m n n m o n n n n o m n l m g n m m n n l n g n n n m m m l m m n m m m l n m m m m m n n m m n m m m m m o o n o m m o n l m l m n m n m n n n n n m n m n n l m n m m m m n m m n m m g n m m n m l g g f f g f g g e g e h l f g f n l l g m g n m l g l m m m g l n m l l g m g m g g g l g l f g m n l m m l m n m m l n n n l m m m g g m n l m l n n m o n n n m l n o l m n o n m m o o n n n n n m n m m m m n n m n m n n l l n m n o n m o m n o l l l n l l l m m m m n l n n n m l n n n m m n n n n o n m o n m m l l m m l f g g g l n n m m l l l l m m m g m l l l n m l n m n m n l m m l l l f e g n m l l l l m l l g l l l g l m l l m m n m o m m n m l m l m m n m m n m l n n m m m n n m m n o m m n n n m n n l l m l m n n m m n n m m n o n n m m n n n n n n m o m m m n n p m o m n o n n n o n o o n n o n m n g n n n n l m m l m g m n m m n l m m o n m n m m n n m n o n n m m m m m n m l l l l o m n m n f m n m n l l m o m l e l l m o l n m m l m m m l n n n m m m l m l m n n m g g m f m g e e g l g f l g e e l l g l g m n g m m g n n l n m g m m g n l g m n n o n m n m n g m n n n m m n m m o n n n n n n m m l n o l n n m n m n l m o n m l m g l m m l m n n n n n n m m n n m l o n o n n m m n o n n n m m n m l m l m n m m n n m n m g l n n n n n m n m n m m m p n n n n m n n n n m l m n n n n l m m l n m g n o m l m n o n m l m m n o l o m m o n l m n n m o o m n n n m n n m n n m n o n o o o n o n m m n l n n n o p o o p m n n o n n n n m n n l l l m o o n o m o n o n n m g l l g m n g n m n n n l m n m m g m g m f l g n n n m m g l m m g l m n m n n n n m m m n m o m l n g m n m n n m o n m m l m m m m n m l n m n l m l n m n m m o m m m n m n m n l m n o p n l m n n n n m p l n m m o n m m l m m l l m l g m n l l l g m l m m m m l l m l l g m m l m m n l m l m l g f g g l m m g l l g l g g m f g l l l m m n l l g l m m l m g e f g g g l l g l m g g g f g f e g g g m g h e l m l l m n n m g g m l l l m l e f l l g l g g l l l m f l l l m l g l g m l f g m g l m m n m m n m l m e m g m m g l g l g m g l m l g g m l m m g g l l l h f g g g l f g g l l m l m m m g l e g g l e g m g f l n n m n m m l m g l e m l m g l m m n g e e g e h g g g f l f m f h m l g l g f l l l l l h g m f m g l g g l e e m l f g m l f l l l l l n n l n m l g g l g f h h c h b i e b f f e m g b l g g l g e g f l g g f g f g g l g l l n g g e g l m m l l n l l l m n l l l m l l l l m g m m l l m g n l m g l g f g l g l m m g m m l o m m n m m n l l m m n m m n n o n n m m m l l o l n l m f g l l m m n n l g m m g m l n l l g m n m f m n l m m n m n l m n n n m g n n n n n m n m o n n o l m l m n m n m g l l m m n n n m n l l m m m n m o n n m n l n m m n m n g m g l m n n l f l l n l n o n l l n m m n m n m m g m m g m n m m g n g m g o n m n o m m m n m l n l m g g l m l l m o m o g l m n l m m l n m m m n m n o n g m n g l m l m n n n o m n o o n n o g n n n n n o n n m o o o n o n o m m l m m n o l l o o m m n n m n n n m m m l m n o m n n n m p m n m n n n o l o n n n o m m n o n n o n n g n n n n n n n m l n n n m n o n n n m o n n n n n o m m o o o o o o o m n n n m o n m n m n n n n o n n n o m n o o n o n n m l f l l f g f l l f f m m m m n l l g m g n m l l n m m m l o m m m m l l l l g l m l m g m m m n l m l l l l l n n l n n l m m n l l l g h g l g m m m m m n l l g l l n n n g n m m l m g n m g l l m m m n m n m o n o m m o m m l m m m n o n m m m m n l m n m n n n n n n m m m n m n m m n n m n l l m n n l n n m m n n n o o o n m n n n m n n n m o n n m m o n n o n o n o o n n o l n o o n n m m n n n o n n n n m m l n l m m m n o n m l m g m m n n l l o n n l n n m n m m o m n m f m l g l g m n l l m n m m l m l g f o l m g m g m n n l o m m m g n l m o m n n l g m l n n m m l m n n n l n n n l m m m o m l n l n m m n n m n m m n m g f l f n m l n m n l m m g l m m g l g l m l l m m o l g m l m m l m n n l n l l l m m m m o m o m l n m m l l m n m l g g l l n m n l m m n l m m l l m n n o o n m n n m n o n m n m l n n m g n n m n n n l n m n o m m m o m m n o m n n n n o m n l l n n n n n o m n o n m n m n n m o n n n o n m m n m m o n l m o o m n n l l m m n n o o n o l n m m f g m f m l m l n m p n o n l l m l m n n l g l l m m g l m m l f m m m l m l g m l l m o m l m m n m m l m m g m l n m l n l o o m m m n l m o m o m m m m m l n n n m n o n n o n m n m n n o n o m m l m n o o m n o n m n o g n m n l m m l m m n l g m l n n m n n m l m n n n m n n n m n m o m m n o n n m o n n o n m n l m l l m m n n m m n n n o n o n n n n n m n m l m n n m m m n l g l l n n m l m n m n m m l m m n n o o n n o o n m m n n m n o n o n n m m l m f g l m m n l n l m n l m n o n n o n n m n m n m n n n n m n n n o n l n n n n n p n m n m n m m m m m m m m g l n m m l o m o m n o m m n n m o n m n n m n n n n o p l n o o o n n n m n o o n n o o o n l m m l l g l l m n m n o n m n n m m n n n o n m o n o n o n o n p n n n n n n n m o m n m m g n o m n n n m n o n f l l l n m m n m g l m o m m n n m l l m l n n n l m l n m l o n n o l n m m n m m m m n p n p l n n n o n n m o o n o o n o o n o o n m n n o n n m o o o n n m n o n o n n n n p o n o o l o o n o o n m n n o o o o o o n o m m o o o n n o m n n o n n m m n n m m m m n m n n n m o o m n m m o n n n o n m o m n o l m m m m n n m m l m m l m f m e g l l l m m m l m m g l l m g m m l l n m m l l l l g n n m m n n o n m n m m m l n l n l n l n l n m m o m l n m l m m m n n n n n o n n o m o o m m n m l m n m m m m m m m o o n m n n o o n n o l o m n o o o o n o o m o o n n m n o n o o n n p n n n m m n o n o o o n o n o n m n n n n n n o n o n p n o o n n m n o n n m o m n o m n n n o m o m o o l o m m o o l n o o m n p n o l o o n n n n o n n n n n o n o o o o m m o n n o m n n m n m m l l n m l m m n n o m o l o n n m m n l l l l f m f l l l m l l g m g m l m n m n m n m m g m m l m m n n m o m o m o o n n n m m m m n m n m n n o o n m n m m m o n n m n n n n o n m n o o m m m m n o o n m n o o n o m n n n n o o o o o n n o n o o o n n o o o n o o o p o n o o o n o m l m n n l n n o n n g n n l m l l n n o l f m n o o n n o n n m o l n n m m l n n n m n m m n n o n m n m o l n m o n m n o n n n m o m m n m n n o o n n o n o n o n n n n l l m m l l m m n n m n l l l n n n n o n n o n o o n l n n n m o n o o n n m m m m n n n m m m m m o m m n o n o m o o o o o o m n n n n n n o n l m n n n n l l o n m n l n m n n n n n m o n m m o o m n l l n n n m o n o m m l n m m o l n n m m o n m l o m n n m n m n m m n n m m n m m m n m n n m m n m m m n m l g l g m n n m m g l n g l g m l n g g h h l l g l l l l f g l m m l n f l n l l m n m n m l m m m l n m n m m n m m m m m l o n m n n n o n m l n o n m n o n m m m m n o o l m n m m o m l m m m l l m o n f m n m l m o l m m n l m n m l n o n n m m l n l m n m n n n o m n o o n o m n n l m m n n n o l n n o o n m n n n n n n m n n m n m m m n n l l m n n o o o n n o n m m o g m m l g l l m n m o m o o n n n m m n n m n n o n m o m m m m n n n n n n m n n l n n m m n n m n n n n o n m n m m n n o m n l n m m o n l m m m n n o l g n m o l l f m o m o m n n o g n n o m n m n o m n l n m n n m n o m n l n m o m m n n n m o m n n n n o m o m o n o o n o n n m m n n o o n l n n m m m m m m m n n m n n m n g m m m m m m m o m l n m l l n m n l o l l m m m l m n o m m m m n n n n o n o o o n n n m l m o o o o o n o n o n n p n o o n n m n n n n m m n n o o o o m n o o o l o m m m l n m o o m o l o o o m g m m o o l n m p o n n n n m o n o o o m m n m m m n o n n o o m n m n m n n m o l l m m m n n m n n o m m n m m n m m n g m m m n m n l l m n n n m o n n m n n n o o n n o n o n n l o m m m o l m n n m n n n o n o n m m n n m n m o m n m n m m n n n n m o p n m o o n o l o m n n n o p n n o o p o n o o m n n o n m l l m n n m m m o m n n n m n n n n n l n o m n n m l l g m o o o o o n n m o n o n o n o m m n m n n n o o m m n n n m n o m m o n n o o n n o n o p n n n o n o n o p o o n n n o m n o n n o o n n o n o n n o n o p o n o n n n o n o n m o o m m n n m o o n n o o n p o p p m o o n m o o o n p o n n n o n g m m o n p n n m o n n o m m o n n o m n n n n n n o p p o n o n p n n n n m o n o n n n n o m n o n o m m o m o n o o n o n o n n m o n n n n m n n m n n n p o m n o o o m o n n o o n m n o n n m o n o o m m o l m n o n o l m n m m l n n m m n n n m n m n m n m n m o n l o n m m n m m n n m n l m n m m m m g l n l n m n m m n m l g m o n m m n n n m m l n l m n n m n m m m m m n m l m m n o n n n n n n l m m m n n m o o n n l l l m l m o n n l m m l n m m m n n n o m n m m m m l n o n n m l n n n l l m m o m m n n m m o n l m n o l n m m n l m n m n n o n m o o o o m n m m m o m o m l g n n o m o m n m n l l n m n n m p n o o m m n l n l l l n n n o m n m m o m n n m m o n n m n n m n n n n n m n m l m n m n n o n o n m o n m n n n o o l m n m m o n l n n m l n n m n m n m l n o o g m m o m n o n m o l n n n o o n l o m o n m o p n n n n l m n m n o n n m o n n n n n o m n n n o n n o o p o o m o n n o n n n m n o n m n m n n m o m n n o n o o o m o n n n n m n o m n n p o m o m n n o m n n o n o o o n n m n m n o n n o o o n n o m n n m m n m m n o n n o o p o n m p n m m m m l m m m l m n n n g n o n l n m l m l l m m m m l o m o m m o o o m n m m n m m g m e e m m l l l n l l g g l g g g m l l m l l n m l l m l g l m m m m n n m n l l m n n m g m l l m l m n n m m n m o m n m o o n m n o m m n m m o o n o l o m o m o m n n m n m l o n n n n n n o n o o n n o o p p o n n n n n n l m n n o o m n g n m o m m o n n n n n o n m n l m l n n o n n m l m m l n l m n n m n m l m n m l m m o m m m o m n n n n o m o l m o l o o m m n o o n n p n n o n n o m o l l m o n n n o o o n n n m m m n o n n n o m o n m n m m n m n m l n m n m n m n m l l m m l m o o l m l n g o l m m m n g l m n g m m n n n m n g l m m l g m o o n n m m m n o n o l m o m m m o m m n m n l o m o o m n n m n n m n m o m o n o o o m n m l n n n o m o n n o p o n o o n m o n m o n o m m o n l o o o n n o p m o l o n p m n n n l n h g m l m g f g g f l l n m l m m n f n l m m l g f g f n e l l l m g g g m m m m m m l n l m n g m n n m l l g n m l l l l m m m m m m n n n m n l m n m n o n n n m o n o m l n n n n n o m o n n l l l l n o l m n m m m n m m m n m m n o m l m l n n n n n n n m m g m m m l n n l o m n m n o m m n m l l n l m m o m m n m l o m l n m g f m g l g g f g f m l g n l l l g m g m m l l f l m n m l l m n n n m m n m n n l n m m l m n o l m m l g l m l m m l e g g g g l l l f l m l m l l n n m l n l m m g l e l l l g l l g g m l l g m l g m g g l l m m n n l g l f g m f l g f e l l l g l f m g l n l l g l g g l g l g l g m g g g f l l m l g h l f g g g g l m l n l l m m n o m l l m n g m m n m m m m n n n n n n n n n o m n n n n n n o l m n n n n o n m n n m n m l m g l g l m m m m m l m m l m l n l f m n m m l m l m l n n m n n l m l m n m n n m o l m m m m n n l m m n m o o n n n m m n n l m n n m l m n m n n o m m n n n g m m l g n o n l l n m n m o o m m l l g g m f g g l n n m l l m m m l m m m g m l l l m m m l g m g l l l l l l g g g l m m f f l g l l g e g l g l l f g l g l g l l f g f g l g g l g f m g l l l g g l g f n l n l n l l n m l g m m g g g m g l l g m l e g h l f g e g m l l g m l g g e g f m l f n g m l m l l m l l l g f l m n l m n n m m n o l m m m m m n l m m g g l g l g f m l l m g l m l l m m l m l n l g m f m g l l m n n l n n m n m n m m m n m n m n n p m n m m m n m o n m m m n n n o n m n l m n l l g g l g h g g g g l l l l g l m f f l f n f g m l m g g o n f m n m m o l n n l m o m n n m l o m n m o n m m l g l l g m m m n n l n m m l l m m l o m g m m g l m o n m m m n l l m m m m m g n o l n m m o n m g l n l n m n l m n l m g m n l m l f l m l l g m m m m m m m l l g g l m l l l m g g m m m m m n m m m m m n o l m n m o o n m m n n m n n n g l n n g g m l f g l l n n m m m m n n m m m l l m m o n m m m n n m l m m m n g l f l m n n o m m m l m n m n f f g l g g l m m l f g l m g l g e d g h g f g g g l g g l g l l l g e g g g h f g f l l g m g g f l l g f g m g l m m g l l n n n m m n n m l m n m m m m n m l n g g m m n l e f m l g l m g f l l l l n m l n m l l f h e f f f l g l f g m l g l g m g n m l e g g f g g g g l g g g m m m m e l m g m n l l m f m g g n m n l m m o n l l o l l l l m l m g m g g m g m g l g g f g m g n e f g g m m l g g f f e h f g g f h m f g m f l m l m n m l l f g g g g g g f f g g m l g f g g m m m e f m l g g l l l m m g l l l g l l m m n l m l m l l g m e f f h g l m g g e g l g f f l g l g f e m m l l e e g g g g l h h f g g l f g e f g f g g f f h f e f g e f b c h g e g g f l g g g e f g g l f g f l l f l g l l m e l g l m m l l m l n l l f g g g g l l g l g l l g g f e f g g e f f f g e f e e e e g e g g l g l g d f h g f f e g g g f e e e e b h d f g e e l e l h h b f f e g b f h e h h d g f f f g h d m e e f g g g g f g e e f l l g l g l l m g l l l g l m f l m l g l g m l m m m l g g l m o l l m m m m n m m m l l m n n m m n m o l n n m n p n o m n l m n n n n n m m n l l l l m n l g n g g f l g g f l m e l g l l l n e g e f l m l g m l m g l n l g g f f f l l m f e f h g m l l g e l g n o m n g m m l l l l l g m g m m m n l m g m n n n m n n l f m n m l l l n n l g m l l n m m m n l n g m g l l e f g g f h f e l e h m f g g d h l g f h f e h h e f f h g e e d e f f e f e l g f f f f e f l g g g m l g g e e f f h e h h b d f d b j c h h h b d d e d g f f g g d e g l g e f g e f e l f h g l h f b h h g f f f g g g l f f l g m f g l g e f g g m e e e g e e l g l g l l f d d d d d d h d b d e f h l f e g e h e e e g h g e f h e l g f e e e e g h e h h e e g l g n g e e l l g l g m g l l g n g n n m m l l n n n n m m m m l m g l n g l g g g l m f n f g g f g l f g g l l g l l l g l f f f g l g l m l l g g l l m l l l m g g m l l e e e e e e l e g f g m g g g l g m l l l l l g g n n l n l m g n l l m l g l m l m n m m m l f l e f g g l f l e h l g e b h e f g e l g m f f e d e f f h e h h b b g h f f g f e f g e l l e g f g e e e l e l m g l m e m m l l n l l l l m l m m n g m l l m n l f l g g l l m l m g l l m m l n m m l l l n l l m n n m n n n m o o m g g m n n m n m m l m m n o o n m n o n o n n l m n o o o o o n o n p n m n n m l n n m l m n m m n n n m n n m n n o n n m n m l m n m o n n n o n n n n m n n l n p m m n n n n n m m m m m n o m o n n l n m m n g n l m l l o g l m n l n l m n n g m o m o n g m n m l m m l n m m g m g m l m m m m m g m m m n n n o n n m m m m n n m m l m n n m m m m n l m m n n m m m m m n g n m n m l l g m l m f m n l m g n n l m m l l g l l m g m m m g f f b h d d l e e l f e e h f l g f l f m l g e f l g g l l g m g m l l g h f d g e e e g f d d h h f d h d e e d h g f g e f f e e h d g e g m f g l g l g e m g l m m n m h m m g e g l g g g l g f g l f l l l g e l f h g f e f g f l l g g g g g f l l m g l g l g l e m g f m l l f g f g l n l g f f m l g l l m l g l n m m m m m n l m l m l n l m n l m n l g l l n m m n n o n l n n n g m n n m m n l m n l g g n n n m g l m n l l m m g m e m l n l n n m l m n m m m l l n l m m m o n n n m m m m m g f e l m l l l l n l l m l n m m l m g m n m n n n l m n n m l o n m o n m m o p n m o n g n n m m n m n o o n n o n l n l o n o n m m m m l g n o n n n n n n n n n o o o m o n l m l n n o m n m n n n o n o m o o n l n o m n l n n o n n n m g m l m l m n l l g l m n n n m l n m m o n m m m m n n g m n n g m g l l m m n n n m m m l l g e d e e g h l l f e l l n l l l m m n l m l m m m l n g m m g l l m l l g f g l m l m n l m l m l l l m m g l l m n m l o l m m f l m g g g g m l m m l l m m l g f l g g n n g l g n m l l m l m m l m m l n m m l m n m n m n l m l m n n n o n n o p n m m n n o l l l n m l l m f l l g g n m l g g g f g m m m l l n m m m n l n n g m n l o l l l n l g n l m l f m m m l m g m m l m m g m g f e m l l l g g g l l l n l l l l g e l g g g l g l l l m g f g l m l g l f e l m g l g m h m m g g l m l g g g m m e l m f m l l f g g f l d f l e h e h f f f l f e e m l f e l g g g g l g l l f m l g g l m g l l m m l m n n n m l n l l n g m m f g l h g n m f l g m l e l g g g g g l m f l m l m m n l l l l g m l g m l m l l l l g g m n m g l g g l f l l l f g l m m m m m f g l m n l l n m l m n n m n g l g l l f m m l f g g m m l l g l l l m m m m m n l l m g g m l m m m l l l l l n g n n m m m l n l o g m m l l m l g g l m f l l m l n f l f m l l m l g l l m l n l n g n m m m l m m m m m n g l l f m m g l l m g g g f e g g l g g f g g l g g g g h l g e e l e f h g m g l m m m n l l n n l l m l g m l g m l l g e l l l f l g g n g l f m l g m m g f f l l g d e e g d d g l g g f l e f l g h l l f g m l g l m l l m l l l m m m l m m n m g l l n m l o n l o m m m g m m n m m o n m n m n g m o n n l l l g g l l l m n n m g m g m g e f f h e e f g m g e l g g e f f g f e f d h e l f f g f h e h l e e e e f g e f f e h f l f e f g l g e m e g f g f e b h d f f e e l l l f m g m l g l g f l g l l m n m g m n n m m n n n m l n l m g l l l l m l f l n m o l l g l m m l n m m n n n o m m n m n n o m n m m n m m n l n m l m m n p o n m m m m n m o o m m n m g m m m m n n o n n o n n o n n m n n n n n n o m p n n n n m n n o n n o n n o m l m l l o l l l m m m m n l m f g m l g n g f e g l m l m f l m l g m g l m l g m g l m o n m m m m l l m m l o m n o m l m n n m p n n n n o n n m m o l o o n m m g g g g l n g e g m g m n l g e g g l g m g g g g e f f f e e g f h h h m l f g l f g g g f g e g e g g g g m e l l m f l l g m l g f l f l l l f l g g l g n m l l m l l o l l o m m m m n m m f m l l m f g g)));
-(display 'Loss' ^(a:0.235 b:0.367 c:0.205 d:0.2 e:0.191 f:0.192 g:0.175 h:0.196 i:0.153 j:0.169 k:0.15 l:0.135 m:0.133 n:0.143 o:0.121 p:0.113 q:0.129 r:0.107 s:0.128 t:0.122 u:0.117 v:0.112 w:0.108 x:0.116 y:0.105 z:0.096 A:0.09 B:0.087 C:0.088 D:0.1 E:0.085 F:0.099 G:0.091 H:0.078 I:0.072 J:0.075 K:0.071 L:0.074 M:0.086 N:0.081 O:0.07 P:0.063 Q:0.068 R:0.076 S:0.077 T:0.065 U:0.069 V:0.057 W:0.061 X:0.064 Y:0.066 Z:0.054 ba:0.059 bb:0.058 bc:0.056 bd:0.062 be:0.073 bf:0.055 bg:0.053 bh:0.048 bi:0.05 bj:0.046 bk:0.047 bl:0.051 bm:0.04 bn:0.052 bo:0.042 bp:0.043 bq:0.044 br:0.041 bs:0.037 bt:0.045 bu:0.038 bv:0.039 bw:0.132 bx:0.035 by:0.036 bz:0.033 bA:0.034 bB:0.032 bC:0.031 bD:0.029 bE:0.03 bF:0.027 bG:0.026 bH:0.025 bI:0.028 bJ:0.106 bK:0.022 bL:0.024 bM:0.023 bN:0.021 bO:0.02 bP:0.019 bQ:0.018 bR:0.017 bS:0.016 bT:0.015 bU:0.014 bV:0.012 bW:0.013 bX:0.011 bY:0.01 bZ:0.009 ca:0.008 cb:0.007 cc:0.006 cd:0.005 ce:0.004 cf:0.06 cg:0.049 (bc 0.279 0.398 0.527 0.572 0.549 0.588 0.518 0.522 0.535 0.515 0.471 0.48 0.459 0.475 0.463 0.451 0.424 0.468 0.416 0.402 0.441 0.412 b 0.388 0.363 0.32 0.397 0.343 0.332 0.341 0.362 0.328 0.334 0.315 0.313 0.304 0.294 0.288 0.301 0.324 0.25 0.3 0.247 0.276 0.308 0.28 0.232 0.272 0.251 0.255 0.278 0.338 0.242 0.257 0.368 0.24 0.263 0.258 0.218 0.375 0.372 a e 0.207 0.243 a 0.209 0.182 b 0.184 0.211 0.217 0.219 0.212 c f 0.197 0.193 d h c d e 0.204 0.201 0.185 0.188 0.165 f g 0.16 g 0.167 0.152 0.18 0.168 k 0.158 n i h j 0.176 0.156 i 0.131 j 0.189 k 0.124 l 0.164 0.139 l 0.138 bw m q j 0.14 v m x s 0.126 w o n 0.142 t 0.146 r p o p 0.299 q u r s t 0.26 0.141 q u 0.151 y 0.118 v 0.101 w 0.123 v x bJ 0.119 0.127 0.098 A F 0.114 y z 0.092 z x o z z z r A B 0.103 E D C B A C 0.115 0.083 G D N H E C 0.095 F M 0.079 K B G H I H J 0.08 R I J H E K be E O K L 0.082 S L M N J U L Q J N P I T I O H P W Q N O R cf S F H L T U R Z P V Y P V W bd X ba X Y V bb K Z Z ba bn bb W 0.067 W bc W bd bc bf bg bc V be bh bf Z W 0.171 Y bb bg bg Z W bl bi bh bk ba bf bq bi Z bg bg Z bf bf cg bt bj bm bj bh bk bl Z bm bo bk bm bn bp bk bm bl bo bk bh bp bv bh bk bk Z bq bk bn bj br bl bm bo bq bq br bj bk bk bs bg Z bA bm bs bo bj bt bm bx bu bu bq bo bs bo bm bu bv bj bm bm bv bp br bs bq bq bo by bs bp l bw bm bx bs br bm bz br by bq bC bx bv bu bi bz bA bp bA br 0.125 bB bz bs bm bz by bu bz bE bu bB bz bm bx bv bx bA bA bx bx bs bx bz bB bC bx bB bx bD bA by bB bB bF bp by bu bD bC bv bC bs bz bE bE bx bH bB by bv bG bz bz bz bE bB bx bB bF bz by bD bI by bG bu bH bI bB bI bx bB bF bI bC bI bu bp bF bB bI bF bx bD bG bI bz bF bM bB bD bH bI bB bI bG bH bH bL bG bI bG bG bB bH bG bK bB bC bI bN bJ bK bF bG bE bC bL bD bF bD bG bG bF bG bK bM bE bK bE bA bG bG bO bF bL bN bE bI bF bL bN bM bI bI bB bH bF bM bF bF bM bG bN bH bK bH bL bN bM bM bL bD bP bG bO bN bG bP bF bF bH bF bK bL bI bI bM bL bG bM bL bN bK bK bO bO bO bM bK bM bG bM bM bQ bK bL bG bH bM bQ bO bN bP bK bN bG bO bM bN bM bG bI bQ bK bR bM bL bO bL bP bN bQ bH bM bH bO bN bQ bO bR bO bS bN bM bH bK bP bP bP bQ bK bO bO bM bQ bQ bQ bG bO bQ bN bP bR bP bN bR bS bL bP bN bS bO bP bR bS bP bO bO bN bO bK bQ bH bS bN bO bP bK bQ bP bR bQ bK bQ bS bQ bP bO bS bN bP bR bS bR bQ bN bR bP bR bS bT bQ bT bT bP bS bR bR bQ bP bQ bR bQ bT bH bO bR bP bP bR bU bS bT bT bO bU bT bR bT bT bT bQ bT bN bQ bQ bR bS bV bT bQ bU bI bS bR bR bR bQ bT bW bP bS bS bU bT bT bT bU bR bS bU bU bT bV bT bS bS bS bS bR bV bU bR bT bX bS bW bT bQ bR bU bS bO bS bS bX bU bS bR bT bW bR bW bT bV bU bT bV bU bT bW bR bT bQ bU bP bP bT bR bU bT bQ bT 0.084 bU bW bU bT bW bR bS bT bR bS bU bU bX bT bR bS bW bV bU bU bU bV bW bU bS bU bQ bW bU bV bU bX bX bU bW bV bW bS bW bW bV bW bT bX bV bT bV bT bR bX bV bW bW bV bX bT bV bU bW bT bR bT bU bU bW bU bT bX bT bX bU bY bV bT bT bT bX bX bX bX bX bY bW bW bS bT bU bY bU bV bW bX bS bW bW bY bX bY bX bU bZ bW bT bV bU bZ bY bW bU bZ bZ bV bV bT bW bY bW bX bX ca bV bU bY bW bY bW bU bW bU bX bW bU bX bX bW bU bW bV ca bY bZ bX bV bZ bZ bX bZ bY bW bV bV bY bZ bU bX bU bW bX bU bX bU cb bY bX bY bV bZ bY bZ bX bZ bW bX bX bX bV bV bY bY bZ bZ bV bX bW bW bV bU bY bW bZ bV bY bY bU bZ bZ bY bY bY bY bZ bX bY bX bU bX bY bV bY ca bX bY bX bV bW bY bX bZ bY bY bV bZ bP bY bY ca bZ bY bY ca bY ca bX bV bX bY ca bZ bV bW bZ cb bY bY bY bZ bY bY bY cb bZ cb bZ bZ bX bY bX bX ca bX ca bY bZ bY bZ bY ca bY bX bY bV bY bV ca bY ca bX ca ca cb bY ca bY bY bT bU bZ bY bZ bX bY bY ca bW bY bZ ca bX cb bX bY cb bZ bX ca bV ca bZ ca bX bZ bX cb bY bZ cc ca ca bT cb bZ bW bZ bY bT ca bZ bZ bZ ca bZ bZ bZ cb bX bZ ca bZ bX bY bY ca bW bZ ca ca ca bZ bX cb ca bZ bY cb ca bW bX bX ca bY bZ bY cb bY bZ ca bX ca bZ bY bW ca ca bY bZ cb bZ ca bZ ca cb cb bZ cb cb bZ ca bZ bZ bY ca bX bZ ca bZ bZ bV ca bZ ca cb ca cb bX cb bZ cc ca bX cb bZ cc cb bZ cb cc cb cc bY cc cb bZ ca ca ca bZ cb cc ca cb bY cb ca bY cc cb cb ca cb ca bY ca bY ca bZ cb cb bY cb bV bZ cb cb bY bZ ca bZ bZ bY cc cc bZ cc cc cb bU cb bZ cb bY bZ ca ca bV bZ ca bS ca bZ ca cc cb ca cc ca cc cb ca cb bZ ca ca cb cc cd bY bZ bZ cc cc cb cc cb cc bV bZ cc cb bU cb cb bZ ca ca cb cd ca ca ca bU bZ bZ bZ cb cc cc bY cc cc cb bY cc cb cc ca bZ ca ca cc bY cb cc cb cb bY cb cd bZ cc cc cb cb bZ ca bY bZ bW cb cc cc bY cb cb cb ca ca bY cb bZ cc cc cb cb cb cc bY cb cb cb ca cc ca cb bY cc bY cb cb bZ cb cb bZ bZ cb cc ca cc bY bZ cb cc cb cc cc ca cb cb cb cc cc ca bZ cd cc bZ cc bY ca ca cb cb cc cb cc cb cb cb ca cb ca cb ca cd ca cc cc cc cd cc ca cc bY cb cb cb cc bY cd ca bZ cb ca bZ ca cc cb bY cb cb ca cb bX cb cb cc ca cb cb cc cb cc cc cd cc cc bZ cb ca bZ cd ca cd cd cb ca cc ca ca cd cd cc cb ca cb cc bZ cb ca cc cd cc bX cc cb cb ca cd bY ca ca cc cb cc ca ca cc cd bZ cb cd bZ bX cd cc bZ cc cb ca cb cc bX cc cb cb cc cc cb cd bX ca cc cb cb cb ca cd cc cc ca cb ca cc cc cb cb bZ cd cb cb ca bZ cb cc cd cc cc cd cc cc cb ce cb cc cb cc ca cd bZ cd cc cc cc cb cc cb ce ca cb cc cd cb cc ca ce cb ca cb cb cd bZ ca cd cc ca bZ cb ca cd cb bZ cc ca cd cd cb cc cc cc cb cc cb cc cb cd cb cb ca ca ca cc ca cd ca bZ cc ca cd cb cd bZ cb bY cc cd cb cc cb cc ca bY cb cc ca cb bZ cd cb cd cb cb bY cb cc cb cb bX ca cb bZ bX cb cb cb cd cb cd cd bZ cc cb cb cd bO cb ca cc cc ca cb cc cd cc ca ca cc ca bZ cb cc cc cc bZ cc cb bZ cd cb bX cc cc cb cc cc ca cc cc bX cb bY cc cc bZ ce cc cb ca ca cc cb bQ cb ca cb cb cb bZ cd cd cb cb bZ cb cd cb cd ca cb bZ cb cb cb cc cb cc ca cd cb cc cc cd cc cd cb ca ca bZ cb cc cc cd cc cd ca cc cb cc cb cd cc cd cc cd cb cc cc cb cc cc cc cc ca ca cb cd bZ cd bZ cc cd bY cd ca cc cb ca cd ca cb cb cd cc ca cd cd cd cd cb cd cb cc ca ca cc cd cc cb bY ca cb cb cc cb cc cb ca cc cd ca cc cd cc cd bU cc ca cb bY bU cc cb cc cb cd cb cc bZ cc cb cd cd cd cd cb cc ca ce cb cc bT ca ca cb cb cb cb cd cb cb bZ cd cd cd cc bZ cd cd cd cc cc cd cb ce cd cd bZ ca cb ca cc ce cc cc cd cc cc cb ca cd cc cc cc cd cc cc cb ca ce cc cb cd ca cb cb cd ca cd cc cc cd bX ce cc bV ce cc cc cc cd cc ce ca cb ca cd cd cd cc cd cd ce cd ca cb ca cd ca cc ca bY cc cc cd ca cc cc cc ce cd cc cc bX ca bZ cd cd cd ca ca cd cc cc ce ce cc cc cc cd cc cd cb cd ce cd ca bS cc cc cd cd bZ cd cb cb cc cb cd bZ cb cc cd ce cc cb cc cc ce cc cb cb cd cc cb cb cb cb bZ bZ bZ cc cb cd cb cd ca cc cb cd cc cb ca cc cb cc bY bZ cc cb cb bS cd ca cd cd cb cb bY cc cb cc ce cc cc bY cb ca bY bU cd cd cd cc cd ca cb ca bV cc cd cc cb ca cd ce bX cb cc bX cd cd cb cd cc cd ce cd ca cb cc cc cc bZ cc cb bO cc cd cc cd cb bY bZ ca bZ cd ce bZ ca cc bZ bZ cc ca bX cb cd cd cc cc cc ca cc cc bY ca cb cd cd cb cb bZ bY cb cb bX ca cd cd ca cc cb cd cd bV cc ce cc bY cc cd bZ cc ca ca cb bY cc cb cb cc cb cb cc cb cb cd cd cd ca cd cc cb ca cb ca cc cd cd cd ce cd bZ ca cd bZ cd ce cd cb cd cd cd ca bX cc cd cb cc ca cc cd cb cd cd cd cd cc cc ca cd bY cc ce ce bY cd bX ca bZ cc bU ce cc cd cc bX cd cd cc bX bZ ca bV ce ca cc cd bZ cc cb cd cb cb bW cc cb ca cb cc ca cb cb cd cb cd cc cb cd bV bV cd cc cc cc cb ca cb cb ca bP cb bX cb cc cc cb cc cc cc bX cb cc ca cd cc cd cc cd cc cd cc cc ce cb ce bX cd cd cc cb cc ca cc ca bY bZ cb ca cb cb bY ce cc ca cd cc cb cd cd cb bV cb cb cd bV cd cb cd cd cc cd cb bX cb cb bZ cb cd cb ca bZ bX ca cd ca cb cb cc ca cb bV cc bW cb cb cc cc cc bZ cb cb cc ca bY cb cd cb cc cb cd cc cd bV cb ca cd ce cd cb ce cb cc cd bY cc cb cc cb ce cc bZ cc bY cd cd cb cb ce cd cc cb ce cc cc ca bZ cb cc bY 0.003 cd cd cd cc cc cb bO ce cb cd cd bZ bZ cd bZ cb cc ca cd ca cd ca cc cb cc cb bT cb cc ce bQ bW bW cc bZ cb cd bZ ca bY bY cb cd bY ca ca cc cb cb bZ cc bZ cc cb ca ca bY bY cb bS cb cc cc cd cc bW cb bZ bZ bV cb cb bT cb bR cc ca bY bV cc bV ce cc ca cd bY cd cd bX bY bY ca bZ cb cc cb cb cd cd ca cd cb cb cc cb bZ ca cc cb cc cc cb cd cc cb ca cd cb bY cc ca bY cd bZ cd cc cc ca cd bZ ca bY bZ ca bZ bZ cb bX ca cb cc cb cd cb cd bZ cb cd bN cc ca cb cc cb ca bX cb cc cc cc bZ cd bY bU bZ ce cd ca cd cc ca cc ca ca ca ce cd cc cd cc bZ cc cc bZ cb cc ca cd bW bU bW bZ cd cb cb ca ca cb ca bZ bY cb cc ca cc bZ cd ca ca cd cc cc ca cc cc cb bV bY ce cc bZ cd ca cd cd cc ca ce cb cd cb ca ce bT cb cd bT bX bX cd bY cc cb cd cc cb cc cc cb bY bY bX cc bZ bS ca ca bY bZ bY cc ca cc bZ cb bU bV cd cd cd cb cd bZ cc cc bW ca ca cb cc cc cb cb bW ca cd cd cd bX cc ca cc bX cd ca bY cc ca cc bX cc bU cc cc cd bY cd bX bR bY bZ cd bY bY ca cc cc ca ca cc bZ cb bP cd bZ cc bX cc cb cb cb cb ce cb bY bV cc bY ce cc cc cb cc ca ca bV cc bW bY ca cb bZ cc cc bY bZ ca ca cb cb ca cc cc bX ca cb cc bK cb bY ce bY cb cb cb cb bX bZ cc bZ cb cc ca cc cd bX cc cc bZ ca bK bZ cb cc ca cd bZ bZ bX cd ca cc cb cd cb bY cc bZ bZ cb cb ca cc cb cb bQ cc cb cb cb ca bZ bZ bY bZ bY cb ca cb bY bW cc bV cd cc bW bZ cb cd bS cc bY bZ cb cc bY bX bZ bU cb cc cc cc ca bY cc bZ bX bV bW bT bV cb bY bY bW ca ca bY bS ca bT bT bX ca bZ bW cb cc bZ bX bZ bT bX bX ca cc cc bY bT cc cd cb ca bZ cb bZ cd cc bW bQ cc cc bY bP bZ cb ca bX bY bQ cb ca ca ca ca cc cd bZ cb cb cc cb ca ca cb bX cb bU cb ca ca bW cb bZ cb cd ca bV bY ca cc bV cb bZ bQ bX bZ cc cc ca cb cc bZ bS cc bO bQ bZ ca cc cc cc bZ cb bT bV cc bX bZ cc cd ca cc bQ bX ca bY bU bZ bX bX bX bX ca bT bU cc ca bV cb bV bV bL bX bW bT bW bT bW bZ bY bZ ca ca bY bZ bW ca bZ cc bY bX bV ca bU cd cc bZ bX cd bS ca bX cc ca bG bZ cd cc ca ca bZ ca bZ bY cc cd bL bX cd ca bY bY cc bV bV cd bY bY bU cb bZ bZ bX bU bU bW bY bQ bZ cc bW bR bV bV cb bZ cb ca cc cb bW bW bW ca bW bY bZ bQ bV bY bW bX bY cb bK cb bY ca bT ca bY cb bR bN bW bW bU ca bX bU cc bV bR bZ bX bV bZ ca bL bS bZ bP bV bV bU cb bX ca bP bZ bB bZ bV ca bY bX bY cb bS bU bL cc bN bV bX cc bT ca ca bY bZ bO cb bG bY bV bQ bT bF bZ bV bN bK bY bZ bX bZ bV ca bZ bT bY bV bV cb bR bN bV bQ bX bG ca bX bT ca ca cc bX bX bY bZ cc bZ ca bM bN cb bY bX bz bZ bW bT bV bW bU bZ bX bS cb bY bW bW bY bT cb bY ca bU bZ bS cb bZ bZ bV bO bY bR bZ bY bV bY bZ bY ca bY bG cc cb cc cb bP bZ ca bT ca bI ca bZ bZ bO bU bV cc bW bU bW bS bS ca bW bC ca bX bX bW bY bR bL bS bY ca bM bQ bS bH bY bY bZ bP bX bW bW bW cb bW bZ bP bY bT bX ca cb bV bS bS bT bL bX bV cb bS cc ca bV cb bO bV bT bX bV bW ca bZ bN bY bU ca bY bY bT bV bU bZ bU bU bX bU cb bY bT bK bY bQ bR bS bU bZ bL bU ca bO bV bT bZ ca bO bY bW bZ bX bK bZ bU bM bV bS bW bK bL bY bW bT bY bZ bE bZ bR bQ bV bS bN bZ bY bV bM bP bZ bX bZ bY cb bN bZ bQ bF bm bR bU bZ bX bV cb bU ca cb bS cb bS bY bT bW cb bW bG bS cb bP ca bY bX bY bO bV bZ bZ cc bS bZ bZ bM bX bV bY bT bV bV bU bP bT cc bP bQ bS bX bQ bW ca bN bV bZ bR bV bQ bV bX bX bR bR bY bV bY bY bU bM bX bT ca cc bZ bQ bY bK bZ bQ ca bU bX bU bW bK ca bz bX cb bV bO cd bX ca cc bS bY bY bW bC bZ bW bR bO bN bI bY bY bS ca bN bL bW bT bN bP bY cb bP bX bX bV bO ca bS bR bV bS cb cc bX cb bW bU ca bX bZ cb bR bC bT bY ca bM bB bZ bY ca bZ bN bX bO bY bQ ca bS bS bL bV cb bU cb bY bS cb bV bG bV bV bW bU ca bR bZ bU bZ bK bR bX bV bU bY bR bU ca bR bU bO bQ bY bL bX bH bO bY bM bQ bX bX bX bY bP bP bU ca bY bU bV bQ bX bY bR bY bV ca bO bY bX bQ bX bB bX bZ bX bY bV bR bQ bY bZ bP bR bX bV bS bZ bT bV bT bV bY cb bY bY bM bY bY bL bK bZ bS bW cb bS ca bW bU bP bV ca bK ca bV bS bN bR bV bP bY bP cb bV bI bK bW bV bV bS bM bV bW bW bT bM bX bV bR bO bU bY bO bP bV cb bL bF bF bY bW bX bT bT bS bL bK bV bQ bT bT bF bW bT cb bY bV bV bP bH bL bU bY bZ bS bS bV bU cc bV bW bG bW bI bE bU cb bS bO bP bK bR bN br bX bv bZ bO bZ ca bE bU bY bO bM bY bG bV bQ ca bX bI bZ bR bC bT bQ bU bS bW bW bO bZ bN bX bR bS bS bX bS bS bO ca bL bN bi bU bW bS bU bX bY bI bY bY bV bN bS bu bT bX bX bC bM bU bX bV bV bR bR bV bP bB bF bQ bO bG bO bY bL bQ bS bT bH bY bY bV bZ bU ca bT bX bY bW bI bR bN cb bP bN bT bL bQ bZ bV bS bN bV bK bR bO bT bN bR bI bO bW bV bN bC bL bQ bR bW bW bV bR bV bI bU bz bT bQ bX bR bK bK bQ bS bM bX bO bG bZ bY bQ bU bF bT bK bW bN bZ bS bW bW bX ca bh bO bz bO bN bG bM bQ bK bV bW bX bI bT bG bV by bD bU bV bV bR bL bL bS bP bT bP bO bU bR bO bz bU bM bT bv bS bN bP bI bP bD bR bN bX bL bM bT bA bQ bR bL ba bZ bY bH bO bW bM bQ bK bW bV bM bZ bP bG bU bM bV bO bQ bX bC bR bV bt bY bL bP bK bO cb bU bN bG bX bT bQ bT bV bM bX bS bR bO bH bR bP bG bG bS bB bU bW bH bD bP bR bK bW bE bU bO bH bu bK bR bV bN ca bT bV bY bK bB bW bR bU bR bQ bM bS bU bV bX bX bW bK bB bS bX bs bQ bL bN bZ ca cf bU bz bV bV bH bT bZ bA bV bG bN bK bD bB cb bM bN bX bV bR bN bM bP bN bP bF bR bW bM bU bX bO bB bN bP bN bN bG bT bO bK bR bT bH bY bG bV bP bW bT bE bU bW bR bU bQ bH bU bD bZ bQ bQ bF bQ bO bG bR bK bK bQ bv bV bQ bM bL bS by bQ bV bG bY bV bG bR bR bO bV bQ bL bW bL bM bG bH bZ bG bW bV bL bO bN bI bM bQ bH bW bS bT bN bZ bQ bL bF bS bN bN bP bN bT bR bT bR bO bX bT bN bV bV bS bL bO bS bT bS bD bO bN bN bT bV bp bR bD bT bS bV bX bL bQ bO bT bP bS bR bO bX bQ bO bQ bX bP bS bS by bP bQ bU bF bU bP bE bW bM bQ bX bU bW bO bK bK bV bQ bR bB bz bU ca bV bN bS bT bL bZ bW bZ bI ca bT bK ca bX bM bS bH bM bG bM bI bW bD bS bR bQ bM bO bN bU bT bY bL bZ bV bN bS bZ ca bV bL bO bL bW bq bK bW bX bS bU bX bH bV bH bT bX bG bT bV bN bO bW bW bQ bD bH bQ bO bY bI bI bS bV bM bS bQ bS bV bZ bS bW bS bV bB bW ca bU bN ca bZ cb bV bU bS bW bR bA bU bT bC bP bL bR bP bE bN bY bK bY bR bV bV bT bD ca bz bM bS bH bF bL br bP bT bU bX bx bS bO bR bR bM bX bA bT bN bZ bC bV bI bD bY bR bW bW bU bS bO bO bQ bU bQ bO bx bP bN bP bO bT bK bX bL bN bH bR bK bQ bN bK bO bV bT bE bK bP bQ ca bQ bE bP bk bW bE bB bL bV bR bU bO bD bO bz bX bW bW bU bP bX bR bM bO bM bQ bI bT bN bQ bE bK bR bQ bL bM bE bR bP bC bB bC bR bN bX bV bE bP ca bI bD bQ bS bz bE bH bF bQ bH bM bR bV bH bR bW bG bO bM bC bP bH bK bX bL bL bV bT bu bS bU bQ bQ ca bW bY bW bS bz bY bU bX bP bL bO bK ca bL bL bH bP bP bF bM bH bK bM bK bR bO bT bK bv bP bS bP bK bD bQ bK bO bF bS bK bU bG bF bu bL bG bG bW bM bT bS bC bK bW bV bQ bK bU bI bN bT bP by bR bF bP bR bY bL bW bP ca bR bT bP bK bD bB bK bP bM bE bE bW bI bM bN bQ bN bL bM bT bG bL bS bF bR bU bS bT bP bX bR bY bK bK bR bN bL bW bQ bG bH bT bV bS bM bN bG bQ bx bO bK bK bQ bA bA bQ bR bE bQ bX bN bR bR bN bB bI bV bP bU bU bR bY bs bT bO bB bK bz bH bQ bK bK bR bQ bG bF bK bX bu bE bG bz bQ bM bU bO bU bK bM bW bC bR bV bO bX bz bL bR bV bS bL bP bS bT bK bG bR bZ bE bL bS bM bz bP bx bD bL bC bL bD bP bK bR bs bQ bT bP bT bI bN bK bC bO bH bC bL bK bW bX bU bQ bR bE bs bz by bD bD bG bD bQ bW bY bG bD bD bg bI bG bM bR bI bS bI bM bF bN bI bZ bs bG bz bG bF bC bB bD bR bT bU bL bO bN bP bC bI bP bs bN bK bP bC bK bO bY bI bL bR bH bT bH bO bS bL bN bD bV bW bT bE bN bx bL bE bQ bG bF bE bT bL bC bR bL bM bQ bN bk bX bW bH bS bE bF bF bF bt bT bm bT bR bQ bz bF bq bu bI bM bN bI bA bO bF bT bH bG bS bG bK bG bM bH bL bK bQ bv bK bA bD bx bP bT bL bP bs bQ bG bR bM bN bE bG bE bE bD bQ bA by bS bq bG bP bH bU bI bI bI bW bO bT bM bx bO bG bx bT bO bQ bH bF bS bK bP bI bS bB bV bS bN bM bC bq bT bL bE bU bH bT bR bS bK bV bP bP bU bD bG bP bT bQ bK bR bW bM bW bN bF bP bW bG bH bQ bG bO bF bG bN bM bO bC bM bW bQ bK bL bS bO bK bN bm bD bT bB bQ bV bQ bP bV bF bL bO bQ bG bQ bD bM bQ bU bM bM bF bD bT bF bN bv bL bY bB bP bO bP bP bI bE bT bE bL bR bI bB bG bO bC bK bK bO bG bI bK bU bO bE bS bN bB bG bE bK bM bN bE bT bQ bG bN bQ bG bE bH bO bL bS bR bQ bW bF bT bI bS by bN bS bQ bK bL bx bN bA bN bS bK bG bE bG bQ bK bR bM bN bZ bH bN bP bO bN bN bL bM bT bV bu bQ bT bP bv bS bO bK bO bI bD bL bG bN bN bT bN bD bT bD bF bN bD bN bU bG bP bP bC bP bG bH bR bC bL bC bm bH bN bO bC bS bP bA bM bE bL bC bz bK bP bL bD bB bO bP bW bN bR bG bN bH bN bU bL bE bO bR bO bN bL bn bM bO bG bG bM by bT by bP bV bQ bD bP bF bM bW bL bH bK bP bC bG bE bI bN bO bs bQ br bV bL bB bG bR bM bL bQ bL bI bN bI bR bB bN bv bK bG bT bC bM bU bY bQ bz bM bK bG bF bO bP bW bL bQ bF bE bD bQ bP bH bs bM bK by bK bG bF bT bL bM bP bF bF bK bA bT bK bP bh bK bA bE bL bC bM bN bI bz bB bS bE bH bW bP bI bz bQ bH bG bW bP bN bP bI bO bx bO bN bE bN bD bL bQ bI bT bK bz bT bS bE bm bz bF bU bB bH bG bR bC bH bS bQ bG bH bH bO bE bQ by bF bE bP bF bK bQ bW bz bH bP bx bH bH bK bM bL bC by bR bx bM bI bK bL bG bF bq bW bT bR bD bC bC bQ bI bS bI bx bN bB bO bG bG bo bU bM bz bL bD bR bE bS bI bN bp bx bN bP bB bN bA bI bK bN bS bS bG bQ bH bL bG br bF bO bL bG by bG bL bO bC bE bK bT bB bM Z bk bK bN bN bU bP bB bq bR bT bg bH bL bN bT by bE bI bK bx bF bE bM bv bs bM bP bE bC bQ bD bu bA bC bs bD bH bH bK bN bF bQ bM by bD bB by bH bN bM bI bC bA bB bI bC bG bL bD bI bQ bL bP bQ bX bT bI bO bF bs bE bB bD bO bN bs bP bI bG bH bK bD bB bD bN bD bM bO bB bE bC bH bM bF bC bL bM bM bC bc bz bM bG bQ bN bH bE bO bS bH bj bB bU bQ bK bT bx bM bz bH bF bO bC bD bQ bK bM bG bN bO br bq bI bO bC bI bG bS bD bz bB bB bE bD by bD bL bN bP bP bS bp bH bK by bA bK bI bG bI bm bO bG bM bH by bR bN bO bN bG bP bK bH bR bO bP bT bm bE bE bK bE bz bN bL bL bI bH bM bO bx bT bM bK bN bz bK bH bN bG bA bN bN bH bK bW bB bD bB bm bO bG bR bC bD bH bG bH bK bR bL bK bO bQ bH bD bO bA bI bE bI bN bT br bE bN bE bK bL bK bL bA bM br bB bN bL bB bF bD bD bO bM bT bS bP bN bQ bN bI bF bB bN bD bi bN bD bI bz bF bR bW bF bK bS by bM bH bI bO bN bC bE bA bP bC bE bK bE bo bC bP bO bG bN bK bS bK bS bL bN bN bE bD bI bG bI bQ bM bB bE bG bz bA bI bF bL bQ bz bN bH bH bP bz bx bQ bL bS bK bG bP bC bP bL bA bN bF bI bN bN bM bC bI bI bN bF bN bN bL bD bR bB bB bK bD bG bK bG bC bz bK bH bm bP bQ bL bh bs bE bT bc bR bA bL bz bi bN bM bN bN bH bN bE bO bE bO bK bI bP bN bP bK bC bx bF bM bE bu bL bE bI bM bK bF bH bQ bC bM bL bS bK bR bM bP bD bO bK bH bR bI bh bu bE bx bN bC bM bt bG bj by bz bF bA bx bI bR bx bU bE bO bG bI bH bF bP bB bP bL bP bv bL bH bK bK by bD bM bF bF bI bG bM bL bK bC bR bL bD bL bN bN bI bG bh bH bx bx bz bF bN bA bR bH bN bR bD bP bM bP bF by bG bM bG bL bL bM bz bG bR bk bL bG bL bN bz bP bK bI bp bD bN bC bN bL bV bN bA bL bH bC bN bL bI bA bK bt bG bG bN bH bE bG bA bz bS bE bK bN bN bI bR bD bF bB bO bC bL bP bD bz bS bM bG bH bD bQ bN bP bp bx bF bN bB bj bN bv bK bM bP bL bT bD bO bD bP bx bz bC bL bM bp bz bQ bz bM bH bH bB bK bs by bz bN bs bE bG bG bF bL bB bF bQ bN bM bF bG bR br bC bM bG bO bP by bG bL bK bU bP bH bD bt br bN bD bG bM bB bI bG bs bU bK by bL bQ bz bF bQ bH bM bE bB bK bG bO bD bL bL bK bG bB bN bN bu bz bP bL bK bN bE bM bK bN cg bA bQ bO bz bM bM bN bE bK bT bx bN bG bG bE bF bE bP bG bG bD bu bF bT bM bF bK by bC bL bP bO bM bN bx bG bM bL bA bD by bM bK bG bx bo bI bD bK bQ bD bO bK bN bG bF bK bE bz bL bL bM bO bH bF bq bH bB bH bF bN bN bA bQ bA bH bE bU bd bC bC bO bG bM bH bM bz bL bO bI bK bO bL bK bz bB bP bF bI bI bD bB bs bK bA by bQ bI bG bE bN bs bs bL bP bE bM bD bG bB bM bz bG bM bH bE bL bL bG bA bI bK bv bC bO bQ br bH bz bM bL bB bG bG bE bQ bF bL bM bQ bQ bO bE bz bF bO bB bD bL bR bP bW bL bM bF bE bN bH bs bK bP bM bK bL bD bH bs bF bG bR bI bK bD bG bD bD bK bP bI bO bB bN bL bF bL bB bK bM bB bN bN bL by bH bA bL bD bD bG bG bM bE by bz bO bk bN bR bK bq bx bL bD bT bK bm bx bH bK bB bF bo bL bK bK bI bF bD bB bN bL bL bD bM bH bH bu bF bv bF bx bM bG bu bp bD bM bE bK bC bL bI bB bD bK bz by bG bD bK bN bK bO bK bx bE bO bD bR bG bE bM bN bD bA bz bS bN br bG bM bQ bD bQ bA bD bQ bS bP bM bH bP bL bD bL bH bL bI bS bR bx bo bN bu bN bO bN bH bP bC bI bP bI bM bS bs bT bH bG bQ bP bQ bH bO bP bK bF bM bI bH bT bH bP bM bH bO bO bL bC bQ bx bM bR bQ bE bP bT bz bO bQ bL bz bG bu bS bP bR bR bv bH bI bG bG bF bL bK bL bG bL by bH bt bH bI bA bG bA bI bU bR bO bL bC bK bH bK bL bz bs bN bO bH bK bz bG bN bS bL bP bN bG bB bK bP bh bC bN bN bH bx bN bN bM bM bK bO bA bL bP bR bz bu bD bK bI bB bD bO bM bN bP bG bs by by bM bC bE bO bC bG bQ bE bH bA bA bF bF bN bH bO bM bO bR bB bM bK bF bN bU bB bG bM bQ bN bM bG bE bN bK bP bm bP bK bK bH bO bK bN bO bO bK bQ bD bM bN bF bF bI bQ bR bK bK bD bO bX bS bO bM bK bM bP bN bK bN bP bQ bG bH bL bW bL bI bM bI bR bB bC bM bD bK bD bS bK bR bH bC bM bL bR bQ bP bK bP bP bA bN bL bO bK bO bP bI bN bM bP bO bI bQ bF bG bE bN bI bR bN bO bP bO bL bK bD bD bG bQ bV bK bL bG bR bH bF bQ bQ bs bN bG bQ bH bW bD bT bH bF bG bM bV bv bN bD bT bH bK bD bG bA bm bH bM bO bx bD bF bO bG bL bD bK bK bx bH bG bB bA bO bN bF bF bK bE bS bG bL bG bM bE bQ bE bR bD bs bH bM bS bP bF bQ bL bA bD bK bB bL bM bK bP bF bC bE bG bM bB bF bO bG bK bP bQ bP bK bM bC bM bO bG bE bN bK bG bV bH bK bM bG bM bL bH bC bN bG bP bF bD bK bT bF bE bG bG bR bR bR bG bI bP bO bH bG bQ bP bI bF bL bx bH bO bH bC bH bK bM bR bM bO bI bA bT bK bK bK bL bW bA bK bN bO bN bK bN bT bK bA bN br bK bB bL bH bH bF bF bF bQ bG bP bD bD bS bH bF bL by bv bH bK bT bz bV bB bG bK bQ bL bO bR bG bW bP bN bx bO bR bK bR bK bB bs bK bT bP bO bK bR bF bT bT bK bD bE bB bp bP bO bK bA bL bi bI bz bH bG bH bR bN bO bL bI bK bQ bP bH bF bN bL bL bK bM bM bO bG bN bN bO bS bL bE bR bR bF bP bG bB bu bT bO bL bF bD bT bM bg bS bM bF bH bI bQ bN bF bK bP by bG bB bT bK bN bM bo bB bP bN bN bK bO bT bD bP bN bM bD bN bQ bR bI bE bM bO bN bQ bK bN bO bR bD bD bK bQ bL bO bP bQ bQ bL bM bM bB bF bK bH bW bI bz bH bP bL bF bN bI by bE bQ bO bH bP bG bL bK bI bS bO bG bE bH bI bT bF bG bR bH bN bD bN bx bv bH bH bA bB bC bR bp bU bE bO bO bK bN bG bU bS bL bE bB bP bD bM bB bg bM bB bG bH bQ bA bK bM bN bM bG bO bK bN bK bF bI bO bv bH bH bW bH bP bQ bN bO bO bM bN bI bN bO bN bQ bK bK bC bL bB bG bO bL bU bK bL bG bO bO bR bF bP bO bz bR bz bo bK bK bO bD bD bD bp bQ bH bF bQ bB bP bD bL bS bH bN bF bP bO bM bL bK bL bH bS bC bH bK bS bO bC bC bR bK bC bT bH bP bP bI br bS bO bK bX bN bO bO bP bH bL bF bP bI bO bD bN bS bU bM bI bL bH bP bG bO bN bR bM bH bM bS bR bE bK bO bN bP bP bI bI bB bP bL bQ bO bF bQ bz bH bv bC bL bA bU bH bL bM bM bM bL bG bE bF bM bo bO bP bK bg bO bM bP bV bF bN bz bM bK bR bS bP bO bM bO bI bT by bI bO bP bA bK bH bx bF bC bM bM bP bR bK bG bR bK bO bN bP bN bH bK bM bx bA bD bS bD bG by bH bN bK bP bF bK bF bF bG bO bM bS bM bQ bF bF bN bG bT bQ bH bN bP bG bA bQ bz bG bR bG bL bH bK bu bK bO bO bO bA bH bM bD bN bL bz bQ bD bK bE bK bB bR bH bR bO bP bP bW bM bS bD bG bM bN bE bE bK bN bE bx bU bO bH bM bP bF bQ bM bG bO bO bI bQ bG bK bN bR bH bI bQ bK bH bK bK bR bN bR bL bU bH bz bR bO bT bS bU bI bz bH bL bK bR bE bO bW bU bL bS bS bV bQ bH bM bI bP bL bH bM bU bP bO bM bL bO bF bF bM bG bO bP bN bN bH bL bP bP bF bO bO bP bQ bs bI bN bP by bL bO bO bE bN bQ bH bN bK bO bO bP bI bG bG bU bo bB bK bQ bK bT bN bM bM bP bK bG bT bO bG bD bO bB bz bB bA bD bR bR bA bT bP bO bH bO bG bA bP bH bS bD bx bI bL bT bW bM bS bO bI bO bS bu bQ bD bO bP bM bN bI bH bS bQ bQ bv bG bS bP bQ bN bK bL bM bR bC bN bI bH bR bH bA bB bG bQ bE bK bQ bQ bE bM bN bS bx bP bP bu bB bF bO bM bK bL bQ bS bD bT bI bK bW bH bP bF bH bE bL bH bR bK bT bK bC bT bN bV bT bL bz bS bS bv bP bL bB bK bT bB bI bK bF bO bF bK bQ bN bS bN bH bR by bP bP bM bU bR bI bQ bR bQ bS bD bm bN bG bE bP bS bH bR bR bS bN bH bO bS bL bL bK bN bz bN bC bK bF bH bX bR bz bK bG bP bA bP bW bv bW bR bT bR bL bK bG bN bS bM bO bH bN bW bF bK bL bP bI bN bQ bE bE bT bP bN bL bT bT bC bM bO bK bB bB bD bK bL bG bO bP bL bQ bE bE bO bT bO bG bR bG bX bD bC bQ bK bD bQ bD by bN bP bN bR bW bH bG bM bR bG bN bF bF bN bK bP bN bM bG bL bH bC bY bF bO bM bF bW bD bT bW bK bK bO bF bM bI bR bI bR bB bF bQ bN bR bN bz bQ bH bA bV bF bK bX bQ bN bO bL bK bM bU bO bP bU bR bS bO bS bM bI bK bP bR bN bC bT bN bN bD bM bN bO bR bQ bQ bX bH bH bS bR bN bx bD bP bD bK bB bB bQ bv bH bK bh bW bL bS bR bA bL bK bS bP bA bG bu bF br bQ bF bM bD bN bL bO bL bO bL bQ bN bM bD bD bP bI bG bP bO bH bH bH bX bO bM bR bO bB bH bL bE bD bF bP bK bQ bP bO bL bQ bx bN bK bH bQ bN bQ bL bN bM bH bK bI bM bI bW bH bU bC bQ bR bL bM bG bI bs bH bM bu bK bS bD bI bD bz bS bU bB bL bM bQ bG bQ bF bz bQ bQ bP bL bO bM bg bO bH bN bS bN bH bH bD bM bL bC bG bR bS bP bR bG bQ bm bK bP bQ bM bN bx bP bN bU bI bz bN bN bG bU br bG bP bT bL bU bG bL bH bT bH bH bM bR bI bN bG bD bQ bN bU bG bQ bG bM bS bN bK bM bR bM bV bF bP bS bQ bR bx bK bN bF bM bQ bQ bS bW bT bL bR bK bI bF bS bL bN bD br bU bL bS bP bP bQ bO bC bL bP bG bQ bO bI bu bD bR bD bH bL bC bI bo bF bN bN bO bN bx bR bP bD bM bB bO bO bG bN bK bD bO bP bL bN bG bI bR bK bE bP bR bx bR bK bP bK bX bL bA bL bR bL bR bK bD bO bW bM bH bD bQ bQ bT bF bE bK bM bO bz bK bK bR bN bU bK bR bP bF bT bW bp bI bM bQ bK bR bL bW bN bP bI bP bK bG bL bN bB bK bQ bR bN bL bQ bL bP bE bG bK bQ bU bD bG by bD bz bM bN bR bG bK bx bP bu bU bM bS bM bR bT bN bL bF bI bN bK bR bK bD bN bH bT bI bP bW bt bG bH bK bL bQ bN bN bG bD bQ bD bs bR bH bN bN bW bK bP bL bu bM bQ bD bI bO bF bE bH bI bL bN bu bN bT bN bL bE bH bK bM bW bK bL bI by bH bv bO bM bK bS bL bP bH bF bO bM bS bS bH bN bU bO bN bO bT bT bL bU bB bK bI bE bI bL bK bC bm bP bM bI bK bP bE bK bz bM bL bI bO bR bO bI bH bS bM bN bS bD bS bO bR bT bG bP by bL bK bA bL bL bU bD bQ bK bL bO bK bL bI bS bO bG bK bI bQ bM bU bN bH bF bO bQ bQ bM bQ bQ bz bL bR bO bB bT bQ bM bP bH bI bA bG by bQ bN bQ bK bK bF bD bE bK bE bV bG bL bP bU bV bT bU bK bK bN bS bO bU bG bL bH bQ bP bL bN bQ bN bI bG bM bD bK bN bU bO bA bQ bO bM bP bT bL bR bG bA br bR bU bG bC bT bO bF bR bP bQ bM bT bP bX bI bT bG bF bI by bz bH bK bF bB bH bB bK bG bI bx bK bO bH bO bx bO bQ bQ bz bN bQ bP bL bE bW by bK bP bO bO bR bF bK bP bN bO bR bG bx bR bR bI bR bE bQ bm bs bP bm bQ bR bT bx bH bL bO bK bT bF bI bM bC bT bK bO bO bI bW bL bO bS bR bF bU bI bN bK bK bK bL bz bN bP bF bG bP bM bQ bW bK bB bQ bR bR bP bH bR bG bK bD bz bQ bN bE bD bO bP bM bK bA bN bM bK bS bP bH bD bI bQ bC bx bA bN bN bH bO bK bQ bC bO bA bU bT bR bI bE bI bU bO bK bP bK bz bP bB bL bK bX bS bG bF bF bP bG bH bK bq bP bK bP bG bM bP bL bN bO bR bO bT bD bB bU bC bN bL bR bR bP bB bQ bH bM bQ bM bF bN bF bL bM bH bT bQ bQ bB bQ bH bO bQ bP bP bQ bF bI bD bu bE bG bH bG bK bF bG bT bO bC bQ bQ bK bM bD bQ bA bQ bP bO bv bM bG bD bI bK bE bL bI bI bF bT bQ bU bI bR bK bE bR bx bs bN bM bO bP bO bL bL bM bR bS bT bT bU bK bT bP bE bW bK bM bY bI bK bF bM bz bN bU bM bL bR bK bE bO bN bP bP bN bL bH bF bN bP bN bN bR bQ bN bT bH bD bK bU bN bu bT by bH bM bR bL bM bO bQ bP bF bD bL bT bH bN bm bK bN bK bK bK bU bO bK bI bM bO bW bQ bm bz bM bV bP bN bK bP bH bG bI by bS bM bR bP bU bR bX bR bK bG bQ bK bH bS bH bM bP bN bR bR bP bK bP bH bQ bD bO bN bK bI bM bO bI bS bM bL bM bM bC bG bM bG bN bT bM bR bB bN bQ bx bM bK bN bV bW bL bL bN bB bz bN bx bU bM bN bP bF bE bH bI bR bN bO bP bA bK bC bD bK bK bG bS bI bH bW bG bC bL bD bF bQ bN bM bH bP bM bI bN bP bQ bL bm bQ bW bA bP bT bE bs bp bN bV bM bH bS bK bQ bL bL bC bN bT bN bT bL bF bN bC bT bK bH bF bE bR bX bS bu bM bD bP bI bh bL bO bT bB bD bQ bI bW bL bI bP bM bM bS bW bL bO bE bG bz bU bG bA bF bO bG bQ bC bH bW bM bQ bM bH bG bu bP bI bS bN bS bF bH bH bM bs bE bK bP bB bE bG by bs bS bQ bN bY bE bI bG bs bF bR bG bK bL bP bN bE bI bN bC bR bQ bR bU bP bP bx bS bN bG bu bM bI bM bI bW bM bH bI bs bQ bT bL bS bQ bH bQ bD bE bA bI bK bG bH bN bz bR bG bI bF bN bG bI bI bN bK bN bO bA bR bT bM bY bD bE bC bK bT bV bO bK bG bS bm bP bU bN bN bO bz bD bF bM bI bV bR bC bS bR bS bH bP bP bS bT bu bT bO bQ bY bQ bK bL bS bU bC bR bP bM bO bI bT bR bP bU bK bM bK bQ bN bH bF bR bQ bR bN bV bC bP bN bX bB bC bP bN bR bP bS bO bU bN bO bO bR bD bO bO bI bC bU bO bP bK bL bQ bK bN bS bH bN bQ bD bH bX bN bB bO bG bT bT bP bQ bP bQ bN bH bN bK bU bH bP bT bN bO bM bM bR bQ bN bQ bS bA bH bi bH bO bM bM bO bU bM bP bB bF bQ bP bL bR bL bI bP bN bN bP bF bO bQ bR bF bS bN bQ bQ bP bI bF bH bS bP bS bL bQ bE bU bS bP bN bK bT bR bU bH bR bR bQ bM bP bR bL bL bQ bK bK bO bM bF bX bK bD bO bP bO bN bS bN bO bN bN bS bP bN bP bO bT bC bH bR bO bL bR bP bQ bR bP bF bM bM bM bS by bL bQ bU bR bT bP bO bM bI bE bK bE bM bs bP bH bO bR bT bL bO bF bO bE bN bQ bX bP bG bR bD bR bR bO bI bN bD bW bH bH bL bE bK bU bL bL bG bM bj bR bO bP bD bL bG bM bR bM bP bO bX bQ bO bB bL bz bO bM bM bM bK bM bI bO bR bQ bK bK bW bU bu bO bQ bC bM bL bC bK by bS bO bW bS bV bR bQ bs bP bS bR bF bL bR bM bN bD bQ bT bQ bN bM bP bT bS bP bS bU bO bR bN bQ bF bP bS bL bM bM bN bI bS bS bO bz bO bF bR bG bV bN bE bO bH bH bF bR bz bP bI bz bK bz bL bL bN bM bT bS bK bI bQ bx bK bW bF bP bN bD bK bH bO bW bO bv bL bH bQ bR bO bI bP bI bF bK bF bG bV bH bV bS bo bB bR bH bR bz bK bO bS bD bH bD bU bM bC bD bF bW bR bP bN bS bG bI bH bO bM bQ bu bI bQ bL bY bS bN bK bQ bO bK bN bO bK bP bN bN bP bB bp bD bQ bS bM bQ bM bU bE bO bL bQ bG bH bF bx bR bH bH bM bT bG bH bL bP bE bH bm bA bP bF bC bS bL bE bD bP bD bW bt bo bM bP bV bN bL bM bS bK bO bF bW bL bN bL bE bS bS bD bR bK bS bL bu bs bC bD bS bG bC bN bK bP bQ bK bG bN bz bI bP bM bP bL bO bO bK bD bL bK bB bL bK bK bF bx bI bK bX bN bX bT bM bG bB bM bL bN bI bN bK bG bF bM bR bT bL bN bR bN bH by bA bP bF bF bM bO bM bM bR bC bT bU bN bL bG bT bN bF bB bp bD bG bI bH bR bD bE bR bK bF bB bN bN bs bM bK by bR bB bP bv bQ bO bD bN bH bS bN bP bR bU bN bO bL bL bD bF bG bG bE bU bN bP bN bz bH bQ bT bu bF bQ bT bO bF bH bM bN bP bV bv bu bF bz bQ bC bH bO bF bE bO bz bP bL bQ bR bC bO bN bN bD bs bM bQ by bE bQ bP bG bK bs bH bL bH bK bH bM bS bD bK bs bD bC bL bz bS bT bP bz bm bG bL bR bK bM bB bB bA bP bI bQ bL bk bC bH by bR bL bQ bN bD bO bP bG bX bL bO bH bv bI bF bL bP bs bS bL bQ bD br bK bU bB bl bS bH bL bN bP bG bC bP bN bG bH bI bR by bU bm bL bC bD bH bK bA bF bM bP bM br bF bA bL bM bK bL bs bT bQ bz bI bI bH bH bS bL bM bN bv bM bQ bG bW bF bG bo bW bP bk bC bv bM bA bP bO bN bN bC bK bF bA bF bM bD Z bA bz bF bG bx bF bL bM bN bO by bp by bB bK bQ bH bL bG bU bq bz bU bN bu bG bj bD bN bK bM bm bI bo bF bv bh bm bt by bD bp bu bE bF bF bk bT bR bN bR bH bK bF bE bK bL bM bK bs bE bH bL bG bG bH bK bN bT bL bI bE bE bI bK bL bu bU bm bK bO bC bO bA bH bz bT bs bF bH bD bQ bP bK bO bB br bS bp bC bN bQ bD bI bs bO bD bN bH bG bR bD bH bC bG bs bM bB bx bB bQ bF bz bA bS bA bR bv bH bG bI bN bP bv bF bA bO bL bI bK bM bS bA bE bU bR bD bG bN bC bz bD bE bG by bI bK bP bz bC bB bM bI bB bB bu bL bB bG bF bz bE bH bB bI bA bP bN bD bB bQ bB bG bo bK bB bM bD bH bx bI bN bL bN bM bG bE bO bR bK bT bh bH bB bL bH bH bs cg bv bO bO bD bQ bI bA bL bz bM bH bR bN bN bF bE bH bz bs bG bR by bN bs bP bq bS bL bz bs bN bF bz bv bB bR bG bG bC bm bI bW bI bx bO bO bP bC bx bM bH bL bj bB bH bB bK bR bD bM bB bL bK bQ bI bI bT bP bI bD bG bx bR bH by bW bF bQ bQ bQ bF bK bF bN bM bL bI bO bN bT bP bR bF bG bz bL bF bO bP bH bO by bI by bH bQ bD bM bL bM bI bQ bK bA bM bN bD bT bK bF bF cg bG bS bF bD bM bD bI bC bH bK bR bL bt by bC bI br bp bE bL bU bM bx bF bR bC bH bM bB bN bL bA bI bO bD bz bB bG bM bD bG bD bM bN bM bO bL bI bT bP bO bB bQ bO bK bC bF bI bP bO bR bK bC bF bC bs bC bR bF bT bK bA bc bM bL bK bQ bD bM bO bz bP bB bB bN bL bq bk bz bO bQ bL bL bM bs bN cg bM bs bD bK bH bq bI bD bH bC bL bD bD bP bC bC ba bO bD bC bO bT bO bk bB bA bD I bQ by bF bD bj bQ bO bO bE bE bF bD bK bz bD bB bD bN bA bN bR bz bN bK bA bz bN bH bI br bM bP bQ bG bQ bK bG bO bj bI bL bQ bQ bN bK bU bN bK by bF bp bS bR bF bE bP bO bG bP bS bI bU bI bD bq bH bM bP bO bN bk bx bH bF bD bu bL br bB bS bR bv bE bN bK bR bh bo bx bD bN bR bA bI bk bL bL bR bu bC bq by bp bK bG bA bM bo bs bI bL bH bx bF bz bK bv bM bC bo bI bH bl bG bL bP br bA bx bF bF bx bL bF bH bx bI by bG bH bA bQ bB bL bI bE bG bh bF bC bs bE bR bt bp bI bA bA bH bC bs bO bC bx bR bq bz bF bP by bN bG bK by bP bN bQ bK bH bs bP bD by bL bj bo cg bC bF bF bL bI bI bE bF bH bM bL bH bz bQ bO bL bE bM bE bS bB bE bO bH bR bE bx bq bx bL bK bW bC bo bB bO bt bP bs bN bN bC bR bm bv bK bx bC bP bA br bP bx bO bu bo bI bu bN bx bG bO bR bG bD bC bN bt bn bR bI bD br bI bL bO bQ bK bC bO bD bL bD bu bD bC bK bI bv bx bs bF bp bA bv by bF bD bM bt bC bt bq bq bG bx bM bA bC bC bB bv bG by bE bO bM bR bz bE bA bF bE bP bj bx bG bI bG bM bK bu bz bP bl bD bN br bp bK bH bM bF bA by bA bN bm bh bA bp bI bD bK bB bD bz bN bP bB bu bA bs bB bL bz bL bj bQ bD bm bM bv br bu bB bG bx bv bo bm bS bB bL bK bI bI bE cg bC bm bA bE bz bG bI bv bo bt bL bb cg bM bv bH bv bM bx bv bm bO bI bH bH bz bx bz bM bI bF bQ bu bR bG bC bC br bm bC bq Z by bG bB bM bz bz bK bT bG bo bo bG bj bl bF bu bs bF bL bO bs bm bu bB bN bF bx bB bH bt bE by bF bl bA bF by bv bG bB bB Z bu br bN by bH bs bH bh bm bn bK bN bD bs bz bF bF bI bI bK bF bP bD bt bp bK bF bG bm bD bm bA bB bC bB bF bm bn br bo bu bL bz bv bg bA bE bA bz bD bE bM by bG bN bE by bE bF bI bz bR bk bH bE bz bq bE bK bs bm bx bp bE bD bH bL bq bL bD bN bK bG bE bI bx bq bK bq bu bC bA bD bB bN bN bq bt bH bs bL bO bE bN bK bN bz bC by bs bp bL bI bt br bA bF bI by bA bC bC bO bf bp bp bN bF bE br bF bO bD bu bK bI bD bI bp bu bG bQ bu bB bq bG bH bu bp bE br bD bo bE bj bC bH bz bA bF bM bC bM bA bC bd bA be bG bE bB bu bF bA by bF bG bG by bp bq bO bD bG bI bG bo bi bf bv by bG bu bk bz bN bl bH bG bA bN bz br bc bD bA bo bD bG bE bH bF bl br bh bC bh bs bH bG bD bI bu V bx bp cg bt Z O bM cg bj bA bC bx bO bD bB bD bB bH bv bO bs bp bI bz bL bA bP bB bD bF bB bE bs bv bs bm bx T bi bO bz by cf bz bF bG bG bG bK bC bE bz bx bx bA bL bz bf bA bL br bt bI bL bE bD bm bE bG bK bD bL bz bp bq bB bL bI bB bF bv bl bL br bB bH bK bx bM bs bA bn bq bu bM bt bz bC bp by bm bI bz bm bi bC bn br bk bO bE bM bH bk bF bo bL bE bz bN bG bo bK bC Z by bz bL bE bv bL bE bz bv bA bL bA bD bu bi bE bC bu br br bs bp bF bB bA bm bG bt bm bL bE bP bv bs bF by bo bC bN bM bF by bs bz bK bm bC bv bC bD bB bD bG bD bc bv bK bx br bB bx bj br bI bo bE bk bz bD bz bA bB Z bH bM bt cf bO bG bA bu bE bk bv bB bz bF bn bI bA bN br bH bh bt by bH bD bz X bD bD bP bI bb bD bA bH bh bF bo bs br bC bQ bo bF bC bD bA bF bE bA bu br bA bp bE bC bx bF bk bI bu bH bx bh bx bI Z bI bs by bz bE bv br bE bF bm bH bO bG bG bv bs bx bB bz bL bu bG bF by bu bG bs bv bG bA bB V bu bh bt bN bF bs bE bu bO cg bv bE bK bo bE bF br bE bF bE bF bt bC bE bF bz bm bO bC bF bA bC bD bu bN bj bH bt bE bE bc bx bz bC bI bm bK bM bq bI br bB bl bC bz bf bO bN bt bF bD bv bx bo bs bE bu by by bA bE bL bN bB bx bN bM bt bI bG bz bA bK bL bG bH bC by bs bD bI bD bs bC bB bN bI by bH bz by bG bP by bK bo bC bF bC bB bu bL bI bF bm bp bB bI bx bm bK bj bs bn bG bG by by bD bM bK bM bD bE bv bD bi bG bF bE bM bC bK bq bD bK bA bp bI bL bu bE bz bE bC bB bs bp bD bx bh bL bG bc bD bN bL V bE bH bt bE bC bG bt bD bt bI by bE bH bx bL bh bC by bh bG bA bA bx bE bu bM bB bu bE bQ bG bL bG bp bP by bD by bI by bs cg bm bA bI bx bB bt bu bm bq bu bH bx bH Z bp bs bm bz bG bv bz bx bq bC bx bx bA bx bv bG bI by bk bt bF bO bA bC bE bO bh bt bL ba bl bK bI by bI bs bj bC bu bC bz bu bh cf bE bE bI bj bm bp bF bM bB bs bv bq bA bF U bg by bF bE bC bj bB bA bE bD bo bG bA bN bo bz bE bx bR bv bs bC bq bI bx bA by bG bB bu bm bF bv bu bC bz bH bF bI bp bO bA bB bz bG bE bH bK bn bm bq bx bj bt bI by bF bB bG bv bI bK bN bo bB bz bo bE bB bA bF bC bN bB bA bf bF bD bG bv bt bM bu bf bm bL bo bz br by bh bj bi bE bo bL bf bx by by bv bu bM bz br bM bu bI bE bu bD bH bj bD bC bx bA bn bA by br bx bI bt bm bE bD bL bG bB bq bu bj bL V bp bI bk bz bF bF V bo bE bj bB bI br bI bF br bI bz by X bG bC bE bx X bi br bD bB bE bD bA bs bA bp by bo bB bQ bv bt bK bs bt bx bG bM by bv bC bz bA bu bD bx bj bu bC by by bo bz bu bF bq bp bu bm bv bB br bu bI bM bv bp bD by bC bB bx bq bD bG bH bG bq bo bk bM bz bM bP bs bt bA bH bx bu bt bD bD bO by bA bc bC bL bS bx by bG bk bg bF bu bD bx bG bu bI bC bE bE bF bC bp bz bG bF bA bx bL bm bH bk bD bE bu bx bC bB bq by bq bA bx bC bL bv bg br bI bN bB bK bC bo bz bn bu bx by bC bo bb bH br bI bk bv bx bB bg bD bP bg bx bL bB bt bu bH bM bx bD bD bE bB bK bH bA bP bF bL bn bp bs bM bz bG bK bm bt bz bB bs bq bt bp bz bB bm bI bu bF bq bC bI bu bx bC bF bA by bt bu bs bs bO bF bj bD bl bz bj bN bu br bz bC bx br bH bO bb bE bm bs bj bB bm bm bP bt bN bC bz bN bA cf bC bD bD bF by bM bx bu bz bC bI bH by bH bE bD bD bE bv bM bM bN bF bG bu bG bx by bo bG bB bA bv bK bz bl bm bF bp br bt bl bD bx bz bO bC bv bj bB bA bi bA bC bG bz by bt bM X bp bh bC bA bj bl bz bB bq bH bm by bG bC bk br bv bq bu bp bp bH bC by bC bj bG bv bH bs bH bF bI bM bF bo bs bx bu bu bs bj bt bI bo bx V bG Z bx bB bL bL ba bH bx bE bF by by bx bh bq bt bC bj bx bm bG bj bI bD bD bF bD bG bi bE bx bp bO bL bz bE bh U bt br bu by bk bC bp bx bs bl bB bK bz bp bC bq bk bE bF bN bA bp bG cg bF bM bu br bk bq bM bt by bs bF bj bB bc by bK cf bq bp br bC bF bx by bo bz bI bN bE bp bu bD bl bI bu bF bf bj bF bu bn bq bq bp bF P bL bj bb bo bF bE bi bI bC bq bC bv bA bG by bF bi bI br bv bE by W bU bM bs bA bD bv bF bA bC bE bK bK bz bs bH by bF bu bE bA bn bB bz bk bv cg bx bk bL bI bu by bI br bE bs bI bh bB bH bb bz bj bk bI bO bC Z bg bt bv bx bB bB bk bC bu bH bz bG bu bE bL cg W bG bb bH bH bF br bE bD bs bE bj bs bv bD bq bg bE T bD bf bP bl br bv bC bO bB bC bA bp bs bM bI bm bH bq bp bB bt bD br bx bI bD bH bm br br bK by bz bC bG bG bB bI bH bz bq bE bo bH bx bq bp bx bE bF bl bx bh bm bC bI bA bH bN bH bC bF bq bo bB bn bz bq bE by bG bC by cg bF bC bB bC bB bs bn bA bA bo bI by bq bp bs bC bi bx bI bv bC bz bo bx bm bC bx bz bi bz by bm bN bq bO bs by bC bL bA bP bG bq by bo bG bG bD bz bq bH bF bo bt bv cg bK bp bQ bF bG br bl bp bo ba bE bs bm bF bA bD bH bA bL bs bL bq bG bD bN bx br bp bK bA bA by bz br bm bH bj bz bq bz cf br bD bq bn bk bE bI bx bM bP bz bh bz br bz bC bL bo bH bz bv bq P bB bx bs bt bz bs 0.089 bd Z bu bx bm bC bE bi bF br bC bC bg bu bg bx bv bi bF bC bD bt bL by bR bB bB bs by by bu br bA bq bD bB bA bz bE bs bx bv bM bO bG bo bs Z bA bL bL bM by bv bF bA bG bj cg bn bm bE bv bE Z bI bE br bz bz bI bF bA bz bI bD bK bh bA bs bz bO bj bB bA bL bx bn bm bF bm bM bF bm bv bv S Z bx bq bA bo bB bM bA bz bz bL bG br bD bA bC bE bu bB bt bo bt bx bD bK bD bu bt bC br bB bE bH br bo by bF bM bN bB bm bM bI bM bI bI bp bK bL bu bt bE bs bo bB bp bM bg bI by bA bE bu bA bz W bB bA bx bA br bC bE bt bi bv bp bz by bs by bi bB bC bz bE bF bG bH bs bn bl bI bH bz bx bm bi R bB by bH bE bh by cg bB bN br bj bm bv bL bu bF bA bo bo bM bG br bz bm bh bk bA bC bx bK bm by bE bm br bx bN bP bE bs bE bG bH bt bn bp bx bD by bK bz bq bo by bo bq bu bD bL bo bk bE bH bE bE bM bM bF br by bA bu bF bp bP bz bv bI bA cg bA bC bs bx bx bC bu bu bA bv bA bA bI V by bu bt bj bL bq bE bz bx bv bx br bA by by bA V bL bD bz bs bx bH bI Z bt bD bB bz bh bk Z bs bA bD bc Z bo bE bG bk bB bx bp bH bD bM bs bB bB bp cg bB bP bk bs bA bB bE by bG bm bB bm bl bD bI bI br bC bv bI bI bi bu bL bA bx bB bq bh bC bC ba bM bo bC bA bK W bs bt bj bB bD bu bz bG bH cg bt bq bA bH by bn bq bn bE bs bH bL bi bx bz bx bF by bi bz bC bz bB bt bM br bF by bE bo bF bp bI bs bz bt bj bj bF bM bt bm bD bF bH bv bv cg bc bl bo bx bm bL bj bm bb bE by bp bM bF bA bH bD bF br bp bp bC bo bm cg bq br bC bx bv bF bN bt bh bB bH bk bo bn bo bx bp bu bE by bs bg bM bv bk bC bx bq bE bA bo ba Z bA I bf Z bE bE bo bx bs bs bm bC)));
+            \`\`
+a:(parseURL 'experiments/reward4.txt' fast)
+b:(parseURL 'experiments/stab4.txt' fast)
+c:(parseURL 'experiments/loss4.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
 elem('text','')
 \`\`
-            // TODO: Re-compute plots: 12k epochs is way too little.
 
         - Stochastic-ensembling \`stddev\`=\`.5\`:
-\`\`
-(display 'Average reward' ^(a:-1.87 b:-1.82 c:-1.86 d:-1.8 e:-1.88 f:-1.91 g:-1.85 h:-1.9 i:-1.84 j:-1.83 k:-1.77 l:-1.92 m:-1.75 n:-1.71 o:-1.81 p:-1.74 q:-1.76 r:-1.89 s:-1.3 t:-1.59 u:-1.44 v:-1.72 w:-1.73 x:-1.47 y:-1.79 z:-1.65 A:-1.51 B:-1.58 C:-1.7 D:-1.6 E:-1.67 F:-1.37 G:-1.56 H:-1.78 I:-1.57 J:-1.42 K:-1.34 L:-1.54 M:-1.69 N:-1.38 O:-1.52 P:-1.61 Q:-1.5 R:-1.49 S:-1.43 T:-1.63 U:-1.45 V:-1.62 W:-1.66 X:-1.19 Y:-1.29 Z:-1.35 ba:-1.55 bb:-1.53 bc:-1.31 bd:-1.48 be:-1.64 bf:-1.14 bg:-1.28 bh:-1.1 bi:-1.39 bj:-1.4 bk:-1.33 bl:-1.68 bm:-1.17 bn:-0.94 bo:-1.02 bp:-1.01 bq:-0.91 br:-1.32 bs:-1.2 bt:-1.27 bu:-1.22 bv:-1.46 bw:-1.25 bx:-0.63 by:-1.06 bz:-1.41 bA:-1.36 bB:-1.13 bC:-0.88 bD:-1.23 bE:-1.03 bF:-1.26 bG:-0.96 bH:-1.24 bI:-1.11 bJ:-1.05 bK:-0.97 bL:-0.77 bM:-0.65 bN:-0.98 bO:-0.82 bP:-1.08 bQ:-0.62 bR:-0.93 bS:-1.21 bT:-0.95 bU:-0.79 bV:-0.75 bW:-0.9 bX:-0.51 bY:-0.99 bZ:-1.07 ca:-1.18 cb:-1.15 cc:-1.16 cd:-1.12 ce:-0.73 cf:-0.67 cg:-0.85 ch:-0.87 ci:-0.78 cj:-0.56 ck:-0.69 cl:-1.09 cm:-0.84 cn:-1.04 co:-0.7 cp:-0.54 cq:-0.92 cr:-0.76 cs:-0.81 ct:-0.64 cu:-0.6 cv:-0.86 cw:-0.8 cx:-0.89 cy:-0.52 cz:-0.43 cA:-0.39 cB:-0.83 cC:-0.5 cD:-0.55 cE:-0.59 cF:-0.72 cG:-0.37 cH:-0.61 cI:-0.38 cJ:-0.47 cK:-0.49 cL:-0.74 cM:-0.53 cN:-0.68 cO:-0.71 cP:-0.32 cQ:-0.41 cR:-0.58 cS:-0.26 cT:-0.46 cU:-0.25 cV:-0.05 cW:-0.36 cX:-1.93 cY:-0.57 cZ:-0.66 da:-0.44 db:-0.34 dc:-0.13 dd:-0.28 de:-0.29 df:-0.27 dg:-0.17 dh:-0.45 di:-0.3 dj:-0.21 dk:0.18 dl:0.05 dm:0.06 dn:-0.24 do:-0.08 dp:-0.09 dq:-0.19 dr:0.09 ds:0.14 dt:-0.07 du:-0.16 dv:-0.15 dw:0.13 dx:-0.03 dy:0.63 dz:0.3 dA:-0.1 dB:-0.22 dC:0.07 dD:-0.12 dE:0.81 dF:-0.23 dG:0.79 dH:0.19 dI:0.6 dJ:-0.02 dK:0.64 dL:0.02 dM:0.47 dN:0.46 dO:0.24 dP:-0.04 dQ:0.37 dR:0.26 dS:0.51 dT:0.54 dU:0.43 dV:0.16 dW:0.34 dX:0.21 dY:0.99 dZ:-0.31 ea:0.22 eb:1.15 ec:0.39 ed:0.86 ee:0.1 ef:0.57 eg:0.65 eh:1.07 ei:0.49 ej:-0.01 ek:0.31 el:0.7 em:0.2 en:0.53 eo:0.35 ep:0.04 eq:0.94 er:0.5 es:0.48 et:0.4 eu:-0.11 ev:0.12 ew:0.28 ex:-0.35 ey:0.45 ez:1.51 eA:0.8 eB:-0.48 eC:-0.18 eD:0.36 eE:-0.4 eF:-0.2 eG:0.41 eH:1.02 eI:0.38 eJ:0.58 eK:0.59 eL:0.83 eM:1.45 eN:0.42 eO:0.27 eP:0.77 eQ:0.44 eR:0.69 eS:-0.33 eT:0.03 eU:0.55 eV:0.92 eW:0.01 eX:0.33 eY:0.76 eZ:-0.14 fa:1.26 fb:0.29 fc:0.73 fd:0.71 fe:0.25 ff:0.52 fg:0.23 fh:0.68 fi:0.15 fj:0.11 fk:0.08 fl:1.34 fm:-0.06 fn:0.67 fo:0.89 fp:0.97 fq:0.17 fr:-0.42 fs:0.84 ft:1.01 fu:0.56 fv:0.32 fw:0.61 fx:0.87 fy:1.37 fz:0.75 fA:0.66 fB:0.9 fC:0.85 fD:0.91 fE:0.74 fF:1.21 fG:1.13 fH:0.96 fI:0.95 fJ:0.78 fK:0.88 fL:1.04 fM:0.72 fN:1.08 fO:1.28 fP:0.62 fQ:1.23 fR:1.03 fS:1.22 fT:1.27 fU:0.82 fV:1.16 fW:1.42 fX:1.36 fY:1.17 fZ:1.18 ga:1.2 gb:1.05 gc:0.93 gd:1.06 ge:1.09 gf:1.11 gg:0.98 gh:1.31 gi:1.24 gj:1.58 gk:1.1 gl:1.19 gm:1.39 gn:1.14 go:1.29 gp:1.3 gq:1.32 gr:1.35 gs:1.33 gt:1.47 gu:1.61 gv:1.25 gw:1.76 gx:1.12 gy:1.43 gz:1.7 gA:1.9 gB:1.55 gC:1.59 gD:1.8 gE:1.88 gF:1.81 gG:1.46 gH:1.49 gI:1.48 gJ:1.38 gK:1.75 gL:1.6 gM:1.53 gN:1.67 gO:1.41 gP:1.4 gQ:1.57 gR:1.65 gS:1.5 gT:1.64 gU:1.52 gV:1.87 gW:1.63 gX:1.54 gY:1.69 gZ:1.74 ha:1.62 hb:1.71 hc:1.44 hd:1.91 he:1.56 hf:1.66 hg:1.68 hh:1.83 hi:1.86 hj:1.78 hk:1.89 hl:1.72 hm:1.92 hn:1.84 ho:1.85 hp:1.73 hq:1.77 hr:1.96 hs:1.79 ht:1.95 hu:1.94 hv:1.82 hw:1.97 hx:1.93 hy:1.98 hz:1.99 (a b c a i y u b d c t a e d e F f j a J g f l h k b r g h q i b D j a o j k s k l g p m z m n k n f o h i bk h cX p w e e n B h k e A q H r I C m s bl x t G q n j c v u v b w x w h o g a y z A i o B O g y S Q C D E k b E y p N bb p p bj F G z B s L H c K I J i d I i v v be K b i L g w M H M t w z I w v o y n H A M v M N bz d v b a p M k H O F E R e y T E c bf K O P C b k m E a P I X bn bG bh by K Q R L V N A D p p U S y Z T bZ z m bd bc v A U cn N n V b v bg w k W D W A a V F c g N I X bu P T bo m bm bM Y K Y Z ba p i w y n A j ba V y bD W w I I bb bi V L V k bc t M bb o bd be bq D bA bf bg B T L bB k k bg br D cc bC I bh W bi U bi bj bk D j bb L k T bl B G w A bX bm bb bn bE F W bl y bs E bx E V V G bp bd z A D bo bw V bd bR cC X bK ce bo Y bp bd bg bb bn bb Q L d bt s bP I P K bi W -1 bg F S bd bJ k bq O bF bl n Y z bl D bi Q F R br n bs Q J V D O bl bt bv V bj Z B bu bv A M O bw cf bx by cl Z F cs C Q cq bO L I bz k t bu dx X bg s x T n i i bl s x z bi bs ba w G M bA B bt bB G bC s bH J bD G bk ba n R O V I A bE B y -1 ba bF bw w L bu bY s bj Q bI bF q i t br U cH bd bo bU bC bQ bB bL bW cu bG x x bc W k L Z bb bt L bH A bc K bd Z bs bI bI bN cp ex bq cg bF bi bG bF bT s bJ z s -1 F bb br cr bJ bK bv bS U bL cP bw u T bD be bs cT bu bM ck s by E B V bq bs bD F W q O bN bD U c t u z I I br bO G e bt bb u cL bA be T v bP bQ bR ba ca bK bf O Y ch bD bB bB bG br bS bT u T A N cO cE bT bB x z N s S be bh cA bp bl bI u bt ci H bU bK E cz bv bN Q s C I bJ z bP be bg N br br cy bm s bi cb bV bV O R bc bw bf bc L bF bg bT Z v bI bW bS bX bD cv A L by bF bv B bT u bY bw cj bD s x x n -1 Y U bv i bj bA bC -1 S bZ bz D bi K e bk R cG bn Z be m bF be V z ba z G bg bu bA bi H E F bK ca N bC bN q bK bD bE O W bs bN A A bm k Z bP J bB S M Z q m E cd I by B I bB bw t O A F cb cc bg bS u O bi t bA ba J br N bq bD ba bv G cd U bd bz C L be ce bt R S be i t I A A bl t N bl W Y N t L O bW bA M br d w y be B k p q a a P u T bc N u bG p bw bE bm bj bz v bi bk bz bH bP I g E J bA P y C T z bv V A I bi T c n C t G M bo w I x v Q P p bU bj U bk P bc v C bl P bd bF P bA V P O bj cd B bc T bs g x bH bb k b E bo k p v J bH s cf A F Z cd bK F bv z C bc G E S C ba A G bz ca bd A P bH -1 x -1 H y T M bi k m E R k k W bl cg s bz bg bt j S cm bj Z bd ch Z v bF t cc N A cd N N J L F N z E M br S S bP W bb bj F I O E T m L bd bo bf cd W T g R bb X I F ci cj C ck bK bR Z be bp Q v bd t R I t bc cl bP t D J A bs bt G br bB bS T q bi q m a ba N bi L bK bg u bh U bP S cm bs cn J bv W S bI cm bK bH bn x cc bj K ct bg bv bP bs C bv bt V W bz bl S bj co bV m br bg bg be D bF M ba O bi S t G bd D S bA br s G bj x bt Q bw bv K co be B v bu be J G T z bA w p t E n bZ m bk cb bD bl C bv bt Y ba P P bF bv cc K bg q F cn be J F bg O cp Z bi bA O ba bD bv cb D bo J bW bg J U cn K cD bA ba be bi Q D bv bw cd C bd j F bB br d d y bA R cc F L w bh O cq P Q B bb bs bb G I C I bb bc bG H L by I v N bH bY bp cr bH B B L F H Q bA y bw H bb V Q bl n be i G br ba z ce bB Q u bE bd w be cl bv Q bz k bZ R bt L cs s I o w M w G q cd cf ct O w bv bk bu cb bg F ca P t u I p y o W br bd a q br O bP cn W bK bd J bb K bY bt A bu K bT U t U bD S bT by bo G bv bA bb bA u be bi S n bR bp ct bc cw bi bB bs bG x cd W P O I N bw bs br O C cd D y I E ba j P T D g Q W O bz bi b E bq k D d o Q g bc Q x J u U I bU W G v v P cu br bI t bH bS W P N bu P ba Y bA T D s B bW bj be Z S bk x bN K K I bt bc bc bz J bR cc be R bj S br g A x s dp bg ba L L C bH B H d bd T cb M I G be n l bd bS be G F bE bl Q bw F L bP bj G bI bB br bi m bb A M bA u R be D I bd ba bd B v by W bo bm K O F bc by ba Y v bz B be bg V o P B bb bg bv bC bA bS z K cl K O I o bc bK F bd s x bh u D z bj bD bG bH L bu w bi bt cv bZ cw bN eS by bD bS cs bt bF cx bH bB ch bu X -1 O Z bi bS cB S t U by ca bS v z q bF J bb C i F p bd bs p H bb T P G E B k y bw bz P t Z be K U x J bb I G bI z bf B be z y H bF W bd bG V bi cu bu cb by bI bD J L bj bD U bd bo bD bb Z R bS bI o P bu be v G w X br m S B z P ba bv bz cc be be cq bD L W S L x bI s D bl by N bN Z s bD Z H L bR bH bA W v by T bi F bw A bu bD bd q W w U B Z a D u Q bf Q ba be I bF cc P bA bh bW bm bB U bm Q br cc bi R bA x bj bv d S M L bf K bc x ba N bf S B bi bg I cc m bN cx bd bl E ca bw bw x s d i D bE bk D B v W m O M d G P Q bu K bC A p v bJ cd cl cy W bT bk bK R m Q M be E bv d W I L U L cb bB B z bI bh w C L cb bz T bw bc p bv bi bx bz P u bA S bI J S bZ u A Q bt T by bV cz ca d t bb T bc Y X E O N R bd Z cb bH n bA a C be Y bH bz bF M ba cb ba M y w L i ba b be cF Z bw bV cd t bd u J bw bz bw bw U bb bz bA t I T C s be q bP p j ba T bl o H bz bs bo bx bF bJ bz V bK Y F bp cS cA cn ca cx bN ca P O Q bc W Y bj bn cB bB A k ba O bd X S bp K L be R T F bR ca E J B K Z V T n W S k E bZ bz y bi t bi cc R v E bd p D ba O T bi F bI q V U d B bc S bc bz B Y bD br F x bz Q ba be bk z J bd bz bj w bQ be p bF bk n E bc L bk bi p bD bz U cb p C bz E b F L n bd S H be E v N br cl bj bi bz bw bq O m bA s bm bv bl C bk U Q ba S z be G P B W u J C L O G t I bc bJ bf bd o Z O be cb bS y W t C U bt Z T bl k P A O n H c b ba j d J T k ba w j n bi bj z P A R L S bb n E H t u k k V y bd I o x bi cK cf bi cx u bB ba C L -1 R be M T cb P W q n S ca K bv J I A bF Z G S bp V t bf bm bG bv bd cn bj K R ca bd cB Q bv be bl E be D G cb bH I y R F F bH W w bc bS P v q j i V bv bl bS z A bl T I w G bm K M bv by cm bS bm N bm cC cy bb cc F S bj Y G bl bF ca M B x W T Q bA bk j v C ba k g z y Z bs v V P ca k bv z bA bt bd G bt ba bE bQ ba ba s bc k k C E u p ba bs A J M C X bv bA Q br o G p N bZ bd s k v k be v G B P bH bL t L be R be z bF E p z t b j bw u S g D C E P A k m bj D j n ba Z bm bj bt D be j bs Q bb cb P R cl G b bj C J bg N X R m N D V D cB bt ca ca bk bz U bg y t cD B cD A C R o h bl u w bb bv be F bw H D o n bi bi bl bc cd bh L R Y U by bF bz c cw x bg T L F cE bz s cp bf I bm bt F x ba bA bs bk P bt Q bj W S bt bI p n z m D bu n bc bb m P L P H E bj bb W H W v b H V bt M W G s N bD bw I G L t v z t u bg bc N v T T s U A cF cI D n bb bs cG s cF -1 bm cw bJ L n bk D R cn A bY bw N D R P bv b bl bw K bt u ba bu be bd L E y t bb bD I I bb w b D Q o bd T O bw bd u z M L V bg V bc E bd bN ba O m D M V R T D U bj bR bd bZ O s cl bc cg bF bo Q bE O G w bz cb J Q cv -1 bT s S u bP cy bW cm S Q B ci J -1 bu w ci bf bf bv K cn Q Z S by Q bW cn N cd bg bI y L s cn bT -1 S P I bj A bw m C bd X cH cI bk bz bw F bm bE ba bF B R ba cb bZ M J u cU q bl C bv y I E U E x s cn bi F U Y p V bk U bP X bG bH A bp bo D bA p B t cF bt bS n cl H J z bh p bz bo bw bm bb -1 bk G n bD a bw bb H J ba bH L bb S bn Z E M br R V bN bI K bN bY z bb bA cw bd P bj C bD O bF by z Q s L z H bn i bi u I K bT bv n S I cd B T T bg bD y v M L Y F I U w B bD U b s by I Q bK bI bg A S G bb bB G U L X Q G bu Q bc s bz bZ bw bP Y F A bo cd bZ v bk bt E F bf U K A cv bC t w ba D W s T br L ba p T bt bA m F bb bA p bz be bl W bF o K n T p v J C cs bd q be bu I E Z n u F B bt B bq ba bj n bD O cH cC bc bF cJ cR bm be bv P Y cv bu bm cc w u L cq bf u bl bZ bq bK cv bu bR bk J J U T w a w j n m N bj P cY bg O be br e be bg K P bd bi bK bY G cB T t B D br -1 bG bi cZ bI ci bj bj y br U R Q L R F -1 P R bR cd ba N o Z Q M w P bF bJ bm z v c br p bk j j o E bJ x bd S G bl P J bw S bH s G X D bv U U C Z bw bp bc J bx D B ba A T T cB W S L cc bJ W b bA Z bD bv bS J bz bR bB bj bw bz br bZ Q cq J bK F x J bH bQ cH bt dh u bP by bA A u bl A O bD Y L bz cu Y R bL cs cl cN bA I bA D a Y bq X G z bu w bQ bA bN L bn E W A V cc V R bb bu bt G P N x I bH cg q u bk W L bF cw u Z bh cx cr O F t N bw bk bw bH I bd bz Y cn bS bc R be X bn bu bE bE ba m bq cr C S K bA cb cn bY R bh Q I ba L bO bO bJ bA cl bO bR bj bK E bN T bE a bF bd Q bj bW bg bf ci bV bp bu cJ cK bo bq ca cl cc bD K bw V U cF X bN co bD Z bF bz bA cv Q W E cd P cl cu G cb br cx cc x L bG cM bG cn J O bD bH W cc bY bD S S ba E t L F P x P cI bH bb bi bi M u bg T bJ ck cb bZ P cL cB bB dS bM bQ cr s bc bD bv bA bl S s bi T bG bm bi bg cd ct G P y be J bd bD bl bJ cl cb A ca bJ by U S ba n by Q bF bT bj D bA bi bf cL bV B G B s cF bf cr cb bX m T x C bK R L V P k bs n J bJ G w V x L bx D cs u cl J bR bT u bi Y cd bc bA bm bs B bu P be br cx T I z bD bP bF bE cc br cM bD N w o V bI B ba cd j ba bH bg Q J bH bP ci bp u cb ca bo bJ J Z bD bh bg J S m bw M O D bP T C I cs bH bd cl bn cm bm bw bc by N t N bH cx cB Z bT d X cd cC bf by cr F bo bw br bA K ba bc co bW Q t K J br M -1 K F bM bR bv cj s L bw cN Y cq bG bK bT X bH bF bJ cF cL cN ce cB bm q w bj bc bH bC G bB bz bb bP I F by bk cL cg t cs cO cg bF bG s R bs cB bB z t bw P G bz cf B n cl cL bH J P bk U cQ bE W Q cn I be G O T bc bE J L cb bA ck bY cv br ca Y ch bV cc cl Q bo cb ce R U bW bt bN Q I bL u J cd cj bP F cg bI bI bn cd ba T A cc bg E bf bB cP ej cI bO di cg cx bF bI bI bN bN cO bH bO X bD bg bL bR be cf cQ O L C bc bn bn P ce P br bB x bK bD bk bG cy bj bk P bt br bb cR cS ck V ba Z V bl G bU S cb M S U bj cd bS bs w bA bq N cn cc F j cq bd cx bX bj bF cW bJ cF bF bI cd v bS cM bt bt bj bs bA Z bH bb Z bD bj K bg bE y Q D by S bw bl Q ch w bl T bw bY E u bF Z B M W bv K o bd F bk cT N cm bQ bI P Y -1 bT cb u cR V bC bT k bH u R bG W cV Q bH cU du Y cV co bV bs cq bs bY cB x ci cl bJ bk bu D bw bh bF s f bT bu S ba p n t S bE bo u K B W bm bt cb x cr bq bR bE bU Q bZ R bQ bd bC bB br bi br P F I bT ch cL bE -1 bY H cn bv e bg R bG bH cv S bp d ca M s O bh o cg ci x cw R S R F p i v n v g bN bv bp bA k cb bH T x cd M G V I w bc bg y a ba bk bG cb cn bc v bg s P X bj T G cd D bF bc bf bi bz bj bj t bl G bk i M bA m b Q A bb be ca E j b w D y P B W y w cl x bD M x g B M p W bC bF bz U g bv -1 bd cK I cW W -1 A bX z bj A A bk a i bw be o F a e h r c G J cb p P Z bg bj cx z be v o G bk bl M g W bt C J S U cl U H k i i v j y H bg f b bi c c Y A i O H i m J d H cb ba y bv cd cl ba bh bW bN ci Y t by w y br n p bT bN d d w e M y a ba a m V ba c d n C L U d T bj n e Y cX s t T w M p K c i bj bc bZ K br W K -1 A t W bj t bR bl bi E d I bj K G bj v b T Z Z bS cd ba cl cY Y bv ck dc X bN bc cP U s bc O F be q bv i D Q a P J c B bB n n bb Q be p q bc cx cw ba b k v be D be cX q f bi b a j bw c r e f i i i a D L o z E f bm t Z cb v bv o V b a ca B T bA C a V y S bP m k bl R x A bB cq bO p p G k bb M bF W K L n P cc e cf X z w q y m bm G bP z bf D bl bF i y V j o U J bZ B W cQ bS bN O O br T t P x bS bT bH bg bS bk P bS bc cs cd O bd N cm K bq bG J bV U be bJ N F z bK D bF cv J bb g bk v M y C bj E bd A i z i v bt I cM J bZ d B w bz g d o L bC g m C p q I c b r ca r N cs bg bG I C bc g m k i H cw cF cl O d K s bt B bd bP cl t I P bZ cE bj bQ A d O bi L R bb bi x bu K cz dj cl bZ bx cf cZ bY W Y d N R cS B p n X E c a g r c bf V bP bK bt bB cb bi c L bd bI R K s W bA O a bv S cg bL bg bE y B cs P P bj bd ci M V bE br k bH be bl g O Y a n br bl ba bT bD Y bz bi x F bJ S Z br A p cu bh by bA cu bB X bm N bE bq cJ da bU ci M ba Q G cn ch A cc D i m v o ba cE df bw x cD cJ cn da cd dm db bG cU bs bE x bq K s A bu bG A x bI u bt br u S cq cC dd bQ cp cq R bT cJ bP ch eZ cC cc V cz cq x s co cv bD bB db D bm Y bj cb cc O A bc bh D x bu Y s bJ bE bO O B P e x m C m bb x u cO bZ B bO o g I bh bl ba Z T B N bS bo bg F bu X bd E bz U bs bA bv bE q C bL bj cF bn R cy dl cN dF bf ce T cn cq V A F Z cu z cc A bT D U a o ba be M b be p bj bg br u P V z bD Z bz R bU cp bG bz bZ ca bk cI bw bF cn ba p H bl ck P w bz cc cm bA V ca bb cf bD bE x Z C w H x z C Y o cB U ca bR cM bX bv bE bg E V S J i w Z U cc bK C a H bq x C D bJ k bh f Z q bd bt Y R by k i K t cx S bv cf G S bd cd R z bi bB O bf cf be by cw bb cn cm ct co be t bd bI V bi bk F P bC Z m S F bN cq P I bK cb bA bf B bE bU bB bo f bg S ch m bd B A D S bZ V c bb T bN n bD n bo N i e bd bw bt o N C A P bY c i x bm H T y W v m g q A z A bk S cd p bY K G bE G A bw bu bf bu bz bA X bl P q k w j be bR cq de cO A cM dc bQ t bs bd bb bz Q be bH be h a bc ba br bu bA b bB cg bC j q a C bv bt cc Q cN B bn x H be bH K O br e v x br T cn G W G bl d V bo U bz bJ a bt g i bc bs s bf bv X cN bh by cC A cn cD O cd bI M bF bE bl bb cv K bg bj q cs W Z B t S bk T A G -1 bB cP cK cN cg cO dd bE cD bD dg cL D by bK cE Q bs K bq bS bC bP bG bB bx bY bx bC J -1 bg bL J cv bJ Z D bw ch bp bC cv cg cd bJ T bR s s s K bp ca cI bm x cl cg bc cr br bR ci cg bn bQ br B bz bd bC bB ck bN cd bp cm co ci cB co S bG cJ bq X bh bQ de cM cC eF bH X cb bG br bp bG bm bM cr K bk df L eT cs cF bQ bp bE bh bU cE dk cU eG en dW dq dg cT dh 0 dg bd cT cA cb dv bV m br cO cR bE cx be u g bd z bk G K bG cj F bh bo u bv bt cu bI bq cr cD cC eE cp bP bL bb cA bQ bT cy x bJ cc be bp co cY by bp bS ca cy ce dn Z bJ cm bJ bo be by fr cB bQ bt dZ do bq fc dO di dt dj eO cS ep dy ev dz dX dr el dk dE dl dm cp cG bp cY bP ch dn cu co cW do dI cV dD cK ch dp bU ds cj bX I bt bD bH -1 bq bt cS bf dq J cZ cK cd cZ ee cd dA dV dp dP dw cR eB dr ds dC cD bn dJ cg cu s K cO cd dt cy bL dk dd cF co eC du L dd dv cK cq cA bJ cR bC bB bD cy co cs bM cE dN dw eY ds dj do dB dH dx eA dy fN fh dz fH dT fL dA dK fb dB cZ ce N cx cJ bW bT -1 Z p bK ba bl cO u bN bT cQ cl cs cq cf t ct dq cQ ca dC cS bS bI cq cp dB dt dD cO cj dE cF dn cK cV cF ch eg eN cE df cv dh dF dG df dl dq eh dG dU dc er fy ea dY fo gu eq gL dp dL dH dI dr dM cD cf ch cF cM bA cw bK bz cD dB cj dB dR dJ dK ei et dL fd dM dN dH dO dt eu dr dv dQ eb cH ek fq dD fk bJ bi bG bs X bR P bL bL cb cL Z N bm bD U bu K bT cg Q x bn x D d v cd cM by bF cb be bG dP cI bW du dg dx cv dP dv cy cR ck J P P cb bE cY cK dn dQ bq dR dO dx cx dS dT dU dV eV ed ec ef dW fl dX fD dY eo dT fv dQ dG fj dZ ea cy eb em dA dS dc fW ec es eK ed cM eR ee ef eg dr eh ei 0 dl dz dh ej ek el ek cW 0 ed fC dU em cB cW en 1 fm eo cx ch fw do ek eD dg dZ dg ep en fK dD ed dW eJ ew eh cM do eq dm er es cD eg et eu dE ek dq ev dm du dX ew dm ec dZ ey bQ cT ex ev du dv em cs ez gl es eP eM en dY 1 ey bG fV dl ey ez fi dv ez dg eI eA dO ed bV dB du cR cY eB dd dQ eC eQ dx dv eD eE dj cJ cP dJ eF bX cw eG da eH eG dH eH ej eL eI fJ em eJ eK dL cf dl en en en ec 1 dn dh en dl dP ft ep dD cY en eL eM eN fF eO en dW es eU cp dc ez ed ei eq el en en dl eH en en dt en em eH ei eP en eQ eR eG dl fx ey dL cU er dl cC eR dt ez er cp ck ew cU eB eS bX dL eT eH eH dV dl ei eU cT dc en ff fs eC df dl dl cT da da gs cV eH dA eH dS eV bM en bJ dH eG fX en eW eP da fa eL eW er eW dN eX cS eF ew 0 el eX eY eo dD 0 dq et cu gb fg eT dI dl ci de dX da dZ dJ bO eZ dI dj dF fa ep cJ eo eu eu dp dg bN er cY dT du cF dp cu cp eT eC dd fb cC bP dK cH eB eu cP fA cC dv eu dv dZ cT dm eW fc es fe er ek gA 0 go fd fe dp dO eK dF dR cW dD dL do dC dD ff cK dB fd em dk fn cu dx eG dc dH cU fg 0 eW dR eo eP dA fh fi dN cp ce bo cQ du cL de fj fk dA fl do eR cV eX er eZ ct cu dZ dl dY cr dB em fO eZ eD en dj eN en eZ fk eG cS cA s bO eZ dD cY fp eS ck dM dM ej cg eQ en en da eF dB cZ eP dl dF fm dW cV dG em dj cM eP eN eW eF eE fh eT fn eo dL eO fo em eZ fp dL fg eD bV bM cO fc fe bk dl cK dj cr fq bX dC en fr dX eu dZ cL cc dV da eB cO dc bf dW bW da cE ee dR dW ds cz dZ eB eW bG cM eD cr dg er fs by dN eD bR bJ dd cK cz dr eF dv eG da bn dg bO bm ci cd fS fg fc cJ fu ci dy dV dg cN fE bV fb dH en cx dl cj gh ce cO bM cH ep eF bX dg bG bo cC eI cO -1 bR cj bb cA cy ek ex dw dA de dm cD cI ex ek em cU eZ cV dv cT bT df fe cp cM eF eW eG cJ cT cw dX cu bR cM fb bE cv cf dW cy dD dV cM dZ dl dP cG cU do eV cx cN el ft fe eZ dj fB bN cI cC cS eV dZ -1 cR dj cp bP bc fu cw bV bM cV dq cN cD fq dZ eB dR dj bT ef de ew eF dj eD fz dt x ee bJ eG fv fm dD cS cN cO cw 0 ee cw fh df cD ec bV eZ dc dj et s cR eW ch eW bo dw by bR da cH bs dx ew db fw eF bJ cO cP by eO du cY em dl cZ bZ dD fj fg fr et fx ev da eB cr cG cD cC db cq bx cU cH eQ dl dX bp ci ea bk cz ci cN fe dv eQ ew db fv ei bM eO fm bi dL dm cD db fw dv bK bn cZ cF cT dh dF bV bF cJ bx ce cG ck en dD dg cW cp dB bM cw dd ce bm cm G co cw bq bh O ck cz cj bU cl es bR eE eZ cw dh eD fb eU db dm cq eF cT di br cQ cH cy bR cn eC cN cs eE df cV di cF cU cx cE cq ch co cD cM ee dR cZ di en en dg do bY ew cf ep cD em dZ J s cF ek dC cZ cS cH cw cF cJ fh ea fn dn cE eT bC bE cA cb cG bK cZ cq bp cA eS dt du cu N bL bK dO dl cO eQ ce fk cI bf bU cY fg cK cs eE dw cA cO bL dD dx do fe eX cR cF dL dX eX eX eS dX cq cR dz fq ds dr ee fq eZ dx es cA cr ci ey cD fd dx cS fr cg cS er dS dn eB cp cd cx dA ej cA ev cV dj eX dG dA fy fx eC cM bn bD cL ei cz ep ci cj bR bs cc cp bc bX dX de t bq Y bM ch dP dU en dp eZ cM bj bn cl bx L X eT cv db cA cV dO dd dc ej dA fn dk eC fn eV eW dl bP bM dk dn cq bs cN dk dZ bQ dM dn bo x eE dD Z cx cz ct et dN bI cJ bO bQ by dn ek dT fz dk dB bP fk fj bs cx cF cD cD fb dJ fq eO cy de cP bm bU bu dt bO bD bf fr dx dc bZ ca br bj cb bH v bP cB bj bF k bs dh cN dL cC S cR bX ex cK eS fk cT cp cj bO cR da bk cB bX dq by eO eD fj ek cK da dk cC cT bJ br bN bZ co bg bq cx du co dW dL em fg di cr bI ch ck cA de fr dO bX ci cK cU bT cK bu cL ek bU bo ds cl bp bm cI bq cL K cw br eS dh ck bW dt cm bl Y cN di bO cV di dp dj cD cH cj cw bU cJ fq fG dn dh cE cJ cS ck cz bj cq cR cN ch cC bK bV cO ex cS cd bp bB cf ej eC dq eS cw bL eO bX cw ci bp bK dh cH dP cE cL eE dC eG cW bf cc cC u bc Z bD Y bB bo di cN cO cq eF cc bq dA bh ci bk s dh dJ cL -1 G di ew gg eW dz cG cr d ca bc bU U cm bW s cA cf cN K cv bG cK cj do dQ cv cs cl dO ca cy dL cj bs cY dQ dQ cL eS X cD cO bN cs cK dh bz bG K dn cg cV dL fA dA cy dr dg eS dH dD bF cM cg bH bC cK dd fB eU bO cg S cO cM fC eo ex ck bi dB da bM ci cW cf bD cb cl bT dq eQ eS dh eL dA cf cQ bQ cN cF eR fD fA dd fI eZ Q J dV cP bU cf cN eB ci cq cN bX dP eR dj cv cf eF ds eQ dQ -1 cg ct dm ew dH dY dl bV ce cM fc dz dZ cp du cf bX fj dl eZ du di ex cN cu cY ct fq em ey cx cp F bu bg bf bp bT 0 cD cr by cn cN bS cD cT fr dr cM bU bK bK bX cU dL eR dg fj dj cu cD cC ch ce ce cl bk dk cI dv 0 cf eE cP bo bX bI eE do fu df cE bT ct dh dp eO dg dW df dP ce dg cm ci dt dR eH dz ds dA Y br dJ ew eT bH fe ds cV eG bQ cG di bQ do dt dj bx dk cM df cC eC fb cr bq bf eF ds cS et dD dC dg bU eC eB cR cF cw bT cE cJ bC cZ bc ce bN cI cN S bd bh bu cb cB cB eZ bS bj bi bP cT ex K cd cb ba cF bN cE cs bj cq M u cN bw ce bx bA bm br bF bB bp bQ cR M br W cg cu bn cv cJ by cx cl bE bn S m bu bc bA dh cx C co bB cv cZ dW cM fd bH cE bx bp cO cf cr cO cn di bx dh bg bp bk B cB bS N cs cm bL dB fk eF bq bG cl ck bt bJ cq ce eC dh cG bV bd N dv bY bI dX cf bw bI bV bT ce fr cT cY bL cg fP ek di bg u bt eB cC bU dj ck dA bh cz bU bE cO cr bs bR fr cW cy cf bM bR cP dx cL by cF cs cI cT da ce cy cD cf cM u cb cI cg bG cK bR eQ dC eo cV dc ek cF fm O ce ek bO eU cp cu bP cR bC cr bL do eC dh bk ce bc bL -1 cR R bs bD cZ I bv cW cf bm J cD cx dn N cb cb dn da eo em fk dU ej cE ch di cZ eW ce cy cP cy cT ct cq dD bK Z x eE by bg cr de X bx bK bJ dc cN cN fk bS -1 dj dq fE cw 0 dV cU cS fi eg cO 0 bX ds dK eJ cA cu cg dh bW cJ cE 0 fj bc dP db cB dQ ff cY dM ev df do dA fF eq eg dc dV dB ej fT bC cw dz dU ee fG fs dz dW cU dc dD bX dO fm eW dH dE eQ fj dh cH dv cZ em dQ dq cT dA dB bh dd eB dg ga gi fA dQ fH fg -1 fq cz eC er cu cm bj bE bH eo df fE fq dF eT eG dA fz cQ cx co cs cQ -1 dZ de cT fg fi cI cJ dO ce dn dn dl ev bx eE cL cS eX dX cY fn fI dG dQ de eS cz eJ ei cR cA cx cs eO dJ cy fd dn cS fk bY ep dR dZ fB dx fk dU cP dB ea ct fm cu cJ cI cg ct eS cw s bB dc ex co dB cJ bG bs bx cR cs dv bX eu cf eF dV dC bz dv dh cB bo by dD fe em cP dg ef fe ey fv bE dZ cH cO ch bh cs bU by cG cj dA cT cu eB cc bp ct cR ch cj dl eo co dJ dq dC dj bZ dN cS dk cS cr bH cE bq F cL cN dv fv ds cG cE dm fj db cK cR cN dm cm cN cL bZ de bB cP cK fJ cL fe ck ds cm dn dZ bT cb s do dh bn cp cd cR di dn fk dZ dH dJ eO ex ep cQ em cT dX dz cC cP fj cr ec fl fh fH er df cM da cK cO ca eZ bE cp co K T bw bs fg dg dV cH cj de bR cy bd F dh bq dT eE dO dw dI fK cu dM cA dA dW cQ cT dT fj db cs cP bN cM cl cp dh ej fr cQ eH er dD dP dd cM ev fI gJ dk dx fh dp ff dI dB do cA dp dJ du bg bV eu ci N de bR cC gc eT eZ dy dj cZ eF fi cC cU er dr fk fd eb es dr dI dS fB dO ds db cV cv bU eW dH dq dj dW ep cs eX ds cT dv dZ fM dC dX eF cS ea eF fi dO 1 eR fL fA dQ fq dJ cY dZ cC cZ dl eb eG fn eL cQ eC dF cZ cu cp di cD ey fM eP em ew dP cC 0 eR ey eJ eX fw dC eZ cC dX dW 0 eW 0 dp dp fi et dQ fN do 0 ea fd dp fr cW dB eQ dP dW cU -1 eZ bH cB cd eW ev dc cK ef gk eU eK ee bM dg eu cG cp cP 0 dq cw cS bw bp D bp bw O bB cO bw dh J bL bO cL eE cA fk eF eg dX dv eC bX cx dP dg dO dL de dw cB ev eB cm cG ev da -1 dp cp cY ev dd bM cm bN bD bv u bO cJ bU cW eB dS bq cs cZ cP cG cp eB bD cq bP bI bD bd cU J cB bF cm bV ch cj bO dh dw cl cE cx cl bn bp bo bH cg bn bb cP da cD ep ch dB ci dA bo cM db dr ce cU cd bD G F X bL cY bh bJ U bt bq bK cK dc cO bV dw ea dw dr dh cc cQ dD eT fs dh dh dr bX bm Z bt bz I P T bp bh bV bW fi dq eB de eC ca Q br d J S cl cc u Q bZ A K bi m T y q bw R z W bB da cr bp W d S cy bP p I B F bd w a w e c e bz P q v E p b J dd J F bu bY u bH Z V ba d X Q O h i G D O G Q bv t E cv O bC a D cm bu s bM bH ct bd bH by N bk D T D k bh ba z bm bR J o g T t bD ba x q k q G L p E bj o b o d y bR ba ba cB u bp cx cd br bH cl Z L c F u t S ca bI fr s D bI bs U x z bP bA bD t V be V P bz V bb D H bP bt bB cC bi bD bE bn cO bM bJ A bu s T ch O bH cd O w R V ch bZ B O cq bh O V L ch R bi V G L m d bg cd bn cg cB G E bw bf ct R B bm F G bm D x D C t Y bs bK ci cr cv t O cg cM bI cx cm cb U bG bl bc -1 J n o U P e d t X dP bi cb P V cc cY bM bE bA bS bf Q cL cx cZ bj ch I I bu eB bV bS bM O bj U G bl B bN G O B q v bh bN z H q d o ba cl G x cd Y X cn M bb bm bj bu bc fr M be C bw x x L cF bs by bm cq Z cb bO P bW bB bE cf cU eK dE dH dv da dj bG br cg bi fr bN ci cq O ca bl dc bh bq cf ca bu ch bI bL bq cq bZ F bD cY bA cq t H J n bP by H cP n L V cx cb bs bm D dd Z F cd Q bl cc bD F bJ cF cf dV df cL bR ck cQ A cY cM ct u dZ dv cr ch cd da bp bg cu cF cE cv dD bh bQ dA co eS cR bX ca bf cl bQ cn cO bi bJ cf bW eG bt bX bP bK bW ev bV cO cO dd bV bn bf bx bN dP cx by cv di cq dB cs dx cQ cA bW bY cx bB fe eX fI ff cN fw dF cF cx eF cH cM dA gO cq cl cB cQ bJ ek bK cF ce cf cn bL ck bi eu bi cf cB bA cP ci u bZ cj bx dF fi cZ bE cQ br bQ df cs bQ cY dt eE cF cB -1 Z du cS dR fK dV fM dr cT dl cs dm ef dC es es dD cE dy fA cA dg eY ct es dv ep dH dy ck cH cQ cw fh fJ fq dA dO cS cI bX ev dm cb dc dn cy cp bC dp cG cF ep dP cz ea dH cU fj ew dW da fm dq cW cW dr eE cD bN cg cH bP bk bk O cz cF bV bj br bj bb n bm bu cu bJ ci bM cy dj do fv dc dL dz dR gm dm eG dj fO 0 dJ dc eE cY da cp cS dL cP cC cL fi dw eW bM dL ev cO cW cA dp ee bV cu cf cU dl bX bn du cK cg by bo ca bz t k X bP bi a H L P A Z g h bc d bb S be c I Q i bB Z B s cp S L cf Y p ba bZ cv cC bx I be I ca bF bQ bo j bk Y V q t bK bL bA G F bS ba -1 m D x G A bd bj p bh X m bl P J O U q H B a M i d r b I I J a be bA ck cq bp F cb cy bw bT ee eN dA dL di cq bQ br bk bA cs bj j V br bF p D t g B e bl be be e bo Y bf cm O cH bG O bP cs G bA T I V Y bB cO V S bu cq k bu cm cZ bO cw cz k bm g O ba bz bm K bo bD bH C V F bg bs cm bk by cR cE bh bF eK dz ex eX cA bc L K ca W bs T Z N D y b bl e cc R X P bH a h O bZ cl cd cc db bk X bK bn I U i bv cZ de K cI bF cZ cy bE bR eu eO bM fb cQ bX cG cC bJ cn eE ej el cZ ck cf F cp dS dZ cy co fv fv dC dZ fp cf ei 1 du dI cD dJ cZ ec eC dD cZ cZ cT Z bO bG cd bO et dF bX cu cr bM cN dw cJ dF cr dk cs cB eF x cv cb bf cA eO cp cP bg cj dF bI bQ bn bo cZ dc dh dH cx cx cP F cF bZ cV ce cr cs bU cl cz cc bN s v eE dR cQ cS dp di de ec fU dh cV fk cm dh ce bE dd ds fR ec dr cJ dh ck cU db cT dg cB bO ds dS dd fQ dU bx fP ep cC fi dd dl cz bS cH cE bh dj eQ cf di fJ dc eW bx eK eu cr bB eu bh W cH cU cF bK bY cM cu da dC dw cd eF dm cb bv x dQ cT cu dd cc dP ev bM dX dn eN dn bh cz cq dt fH cD cm dR cS eG gf eO dY dA fQ eG fF dc fd ev db bX cm eO dr gS fn dM fE fg el eG eI dr cQ dI dJ eQ fj cy cC di bO eT dw cA ek et cT cV cW ff dS eX dW dW ej dJ fu em dA dH fC dg dZ ex bn ct cB dL cC dg eW eC do da ex Y cY bM dA di dt bN du em dv er eB dq cG ct cI cK dS fg 0 dl fg dt bN cN cg bh cu cD dH fj fv dr fK ea ds ds ci bQ bO cJ dt eE cp cY cO eF bV eF cj db dC de bQ cO cx dm eQ bO cU ci bG cJ cL dH dP ds fi -1 dj R cR cA fg dY 0 cS cc cg dc dF di fm cy de cS eP dC dD db dM da ff fe dY eS bJ dJ es de da cN ff eS et dG ew fG fZ eu fR fq fr ea cp cV fi dh dD bR fj ej dL cK fS cK cF cQ bM dt cv co dh cT dT et et el fg fb eU fY fo cy fJ fT fc ds eI fj bK dp bW eB fr cP bU cf fJ bO ex cY dm ce eu dl dK eX dn dP fv ef du eo df eK bI dH ek fu dS cp cM eE dw dK dK fb er ec fL fK eC eg dN ec es fj du ek cj do cW fp ew fU ei el cW dP eX fv fq fu ej eH fV dS fW fn dp dp dq dr dt eD cU fq dg cn fH eZ ea fq df do dw cQ dw dc eY ff eS es dI eN eB ed fm fG eg dk eO cW eK dV eO fm eD dS cI dT dd ef bV dO ea dH cA cr cQ eC cQ dX dH ge dQ er ei eP ec et fi dm bU dt dr fp fr cj dw cu ev fo fU dk eU ds ek cQ ee eG df dO ec cY dG eX ch dJ dy fo fX ed ea dF fY fe fA dE dt ec dK gR cL eZ dI gD dO ej eT el eQ dh fo fT gd dx fr bN bO cB ci cF el dm dX ej ek eZ cq cM eT fv bM dc en en dF ec fP cW dQ dL dO ep fP ea di dc dI 0 dX eQ ci eS da dD cZ dE ek gy fm gn dP X cD cw ex bX cp cG fv cP dd cI ff bu eB dO eI fJ dk eg ff eI ds fb fc dP eT co ct bR ej fn cW eS eA eU fL cD eo cS cV cT cD bQ dP dU cQ em fq fx fe dm dX fd db dR cD 0 fA dU fV eU ej fZ gB dd ek eZ ga dk es ep cY eD dD bK eU dT dL cS cD bC eE gb dq cA fi gc fL fw 0 db bL dY dq fg dt dP cu dx cU dl fD eF de eQ dU cw dk eS ek eG eg dY fh dS gd dt dn cN cu cK ep eT dV cn bI dD dP fP fa dA el eQ ep cT df gc gc ee eI fw eD cS cC bX bW ev dJ fg cW eZ eX et eu dQ cA eD eC eW fU dh dO dF dk dv fm eK dA eJ 0 ef cI cz gb cu ev fe eX ef eD fA ef fv dQ ds ge dN fU fl fk ex fd gY dX eh dd dH eG cs bU s dh cJ cv cT do dj dx dQ gb fD fm co fL dO dl F cd cC dU fi fD eO eL dn ea fq fM eP dA ep gf em db eJ fM di es dB dT bT cR cN cA ew cr cp cH cU fu eE et dF fi cK cH dc fq eS dT bG df cE en dx dA eu eR dn fh eF cx bJ dD du bU bA bL dD eU dw fb dl dW gf cT dr dc en dD dR ei dg dl dX cN dC cQ ec cS ep cC dj dp cu cK dD dK dc dd ek fC cT cA bx cy cH bf bJ bB fg cr cQ ee dh fg du dp eQ dO dc cT ct cC eO eY dz em bx eQ eK dr eN dX dH db dw dV eb cM cL cy eS ff fv cC bJ eT dx ex S eS dK fr eE eE cI eh s dt bX eA bU fm ev bh cq bo u cj M ca eu ex bR bQ dP dv dv dw dE gp dd bM eC bV dZ cy bF dK eG fI eK dX du cp ep ej eZ dC bx db cJ cm cr s dM eg eS fi bA cI cd cA dc fh fU fC gq ea cU dQ eI em eZ dn do dL cg ex cu cB fc ex bG cQ cV 1 dl bm fm cA cQ bV eV eQ eS gU gg dn ea fk fe cQ dX cI ev 0 ex dI bY em dX dT cj cM dl dt dX df cu ce 0 cE eR ch cA dq dS cx dX dn de gh br eU 1 et bN br bQ -1 cW cg eY fw eu bk cS dj dJ ex bG bq dn dg bB ci cv ca dB es eB cz ca ck cK dR dN fz fF er cC gc dr dV cH dr bV bL J fv cZ dq ee fw dc bS eo dB dg di eG fj cz cR fr fe dx bn bl cu bo ct cG U ew dy cj dV cJ cn ce fe er ee bI eW bG dz dl ex dV dT ef cT eX fs ew fp ek ct cM cT dC dd bU dV df dl er bM eQ ew gc fA dj en dn cS fe cn cR cz bP N bq bd y bP z bT bY Y bY bG bs cz ev eG ci bw cs by bC co cL cf bp et cI cP ex bW eC fI cH fj dm cJ cC G bG bJ bj bY dd fw bL dP dW bM eS dV dh dx bJ fj cG bT cP cY dn fE dR eU fd dX eg eD eN el ck bF bL bW eB ec bs dl ec ds fm eZ dp ci ea dx cz bh cw bE cO eu gj bV dQ fA du bh bx ee dD dz eZ bx bK dz ef dJ eA gi ct du cq dF cj db bk bT cP cy bT bn bF br cp dR cU cy ej eg dK cR cb bS bq cp bX dQ bq cD ev ea fU de dI eo gj eY cC dF ek fn dl eI ee ev cr df ei cz fv cI fx fv dQ dh dk eC 0 dO eU ew fJ dz dA bx bJ cO eS dk bG cl cg bT L cY cU cS bY eD dL cy cb N cP bK cr bJ bR cR ex eA eL da cO ej fp et ea eE dW cq dg U cd ef bW ck eq co bb cK cS eC ct bO cd eB bC bL cg do bk cs eG ej bo cG cE ce cH dd eG dr et cg bG cC dw dk eY dL eF fg eG fJ eJ cV eu fN ey ex fn en dH fD eG fq cu eA ge cW dV ea cM fh bK cA cY bz ca bf dt ce ed dq dg da cx cU bM K N cl cj bo dt du eE dn fr eZ ga bM cc eB cl di fU cw cT S bk ea fr dq bR cH cL dL cq eE cp bI cV cU fg dn cM cZ cK fm cD dg eF fk cO cr cE fr cN bO cW cH ci cv ct cJ cw eL cZ cq cf cr bJ cS bn er ch cQ ei dC -1 eN eD dp gk fA eQ cm ck bp dM do dR s bL fj 0 fv fi bX bF S cn dF cs bY cJ cD cy cg cv dp eD cI cW du ev cG dq fq de bq bI U fv ce eF bW eJ cG cy ce bh R cx dd cU dF cw en ew dr ec co by cw da bQ 0 dM eD dE cE eD dD ei da eG fi eZ bq de ek dC ee du ey de cH ec dh dh bu cV db dW dg eF cJ cp cM bQ bK dq eg do fg cJ bq cJ ef fC eK cQ dv fz fj cM bc fP dD cc dP cV cw cE fr fj cw df dA dP dt fP fb eX fL ek ev eZ eT bC dZ cf dg bp bu eE dm dv dB bD cb bk cn bR W cl cl cr br bi bT eK cc cL dl fE bT cY bh eX dj eO dh df da dA em eJ gr dO cV df ee bN bL bV cI df dc dx dD dD fb ep dv dS do fM dC cQ dz bT dt cV eB cQ cU cp dd dt dd eU fb cL dJ dg eW bq ct bU cI dn bV cB cA X ct ch cJ dL cM et dH de gd ew dk 0 eK dR dB cu bN dq bE dz fq cM cn bR ew dv fD dO ep ge dL gc gl eo gv fD gc eY dr fg cA bU cF bC cf di dl bQ fj fj eG eQ ek cV da bM dF eZ cF bF cO bH bL eW -1 cq fq dI dR fp eI dQ dD bR fe eu cv bl bq ct dz -1 dJ cQ eE bQ dh cM bL cG fb eE db dx fi fq cj fj cg cJ cs bs cy fk dQ gm dN dh cF dH cU eC gg ey dx cA cA dk eW fi dZ fo cS ej eC eU eb eC cz bC ev cs cZ cA cz bO cK cc cF cn bM bq dn es dd dk ey ek eU dD do eX bX dB dq fg fm ej dP gc es bh -1 dq gj dq cD dk cI bW cD dQ dr dx bD cl dd cz dM cH dv cC es cL gn eX gm eQ dV df cq eK fj cy ce cM ec dT el ep de dq eu dI cG dx dI cS dJ bx dw do dp cW bO cs dl gg fn fE fj dn co Z cU bK eG bx dT fs ep di dg dB bY dF cH dc cU cR dC eF ch cR cz dP x eZ cH bM cg dV dq fC eo de cJ dO dx cP dz cL bn co ct bQ cI ch ej ey dX eX fZ dt ex eS cp dP eO dN cz dx fw eO de cA do cS dc cf eA eT dU dO er fz dF dM cz eF bD S bL fk cm bR cv cd cU cG cu cG cW eN bI ds bU dt dt ep eI cM et fj bo dy db cQ bY dm bW du bz cl cx cH fF bp bO di by dJ eC cU dj dJ cR bv x dt ec ch eW cr dj cf cH ec ee fU cp cC dK ea bW fk dL dz eW cS ec dA en cu cm ck de fk bO eE cf cq dA cY bZ ct cE ck eo cZ cJ dv dp ce ch ch eF cj cF ct bx 0 cO cA dV fg di dE cI cJ cr cr bn cB bc Z bD bx dV dh cd cx ci cc ci cq di dp dp bQ di cw di dp eu dD eS cg cs ex co dg bG cp cV fv eg cG dL ci cT ds fh db cI ey bL du dM dw dZ fh ek cP de bh cS eo eT dI eZ eO bs bE dd cC dh cI dF ep fb dB ck fe dZ en ec dr ft dw dH cZ ce er dH dr dA ep fD dc dl eC eS cW fD dZ bF ed ei fm bL bR bQ bX gb bE cL bP ch cV fr dX ds eP eL ec dv cT fq de eS dr dB bp bP bI bf F bZ cI db dr fv dZ fj cY cg cV dc fg eD cF dS dM fP ei dc eX dn dB cY eF s cB dX fi fI do cL de cG cx bH ce bx dj fm cL cj eW cU ek dd de cI u bG 0 cd bI bO dy dq ej co cv cr ca bh by cz bQ bx bM by cM bA bC eC cO eo ex eF fr bS dc cp cN bQ eB fq de dd dR ef do bk eB bW cL cT cr co bL cU bc dl fk cu bL bY bd by bq -1 br bG bV eZ eT dV -1 cQ bX cg ce fE gn df ew co X bS bH cE cZ da bP by bA bZ X dh do bZ dx da eZ dz cN cb co ck ch bO ef fm X bK bT fr dZ ex fq bn eF dB dl bV cT cP s ck cL ex x ci bC di bK cN dV dc dm dg fH bS dB dk cO eC cO ew dl cj fk cB -1 cq fv cD G fk ey dg bw cK cE ev bL ee cd bY ee eL cJ fK cz dL bZ dd dW cm dk da db cx db dg fe cx ci co dm bW dg eN ev bM cH eu cp eO cl bO df dw dx fU cu bN bJ cg eE dg fm dr bT bW bZ cd bB dn s bh S fq ef ex cM dB by cd bt F cC bs fv bX cS fj cp bM dm bU em cZ cJ cB ey eC dM fe ei df df cZ dB bV du fe bP bZ cV bL z cV bE bC cS bl ct eF fj ew bQ eS dl cs bR cD dt bg cf cH s cm cj cD bo cs dG ff cY fg dJ dj bV bQ bg bs cf cg bE dD ee dh bF cv cr co bW ck fe fw di bU cV cJ dk ey bO ca bM cF fh cY ep bF cZ bh br cf dn bE bY cW cy bq J bU bQ cP de dl cA cs bV ce bQ cH bD ec eT do s cZ eG bx cp cN cZ dJ eO cV dB dm cm ch cg bR cf cS Q bC bi bw eE cP bY ct bq bo cG eZ di dW ex bX cm bi eT ct db dZ dY do dU de dl dj es ex dg do ci ch ck cm bN cZ cP ch cU eF cG ev cB cB bV dA cK cn di bp bQ bG cz fr cO cq dh cD dL ep ek ct bc cY cU eO fm fk en eQ de bp br bC eZ ee dP cZ do cK cf cK dZ bI cQ bN dc bB et fg fj dC cj ev dn eF fw cL dj dp du ep ex bX cf eZ cg cG bZ bL bX cN cv cV fC eE eP de bK cr ci bC cO bV X cZ cY dV cK cc eS by bV bC cx cF bx eF ci dD bm cN fv bh cH dq cR cL cx df cQ bT bx s fm dq fi db cK bJ J cZ fV bt bV bZ bL eO dJ bo bU fe dB eD cz cn ev da dY fe bp Y N cB dB dZ cC cy cI bx bP dn ek dA bQ bU dd cf cn cu eB dd cv dd cP dr dJ dA em ds bU dj de eu ea cA dq eS fK dJ ce bc ds cf cR dJ dt dH cw by eZ dV cQ cH ey fn fr fr bW dd fu dd bY bY co dL dx cY ca cc fP fv cQ ex cR dr di eB er cC dU bK fq cZ bG bA cw bP fj cG ct dc du dg bR bU cu cw cf er cH Z cN cl cw cz bX eE df dw fi de cL bF dr cy ct cu dw cd dn cg bV ci eS cW dn cf eS cS dh ex bh cZ bm bL dr cc cq du dA bG df bC ew db cO cA ed cA ek cw gc fs eT eB cD dB en dq es eF cJ dV cN bM dV bR cl Z cG fv cy bI fg bV bQ cB du eS bc df dF do cO ee cU df eS cH cC ck cC cS co bN ce dh cK fr dr dt dd bR dv fE ep dF dD bg du fk eR bB dz ex bX dn eW cM cI cv cU eu dA cM bL ee cS bW fb eF dp fu bO cZ cz P bk cD fe eW fj cf fD eC cK dr fj eC dW ds cq cG dj cM de bT di dv cN cw cz cL db cI du bZ bO X K cx cF cw fm eZ cZ fg cu db cC fk fk eF cZ bI ca bP db bX fk dy cL bL bo ce dt em cx dh dB cO bY cS dU dH ee cU dC cl eS eu cE Q bN bR dn ce bH bR 0 cF cr cf Z cS cI cr eW bJ cZ bC cO cS cI cM bN dg Z bX cg dX fg cr bq eE dS cD db bL bD bX cA fk fe eu cN cT cH bJ bV cr bL bW dO J Y dL bG cF cY ci dj bx cn cy en fE ck cB bT bs df bC eZ 0 bc bo dt db bk cH eS cS cT bT de dA ck X -1 ch bK ch ds dv cF bU cM bX bZ bj cx cO bV bP u eZ bf bw cn cu eE bT cZ dF fb bt db cM cE df bq cm cj bI db cI cJ bn J cL bK J cy Y cR cq eu ej cd ch du cc bN cd bK s cd ck bY cl bo cw eW cL bc bq bm cO cW cB cM cD cr bH bn cU V bu cP cG cr dZ ex dL ex da Y cM df eW fi dL dc cI bi cb dO eC bq dr cV cI fg ce bV dg dD dn cV cK cs cF bZ bJ cH eZ ck cQ bX dn cy ce I bz bV bE 0 bo db dD X da cR bJ cc dJ bn bQ by bG bn cQ bq x X cq db bv Q bp u cB h H J cn bD bU cq X bx cK bP bT cf et cE cD dj dn bL cE do bD bM bF cb cx bx S bw L cy bW eB bx P L bO bY cf cR Z bR cT bH bg bR bD V F bJ t bz bQ df bI bp y bz br bj bF be ci bu ba F K ci x bC bV bz ch cd bG cq bg E K bt bH bH cc ba x E cq cr cO bU cv bB dg bJ by bN bX cF co eC ci cD bN Z bU bH bh bb cu bn bt J cs bU bP bo dZ bF Q dV dP bW da cI cr cy cm cf bx cb cL cx bd ck bV S Z cl R bq bz cL cf cM bW R ca ds cB cv bN bU s Z bC bQ D u bB eF ci cE de bS B cd E U bE Z bi bl O G cZ bL bw bm cJ ev n cs S cL bk bA eS cN cM bs by cI co cf bH bS bX cN cK bQ cS bU bC eW ct ej cH dd eI bO co eW cf cx cA dF cT bR ck bS bd bY cq cd by bW cc cB z cA bz bF bw t bC cN bY cU bZ N bc ct cs bg bj bI R cv cJ ee bo eV cf cs dx cZ fr bX df cG eT bg ce bU dB bK cZ cw K bs bW by cD eB bn eF 0 H cu dv cz cP dd bf dC cO dF cH dv cD bm bG L cc de cj bG br db bl cf eT dq m bW bP ca Z cL cM ct bP cc bh ca s m w bZ s bF U A cm bK cI bY ca bA bv bz eE fm cM bf bF cG cL ck dn cM bP bn cH U cn cd co by bo bf bM bg bw K bK M V cv cJ cY bO T bu bn bZ bt bL x G Q bO bb be bg bo cR dF bM bj bp X dj A bW ej cx bI bn bX cE Y O ba bf N bP v bP p bj bT bk bg cP bg bO bD bQ u be K cg cw bi cY bm bm bZ bN cj bf bL cx co R bX ce J cK bY bt cy bw t bg bh db cW dZ bC dg fj dC dj cH cI eO cz dg bF cG dB eQ eS bU cp bQ cu J cH do dt dn ex cz dA cZ 0 cG cW cp bx ct dc dq cv by dJ s bI Y bz dJ cy ci bn bf cO cf L bE br 0 ch bS Q U cn da bf cg cI bP bO dl cT ca bU V dh cq bf cO bt cb ee 0 fw ex ck cQ cJ eu bU cH cK ca bP W bn cd cY bU bm cC bm cS bT ce bB co fm du fk cC cV dz dk F bX dZ ck bQ cl cT dl ct fL cu cp dq dD dd dm cw bt bZ cR bW cR cu dD bo da cQ cl dL N cN bT bs bc bW eS eS db bL ey eJ fP dV ex dD cP ca eF fq em dw dP bQ cT ek cI fk dk ex cF cE ce da dC cQ dK fi db dP go fg cN fE eu bK cz bs bZ dr em bF dC ek bX cN cM ep cK dj bE cC cD fm df fi cV bn cW fr fb bQ eR ex cp bq eE dt cS fc dz dn dl fv cP cf dO cU cD eT cI eB bk ev dm bt cu bP eO dP cL cy k br cN bM bw cB cC bB cS dV fz fw fq ds dJ dS eK fS go ev 1 ej ea ee cr ec eu bX cP dw cI ds eP eT eT eD cO de do cH bJ dw cw F bB dR eS dc cr bw cV cQ ct co cz fh et by eG fg dp gp dm gd bZ -1 K cR dh ew bH bG ck cJ do ej eF dk eJ ej dp cU dd eS ej bN dL dS dm eF da dM ej cT dH dg bc 0 cI da eE dC cP dD fn fE eA cj cy fk ef fi ev dF bB fU fo cr eq eT fv cp eT cz dh dz fq bv L cg bN cJ fi 0 df dD gq eg de dl fe dW fv ee cP cE fe Z ec bH cp ev dT fm ef en eg eC bC ew dt dK eW bX dq cE dB ci cz bs fR bx cb eW U fn dy fs dK gr et du 0 dx eG fv eD eP du cP bx dL dw eW eu cE bx bx fs dL eq ed fa gC eO eo do eU ej dQ dd dS gf fh fv cH eS dt dx dZ cI dw dD cZ dk eq et eF cE fr cn cL bM cE dl er eO gg cc fg em 1 ek fj fU dH dz ek da eu dz do dm fU ea fz dD fr cV ff bU cx Q fq di ex cW cs cY cE bL cQ cA fr by cc dA bL bB bI dH cH cg ep dR eo eW dv ej dp fD cu dk dW fj fb 1 ep fk eP cu gh gn ef gt fG eC bG cK dP dJ fo eT fI en fS fx dM dO eU fd dT eU dd bX eS eC fP dD fs dk do cA dV eo dr dV de fu fi dj fu dp fx dC 0 fh eW cp et cH dc dC dZ fr fv dM eV db cT bx eD ck fv dm cM ds fK eG gc gx dy dC fu dx eK eU dA en gg dE gs fc dy eI ex dx dd bb dg ct bY dQ bK dN fM fs cp dC eO bn eI dz fV eR dk bi bi bQ bO dM dz dn fo cz cd bs dl eu ct bg cg cU bR bq do dD eC bB bS bU 0 fw gc cI cL dC eJ ec dz eW dO eb dN fM gh fG es eY ea fD cE cC fp eL fU fd dT fD ep dO eT fn dS do dJ bQ fj cV dK fi fi eO cH eZ dS fk dZ db ei dJ ck cL ce cQ fi cI fw cP ee fo dj dl gg gt eq gm fI ft ge ge cV ct ch cd bp dk cS eQ bT cw eC gu fe eD dw eM ew ej dO bE dT di cS dG cJ cv du dt eE fo em eR dK ew cJ gq cW eu eO dq fO ck er ep fU dV dr fl es dW dT eG eY gw eU fn ei eh eo eu es ey eX ef fc ha dS fx ek eQ fI hj eR 0 bL bN dk gv dJ ep dM eI db cZ eH bM fi fn dr eo cG cC eF fK gF da dn cI cz Q cz dR fM Y ce dT fp dC cx cD da dE dk N v cy cL dq eC eP eo fC eH fj fS cz dM eN dj fh cU ea ey gc fM dS eV fD ec cY O cD cn da dU fH eY gv fk dH -1 fV dA fK gw dW ga fP eU bn dq bU cM bP dh dV dB dV cO 0 eU dz fu fE dK gz eT fH eC fC eN fA fA eU ei dC fb eg dy eA gx gf ec eu cs ek eB bM n cm fo cU bV eT gc fG fG el eh fC eN fk fB eu cx dX fH ed fv bL dy fQ cW cQ fH gN fm K ch dH eI eL fr dp ef fT dW cC fh eH fl gy dr em er eC bh cf fq da ev de bn do cW bp ea dn dM do bx ba da cY dh dC fj fi cy dG eD dr cF fg dc dS dC dK eH fl eU ff cO ce dV en es bJ et em eX da fg et dE ew ew ck dM 1 fa dd fi eF fz dD eA dG fc ga dT dy dj dM ch fU fm cM cP ce em cN m I ey hk fT cy eG cO eL ey en cP fa bg eD eY bV dq dU dU cF dF dx dt gx ez gl gv fO eV eN eK fz eY fA dL bm cx eP eT gz eO dH gA gB fP fG eF eJ dm bE x bL ei df eX el fp es fy gq fY 1 fA gv ds dZ bM dJ fz ev eW eq cy fs dl gt eO fb dC dM gC fx dr cr ec eq fA ge ga dY cU es fE bj dp de dV fD fb bq cW bQ eS dp cD gk cM cy fC bH h bd bc eX ee cq db bK dP dv ds dF dl cV eE fd ed eZ dC dA cD dp dL es gc fI eP fM dC fN fD gs go fr dr fI et eo dG dS fn gG dN fb da R bu eu ez fF fd eJ fd ce J cT dW eo fD eX cr cD co bo bL bw Q cr fr eQ fI el dg H bU dF 1 dl eR dJ eW bs fx gD et gg fu ds ee dT eX eX fr dy ei dw bT fg cP dP M J cY eB U cd bG fv fn fw fa eH fp fh ea da dF cN bc cx dm eG dd P w bA bK cj cW ce cr eN cp fv gk gk gE fy gE en cM fD gk 0 dO dh fl ft dK fv ef er eb dK eJ eA em de dg eW cy bK cd j dT cI fl eE bW bu bu bZ dM fR en ct bX cv U 0 eo eF dD cC bC dk ed fy fO fa fJ gF el eR bI fk dD fB dN bX fv ed dM fe gI eD gG fC dY he er eU fn fh gg gW cG cY C r bY fk ce dX eW et eS cM bG ct X bZ -1 U W dA ex cp em eN gH fi eI db eo ci ba ev eZ Y N bN ca bT u M K bO fU eG dM fG fU ea ek dm hb gg gH de bj br ch cb dC bX fm fq dv da do gk fB 2 gy eP fG en gI gF eH gw gJ fa gV eg eH eY dG gw ez gy dy gK hd eo ev bQ dg dQ dH eq el dy dq dA cP ft bP N eW dg ea dM dp bq bg bR en dR cA dO eO eT cE dk fJ gK dJ bW bV fd cV da fJ dX ci cz ft gk cV eW bF bp cP cd em bq cK eF cx fr fb eu cK bx A cH dc dK bG fg do cU B cC du bg bW bB y cG cC cf dM eU dA dj fg cY do dp cj bV eC df dl ho fG fj fl eU dG ew fw dI eO cx cQ O bW bP cH cd g I bu br dQ dO fe cV ee cm bQ gf dD cA dh fP eR dJ bN dk fj fg eu cb y u cC dQ ev cE bL cz ew do bo du dp cx L -1 cQ cm dD cI cD -1 fm dK dA bV cb K D co eZ dq ff fu cf fv fd eI dy fB eV cN S dL dh -1 bG N M I ch cq dB cC ea eP fp dk eJ gk ff eF gL eD gG cf cT eh fZ fp fx ga eK fx hx gr fP fp fR eD ey dd dl dl dj cD bz cl Z dN dw fs ct dv dk eX ep eW et ej bv bP cB bR bV cS da fm dF cw dG dl dO em de dg dD eu X cP bG bY dR ci dM ei gg dJ cQ bL bX db bn N b ca V k cZ dA dj fC du dh fA cG dd dU fv fj dN ff fv fm dg cE cU bR cT dc cT dF eg dM cI dG fi eD ck bZ dd ff fd dc dj dO es eV dA ea dq bR bI bF cQ ds bV cu cx bX eq dk fA dN dm cj er eY de bo bv bY cp eO ey dy dA do dz eO eG ex fg dO bQ F L cD bm cs cH bp -1 eK eX fM cR df cR eF dz el ej cG dJ ew gp ew dF dx cK cr da dV do eT bQ bB dn eZ cA ct fq dN fg cI eD eK gg ei eE ck bW Y fr fk bP bA bh bk bZ Y bA bL ch E K ck fg cH bx bA dh cL ex dQ dz eL ci fj cp eF bW cO dg fu el cB cn cg eZ cC ey cR dt em er dY gI ep eB cD cB cs dD dL ed hh fv fr et ef fJ bO cw dF t cw eL et eR eZ cE N bp da cP cn cp eQ fd fU eW fz dh cx cb o v l ba H j M L bX bk N G bd bq bh cx d q P N p bj bR dk ds cQ dM cA cO ct cR bS cY bW dC fi em eG eC di dM cf A Y C cC dt bN bz cB cg bU cl bF ci cJ dV ee ci cb bB db cq bU bg bB bh ct bQ cm cb cZ ct cP cy eU dx bk bu bF t cc 0 el cf dF dH eh fs ev bN dr dn eS cM bn bS Y bs cY et da bs bL bY cn dp ey eo dA dh bU bc z N dJ dl dG fh fL fv dk cV dU cP go fw dU ci U S dg bW cV ep dA eA fg cN fj fj dx dV ei eW bd cg bx bj bY bz da dt cU eS eu cK Z eE cI dv cz bO bK bp bw N F K dP cj dj fk fd eO eW da dt cu bu dW dz eY dL ct bK cs cg dA de dx by Q ev fv fA gg ep eC dg cj dq cZ dd cW cq bJ cs fk cp dB bD cj ea dL eL eV eQ dP gM ge eh eR fz fD eo fE cG cJ cL cm cN eZ bQ dh et eT dl ce cz bZ dc 0 eC fq db em cf bJ w bM eO fw dz fe cq bA cj cm cd fr bt fi bZ bX fk bC bp Y bg U cZ bT bZ L cb cJ fe fq fE bR cq cf E dp du dv eB cj cV cQ cA eW fw cE eD eW er fu es fq dp dP fm dd dX cf bX dD eD 0 ej cT cA dF cv by ce bf cs eB ew dB dj cw fg cp bX de eU eh dP da dZ bO dr ep eE cO cn eF cO dn bE dd cn cn fi dw dE dh dm dq dX ew fr dR dm gf fv el fd dd cz da bY ef fz cV cK df eO ev ev eC cL cs fq em eB gg fI dk bN em fb de bc by bs fr cN dO fK fM er fm dx cu cN eo ep dr fS dR dq gJ fh cO cy 0 cK eB dw cT cs dd eU ds eG fk eT dJ cy cA eZ dP eV ed dh dH dE 0 fO eN fu cY cI ec fE cQ da cA dQ dJ bR eO ev fw gl eb eL eu dR eE eF ew dn fM dS dN fK fA dH gc eD fR gy ep dK dS fi eA eT dT en eN eF dO ej cA ef fL fB dS er eJ gh fC fA fs eI fR gB fM et eU dF dI dP gs dI gB dE gr fT gI eL eq eK dT do cP ei fG dT fD gd dz er cI fU fx ew dI ec gn gc fZ go ew eC eH fD fa fK fG cV ep ep cW em ee dn eO cQ cd dK ev ec ge fP gz ef eP ej en eu fq fd eg dP ek fq dH 0 dM fj fY fU eO de cK eJ dC fD fE ei dq eQ fG fj fd gp fu gj eW dH fC fp hi ea cS dQ ds dR fE ek fe eR dS gP dQ eL cE dG eZ fv fm dg cA cq eq ee fD eD fR gs gQ gM es eP bh eS dq du fM eG cP fC fO fv ez hf gN fQ ff eY ec ee dc dQ cu eX eE dH fc fs dn fi cI fb fw du dj fm dq fb dk fu fh eD eO dg ci dE bU eR fz eT bX ea eD ff eN dU eo de ga eF dJ fe fs fi fZ dy bM fP fo eo gN ed gv eX go dw dN ee dA dn dC dc dl ex cT ex dt dE dV cG ey dL dX cP cD fv dt dr gm gL 0 cg eQ dh bL cj el fz gO ds dT ey gC cP dE en eO dO dU eD fg fj dy dC fG fw gk ex gj eE dr co eE cH ej cY fz eD eo fB eo dH dM fu dH fN fc eY cP fe fj dl cW dm eC bx dk dt cC dF do fK eY dQ gs dt ec dr dn eD di ej dI fy gb gP eP fv ck dy fk dO ec cW dE di eg dy dZ bE D cr cP dL ev dh du dB dE X bV eS fk eG gg fU bX dB cz da cW dr cz eu dH dg fo ff cm eH ft dy dG dO eT fm dQ ez gb dY fo fD dT dK dI dy fP eH dG dx fG cP fu fk dM dH bV eZ dv dA dA df dm eC eD dC fO fA dt fp cN dv ct dh cf ff ep fr dU ea ff ge dH fZ gQ eR eb ee eE fr dh dr cW db dE dC fn ea fg eo fu df dv db dF dl do eG dR fs fO fe dV fQ ew fB ev fx eP dO ec dc dM dF eS fA hg fy eh ft ew fy fP dN es 0 gk fM dN fA fv et gn fd cK dD dA eV dm df cV fV fb gn do fv dG fe eP dX ft ep ec cS cD cO eZ bx 0 dR ee dg fv eU eR ee dT ea fs fo dI fZ dQ cu ea cJ dF dC dp dx fk ea gb dU eL fv fj fY gk gR eR gL dJ eg ew eI ft eV fA fc fd dQ 0 bE fM em el dy fU hc fQ dy dt dy eq es ec fc fB fq dA er dO dO fq dj bn dZ dP cM eE dZ dn dI fc gJ eU eU dv dP cO fv ed ea eR ed dr fa fn fD dq fm fA gT gr ei dN dE fT fc fv dy df fm eE cN er df dM eq fn gg fq cQ ej bq dW ec dO es el dK eB cs bK dd cP fq bx ec cC bP dX de fi eP dI fo fL eG dr ek dP dc ew fY dw gc dp cT eX ea dL fN fn fw dW cT fB fJ dJ eP fH dQ dJ fR gl gc dj fb cW cW dl fv ek dk eK gS fc ef ef eX ff eZ eN fw fR gT eN dR fe eH fh dV gc eY ew eB db dw eX eL gb fV eg gG dg fI fB dQ 0 fg et eZ em ci cR fp fj dz eX dH dH dK eV en fP en eu dy dw gd eD fn fl ec fd eZ ft eI fV fZ ec eY dM fs gg ds eP dd ep dH eP et db cR dQ ff ee dI dD ek dH fg dB eN fG fm ea dx dv du cC dB bK cM cG ck dk dW df cV dq cp eT cP fp gp fP dz ea ea dM 1 fb fF ef fW gg ek eg dP fJ dG dU dk gn go eA do eh eO dT dS fe dE bV dE eq cp fd dH eL fk eQ eX ev fw fR dK ec eK el dp dC dA fE cA ec fI cI eg dx dy gq ck fE dw fJ dS eQ fk eZ dU dT ev go dl fy dK fs dm cG ep dO gl cN fb cO eD fk fb do dX 0 dz ga eg cM dW gk eV dx gC fH fo ei ej eP et dU ew eV eW fz gQ el cE dB dW fI dS eK dz gg dw gx gn dN fi dv da fw gn fj eJ ei ep dA dc dB dJ ef fn de dO dx eU dY fv gi gd dw fm cP gq dw dJ dV fg dU em eu gf fu gp fl fo dQ dT dv ex dS gp eg cI fE dg cA dc 1 fh ff bn cq en fG ex eg fc fg ex dl eF ex cK fg eg dq fx 1 dQ eA fC gc gf cJ dz dZ bE fk ct bn ck bT bm ex cB fd cC bn ef dV fk dO fg dA 0 dO gp cS ea cr by K ba db cu eC es fL fq eC em dz cG fi bS fm dp fh em cT dx dw ej fg ct dH fb cQ ew fj fE dm eg dW dK ev bK L cJ cC ci eq cu en fr cR cy dm cV cc eS cs cK cP cQ bn bK cH do bx eE eY do ef ef fw dO dw dB dj bO bR dj dx fV gP dK dI em bJ cH ex dq dK fg er dm cw cu dn db cj fq ed dl dt db eR dx dC gc go fi fI dV fk dP dV bV dL fm di cn bJ bK bR cV cC dj bN df ct eW da cs dp fv fm cE em cF eG dp cT eX dc eW cQ bP cx cG bh dV ch dB du ea eV dL dy dm bP ct cY cs 0 fk ek cu cs dC bn cO dP cE cI dc cY dX bI Y ci ci cN dg cZ ds bW ci dr dW dI fq dv cH bs cU di X bN cb cd cL cv cN dP eN eE bV cG bG eE cE bO dL bC cG cw eN fe eX dz fM fu dE eh eQ dd dY bN do cy 0 dI dC dh dT en eG dI fs fR ek dt eX dG fJ dS fm eI dV eD dB ey dr eI dq eC by fv ct eD dB cu eQ ck ec fk dx dW gJ eu fw fD em ew fz dQ fR eo cP dF dH bx eT eW eW fm dA fR cV fm eX eL fv eQ eK eH 0 fU eZ ef fi fv X ct dk dU gb ff fN ft eb dK dm eE bZ bw dD eB fg fb dg eU fu dT dA eu cZ eJ cu eg eg eK dX eD dD eg eC db ev cq bU dV ev fE ge gU cx eV fh gv fa eE bV cA dx gg eG dK dJ dg dL eD dx dN ga dy eb ew ej cQ dG gh dR gX dT bQ du db dg bO dB fg dy dQ cl di dg dk eX dB gi cS fy do fk df fi eo dR dL fg ea dw dJ dk 0 er dn fm eO eR fM dR fH et cW eY eu bc fU eQ et fn dY dJ fL cI ce fP cV dn dW fg dy cP ci dq ee cH bV eN eG eP ci dB cC dA eS fE ef dH dO dT es fk ce cS fB dm eS di fw fZ ea fF dN eb gn gR fO gm fD gf bJ cG fv cV ds gp eK eA dD cV bW eo eF dV dc bX cl fA eC dk fu co ex Y dl gV cB fU cq cf ea eg cV ed co ek fw dB eX ct cZ dD cw dQ es cO em fb df dd bV ch 0 dn eX fe fb dc dl dA fU eg fo dV fU dV dZ dl fj dc dg gd ej eI cI ee eW fu eN eX cf er eO cZ cY fz fU ek ff fW eo cG es cu dW cT bY dd fF fg eG dv cl dH fE eG cz es eA gf eO ey fL dC fu dq cg em fj by dV ff dZ ct ei gs gS ep ds ed dw by x cb bU dm cZ bR bX cx bQ cj cJ df fe dx bn ck eB dn df do fd eg dI fh fj dS fv ej cH fr dQ de gg eZ bY cv ce cz dU eB dt eR dp fh fr dv fC dy dj cJ di eU ea bM bV cw bU K ci dD ep dJ dT bN eF fv fL eX ev cd cy cz es eL ds cR eL eE ed gy cz fL di eU ec dv cc dH fx dQ fs dy gy fz fR dM dZ dQ dt do dp dB bY cu bf bH -1 bU O bA cd cL cF bc bK cM ee dJ ee fA dW eD 0 ev fq fs cI dH eQ el fE dN gx cy dC di cz dj dQ er fj dy cI cy df ex cG cd ex cj ew cu cO cD bn cL bf eB cv bE bD bo bw bg cI bH X bF do dn bL ef eC cy ca do dv cw dn Y cN cY eo dt ei df eu fr bW ce do ew bG by L cJ cO bo cp ea eO cj dq br J bs dH bu dw fm bU cP dy ew cN ek bO dm cJ df ew cL eE dX cL fA ef fk dF ea ey eK ey ce co ew do fw bS cj ei cV fm cM dj ej ek eG eN dE cp du eZ dq ee ck fm bL cI bM bY S cF bB dq cj ck ev cW ej ey dL bG ch cl cY bm bN cZ bm cc bc bB cY bk bk bs bn cb bV cK ck cc cy cF by bR cc bL -1 cf de ce s cx dl cC ck bW fq co bp cy cd ct cz dp fg ep bs cU eT cG cN bf cy ee eE cy di dg bZ cH eE dc ex di em dl cm ct bx cs fm dp eQ fg eB cW dP du dx ej dt dm dv eB dJ dq bO eS dd ds eo en ec eA fj cP dg fz cz eF dg bE ek cD cO bU cs eg ds eF ce dN fS ef eQ dT fz dA cS bD dh dn dm cK cV eZ gm fB fJ bU bV co bV cB cg cr fi ck cl bh ep fb de dF cU ce eu ee cG eB bg cN dF ee cP dy cW fv dK dP dc dA cM em ff ds eo do de dn dj dx ex dr eQ cp dO dW cE dO dC fQ fv cP di do dl cQ fK bQ eI dE fi fj cw dl do eY dq cu cd bW eC cn bO bk bR R -1 bs -1 br cw bo bd bQ cc bn A bk bJ bp dP bQ cs bN cD dm cU ev dp ek bQ eX cC dj dA cv dk de cK dw cG dk eF ff cR eE bQ X cT cA dM dL ee eg gi cP cI do dl dL ey ef dP eJ eE dB dH dm es eO fm cM ev eQ eJ gd gP cq cA bG cW cE cm ck cD dd ds dx dt es dq di eE cO co cv bM dA em dm cz eY dg dW fi es dP cw ej cH cl cD da cJ eu bQ cY bN bN fg fk cA dJ dv bM db cZ cG fm cN dD s bs df do cT eE dj cY bJ cr bY dd fe cG dn dj gW gk cW dF eY dS gx fm es eu cQ dW dk dO cP dD fA eS dz dn fU dd dC eO dA cB du dX dc fA et fI cy eK em ej bp ct cH dv dx cf eZ ck du eT dh ck cY da cp bq cM dg bL eS bh eE cR cm dL dZ cW cp eS bP dZ cR bT cn cK ci cs cP cz eS dB eG cG dV cy dx eU bD cQ cG cp cR cu cf ch cI du cE bX cT dt cz cB cK cZ bI cz cC bh dA cx cP ci ct cE cN bV cj cE ev cP ep -1 dn cG di cT dh bM cf ej fz co cK cK dm cI ee ex dq dW bW bq eF fA dR dR eC fi ew eo ev fj dC dt dn fM fE df eo cF ev dn dw ej cz fr cH cQ ch O bg cP Q bU cf bj cs co cf eC eE dL eo dq dn fd eW dC di dq eB bN ck eB bQ bC ed dB ff eZ cI cr bo cv bT cE bD cf bg bA bH B p bZ cs cr cr cg bR bh bf bj eF dd bP cP cY bW L cm cC bA cC Y bt C cw cw bj L dq bn dp bC fr bU cV dm cC cD dA cz dD cz dH cC dm fg cB -1 bx dn fr cU dp ci dX dp dj dc cT cF cS fU eF do eB cc bQ de bI cl bW cy ec da eQ dQ dl er ea bY eF dx fm bx cQ bL N bG cC dN dc fk cm dc cy cB X cG bL ff eF bZ dz cS eC et cB bY S dv cT cu cr bh bZ cI el bt fq bs cH cA cf bO dV da dG eB cn cB bf dj cT di dt eS di ck ca fe eQ dF dC cQ cB -1 bS bE eF dc bY cy cO cR cA ct da bW bx cT bx de eW dj eS cY dU dP bE bK bG cp cr cY bz dx cO cj bW bF dw dd cz cw bd cR ct cS eC cp ev fm dn dg cQ ep fe dV dq cM bR cm by cn cL cx cf bO ex bQ cB s I bB cz cW bE cC fq ee 0 cO bE de cq eB bs bU co eD dh dn cE cM cD cx cM cH cg eE eF eu ep bc ch cx cH Q J ch cj ck bt Y cD bf cn Z bD cc bi cm cg cr X bW eB cd cO bZ dh cE cF bI ch cQ fk ch bX cj db dJ bQ cq co ck bc ct be cw cq ch cu cF bM bQ cR cT cj cS cV da dU dR dE dP bQ cQ cM cI bE eE bu cz cT df dL bL cf eS K dh bo bi ci dA bg N cT cY ck bb bc ep eW dF ct cK bT dj X bi bw bg de cm cv bY cf cb cd by ck bw cD cq br bP E cw B T cv bY dw bq dn eB co bl du cs fi bW ck ea dB cN cI cB cE dw cg cu dq cR fb eF dL eo di dc dw cI fd dq dU ce eu cz du bh dB dx ct cb bf bV bm bL cs fv cC bI cF cK cf bY dd dZ cn eF cr ci cQ eS cO dk dv cN cI ci ex fK cQ eS dr cz di cS fd cj cy de fj cm br bp cb bA Q bp R bs bG bJ eB dq ca cA dP cv eN cD bX by cp br bZ cE cl bN dC dm bW dO ck ch eu dg dA cH ce cp cL cD da bX eC ce bX dD fP fb dQ eK eZ dg cZ cE dh -1 eG cF dh cI cy ce dj dq dc dg dd fk cg di fT fp dy fI eF ff cS cY dm dx ej di bN P bi co bt bD cd bY dd co cH cZ dD dR dp cu fi eE dH fv dJ bh ex dV dc dM fu em dp dh dB bO bT dn cC ep dj bO cY eB ee dt eg fj cT dJ dm dB cJ fm bp bT cC bq ds eW dc dV cg en fu fJ eB cf cG bL cR eD ej bM fg ea fu ga eI eQ fB eN 0 cZ dp bp cf cK dF de bx cM cz dC eO fg do bK cH cG cR cu dS fK fP ef cD bs eB du eu cZ bM du du ck co bM bX ct et ck cB eE ct ce dw dF cW ey em cR ew eO df dc bX dI dT ea fj bX cB bO eZ dz fg fq bX dZ cJ dk dK da cV er gb ds fH gg dc dg du dL dk dj dA bK cU cV X cP cu cz cY dg fk fe cG fb dg eJ fq dp cJ dZ cp fq cV eI dZ ex cu dq fk eR eD er fv fY er fU ft eo dB dq cB fg dW cz de dg eQ dc dp fd gq eX fe ec dR ef eO fv fE dW em fP eR eB dg ee df eE da cy cP eF dm dz dH cA dT ea eJ eJ dy dk dL fM fj cG cS eS ep dd cQ bx dO el eF fw dw db dP do eF do cO dZ cf 0 cI dX fo ej do dg el fb ch dv eD en dk ge fh ef eI eU fn fc fd dF eH dg eG eV dW eJ eN fr dj dg gi fM eh fC eR fi cQ ex es dI dj eS di cY eN gd dN dj fA eP dL dH dF dC cN eB ev fw fb cu -1 dV cp cz cY ew dI dP dc fz eY cV cL eZ dx ev fA fg ff et dc cP dC ev dE ga dw gg fg dM ep dy dS gp eK 1 eI dA ev bO ea fq dS es fg fo ey eg fH cz dM eH cP fx eO dC fV eZ dB cM ct fA eD eY et ef fe fw dS 0 do dL eE fK fi eJ dS fG dc 0 dS ds dR ey dC el es db ex eG dJ dG dT em eQ dN fo et fT dT fN fw ea gG es ek fU fk dj dF eH fP dO cV eK ei ei dJ du fr dn dt dj ej cD dB bI bn cd cE bD bO bS bL bN cC cz bG cY cu cw ct bo cE cD dv cy bb cZ cn bU cC dF bN cS dd ct bz bW cy dA du eB cy bQ cy cR dB fm eQ dx eI gf fN cG de fu eT dA dk cm F cr cH co cj ej cU ek fD fU dY eJ cI cR fj dE fM fC bQ ep dn fj eo dK eU gl fO gR eq dy fo gg fw dy eK fu eq dT dm fU eQ dd em ey eX fz el dG eA fw fo fE fo cK cU dk dO fN ev fP ds ec dN eP gX gs fI fJ ek dW eZ cm fm ep ch ei eb eR fu dW gg dN dq fH fm dy eI dD ds bT dN ey eQ 1 eA eJ eP ds cr ck cG cr bT ex dk fk er fx fd es cS cC dX 1 dJ eY eN fD fx dN dp dM dj do cA de cx bf bw cg bT cu cV dP eo dk cz cL ct dL dR cp fv dP dm cO ee eP go dH dM ev dg fv dY eX dY cY bM fJ fj bX cp cF de df dv ff 1 eB co bU cN bF bq bL F dq cp dM dH go gT ff fC gm ed dK 0 ga dR ee dS fc ds dP cB bR dx dO cG bG eB cj fj fx dk et dI ff eu by de dL dH dF cR eN bx dl dc fz es el fO ds ee gJ 1 el eT fC cz dL dJ dx ff fh ed dT fE dt dX fC ec ef eF dJ fq fO ea en gn dQ dL do ei dr fg es fJ dz eA dS eo dv cv eu cM de dL dg dg fe dc fg eK fj fK dG fw 0 dO fn dN ek eP fx dC fY 1 dG gk dm fu em fb dx dM dg fg dG eJ ef dT fA dS dh dg cj dV gg eI dp cS bP U ck du el eX fC dM eY dN fi dU eQ cV ea ea eJ ei fv eG gq ec fA cK fm eu eJ gS dy dI dw eU bY cI cr dC fi eU eK dD dQ gc fE eu fJ ed dY ed eG cW cz dt dF fs gg eh eg er dI fi dp dM fu gK fM eR fO eY gd go ei gY gB eN fk cS ei fW dS fh fU gx fP et eJ fV eG dn fg gg eI ed fs eX ge fS fW dY eb dI fd dQ fi el dg ec eh fe eW fj cj fr ef eE cD db er fP fu dw es dR fq dD fk dq dN dV fJ ds fQ gf dk eX dp cM fq ea fq fD fu eA dx cT ex eF 0 eJ eQ dI ey fA dz dF cG fA eg cR fz fj cG bR dI dS fG eT eo eQ 1 dA dw dr dJ fl dR eq dU fh eK eq eD dJ fu dB cW fP eL ea eJ fk ec dV er cY eI du eZ cJ cM cH bK eW fa dw dt fv dK fJ dz cK dp cf dN cG eS ew cx cW bg eF co cB ct eD eE dD cz dq eW eC dP cp ds cI dn dW dn dA fz cK eI dQ en fg de ek eQ ej fz eK dw dV cW gd dQ cV eQ ej du fN ej eS ds dC dC fb dp el fh fh dH dp cj ck bD cu dB dN ei fc fv eo et cz cj dq cM ds fb gn gc ea fi ce dr dY dJ gg eq fG gf et dH fL em dS gc ek dk dj fL dL dN eI eI bL cF cw dW cS cz bn ea dz eu dM eh cS fF et ev ea dQ eu dZ eE fq dR eQ dI eo dw cU du fn fk dH db cV dz eK eT dH fk du di eZ cV dx dc dN ej eB eO cA bp cj cm de fM dv fn fz cE dc fi ef eA fA eq dJ bW ex fj eI ds dO ei ds eJ dA bY cJ de eT dC bN cY bC eG eW ft fF dV ef fx fn dn dR fv cy cC cY di ev cw ck eQ ff dN et eQ cQ cS cj dg bQ fv cD dy da eN dF eW dA cV eO dW ej dV fp fu dJ eU ft fj fm fY dv em fd dl fn dc dS bM cF cT dW dW eF fm cV eG fP cP dc dY ea dC dE em fd fw cU cT cx bi cC bq eZ dl cG eB ci dw bf u X dd cx dZ ci eu dz dR es fv cz cm bu ew fd fP er dq gt ec dg dU fb eF eC eu dP ea er du dJ dW gi dV dt dx cP dJ cJ dF eQ cw bp cm cC bV eN bV du eG ef ef eS dp cY eW ej dN dq eY dW dy ff eg fj dU ds dR dj eW dV fi cD cS cf bT bW bK eQ ds ee cV ee dN by eN fw ec dY eK dn dW cY dj eS eW cb cm cS em gg dS eT bM cK dd dX ec eZ cJ fr fg dF cp cG cT eQ ed fe fI eX dy eu dj eF ew dp fs bq bX cP dM eF db ej ce dh dn cl Z bz bK cH cS fo ds dp dg et dL dj eo fw fg ee dd fv dW ey cI cu eO dQ fn dL dK fk ew fU dz dC eJ gk fU eL dW dE fq fb dp ct cv ev cU cR bM ep fD fP fi dq cM cf bO cO cA eZ dD cp bQ cg cL cO cv dD ca eZ cG dd bQ dj fC dJ cR cE dk fq dU cO dE eR fv fm cj bV do dE fR fb eq dT fq eR dH ff dF dk ew bT df dR eE cn cH dq eT bs eF fr db ej ff ep fj cT cf dg eo dn dd cW cS bO dV cQ ex dt dQ bK dh fq dR eu ep dZ eF cO cY bC bj bR ch bB ed dW eQ dS cu dh br T cF fu fn eW dW dz fj dp cv eO db dP fv dn ep cO bx bx cg eT dP fu cB fe cI ep by df fP fg dW fn fq cP cS gb fb dK fM fY ea fn fe fp ek dQ eW fg dX dS eu dS dU fj dz fh dO dm dd fk cV eS ek 0 cA dn ex cf cw bX cS ep em ff dg fi fg fe cP eF eQ eO do eI fC en dv eQ dS 0 dx ex eC dP gX dA ff dG dU fv eh dT eV fi cU ec dT fw dM fJ fm dC dH fI bX dD cB fw ep fe eI em eg em dq dH fu eV dT gc dK dI fz ev dS gm dN et gn eU fw dp cV bE ds gx dW ft dL bh cb ex ci eT fE dM eT fo fe ef ek dK dN dG ek dN eJ dc dm cQ cV fh fC ev dx fc dt cQ dJ eT cC dn db cG ee fG fz eD gL eb gZ eU cT dv dt df ea ea eV co cI dD bL ex ed dD dq ce fA bN db dP dy eW da fr dv dL bZ fb cO bp cE dg fw ef dy ei cV ef ej bx eJ fE eQ eU cG dv fm fr cS eV fj do fm fv fU ck eS ew ee bx cZ dQ eT el db dU fn dd dV dF dv bW cd R bW eu bC bu bP K cg bU bL fr ec dS cR ev ds cz cV dG cp ds dO eW eV dN ey dK eR el fY dW dO dr fQ eO eI fc er gb fm es fu fe ff fv en eD dY ge fx dl eY dL fq el ev eq ec dy gb gI cJ dP dp eb fz eI gu fe eu dR fI el fF fc ds dC fd cA fr dC dx eu cV ea eJ cV dB dc dq ei dT fv dN cP dg ey dS fi cS gc fE eT dk dr dJ ed eZ dh cV dF cp co fd dB eQ dr gL cv dF fn fq cC fv dn et fw df eU dI dK dR ct ep eP fq fB em dc fd dT eK fD dX bC eo es ef dI gZ eg fK fw dz ct eY fa ge cV fA dK el dO eG dO et ge ef eo ev fJ fk dL eU fq cj eN eq gr dY ep dw dO de cp fA eG gn ew ee ge fd es dw eC dl eG cW ei eo ei eF fU fz ek fw ei er dv el eJ fw fv dO dq cg dh de fa dX dl cT dG dL fv eH dA eK dG dT fI ea ew fr eF ep dy eF ea fv dj ev dh dP di et de dx dg fw eo eW ff eA fB eX fn gX dG fC fc dr dI fu dC fT eo fs dS eK ge cV ds eN de eJ gg dd dQ fo eJ dX fm eH fs fu dC ea dT fs gc gk fZ fl gh eH ef dE ff gQ ei ds fd eA dR ec fb eH eA dW eW ep ch ew dW cP cY eC ex dY fd fu fb dg ds dR et ef ci dv dx fo eX eo cP en dD eC eo ey eo dr cP dF eJ dA el fA dI dC fC eF bM cf cW cl eK er dr bU cT cp dw dz dI ev dl fs fn eX eI dz eE ey dp dV ff dN gc dG dJ cI fk dk dz dc eY cz dW eV ep ct cQ dB ff ge ga eA ev eP fH dC fr dB cS dP fj fv ei eG dk fu dc et dX el dE ge ed dY eT dx dz dj dz dn dU dV dm eV 1 dK eZ eS cF ea do dA fh eI fg eS cK fo fw fn fJ dr cS gp eD dZ 1 fv es dI cN em dR fC dw ey eg gl dT dD eE dD fu cS eT gr ga fx fJ ff dS cR cA eo cZ cS dp dv dq dQ ee dx fj eg dy fw dS dc cU fA ev ce dc eZ cI da eC fk eT eI gp ea fz dV eQ dD ei ds dr ff dW fv dt eu fg eR dU bX eX dk fa fp dC ff dM ec er eO ey ec dx eZ fC dS ep cj cO er ea fM ed fq ep gk fE dH dV gd dt eW ee ej dX dE dH ea 1 dk fI eG en dU eO dk eq dI dl cg cP dP fj eo fH cQ ds dD dO fb dd fV es fC ei fv dM dE fb es db fw eF cA fe dg dr eX gb ev es dw fm dg dp dY dV eW bC eC eG eO cW dA fx ei cH cx ev fd dc eS dy dA cS cW fJ fq fp dw dA dx eh fh er fZ dS dJ eD ei fq ey fu eR fm bQ fc dr cK di fv ef ew dZ fA eE df ey ey el dS fU fo fP ey fK fn dc eK bq en eI dp fh dr bN gb fz dS dC cU da dl fv eW bN cC dz dM fu ea ek eo fS ff en eO dO dV ec fv fq da cI cM fM cK fp ey fB ec dG dv gz fY fC dU er dK cS et cP ft dQ dN eL fo ei fM eg ea ea fJ gx dz eR dO fj fR cU fD dH eo ds dv dr dR eA eD dA dy dt eZ fr fj ey fQ fs eC do eT fF dO eg fg da dM dF cQ fC fQ eV fn eZ dC gb ei gp dG dD 1 eT fP dq cA dX ew dS dk fP cS dX es dR dP dU eo eq em ew er eI eI eV cA fu eu dk dX dv fh es eV do fu dr cV es eB ef dX dO et ds cW dA dq gx dX fR dy cU dM dV fJ fi fN eu fr bn cf cH dP cD dV eo dN ff eu dk eU dd ek eu eJ eR eW dr fz dW eR et cA eW cP eZ dY dE ek ey dn ds dW gb cY eX eU df fa eO dX eX ek es ep du ga gc fG gn fH es eq fP fv gq gs eX gx fA el dI dU eD eg eK eA gR fs eA fp gg dS gl dS fE ej eg ds eD dz eg eZ fd cC eg dR eJ dA ep fk ej eX cA cP cl bh cv fo gY fA em cV fb ei do dj gx ga fp dt fz el dM ch du du fp dU fe fc dA bp fw eR ff go fP dU gH eY ga eH gt fC eL dr eE el fu ff dC cS fu fu dS ee dH fk fE eV dQ fb dQ eq cV dQ fh eq dm dp cp cJ em fn et du dM eN gn fT cG ee cz dC fn eq fu dQ cW cQ dd eI fx dp dy cG fS dH el dw gI fL fx eQ eP fw gS fU et eD fn fe ff dw ew eD fJ fA ed gr gy ft dU gk eH dy dH dM db eW dA bE cP bU ck ct dW ff dT ei eY dN bM di dT dI ga ed fV fX fY fv dK dL eN fS dM 0 fq cw ci dA di 1 fV eb fK eK fP dF ff eB fj eC dE fi eJ do ej dT dX gc cA fO fn fJ gL eb gb ha fT es fU cV ei fj er fh fz fw em fK fJ fi dy ds fA fC dM dE en cO fc gC fq fX gJ fC eI gv fM ga gf ft ef dL fV dV eF fJ hb eR gn eR eL gb ep dA eo dN eo eg fU fF dI eD dC du eS do eo cP eK ej fv eY eP eT de eq dT fQ dW ft fd eY hc ez fz ei fw ds dO eG et eT eA dM fM fy fP dk dW es fY fn dP eD ev fi dj dF dj dp fd fb fZ fx dR ee fM dF ct 0 dM eh ed gp gM fy gO ej fd fk cV cU eU gs fD eJ gG eH gb fm fq cT fq fp fp gy gx dw gL fu 1 ff hd gW gJ er gh fp fP fA fj he gp fh fA fm gb fo dh dy dU 1 ha eF cz em er cJ dT du ev dU ek fu ex bL fm dN fU et gp fR dU fj fn eW es eK eB fM bq dP dX eD dN dZ eE dY dw fC fZ dl dy dY dV eY dV eo dV eT ff dr eD fp fZ dG cW dU cW dB dK dd ca cB bV eC eD fa dK 1 dl ft eY eK fc cH eW ea en cj cA fJ fx eG dJ dk eI eO et fC bX dU eE fq dZ ea gg fv dV gk dy gb eU gx eh eo gS gx fN fK eK fI eQ eq 1 fE gg fp fU eW fB eL fX fM fN dp ga eY gn ga gg fq et dH fE eA fu dR dQ dM fv eJ do ee eG eS fN fM dX fh eN go dT fs ef du dP cy dP fi eC gd dp eE bM dM dv dC cJ dq eW fI fm fs fo dk dr ec eO eU eJ fw eX cQ cE dd eu eW cj eQ ft hn fu fg hc df eU dT ef fL gf fc fs ej z dA dK dK dn ge eC dN ee fh fq dI dq gd ex eK fI gf dy dm 1 dw gl db bX eR cF fI dQ dX dp ex ej fm fb dG fu fE fE ej eL 1 eX eu fU dK gQ gq dl fE el em dQ fF dU en dl cG dH fn eu eO ek gc fC dk dm dJ eh fi du dm cp cA dO bT ew ei eW fC da eB dl fb df dL cW dD bN ch bZ bO db cD dX eI cL bV da eC dv fe eO ev dk do eQ bO bL cD da cJ eC dB fs eW ck A cF fi bY co ev bx db el dN eg eg fz dF ff eT dp fP dx cs fh cx fm bL dQ cm ex fw du et dW eD fz dD du eo fj cH dh bT da cO ci bM eS M I S fk eF ex dt ee ev fC dI dS cJ di 0 cW fM eG gb cC ds eH et 1 fn dP dY bK cS eT gK fY ff gp fT hp fn fP fV el dS eb cC dq eg fP eE gi gc fp go fC ew fq dZ eR gy fK ft gG fO gq fY dG fc dT dI eS bV ei bX el dv ei fg ew cR dP gk fd fU ea 0 fP gO dP ek fw fn fH eh ew fi ej fq eJ ft fz fq gG hf dI eh bQ fk dq fk ei fO dK eC fg fD eI dg ej cZ fs dH de dQ et dd eH eI cH ed fm dW fv dI dG es dw gi eh fs dX fg fP dp eL dg bw cO bR db bF dn cz eW dv dX fA eR ei fi fM fg cC cD ce cp dh dF dD ej dj cH bx bE eE fP dv fJ ek ej fL hv fs fN fu ef eO dx cN cL dJ cY dp en dP gx fm dn eN ej er dU dQ gv cC dT fF df cm bC dp cD eu cJ cw eY ep eG gv fb dH fx fy hg ef eZ dl eE bx gd ec gy fP dT fx fA dV dP dd do dO fj dv fE cM fU 0 dT dU eT eX ff dQ ec bT cA fj ds db dm dH dk bK dH dK fz eC ge do dM fu gI fn eU dA ed fA dE eF eu dC db dz eC cU dT dW hh fJ bM bC ex bM dr du dP fv de db ec ea fP dU dc fV eI dy fl dq ft es gW gL gg fL gc eI ds fk dA eF dK fF eQ dN eH fU eI eE ff eA eJ fT hg eq et dv bq dR 0 em dn eP fk fR fs ea dN fn gW gl dM eA eD dj dW bY ds eQ do eI ef dV ea eR de fC cQ eD ey cV dG fM eN ep fR eS dl ec dM ex dT dm eo dY dA et ep em gk du en dp dh ec cB cz eZ bc ef eF cO em cV 0 ej cF do cz dV ck gk dS dV ft fd gI eA fw dh eq dj dX eP eB bM cS bI dM em eD eB eY fc eH eV dh eW dC dv eK cI eg fw fi dm ew dj fw fK dX cx cV eu dl dH fM cA dt et ec dk eD dv bF cj cQ dN gd gf dp bQ dv bq dB fq gc dW fJ gR ek fP dV dV eQ fi bM dj eJ ed gy dQ dn em ga hi dV dn de dJ cD go dR eV gg eV dW dS eF dm da bV dN fi fE gb dA et do cW cU cC fe ek dB dr gd da eX fJ dy fw dq dp eF fe eg eX fl en dN ge fY fB fj cS eG dL fv cL dL eW eJ fM cW eJ gb eY fB gf dw ev en dg fr eI em dr dl dw fr dq eo ei dA eH dr 0 eI fQ eG eL dO fd eH dY eA ft eS cR cM dg co ci ej ep fE gk dj de ee ev fE cz ei do eb eX dy dL dH fa fE dp dE fD dO fH gd fs eV eR el eU cR ep eJ cr cZ dS di dR dl dY fa fB cz dE cC bS ct ch cJ ew db ew dS dH er cV bQ cD do ep cP di ef eJ ee ev fp fv fA ep dL fh fm dE fb db cO dD fj gf gp dg ct eU s cI cy dh cQ fk ew ep dH dJ fe eS eV dc dR dk eq fM eK dm fd dY ff cV dx dl dP cU ek dl dc dZ cS fM dN eD cJ dv eW eC dc cm cI cv cj fj fb fU dH eo fg cI bx eo ef eL gx gI fq eY 0 eo cS em eZ fs eu dV ds eH fd gn ff em ek eQ dR dS dM dj fm ff dA dl dZ fJ fK dG fo dR dB do dn gk gq fr eD dw eN eq gk fq dA cQ fb dw dC ep eT eS cI ha fO ed fR fQ ev eG cz cZ dP ex fk ej bX bE cm cS en eo gk ga eR ek dh ey eg gd eY eJ eN dw cI cA eB bV cW bG dO eG gd dN fB eN 1 bh ck bL ct co dS eS bn fr cV dX cS cO ex bZ ec eC cU cW cw cH cS du ds fd ew de eE bx dA Y bq ci da bB cB O P z v ct cF cp cf bN K bs bS co cG dX fm dv cW cD ev cS fc ck eS dh co cN cH cD eF dq dv eQ dX fg eh do cS bP bN bP bN bI bp ci G z br bd bk ck bT bZ cS eS eF ew es dr dT eJ gG dw eo df ep cL ca Y dZ eD dh dq dw dh dI cy dc dt fg cT eE cR bK bp cs bC bf eW cK bJ di eC bc bR ct bp Z bX bM eW fm cj bp eB dA fk cd cq db eZ cR dA dd eu fi fC fY ff eJ cU dA fj ec ek eQ fk fQ dU ds ee cQ cS cI cK dj en fw eb eK eO cJ ex cu cz bL dc cy bn di cQ eD eC dz fc bQ da bA cM F bu U bs u H by cd J x bT bB bv cb cO di bF cf br bF bB bS K bY cq bH T br br bB w ba bv co cH X A z u bF P w d M P K ba Y e P Q ce d B t bH bj be by K z V bi cl bC u O L R bh W bv bH bt cn bA bk bN cm bK bZ bt bO bg dv bg cr br bD R M bG I bP bs G R I n K br bN t X cY bB bF N bF cN cs bO cm cw J cl bh bg bg bY ca O bz bc bC bW bz bZ bP W ch ba ca cB bL ck bK bD S u bj u bF bA ci cP bP bG ei bW cY di bw C bh bC bn cC cw cN I C bI G bI bu Z Q Q bu U bv bs ba ba W bk bm E bI cq bg X cT dn bI bu da eB cF cw cF R bs U bt m bI z t Q br bt G bA P B bk R bG R y c R N J N bS F X bi cw w A bt V B bw z bY T br V bz bc Q bB q bg cN B bP bZ br s bh D G C bl bA ca A K bc L n bB x M N O bb y bs O bf cn S bk Y bT J T bd bQ R bj G bi I bu bl bk bn L cs bn bJ bW by D bv u bu bs Z A bA cN K B bk by bt F bf cn cc p N bk t V Z ba M M P bi u t K P by cv L bF cd br T bV bk V bw bS bZ cu cl K bT T T bI be bt co q q T bb E t bW bN bD bH V bb t bl e k y T z bi G D Z B u ba bt B X bz bH Y bP cC bZ M P i bc P bw bf J C t J bA bq bA ba P R Y p F br cl L R bg B ba bz bA ca cO bb bA bG cn Z bK F cd Z N F bf cC R bi bk bC t bj Y K bZ C cm cb bq D J bw cd bm bs bw ch cc bY bh bp df A bw bt by A D o W d x bq G m E V R bf by F bU bJ bP bU x F bc Z Q A bk U A -1 cl Q v z I z bz ba S bs V e cc o bA bz J Y E Z bv X N bG K m L K u cd s cI bY cb bn bz U bF R bL R J cO bs L B L bd bw D E y bv ba bj bb o Q P be bj bB N bH bi k d bk bI bS J U C w bb br bk L bi bj A bz O cf cd df bi D br bz i -1 bl bv by U dP bo cN bD bl C L cc D be W bm m bl x bm N cl u cl ba bE L bD cd bU bz X bY B W V -1 bA cD bd bs R bK bU K B bm cl bU cq bJ by cr bg T bK J dq dj cj S co bn bB bd bE cB bu Z cY ct bI cr bi bw ca bo bv K cD dm bE do cB cR cm bN cq bj bJ O bN cB bS Z bF bT bd cH cG bf bd s bL ck S bb bF cd bS bS bY du cm cx cv U cK bc bA cA cq G bJ bI cl cP ct dd ef cp bq bA ci cK bV bX ce bh cE -1 bo bT cu bX cx bq B bJ bf bW bq cW ca u bE cv ci cb cC bw bg bS bC cC cR bR bs O bw bE bj U by B Q b ca ca bY bw bj -1 bZ T C S L bJ bo R d R Q cd O m p bd bZ cR bd s z ci s bz bS bE P bI cc bC bG bw cn bO cd cm bU bi bF F bd bG bO E q M D bc X cR cg bL bQ F cr cg eS bZ -1 bV bA bs K bl W bs bM bk bB Z cM eZ bP bL fj dt ey bO cq cC bE cK bx bo q cr cH cD cg fm ck cF ch dh dh dk do dc bJ bD cr u bT cf cs bS F bZ bt co u cl N P t cO dZ bn x bw cR dn bE cn bG cY ct bx cq bf X bc bg bz cN bm cs bF bU cp s cL bR de bR cJ cl cm bN bX dA ej dp fk da fq eZ ep cT bO bT cj bN cB cp cD ea dA cU bW dB bn cr bq cK cr bW cJ eF cA bJ cn bL cF bU eN fr cG dF bX cx cE eT cU ck dJ ex D eB bX fB fP dg ec dh fi ej bn dv dx ec eW di dr cG er fc cY dB eW da ch cj bM dv dh ee bM dh fj cw dx eX ce co em dG es fz co dA db df eZ eG fe cf cT cx bo cE fq dR ek fn eF eB cj cY cI cO dw dj eZ dg gf eF dG ev fr dv K cK cG dw cM eT dJ du bI cg cf cz cu cD bK -1 dL dO eI er dN cW cK dP bJ de cJ de bH da ev bc bz cs ci s U Z bk cl bT Z u be s ex K bh cy ev ce fm do de bF dB dA eI eX eI co ea cL bp fv fq dl cu fw fn ep br bp dG cR dt bY fi eN fi dn eW dX ej dV du dx cG cx fh dg bx dt bM ck cO cb cK bq cH bL cJ eO eu ej by bC cK ch cf cY eS ew bZ fz dH dR fs dy dj bW cY dR dx co bY cZ bs cA cR fr dU dC bX dr dv 0 eU eQ di 0 et ey eu do fj el es eq cY dp eS cP cT dJ cu bL cj dx bG bS cL dI dO bc cn cR eZ cZ dF cB eS cM cP dP fg ds ed fn dh cK bP bJ G bE bI cx cq cM cu cT eX fw eQ fk df cF eY eQ eE bD df cg bQ bE de dR by cz cq do bR dq ct dJ fh fg co em dc cB cR fr bC cN dl cL cb cH dl dl df dJ dD dK fw bX fi dA cD cC dV t cw P bS G bG bP K u bj O bq cM cJ R bT ct bG bv bF X cL bW dh ce ep cz cM s cc bY bq cp bM eC du bR bN cB bx cf cm dJ cH bS bh cz eE bC cV cH cG da eB cf dh bs ee cM ck eQ cY bc dD cR fg bx J cw ds eC du gx ei cf cJ dB cU bK cf dm cP ch eB ee ej da ea bn bt cm cp bU dL cO ej de cf cp cu ct cJ cW dB bF dg cN 0 cu bM eu cR cf cf fz 0 fe eg fg fr ds cE bf eX cD cy bi bV dj do cJ bW cO di bu cZ cp cl bV cK cJ cL bJ D cs z -1 bN di bI bi cv cW cE bs bc cj bf bM cY db eX eF bX dL eF bC cJ cH cR cF O ex ci bZ cd cx eX ee do ci cU cy ct bq cK cL ee du dD dl ey dr cZ bM dz fe bh ce do da bs du dx Z u bM eD eB fr ee fv bN bM dd df bD F bg Y Z Z bm bT D bv M bk cI cG bh V bx J bT cu bh cH cR g cl L cd bU bJ be bF bD G cO bJ B cd ca bj bs cD bF bx br bV dd cY K bu T bq dh bF bN w by bl bD da Q cb bH cq L T bw bf bz bW P ce cN cD dr db bN cA bW bY cs G bJ X cF bN cx dO cI do cB bG cu br L bD cd bR cr cM cN bm cl dZ cY bG bC bW bk cS cM cQ cP cE cr cE ep dx cp cv cn be bD dn bX bv F P cw bR ce -1 cp cA bt bm bz bu ba ca bL cg ck I D bt ba bj cl di ca P cW bO K br bd bU bq u Z cb t X bT bN bv cY bc cL bB cq bj G ca bS bt bg Y ba bo bO eF cS cp bY ch da bW X bz bk G bb bk bW bD bS ca bc Z Q N br u ce bE cn K bO bA cZ cf bJ cA cy fq dq cA eS K ca bK bF bS bN -1 bn cl bH ba bJ bR bv bF J bn bH fA dR cG dq bh bo X G bK cl X P R bZ cq B H cl F cd cy bJ ci bn bB U L cn bz -1 cG cr cp dv N cs T bP cc cl h bk J C ch L cl P ci bm eB cC bh bc N bj bb by cy cC dp bG dc dt cY bZ cU cq bP bo bD bS bk P bj Z e bl D bT bz z bs K J bz N bI N D bs bU cg bW F bE cC Y db ck eB di bq cy bz ce bF bR dm bE bP cc cv F bw bT s cc ca bO F cO cP cg cI J V z bz H bZ cf cl bB bS A N bE cq cr bC bP Z bm bA D bG bq -1 eE cv cH db cO cO dN em dw dh bR cP cv dv bA ci bc fi cG X J bD bJ bX eS bx cS cB eF do ch cc bo cE bA bP cB di cq eB bz bN bJ bx bG cv ce by cZ cm cm bT dg bp Y bB Z cF cK cJ do cR bu bA bE bI cs dr dh dR dL eu di Q z cq bw U bt Y G cL bp Y ca bU bb X cH cD eC cN dc bO bR cq dB bJ bf by cO dc cT bB cO cw dZ bP bM da dg dh cD ce cr dd fr bS ce cu cJ du T bH bG bV da bR bK dz db cA cD bi da bC cL cF ce cT fr bf bc bP cl bF cd I u by K bo bb q B bq bS cu cx cF bc bd g M k bv bo bK bo cf bS bZ bn bK ca bi bK bn p P bx bO eS bp cZ cb g -1 bV cV cs bi cf ca -1 bo cn bx ca s bL bB ck cw bB bI bS dd bF cd bE cH en cU dp fe cs cR cY bR cE cb dd eF bB bR cR cR bq bM bC bS cr ce bt cI bN bR cd Y cB -1 X bS cx bd cq cW dd dh cR bd ca N bW cT bB cs cC cO bZ bj br cY bo bW eC bY fj dD bQ bT J bq S cs cj cD cb bN bb ca cl -1 bc bk bZ cx eE cC cB cS bG cq ch bL eu fi cJ bW db di cZ cC eO ci cw cc eF db cq ct bx dC cU cC cm bt bt dc dg cn cp L bv ba X bg cg I ba F E R bm bH -1 dT cB eE cL ch bX fm cP db dP bM cy dt cZ cY bp dz cQ eS bX eB eN dK di eu dr eW dd cK eO cI et eC fr cx ct cB bW bH ce bN cl cM cQ cD cy dO fi cO s bB cN N G bP cT dh cs bp bI bT bC cP ce du eX cD bk cg cO bw X d J O Y bE br cY cB cZ cx bW fr cb bn bh dZ bW cF cJ bo X C bS by eI dX bX bw Y cK bx cZ bn bP bk cp bT bo cT cz do dg cQ db db do ex dF cF bV cJ cJ cp cN cN bx by bO bP dH dn cE bh cO dg co bC cE bo cy cE ca A bB cF bh bx bM bf bc ct dd cT cY ce F cz cv dn dt bD bL bk bu ck dZ dX cV eX di fM fi cH bU cQ bO cQ bV eW dt dB fv ev cY ch bh cW cF cM cp ch cL ce cO cI ee dX cG cy cs ck cZ cI bC cD cT fq dk ee co cY en cW cg cI dv cm dA cE ct cr dA eE ci ev dC cI bV ci ce cM bn df dl du bX eu fq cQ bD bK fg 0 ea eO fu cv dX cn bQ eq gb dG fK dU dr bX dx dj cV dA da cV dd fr eZ ep eu cJ fw eV fF dy em dD eS cU dp dw fM ew dH cV dQ en et eZ cu cU ej cA eP fv cm dv dw dO fq dW dR bx bU cA eS em cW cU fm dt ef fS fL ey dB fn ei dN dT gs go fw ef es eC dq fr 0 fI cP cV bU fJ dr eT fY dU fI df fj eS dW ee dg dU ep dV fh fN ev fI dz gk eI fm eA fo gb fe fo dL dq em em eK dJ eI eI fE fb eU eU eG fz dy dO fx es er dG ea gr gs hi hg gr eV hc fC dN fU gt eU ga fT fz ei eJ ga gc fm dE fp ei fR fM dE fv fn en gg gC fC eP fz eD dW ec eO fC fM gk fG gj fL dN ey dc dl dS dU dr 1 gg fK ew fa fA fZ gk ff dn fe cI er eq ft eu et ey ec fW fX fz go dL el es fP fk eY dO dN dT dz ea fK fP gT fH eM eh fl ey fD et eP et dS fs fb fo fx gC fp gx dY dc dw eZ dk fd fM dm er es eB do eG fI ga eK dr eb eF eM fp dT dU fi cU fb eY em ds eU dn eW eG dH ec cC fZ gg gp gl fd fQ gv fs do fU dz da dR eJ ep dC eg eh dB fC fQ eh eq eh dS 1 ft gk eP eW fx du et dH cZ eK fG dQ fw fa eP fV gh fm dC eQ dY gR hf fD du fw eQ ep dH cy dx fa ft gw gv dN dE cU -1 dk cS fd dN dT eA eD fh fm eK dx eg fl eQ ec dU eV eh fA eU eW dW dl cY ci dF fd dv dM eI ct dB ee eX cA cV eO fn fa eQ eN dS fp ew gm eb fR er fn eC eg fh eu ea dw eO dk et eP fZ ee er eI fs dR dr bY em eJ fc fm dy gd ev gp fI eL dY fx eZ eN fF fR cV dV fi fA fV gk fI 0 dB cL fd fA dw fz es dC fk fe db dV gv fa dw eG dI gW gk el dK ga fG dN dA dK dp cu cJ dd ea fs dU dT eI dI el go dM fY ej eG fW fh gC fK en gy dU dX eD fl fb cR cT bQ dR eX dv cY ef fa dn gh gy gy ey fF eV dV cy fm dN ff gg ep eC cz dF fm dH fg eZ cE fq dG gi dP dp gC fO dU gk fD er fx gV es gO ei eX fs eM gK fV eR fY gf dn ge eW fZ ew eu dk dF dz dt eQ gt dO gv gv gn fa dv fP eD dh eE eO dk en dj cP dI fG fn fS en fI fb eg 1 fK dQ fo bG fe ds hf dW fE ey fM dV gg eP gb gb es eT bM em gS gV gw ec ei fW gN gv eV dO cV eA dE fR dO gY dj fv fz dU eX fA eC dw ek fh gm fP fQ 1 cp fR dC dl ge dW di eX eU cH dM ev bJ fw fq dt dk gs gm ez eg eh gl dR ed fB dV eV dU fP fd fM gl fo fy gq dN eN dK en cU el dT fl eY gv dS dK fy eW fJ fT eu eE fV dg fK dC eJ dE fP cT gT fY eW fh fD fV dR dw er fM eZ dO fk dD eP fj gL en eg eD ef eA fL ej dX eU eo ff fn dT cf dg ff eJ eP eg dI 1 eG eg fB gx er em ef eG dr eu cG dm fZ dI eK ff fM fi dL gf dj eA fB eh fe fb fV fc ev fN gG eD cf fY ed dB fN dU dW gb fK es eq et er eh el fd ge cG dd eW eM gg fT fA gq gx fn fR gq dk gS es ff eq gf gH gv fJ fU eG 1 cK bP dG eN dS fc gp fP fI dd cU et eN eN fa gk fc gx dm fo fV hm dI fw ft ft eX fm eE dO fD eP fD eD eq fG ec el cM eS eE df ei cP fi gs fP dy fb eE gp fh gc eA cj cf gS eO fN dt ej eZ ft eH hg fM fs dI fw fh fN gq fz ey da eq gy dM gK eP ej fk gk dW cR el fQ gg eK eL dI eQ dm fn ev gO fw gi ft fr dD dD dX eI dE em gK fv dw eK eI et eo gc eV fg ec dS el dU gf cA gv cV eC dL gW gO es eN eD dK ft eA dI fb fT eR fv eP gG go ds ft eq gr hh er go gg eJ dI eR ft eq fA dM gx fp dN dM gk gc eR fl fT gv fD gC eM gH fu eY dM fo eH fx fH eQ fZ fL fW ga gH fK fn fM gB dS dN bQ ei fe 0 fo fQ hj gh eM fR et eF dm eF dI eQ eE ef dk dK dr es fH eP fu cI dr dE en cE cK ep cE dc cj fP cU dR en gB ga fn fP dW fE en fW fH fZ fh gc dC gs hk ez hw eb dg dL ej fU eR eh eK eN dv cP dt fs fV fC gw hk hu fI gI gk hl gJ gj dt eG ek fn eZ gv dE dT el ha fK eV fV gm fH gl fy eA gF hc eh eL gx ha eH fY fh dE dj cf bp cE go he hg fS gc gW gq ha gP fW fM dI gB dE gt fY gk gx fS gD gH gb gU hs fL fL gI gp gu fa eg 0 fe ev em dz eR gL gw gW fZ eH eq gq fK hc ez fX ed gu eh fI fP dl bn dE ef dO ee fK hb fN gZ hf dV fu hf fz gD dy ha dQ cQ dN fe fv fp eH eL fp dV fC el gT eG eQ fG gy fX fJ gy el gx fo gn hi eK dy gT dM fL cF eQ gG hl hq fT fo dE gf fx eU dN fF fo gp fT gE hm fs gg gK eJ hf fB ez hn gg 2 gr fH gJ gp fE er 2 gw eM hl fy gC gf cM ft dY eV gS fa er dQ fs ho gL gJ gu gs fZ fF fS hp hn gh ey ge gx dE gr hb gO eh gr dx gf ge fl eA fT fT fR gR ez gH fl gJ ez gv eH ez hc ft gw 2 gO hm hq ht gc fZ gr fT gg fW ez gI gp eV fa dT gI ed hf dz gJ ga eH gO hl dl gz eH hi gw fQ fo gc fN ez fV gC gA gm hr hk gg gJ hd eP dX gl eQ fz eL gG ga hn gK fH gb dE gN 2 hh hr hs fO go fL ho gt ht gj gB fx gU dX gU fT hu fT ez fW hu gE fO eg eG gY hn eP dE gO hk eH ez ez gP gP eH gG gP fd fv dE fC dQ ez fU fH go dK gX gs gE fw ht gn gR gE eH dT eq gI ez gH 2 eH eH 2 ez fD 2 ge 1 gr eH fy fy fl fl gE fX 2 hj eN fu ft fd go ft fK eP eG fk eR eL dX eD el gU fG el gd gP fw fP dG ea dl cT fx dc dw ed hd gQ gd ef gS en dL cC eh eW eH en eH gV gA fa gh hv hj ez gW fV gr fC dy eq fo fI ey 1 gl fG gx fc fz eA fC eK fA fw fE gc dn dz gP gr gw el fE cS fb ec fd gq gR fG ds gx ft fo fl gt fB gZ ff fd ez gD hw eu gO ei dw fx gr ez gH eV gg hx hi fo en hk gv eP gV dE hj et gH ez gl eb ez gg 2 ho hn ha fF gP gi gp dF fW eV fG gR eK dH ex eK dz 1 fb eG dh dI dU fB 2 gS eq eL ds en fo 2 eH fH eL ga dl fy 2 eH hx fo gU ht dQ ed en fi dG eD gN eR gk fc gT gr 2 fO fx eP gg hz hl 2 ez hs gP go cU dE gy hh gD dQ fC ez fO fF gS fy hy gq 2 eH dY fJ hn gG gv eH ez eq ez eH gG gv fG ew fM ek dE fE gh fN ek eR dE du dS dj dP dA gn fI fN gL 0 eT fo fH gi eg er eM ez fe fh du eH gS fa eV hb gY gF gn gJ fo fm ea hg gO gd gJ fw fk fp dY ez hy ez 1 gc eH fQ fY fp fW gp hq gI fD gq fl gr gR gT hn fy gG dO hf fa gz fY gh dG gf fu hm eV fh fW eD fJ eO ez eK eI gO eV gd fS hc fa fC eY eY eJ eS ff eK fl fI fo hy dt gH eH dl ft ff hv gw gJ gO fD 2 dI gU fl ft fX fD fx fl gS dj gi fp fI gf dE fw fB gj fW gP gS gH gD eq hk hh hr gi gG eH eH fW hc er 2 gE ez en eH fY dM fE gt gO eV gp eI gx fF dK ha gk fn dM fc gg gr gu fd gd fU hc fL hk hc hw ez gS hu fI eY fL ez gh hr fa ez fC gJ eP ez 2 fB eN 0 dV fv fa fc fN dE gO ez fl hu fl gS hx ha gH gk eP fz fw eD gM fv fC hx en gI 2 fH hd hf eU eg gt ga eL fW 2 hm fF fp fn fA 1 fD fT fD ga gp gb gw eA fU gt gl fB hm ho fy gP fk fG hc gy fn fx dE fC et eY gn gj dv bX cQ cG df he fZ fG fU fA ev fQ eQ eJ gx fj gP dM fE dp bn bp dD ey ed dH fo fJ hf eP ef fd eQ dW hc gm fC dF fR eJ fq dM dQ bX bk bR eR fc eV dT fC fl ht gY gv eK fH fI gk gJ gL fW dG fd dJ eB eg dW ek dK fh dy ef dw eY fQ fQ gZ hx gm ec he fM dJ gm dX eu eE eS bQ ea en fG es eD fR gl gk ff dE dI gQ fk gb dc cL eT eV eQ fd fg dV dR gk gN fE gZ fW gG ez gt gt gp eH eR hb gJ hx gD gG gD gm eK ef eh dz hc fc gg ez fN gr gi hi fX gR fl fW hr hc eg fJ dy gh gX dQ fv eK fE eI fD fO fC gf eA fU fB 1 eM hf fJ fQ hb ez ez ez gH gw eH ez gZ hi fS hg fH gF ed gT gO fJ ga dC dW dD fn fS gf gG eQ fX fD gt eM gm gn fb gr fl eH hy gA dy fI fu gs fd hv gQ gx he fY gN hn fa gY el eb gx eo dw cY en fb cC cu bS cP fr eZ fr bS dj eh fw dA eZ eN cS dA dJ ew dD ed dF fM gp eU ft gI gt gR eO eb dK eo cS fs dS gw fy gk gF gO dK gk ez gy hi hy 2 gO gZ ez gI gq fO cV gb ft dT eL fc fA gk gm 2 gf fZ gI gm er ez hw fa ez go fI fZ gl gC fT dH ea ev eu dL eQ fo en cv eg eq ht hk gf gm fp fH fC gp gV fz cE ds dW dR dK ei dU fN fx fH fV fN ed dQ er dq fz fB eN cW cJ eK ev eu cY ca dF dV dO dm fM fP gx fl ft eq fg cD em dz dS gw gb eG hc en dI dG fO gB eM hy dR gP ga dM fo dT dJ fg do dG fz gt he hu fK fg gI fx fM fl fH 2 gP fF 2 hd hx gO gT eJ fa eM gb eR dF gP fF dX hc dk dP dP cQ dP ge dD cR bF eH ey gP gR gy fH hr gj fV hy 0 cA fQ gJ eV eJ dM fw fs fu gW fw fv gh ea ga eP ez ez gF ez fS eM fT gK fQ 2 fN fc dM gI dI cW dk fh 0 dW go gP gi eY gv 2 2 gp gH eR ez gG hz gf dI fH gc fI eW fE fN gt fo hc eY gI gV fy el ga fy ho gb gs fS dT ei dv ec eq gm gS fx fU ft fQ ey eO cg cr bM bV eB dS fe fB dx cG bM bq bo db dt cd bE bo cm eU dM eA eQ fx fc eU fI gv fZ eb ed hf ht gR dX fU gd gc gb dY eh dA fx ec ej bO ca bb cr cH bh bL gj eR gu fQ ei dz eq fJ fK gL fM da dX eT eJ de fB eL er dq bX fA en cI eK ga dD eI eV dE do fC gU ez gE gI fW go gH fX gD gs gF dU he es dN fd cP bt ck cG bL bi U J U eI dS em dj dx eB do ds dv eX ej dh fb P ce bn bJ bZ bP cg J bA B bc bE N G bv K h s dk cH fr bW ee cZ U K u bh V n y bB Y r bG cr cU eC dm eq es hx gv eb dE fv eo cQ eK cQ em cj cK dd dk ea eR fA dP cw cH W bk dm eD ei gg dr dp cy dm fc ee cu cU cM dt ci bA cb cs bX da eS cS cI bG de cY bN z l bw dr cP cC dc cY cH cI R cn bW bu ca bu ci dP dF dU dR dD dc bW ct ew gJ gN ha fb fp bP dB cr cD bV bI Z s w dJ cH by bB bw cY cp bZ x Y cg ct cN ce bO bC de fm dX ej bX eR es eJ fU gH fF es ej fQ ei fH fo cU bU cQ bP bT bE cg bk bJ cs bW dh fr fA fT ez 2 hw gA fS fT ha eG dY eF eF df dW eu fD eW eW eD dp eB fj bg bG cZ cj cN cI S bC dX fq dz gi eM ge eR ey fs gN ft fN dK en fM hc dK en gc gX fX fI fD fY eR fX fI 2 gN gx dE fj fd fW gu gb dN gJ ei gg fJ dD gL gl hg gq dM dI gX gG ge fV fc dN dN gx hf fs fD gP gf eM gJ hj fF fp dy gL dS cU ei fh gc fF es fI ed dz ed eK dK fI fs eP eY gd eL fN eV fF fP fn gd gc gv hb gD eN gi fK eU em fz fi eq gp eq ga dE gI gx gU fE dD do cD cI eo dQ fm fi ef fi dg eo cK do cK cu dn dM fA eb dy ea dy dM fL dS ej ea fc ga gO hf gH fC fW fo ge dK et 0 dX dC eU fh eT ed fD fD fa fF he hs hn gm ez hu hh fo ez gI hs gA eH gV gh gb gq fO gt gM ez eg hh eR eg eY fY gl fE go gW gq gW gs gs gk gJ es gT fH dY eY eb dM eX cF fm dv dD fu fD he gV gl gT gN fW hd gi gl fX hq fT fy gt ge fy fs gQ eL hr fF fQ 2 gk hs gp gP gb eU gy ff ft gO ff ed fK gd dE eb gc ff dz ed eP eY dM ef fU gx dt dN gb eO ew cK dq fj fj fg fr cR ee fJ eL dT fk dz eg gf gR fX fT gN gw gV gR gM eA fR eb eb eX dI fF 1 fc ek fB fM eV gr hr gG fC fP gM gQ hg eL fE fg fs fF fG fY gU fQ gS gP gX eY gH gH dE gn dg gW gi gX dU es fX fU fc fF hm hh fQ gt gB fA gQ fQ fE fw ev ei eq ec gi gx fV ez gr gn ge hb eX gx gN fw fg dy gN gN gi fN ez fH gC fx eS ek eK fT fZ fW gQ he fa ge gl gP gJ gq gq eK eH hv fS gt fH fY gT gp gM eo eW fO gB hx fY gI fh fS gf fH fv eO dk eV ed dW gk fw gJ gl dS fb gs fC dI gG gS ep fx gr gr hc gr dG fD ev ep fS fy gO ft eS gD fW gD eb hx gI gI hn hx gV gx gi eR fW gB eg eL dU dx eJ dg db cP br eF dy dy gm gD gF 1 fl eH hr gj he gk eA gB dO fy dy em dR fM ey gT es fC gp eM gw gQ eL es dY eH hk dQ dt fg bw cL dZ eR gk gk gc 2 fW hx gT gP fW gH dY ho eb fV fb eV fA gZ ha ha fE dp fR gd eY eM eP gr fB fK fm dl eW dW eh fI eR fA fz hv hn gX ha dS gh gK hr fW fK gq gq eM fJ hl dy gi gJ gX gl fb dN ff da eI dv fM fE ez gc fy fx eJ dI dM dP fx dE gS gB fK eE bH cZ bb bw x eZ ev fr ep fi gG eN fM gF gN gk fT fF dV fv eQ dw gq eY hu 2 gH dS hx hg hp ed fN fG fz gf eH ez gJ hk 2 2 2 ez gc gE dY gH eg gI gI eH ez 1 gm gw dN gk dX gc fF gi gE hx gV gD fA fT gv eH eH gO gm gI 2 ht dR cK eJ dE eH gE fW fL fD fF ha hs fJ eN eh fW 1 hc fa gy fl gn fa ht dO fZ fO fb eL hl ez gd gg gO gN gg dI eR gG fC gm fU gh fY gn hp dv fl fg eg em dY ge gT fM fS fl fH eM hf gs ef gU gq fK fD gt gw ff fb dr fb gp gc gn fI dI fX fX gy gi gg fU eo fi dt gC gi eP gw gJ gz fv eb gw eq en fo fv fD gy gm hi eq gJ gP dN ey hk hr hx ez fW gV gg eH gS fD fX 2 ht gl hw ez gl dY fs eq gt fK ge gy fw gJ ff ec ff fo fH gt fp ey gI eH ez eo ft gI gG ho ez en ez gP fM dS gH ec fn gy fy eg ek gn fQ gs eK hk hh gc ge fJ dx fH fF ed dw ge eV gg eH ha gt ez gO gy 2 gV dK eM dG 2 ez hn ht gX eM fH eN fD ga eO hd fl gi dx dN ft dq gs fG fv gU ek ei gL fG eG he eA fy ez gG gr ez eR dV fT fZ gV gP ez ez eG eH gv gS gE eM dN dz gY gJ dR fT en ez gh fA eT dp gm eN gO fI fQ gJ fa fy fB dE dP dQ gl fN 2 gn ez hr gI gP gm gm eF fA fs gi gv fx eQ eH fO gc ds gc hc ec eM gO hs gO gl fp fK gb eP eC fE fd gO dt ej fV dV eq eH gO fe dU ez gK fO gO eH ga fX eH ea fW gi gv cM ej dK hu ez ez ej fH dl hc dN fn hv dI fa eq fF dH fp hk gI ej gl 1 eL fW dY fD eV eM dG eP fz dG dQ gb fV dY hl eH fa gE gm eH gH gC fQ eb fQ dG dQ eD el gh fa fb eY gV fx hs fG fH ek fF eA eK gb gw gR gI hj fo fc em dP gb gj eG fp he gr gp fE fo fO hn gc eL fI eL dB em ff er gt gt gx gM fO fQ fu gd fJ dc ev cG df fU gs fY el hq eg dU hu hh fF fR dP eM gi ds fZ fH dQ eM hu dN fL ds fg eQ do fC dg er gc gz gv fo fW fv fD hj dU gr eH fS fs gl dP eG ez gc eV gJ gP fp gg hh hf dW eb hg dY fe dK gh ed fB er eO ek gG hd eW gq es fC fM fw fh dl fH dY fA eI gG gf di cE eV ek fE ek hd fO gy fx eZ fA eD eG ci dv dm fL eX eT ef eY gJ fn hl dn eR ht er en eq dm ee gO dK ga gs bV en dw dL ew ej eu dG dR fT ft eH fU ez gH gO hc gm fw dX eD fU ew fc fq du dE es dJ ed en eo dl ei do 0 ew fJ dS fv fe gJ eP hy fy hk gq dE eV hh fu fF ed gm gG gc fC fO fw gK dM fA fL dM dE dI eN fo fD em eG fl dM gg fo eN gc er dE gm fM dY ec go eP fD fS dH fJ go fH gq ht fE fz fQ ed gs fO fU fl fc gb gq fj fG eG dR fI gc dG gg fN eR gJ fH gp hk gv dJ dR dz dy hs fW gg ep hk fO fC dN fX fD eb eK hv gY fI fj fp eb dS dJ er gS eM gc fa el el gc eH dw dW dW ey eR fw dQ fl eI fY ho fy 1 eL fC eN gq fh fl ft dj fW dz dX ed dA fI ey dU es fH gj fX ht fK gx 0 gg gO gz dl eW gv dW gH fx gK fl gf fH eT eP eD fE gJ eq fM fl gP fa dM eK eg gx eV fC hj gt fC gw dw fX gX fu et er dG eo gR fj fI fv gV gg gi eb eD dY ff gg gN fB fF gs de gc 1 gZ fv eO eg dx gv hc dE gt eR fl dY eH en eQ fH fp db eU gf gn dG fs fn gq et fb gQ dI fV dG eY er fM dp gj eH gG go fX hs eG hx fU dU gq fU eA fI eQ fP 2 hq fT gh ha fQ eJ fB gJ fg eK fH hb fF gl fE fB fH ga dQ fo ck gc ez fH fK fj eX dX ek cO es ep eH 2 ei fX dN hs gJ fy fU gz dN dJ ey fI gg er eK fe fz fp do ge dJ ej bS dN fK gs fH eQ gm he eR dG 0 fU gx gk dU el fb eM dB em fE fE fF ew go fe fA gg eA gw gh eQ fz gf eX eL eR eH fX el fG dN gX ef eK dt fs fx dD fp gg eo eL fU cf dA gc hd et eM hn eJ gp hl fD gr fW eq fC gP dN ct gZ fE gd fb dw dd cp ei eC eg fb dZ ej dz ck bq dD fc gG gC cV fY dX er eD fE fu dm gd dv fS el go gX fC dy fw ee fz dG ei eO eV dA dp dl dO cN dl fM eX dx fg ei eN cJ cQ fU ep eu bZ cq cf bO dx bU da dA fy fw dV hc eT fp dO dr eC eT eg dR fZ fL cz dr ec dz dp es dN dD fO gf dz eD gg fA eZ es bO cC cU dL dp dt ei dC dc eL fE fx hc fV ff dG fs fP dQ dm dV bP dU gH gI dk dE eQ eX cp hn hs gi hp ee dO bG fj cu eT cP cM eY dp ey eQ db dM et fu dG dk dU he fq fN dw bx fC dK eJ hj fL gO go he cg bY eB dU gh fC gr gm fg gc em gh ge ed eg cW eI fG eq fp ed dz eG dY fC dy er bV fg cS ey eI eI eC gI fx fw et ew dv dZ gl dG fg dS ei dp fy fG gM gh dM fV dE fG ey eP eh eG eg dL gc eQ fc 0 fv bO fu ee es dU fe 0 ck el gl en fw 0 fB dL fG fI eH gm ee fu fK dQ fn dg ga dK ea fd fQ eK fE fv eN dm fL cp cd eX dc eJ dW fq dw gc dk gx fC gr gN gk fd ed gD ec dz dW fp fV fb dE fX fe eF dZ eE eR ea cl fE dE eR fW dy em dm en cJ gJ gc da en fX dM hi fU gl fn et dz fG dR fB fH gb er eG ds fK fq cZ dF ea eA ej cE eU cV fm cz dr N X ci cC ev eR dU bQ dX da cC eT cg by bP bP bV ev cG ey dX en fe ct dg cP dc dj fk bX ee eN fz dj fC dc dc eY eQ fe dv fq cz bQ ep fA dV fV dE dH fn dU en eV ei eY fn eb gr fL ei de dR cj cY dc cy bc bX bh A eE cz eE cP fI fL dj fn ga fS fb gl dg gs hc eR eb er dw fA eG ec fR ee dL ev gL dB ec fB gu fi dv dW eK fT -1 fU em ft dG dy eY gB gp eo dm em eC dT dR eg bX cT dq cx cV eZ bh ct cM dQ eC eZ dB ci cN eE dc dn cQ eo cy dP dK fe fg fw el fJ dK cz ev cI dD ds eX cH bH bD fk fC bO dd eB cQ eU eR ct df bV bJ dw eS ek fD cj cP cD fm eu db dN cQ bX ga dV dA cV fg dn cN dR eI fU eK ea eN 1 bx gC fM fn hl dR fn fh eR dK dy dr fi gg cR eV gs eL et fF fo ew fU fE gd eX gN eO hh gi gm gE fF fA eK ft dG fD fx eM fb fY dv gs fl eP fY fJ fh dg dC dL db dl dp fe dy ez cQ bp dR cE dS cV eM dq cM cr cJ cK cp bC dA cF eT eQ fE fd fO eP fE eO dL dK dV cz ef fn fA ec dQ ev dh fU eq ee dH eG dy fU eg dA eU dv du fb cg eZ cV dM cg cQ dP dd eo dW dY dP fB fA gg fl dr eO gf fl fT dc fn dP fb dv ei dm ea cP et eS dN eb fT gz go dI dH fB 1 eG hf bU dm dM fk em do bm dd du ew fP ek fi bn fT gd gd hc eq gU gS eR dK eN dZ eX dX ew dl cI fu dZ de fe df cG fu eI eo cL cP dU dZ bK dm fq dm cI eO du da bU fL 1 dg dW el eq cV eS eZ dC em fv eF es dN fx et ex eU ch dQ fz eG fG cP eW dO gs cS eR cY do eB eG dg bV dW cS eC ds dV hf fx el fi ea eJ dV fj fH eD eW fy dc eV eJ fQ fu fK fs ex dP ct cP cZ bB dp dS fp gS dP ea cz fb dp en eF eD fa fD dX eR dI dC eT fe cG dj do eJ ft ge fY eg eL gt dU dV ge fg dQ gO 0 dL fn eV fj gx eA fF ew ff dX eQ dG gh en gB gh gL eO gn dE dy ff gC fU dT fk ey fz ec eP fh fV dK ho gG eN dI fw eR eH eR eg dQ ds dO dp dH eW gO fo gg em eO cW gT eH eQ gl fR fd eg es er hc eg dw dJ dc eM et fo 1 hn gs fC eG dN ew fI eg ej fC eh eG fH eO gj ei ge ee eI fI dA cU gd dR eA gi fs dF fc fJ dO eI ec dS gj fV ei dl dg ey dE ey fi dw eX dP dk cS db ga dM eW fx fw eF ff cV eu fk fS eQ fQ gg el eQ dt en gj gb ef fx eb ee eh fJ dN fE dR eg fF fP et fs en dC dI gf dq fK eO ei em ek eq gv ez fy fp hm fK dE fc ff gv ge fu de df eF cF bh cy eS eX eo gm fC ga fn fR 1 fv cT eG dD fm dw X cD eX ey dU ga gy dx eK eU ef fw bx el fv eE dH fj eu eW dx gv gc fz gf eQ em et et dJ cT cW cY dq dy eT gf fF hx ha et fi dl fG eV dk eJ dD eq fO fH dk eR gL fI fR ew fh fM dQ dt eR eZ eJ dT fY eW ea eG di ee fN dN ff dS ed fT fV es gB es dm eT dP dS fC 0 dE fI gd hp fx ft eA gn eA dK eR fQ ge dI gp fk cz dE ee eL fU gB gP eA dJ eu cJ eS di cQ cF cB cy cS eO cJ db de dO eQ fE dj fl fc fs gd dB fA eC cU fP dx eV ec gR gv gM fF gr gr hc eO em dS eO dJ ef ek cP cC ci cF df cn bW bh fi eD dM dK ei fP fq fQ dm fB fw dM cY dj dR ed dQ db fw eG fp gi eg dC fx cF eW cS dP dH ea cA cC cW bK cI cW df bJ dt cb cu bI eE cR dh cr ei fe fI fT dy fR dN 1 gp fz dr fd dJ eQ fa 1 dG eV ef gx fD eq fb eU dX fr du dk dV 1 eb ew eR eO el dy eG ew dE dY eh gd hb ge gB fM fY gm eU gI en ft dO ds fm bE eZ eW cD fh eX gH hi fv eU dU fn gP fr dw eK fu fq cD dS fi dM 0 bG dZ dd eU eO dB cu cq db da dW ea eo eK fi dc dc cO eT dj dn cP dH gk ec fV fP ed hg ez eb gW gk fF fF eU fq ds et dE ed fy gP gx eh ed fn fw dO cO df ea eu gb fc dG 0 dG dF dN dc ee eT dM fM cR)));
-(display 'Stability' ^(a:0.54 b:0.37 c:0.76 d:0.49 e:0.67 f:0.47 g:0.73 h:0.69 i:0.71 j:0.55 k:0.78 l:0.6 m:0.84 n:0.66 o:0.57 p:0.59 q:0.7 r:0.29 s:0.39 t:0.83 u:0.88 v:0.36 w:0.77 x:0.56 y:0.4 z:0.51 A:0.52 B:0.86 C:0.58 D:0.42 E:0.53 F:0.68 G:0.65 H:0.43 I:0.75 J:0.64 K:0.63 L:0.44 M:0.41 N:0.72 O:0.8 P:0.82 Q:0.79 R:0.48 S:0.46 T:0.35 U:0.61 V:0.5 W:0.62 X:0.45 Y:0.38 Z:0.74 ba:0.81 bb:0.85 bc:0.87 bd:0.92 be:0.3 bf:0.89 bg:0.93 bh:0.9 bi:0.91 bj:0.26 bk:0.96 bl:0.94 bm:0.33 bn:0.32 bo:0.23 bp:0.18 bq:0.95 br:0.97 bs:0.22 bt:0.28 bu:0.31 bv:0.98 bw:0.24 bx:0.34 by:0.25 bz:0.27 bA:0.2 bB:0.17 bC:0.21 bD:0.1 bE:0.99 bF:0.13 bG:0.19 bH:0.16 bI:0.15 (b a h a k b q B c u z y w r e c i O f p d Z m d ba l e o f j n g g s h f i j d k bd V t A l m i H n P e o I C p j q o r q F e g h s t d d v u Y f E c v a j W x be w p x y D i z A d c J l x c p s bb s s B C s D E w p L E G l F w G n Q h N h o X H p E l M s n I C z K j o J a k C T bc S R K L M o p G x N h h K f C k J O G bj o z d P Q x d R c j E s d K n S e E x g f G F T j e K U n S U e G F n i n o p F N O e q x K J F K V a e a U n p a a bn C S d a p f l N n A C j f W x I p A X Y K A n G p j T X z s C e N M G E C o a A U z a d w J L h e A z q h x G Y q j V E E J g j o j S G e U a o A e K s W E X S E C e l E H C E c W W n S V J e i E p A R l S U E X G x h V f z X F p R K U W J W o S j A A X h d w n j R S o a o d L U z W h i d x C U X R A R x p F z b n K l h z f U C o p z U g G C a K K X J A V e C z g d n d l o W x o x n a v l U L j l o L A y l o d g K n p h U J R d M X h z o o a A Y D W n A S V j h e o E K U q o a a p C i R q g q s a M p A A N j K K j W e K q q x z G p J e h K a h K d j D U V A E q X a C l V E c S j e e o M f f L M V d z x V a C L o d H A z e q F h E E G K C z E I K S j H A C p j C G I d W C z J X o f R E J R W A l l f X S V p W p v p f x g o p l g e l q J q R E E J E l q G p x n R o l Z a y f f b h p f o M J A l V p a z R h h e U h A F F p c c K N z e N C E H E c W a W G e G h x W E h J I A A J k h p p w D o N a L L f h p e S o l F q E C D U n G C h o C p J w C J w o n j h x i C j a l n c d n x i U G p w h n q q F c p o W a e n W g G w V T l x j x x E K z n j y W J g N U K C j W n p o Y W z R q Y n n k K o W q R U i l K G e J i x Z q H x q Z z F C N Z p E j J O W G U q H K e J O G Z o e h h I c k w G w V W E I a z o l G Q i l O P i x h C h X J n p J i o i E E n o V W G E o q G ba G J e x p g k n F U d N h q a g C J h k N c I E f ba W F j N V j c Q c g O Z e l I W Z Z w a h a q U N k U N w P n i G l n c l l c l n q l n n C G G n e I n k i i p P F a q J I g g N p I Z O O O N t u w g g F ba k Z ba q W a F J p m D h k P x Z I q k c g O e h n U e w Z Q m c k k i q e ba Q ba q n g bb O t P ba O G c F C Q I I t k u O w c Q g i Z h P Q I F C h bc C Z x k P i Z I O U U bb c ba N q G g G c e Z C O g i Q m B i Z I k w g Z U F C c c a k k Z d i O g ba G u e B n K i Q i g w g n P ba G m I l k g ba e P Q ba P bb z c J n i w e N C c Z B ba g c i bc B P bb Q m O K N g t k N C O J bb t u h bg Z P Q Z bc c I w q o F q Q O m P N ba u W c U q k q h c Q m Z h u h g t n u m t Z l i bd g g ba i O e P g I Q O i O bb U k c K I l F bi t e w ba J F P k bb u bb a a bb bf bb Q Q ba I m g bb m N g Q i O k l F O bb m u w q bc bb F bb k t ba ba N q g c bc P z P ba J k k e O c C k be R J bf Q K T i ba bf F k U m ba P j K Z g j m g x ba U k i e Q t Z I B k h g bb i O i t Q P F u Z ba g O J B I u P I g bc ba m Z w O O C B i bf a E bb R B O O k h m bf i m t z bg t m u U l Q N Z bf bb I o c bh w Q x q o i u c i bc p t p O t t bb I I t bc O B u bc e P F P B J i t K m l bf W x bb bk m p q k bb U Q N q h u bh B k e G B n t P p m ba Z t g m t C h Z c ba w Q o ba k k ba O bd C C w P bf p J bc bg q l bb c d l d P I N h u B D c Z k p ba U Q G bb F C be J I k bb i h P ba P bc g t X bh t f u u F P F m q P i I h n i bi u bd J bf k bj bp O p k N bh p e k Q i h w N m h P t m t Z G k R p g i h H e k n g Z bb n ba bb g N bb K q w O e u x P bu L i l e i L u I p Z u O J G p bf bh J bf a c k O bi w O bd Q J Z P bh B j O bb N P k m q i N U N bb g bd X bi bg C bh k w S x S bh Q q t N q X m i z t k C bd R g N q P P I m u O P w bb w e k bb m ba O g bf m m bc G bl B bk j B B o bo bg a q t m w J p E V F e bb N l F P c I N k g w w e E B z bb J h E e k g e c x K bb m G x E j o N P q i n t Z w K Z bb w t bh ba F q ba q m c p h X X i u k z bb I G G g Q E I q F F u O N i m P q Q g bb u bc c J O O bb bf m bh K c N V g Q bi V k N z bl bF o c bb C P q bk ba I e O L j q E bf m m a G J i q i l c bi Q u A bh i g u O J J n A ba t bh a x I P k n t bb I I bc bh z t n X Z O bh z j w bh N C n q w C P O O Z u l a br e G S V j p ba e e Z g g k U bb w h bb B m n m m I l C e k B i Q k n G c e a l A U k q O t n i O B Q g h h I q G I I R t bd bd bc n n bi P bi w e g t z J F k O g P O P u w n P N O Q e bi q c bi V G B c N g u c K Z k g O h k q I c l Z m h Z n g g q k Z z k bc h bb bi W k C l B a N bb H bc G o m m E a bl W k P q O Q I E bf bb w P Q B G g I n F m bb Z n h k I w h c P P Z u U W u t k u bc bm M m m q h B c Z u m U m p P c O l bb w m bh G bh x ba u w c t B m x Q bf ba w G l o n w c bb A Q c t K F h m d f x V Z u g G N m F I l q t Z u i Q U h bf e F bb k bk Q u A ba k F bc O q i W G m h q m e q P G bg w bi bm bn w bb i k P l i g O bb h O bf Z Z y I O P Z Z o i O m q Z g g J Q Q K g l k ba k c t P O F o t ba h k c k B bi bl h B e bg ba bg c J c bc q q w Q k Q Z W B u e P A l n bk bl I C y bd bo bh I W q g bb V q K bf n w bb O t bd B bd B q h k n I O U bb t I m bf z c h j bf c e U bd bl bg S x i ba S B q I h k t bf w bc J ba O I Z k m g bc k G w J A m C t w i q B bi bq v P I bf i bh h q k Z f u e I n u bh a x J n k q Q P bg bk y j P Q q Q g c G J bi G u a g n O t ba N Q bf O Z W k C Q Z I ba m Z m B B g W bf t C bf k G I w I m k g e h P bd G x N O l bl bl bi q bf bd P O ba E Q N U B bc c k w P k l m I G Q c bg q q O P q W s m Z Z q t J k Z L I E a l w q Z h bb bh bb bb h n Z bc n G g q c Z P bd bp e P Q G bb k c U P Q C C p bc i u N F O Q e m ba h m f k B B Q bh k u c F W P Z t g w O I e bb g bq bk bl br h J A be bl F r h j N W G bb L h m bf ba bc M B O bq F ba h i W N Z I K B bh br w t k ba bc e ba F j bf w q l Q k t t O k h bc e z Z Q G k Z q I Z i bb J bi Q c B I m l e m B i N bh B bh bb f g Z N h a bf i bc w bb i bf P g P bf c U bs t bo Q bI c L bs o bg Q g G I J S J bl bt x bm C bn d bc P h h i O w i m J O k q bh l k K w bi c bh P h u Z a P P c ba c i n a bc Q J Z Q G c u bd O B bi Z q Q U g N n J g B U J g u bi g bj L z bc e t ba n t w N G O g d c G bi C Q bq K k j i P w k K u bb P w k f d V F B J bh bf c bb N u u u c G u Q x Z P J n k I c N ba I O bi l e c bf u bf g Q q Q n w P O bg h R F J K G k k k F t Z Z P g bb c Q n e o h i j O n bt bc bz v u i W q i Z Z I bc g P bb S br e e B f bd k Q t g d ba O i p W S t ba u O t J c n h c bc m l q B o bb g m C I bb k Q bh t bf bh bl f bl K k c bh c P h u F P bg bd n C B bb q O k i N m B O O m c m u k w bf O e P w g t O Z bh S w g bc G p k i t k k P bg o N S i bj bo r i bk h Q P h g Q D Z ba bf c D bl c z Z bf P bf t C G B bf O l N M d J i X Q q h n k e bc m bd j u q O q o N l u O ba X l h J h q B k Q F N q q c F C P u ba U O c U P p c bh e O O Q w h I Q O w n Z J m q j p U G bd N w J e I E C t m ba bh I w k K g W k x P bd I bi bg w bk bj bc u K i q O O q G m V c A m bc O w k c k N k I n ba p Q q e O m N k m bh I P bi i g B p c w k h B q bc I B O B h F bc N bc a l ba Q i h bf g u bf t T Z bd bq bb bB bq bH bq M bf ba i i w l Q E p O I p Z p h U x M q B x r bu bm bc t w p G K e g O K O q i Z ba O g k Z k e x d C O m F J m bb h a J bh k be X e h P g F P w i w bb e I w u bb V bi bd X e I bc j W n J p j bh h m F t h n bc P ba c O N m g U x p n c q B p bf J U u p J n c bb Q P h N O k O w m bi Q m O G p e m I Q c bc u g u P w P C O q F u C S bq bw U m bu g bv ba bn e g h bc bi I p x c x N bm bv bv bq q g J g c I e m Q I u J k m u c c bh bh c n bb q ba t N O G e bc bb g u l P Q K z J t J w K bf W bd Z V ba bw I bc m S l z j w Z a x bc bf e U I ba a N ba i n P i bh u a bi G bb J bf ba W bh e c k t w L O P S bi bl bA bl br f T L J J e A O P C w n k q A Q k bg e bf bh n bd G k bc k Q o m q O C E x Y bx O a B C Q j w K bb N c g O k K g w R d j g c ba t G bi Z bb bb q O B j U m T bv Q I bq s bg L Z Z k q ba I m B c Q I S bh I f A O T bi J bh Q n c Z G bc z t bb I m bb Z t p P I P u Z B O N I e Q k ba e N h G P n w Q F bh g P i bb bb w K z k bg bn bg bk s bi t bc N F f bh bg h D t bi O bh P c p x B bc i J U N O bb bb br a bc bh bg a h B bf E bc A E Q P Z F O P x K N F bh bd ba B Q w ba h P t g bb ba u O w x h J k O k c Q m m w c e t bf bd g l t q bb l c bh o E J bi L i a u u Q K k n q k L J k t k bf N c bc P F Q W G Q P Q t Q w t Q Q bf m W Y bf n n i I f g h c J g bb I P J O B U N W h N o Z x e m u m Q q ba G P bf bc bb q h B o I O bi bh t P k Z B ba m O U bb bh B bf F bi ba u O c G c O i bf f bg ba bx i by by bk g u bb m F F h G N j bf bf N J G bk o W L L t I ba m m u w bh M v bc N P B ba k g F G H bi bd br bx O bc E i Z bc f k U o a X N bi Q X Y w i ba G l ba Q h bh h k E g c w i i q Z bb bc t Q Q N bl Q t w q c G bb bb t t g u q q Q Q bi Q a bi u t N m bh t g P c bi c w I n bd bc B bf g i bg W bh br bf bg bc m N bd K m bq bf bl bk G br T Q n P I Q q e Q c Z N P t E u G h J l Q m bq q i w p ba P bq u t bc bi bh bg t u J e A l a a ba bc g x bi bl J d bh bC P d X bl V bm y bp t bc 0.11 N C bf S P a Z O E bz a D C bd n h bc Z K P bl G R l t t O Q I bb I bg ba J Q U k u bb bh bi l bf Z t I w N w I I bb U V P j I O Z B bb Q O u m Q B bi bq O M o F bE bq bv bg bg bl bl O m m P Q Z bc n i m k O bb G Z q P a bq bi g ba J B bi k I m bg B K K bq bb N bf bi bt bc bD k bg bm o T I W n W K c f C bc o G bi e f bb c B P O N h h Q ba Q Q Q m P e bf m i c m ba n B bq I t x p m c Q bb ba k Z bb m bb m bh k bk B bd n z Y E I bq N K u O c n c W t x bi Y m B bf z l bh F bb t g c w bb h Q t bh K h n L Q c Q ba a V u O Q x bi O Q I l u o Z k N B o P bc t g P A I b w x bA bk bB bk a S R j Q h E bd m G G ba bg j bb bl bu bl h bf q t ba N b B H e l q i bb bi I U M U bl X O t I k F bi l w m N B bc Z w Q ba a n w p K k k B t w P i t u ba B O bb bd bl bd bl bd g B L C bq bb bc B N t Z U A K G bf e D bb d K bq k bb n q O Z H j u bf w bi o O bc F Q g u bh h Q m k V bh Q Q P l m bc X F P f N h e t x h i bg n U x q ba bh bq t z C k bf c P Q O u J I u e O bk m h B C I bb bh t U F B bb Z a G g O t k c bc u bb e Q A bq n Q O Z B O m O k j Z J bf i n t bb B u bd q F I ba j w ba e a l W g bn bl bk bv bl bf l bl m i a bh bb w P Z Q Q F n T bi bi bh K m I ba h ba ba q k a j bg U N k bf q bg bd c bb g d bc bg bh I be B I bh h k J ba q h P bl I N N O N O Z t w ba m B Q u O q g d N bd N g B n c bb q h G u K t bq ba u d ba bq q br E s bb bl bq u G q e A g k w ba bb bc h i O Q F l e j s E bc t z B e g I P bb bb Q B l Z t bq F N bc h I E j bB e bC bs bl R be T bD L bg F bd bk P O y N Z k C I I L j P y h q bb br ba f r w bd J c n bq k bi Z w F bi K bd P x u m e I I P F t bc K W M u bb W bk O e n bq e n i u N K bc c ba q Q G w bf bf ba n bk bi bc I bh bc bl O bh c B bq Z t ba N bq P e m q bv t o bq u O K bc k N m e F m bf k i u bf t u N bc bg p bh f P z u bf bd bc bf t B S bb B ba c i t c Y bd bi m p bd F N bc bb bi c Q i P bi Q Q bb K Q P I c Q ba bq t bk bq l h E l bd bi c bb J a I Q G e e w Q bb G h P N G P ba bc bb q t O F B t Y K bo bB bE bk e p O i c w Z p Q W c P u m P h g t B bb h O m ba Q h bb n ba O bf I t m t O g i bl t Z bg K O z bk u Z G x z bo T k bh bd o bq B g U Q E d V Q bi P B bq C bf n bq u i B g k w g H bh R u G bi bf bc F q g Z B bd d bk A E q bk N R O J p ba Q n c h o c u q z w V bm u br bq A I G y l R k Q B n B n c w n m h bf p P e Q G w Z K e U k bh e e bg u bh l k Z Z i B O u k G l p u bl bl t bf c m h bb bd w G J U O ba I F c n a bq G q U h bc bh N h h e bb i t e N l q ba bb g t Q i t t Z o y bv bk b bB k m bb bg X bk bf h U bc B U B R Z q bf J l F W ba N u I G F g l Z K g w g B F bb bh P t i t I i N m W V n c y bb bi g W bf t P w Z J O bh q j P O t bc Q O bb F I N I c F K bb a K l q w K k D t I l bk u c N t B H J c bb g bc N i t q C p w W Z R J o O P j bd c k B q h i e i I Z m q F N P Z N bf e h N bb F c c K Z Q O B n D d l n R bc A c r f K bq bl n h P w bb w P l F S U d by bt bl t N bg d q g I W E K e e N V q J bg c k c bq bg E bC A bd B U bl F t bG t B K bf e bb E bf t w O s g bc bm ba K W R bs b bF bi bG a f bv a Y c o bf m G u l i Q h o N e G I k ba Z ba U e bl Z j H bk bi i bf c bd w k ba bh B Z c i F i h I B i I c N ba f I bh e h bh w Q N bb k m k n k Z k P k Q B p Z P F bb bb B h bb bd O g I c h c t e h h u bb t i J W j N p bi bd U I bl Y ba Z L bq bq Z K O bf Q bf w O t g bb J bb bh h u m bb B bl w f d G o i t I N N q Q c O h h i n t G G C bc W F W P B k t m k t w N n u bb N c P q B bb w Z bf m O P t t Z B u Z bl G Q bg ba bf P I N bf n c N bc w h t t Z bb O i t x P h bb P c P I u G h bh Q g K k ba F h O u B bf p e i C d h t bh B V z B N Q h n g P ba J bb P P g bc g e m k c w k F P m P u p O m bb I m c w ba k Q k Q bb I m bc ba u N F bb B bb N u m N bb u k N q bc q t bb c t c P u Q P u O t w N O t t Z O B ba t m c P t m k bc bc bc u k O c B Q ba bf g u Q bd N t bf ba i i B k g P O O N w Q c w Q w bb P t ba O I bb I g c P bi g I C e bb I ba bh P h k F J i u m t g B q P B Q Q O c Z ba i ba K ba I P P t P bb u c t Q F bf bh u g t m c B B bh O P t B k k w bf t bb u u P Z B Z P B Z bd Q bb t i c k k t c g w P B N P O ba P bc k Q i N Q P t m Q c Z i ba N Q t O ba B bb Z P q bg bc ba F B bc bf O q P B bb P O I c O bb O c bc t c ba bb B k N bb m k q m c c P Z ba u bb bh m t bc t c m P bb t ba u bh B u c t P O Q P u bc ba Q m bc bc i m bb bi u bf m bb h I k ba Q B O bf Q c ba bl bf w q k I J Z I bb I N ba B bh B bb t t m bd ba w bc bc h B bi Z bd t O N w bd i bb k m u bb Q h Z t ba t k B bg Q P bb bd m k m bi bb P bb t m bf B bc w g Q ba bb u bi m m bf u bb B m bd bf Z u bf i bd m Z m bb bb bh g O B O N P bi h P c bf i e q c O O m O bc O P P bf k bc bi ba m ba g P P u bc t w bb B c t Q P Q O m u c u c B P P m bd bc m c O B ba m bb bh B w bc u w k bi m u t bh bf Q ba bd O P bc c q P h m bh c O B w O bb c bf ba bc bi u bi bh O u m bc bg bc Q Z q u bi bd I O bh m u q bb P I ba m w h O N O k O P O J ba bf m Q t q i bf B m P B O q Q B bf G ba Z bd O P u F w k N Z O q P N c k g P h I O O bc Z e P c c c bb g g Q B q O Q t Q P O k q I w bc O B ba Z bh O c c P m bf O ba I t k w k bb Z q u G F k O q Z g k bb c O q u i B t c Z I P k w e k bb P N bc I c k Z i w I Q t u g w i w I bb g Z q Z w w n u a I P k g Q u n N e g n m O Q I w P k N k F ba G k B c m O bd q u K i I P k m l Z Z Q ba Z N F ba n O t h Q bb bb U P q I u O O q B J h F bb t W P m I w k O k q bb B B w bc ba ba P B k ba o J bf bc i g q i bb h m F c bb bc e I g Z l ba w C O bb F bb O A O g J bb G c k K c u h I Q t h i G h q i O u m w bb O Z F g q ba O i k W I t w N w B l Z n P G Z n bb Q k m I p m C Z Q n i f H bc h C K Z W o Z m bb a I Q e N W p e Q h P I l K h i N B e Q q c B w k h J w m i q B s n c U K C B W ba I i g O O g i F bc q k c P t c u k j O K w w q e g U bc Q G I a e U c J P k N I k w h bf N E k h U W k f z K O bh be t ba t f O K a B U bb P R O J m e l m I bc h c t J K l q Q P t O F J G B t bf K Q bc Q ba q I J p m m Z B Z O bb p I Q J w g I P e U ba i c m B q N p w q W O e g q Q Z q q p F m A ba u i E d O bc B G bd bf c W J B k m g J h m U l k g p c t J m o B n G Q P N G e q e M e I P e bb q bb x I O bc i c O bc bh q ba B c O e I e O P K l I o J g k Q o g w t m i bb h g B m P g i g bi F e G bf z z t N ba O p Q e W t U Z bb ba B e ba q k O bh F k bh q m t bc ba U u k bg q n t e P Z w F k C c u bk c e t I Q I o bi j c t h w I O c I k B w P Z g J k O m O O bf bb g n K Z ba Q O O W Z O w o h bb e p B O R B E J I bb F A U Z bc P B Z O G N F q t N t z Q g g B ba ba e N ba t w bb m m bb ba bb V J E bc O n U bg k h Z t ba O m t k I F bb I bb bh O N j O O bc bb O p B bf B c Q t I x t h J e n w u i k G p P O bh O k bf B t Q F e c o w O q P n I e ba O e J i ba B bi V A bi bl L Q i z bf m c K t O e u bi c P bf m B O F O w g C bf P m q w C c ba C e B Q Q W ba P N ba w B F P t B F E B bd t K m O bc w u u ba m B bh F c c w bb bb bc B bb i bc Q t Z Q Z bb O P g q P m c w q bb I O J bf c u I m g N w bh bd I l u I Q bf f Q i J t O bc J z i bc N bb i bb B F K E P bb K m N j C B bb bc P I l I N bh e q i g bb Q k Z O c i I J n Q q Z I u h Q K bc P z c m I w B c i C g Z O O g G Q P bb x q m e Z O Z C g k Z G J N m Z J N Q P t bi g O u k bc k k N Z m i i g q O P c q k h k j bf bc W L N J m u S bh I Z A g z O j o ba I n P z Q G q I I w w n U P I w O I k h l m g p o P Q ba t O m q g q i I e Q Q K O h K N ba B B m Z P N N l G w g I w i l ba C m W l x N k e c o k N Q w j bb A w t ba G bb G g g ba e N t J c B bb q w i o n O Z m i w q u O bf I Q g e O k bi W w U P Q I g i Z ba U g q e c x h q I m c e Z a F m O O n e B bf h n n n w o bb P Z c bd M t Q w i B u Z bf W g t i t q h g w c q t q c h Q k bc t k h w c k m q B w m P ba Z ba K h g Z c k I c N f B c bc bb g ba h q Q u bf K m U U B c m w t n k Q Q c J J O g u bh e t bc e N Z n h o g k G w J P q I c h m Z Z F bf e bb k i B K q Z t c I Z I h N w m N F bc U P O k F x o bb c bh O c t F B h P P o Z ba bc G bi N I h n w k l c ba m Z c g Q bb w l l i I w Z w J Q U w P Z I q w h F B Z bf J g l o I k m Q q P bb g c bi t ba P q k G G h e n u t g h bc N U w u bb i bi h t bf F I i P N Z P m w G g q u t P a g k O k Z U Z W w g bh w Q N e bb g Q g k bb O h I P k h bb O F l Q t G n Z h h K P t c k Z G K Q c w O I q m Q m t P U K bc bf bb Z k k P N K n h K g N g bb Z g g B i P Q o F bh F n k Q g Z N Q k P c G J Z Q W w bb N J bd bi G G u bc e e O O N N e c p G I bc t N U bc bb p bh u k q t h B h w m n i Z J g K m P n a P U I N bf ba l q k i q g ba t h h A g W F g k O N h Q bb Q l ba N p c i Q bh k ba g I q i U k O U R Z O K K w ba bf bb G q bb q N e n m g w u t ba g I p O w m t K p bb m bf Q bf bh g G P O Q h P ba ba u g bf t j m bh k bh c m c u Z bd P t bb bf O i B t g Q ba c I I B B i m c G bd m t g m i P c t n B g c c P P k N w t P k c Q B P c bc bd o j P bf ba X m P Z Q m N bb B G bg O bg k h F bi L bl bq s bf B bf m c t B n i bc w Z x p k bc g l t F I g e w i W ba I Z w l B P w t n B i i h u Z q P bi t Q w P Q bc bb B w h F n i k P i Z t bf bq R u t d bf Q J n bc w e i J Z N P g B m Q n G F C K bg I w B I i w G i h Q w N Z bh z P bc B A n B z h c x P e O N bf I O n bh E bc bc bf bb bh i G C f N bb o a P bf Z t P Z q n i bf u B bn G bd g Q Z bd bh a j bi k ba e w c P J j W m B bm p X F K V w I a q g W g Z c n c ba I w e Z O Q w G e O o bb Q N m k u o z t U i G I k bh l ba ba Q V C bc Q W C bb bd u S o p N N m Q bc Q K e P O I Q w Q q N Z N Q bb bb N g w bc g N F P F q bh w O n c B e h u W w O k bb t t F W J g bf K k K t t g bb P I ba G w i bb Z P K O c Z J l t g bf P Z q G d k Q w j t O Q Q c t j n u n N o U m w C V K Q c bb w Q q G J Q P u h w bl Q K B U B e F e e g p B k P i w g bc c m g u bc bh N F i O N N bc k i g U K N g w bc J h K l S h bb W g N ba c w h g e h O W k A u C c W x bb g j O O Z c K ba u R c bb w c U bi u N J g c bb w bf bi h Z u t G bd t h g N Q F i bb I Q G c bb G w Q I U c i bb t m l ba Z ba J k I c bc k I B B I k I K Z I g e u c N c C h c ba Z g c bf bb Z bc u u bh B P bi bh P U t bk d bg z I ba bf B w k h m B t x q bb I ba bb Q q q ba Z K bi bc N O K P bi bb w L m G e V bh bb K P w W l bh w Q k ba c bc bb n B g bc bf N Q C g h bd bf h N i B t B N w c B I Q m k i e m m ba Z u i I bb h bc n ba k Z u Q F Q bf bi bf G O q bb t I Q c bb bf o k t I bh bc h ba N Q I I c x Q J o J bc j D Q bi bb j bc q P h k G N bb k Q F N h bh N e w K k G n u bb F Q G Q U W c p N w F B ba K m e h O N bl P bi bq bx q j p P bf bh bf G g i k j h q h N P Z t B k Z k Q G m q q l A k B i e i p O k w K t P g q bb a l K t k e I Q i B G e l C p t bb e N t q o O ba m G Q O t e F N e bc c ba I i k Q P bb O c n ba w e G n w g P O G u c Q n j bc O l w i o u bf t B P O J n c u P P t o P g B q w P bh F t K F E c F c t Q m m U P ba q i w C E c K i t l n t Q N e Q O F h w P q W n N N P k bb h W w z u O B W k U ba P J l P ba ba l i P F W I Z ba Q s d m k N B w O bf bb F P g I G J c q J N n q i n e Z h n c m Q J g I k c N O N bb i I g k Q X bb Z J B V I Z h m k J O Q Q w c t N q ba ba N J q bb w c c B p i t ba k Z O i m t O g Z t I F h Z bc B k O c t V k j N F Q I I O t c w h N Q k t g W x bc z i J K bb u bc n G q k g w t W U F k w Q t k B q J N e c W w i k k g O ba i bb e P t bb w k N F N c B O N k Q E i t k c g N O c n Z q N Z g I Z c t e bf n c J t g c k c bb ba m a t ba F g I c bc m Z G I N K c bb C ba Q i P Q N N ba g P Z m I O I L p bl ba u u bq Q c N q bx L I t bc O E u k Z q k B K w G w q U t O I I O c k i k h w bc G ba N Z e H n k J C n l ba J c J B t g w t I c bb bc l I m W I W q t g ba K a j Q i P l k c w t n d m z R i A F t k n q k N h w h O h I c O B U P h w m z h B g K Z Z I q I w t c t K i o q ba W N P n w bc u o ba m g B J N I N Q N u bb m ba Z J F q m bf bb Q n bb G N p B w Q p P q t c B n e bb g k w m F q q N l K Q I C n ba ba k e O R E Z w c N bb h m c bb I s n f u A j P a o Q F Q i Q l g P u B F G a F P bb F Q i P ba c k m G q c O ba g k c h O h E Q m F g bd m W B k D B A B g ba O u w I bb k w u Q t bf m bc t p i X F g z v bn be bc O bc C w n q i Q bh s K o p I o u w k J bf Q k p q q w g Q h t P Z g O bc C K bb w m O I c N Z Z c G Z k B m O J ba q W w l F h Z c w N bf m ba k h N U G B m Z n i z q l u i u P N n bf bf i bc P I ba m B Z P bb k m bf bc W B u Z P w u n ba q t k Q m Q n Z m bb q J N I B bh Q q m B R p t p m bh k q i P u E k J k t O Q g t P c g c h Q Q G k m O k i k m k Q c c O i c G h Q k I Q q n q t c i I bh k Z ba c O O g bc W N t h l P w p F o Q g F I I k I Z Q Z j h x c u K f ba E p m ba m Z w P w O i i P bh n g t Y E m w G u B g u b P V W B t K A h c a q i bc m P K G Z V w g ba ba bb bb B ba C h c h q Z bd t Z bi c Z g R n P P B i J bb J O e t O i bc bb bi P k k P R bc P bc W bb g Z O C I bh g k t bh u t K i u O bi Q bi Z Z U N c p P q w Q q K g bb k bb bc bb u bf n P h p bc n F k Q O w w B Q bc c m O Q bc N u ba J O bh bb q u c d h bf bl B P bf w B t ba q O g F G C Q u bb q K L bi t F N g ba N bc w w g g N Q m m P J ba N w i W q t Q P h k N h B k bf w Q w bi I t ba ba u Q bb bf m m w l C d bc n t bf bb w W x bf bi N bd l z V bb I c I I h q w bc t U w ba Z e P m q P P n k t i N J O U N N e bc g k u q P Q h g B P O bh m B bd Q bc u U I t q Q n bh K m G t m O t u U e G B l bc ba k bq bl Q N u bc Z B t q m bf bb t bb u q O c bb g u q bd B A J bh M O u m m F g ba h I Q w U B q bf I w t n J bh ba O G j P w I C Q w p N J q bc ba G q bb W B I e c P P e I c Z q u Q P W q G k bh ba m h F bb c q ba O J t ba w l ba m O N u q bi bf D N K q Q I G ba Q ba k n ba c c w P N i Q Q O i w O m G h Q w O w m N Q P K Q h O P bh N l K t ba i J G k U E x z P I q F Q Z I t t h t P n bc q l x I ba bc w c Q m ba Q e K bb W Q w z N i Y c J l bb u c p g q F c F w B P w n O i N bb I t g N c Q c Z O P P m t bf bb Z O O k J bb k O bb c F n w Z ba w bi I i g e i B U g k I i w w Z ba n ba l m I w R a I bb bb m i J k e t Z m ba U Z K k bc V bf bh d O i bc e P bh k q t Q t bb B Z u k bb l P O N F t bh w C Q k w ba O bc G ba Z I bc P h B g w h bb Q ba O P t u w h bh bb B i K w W F Q F h O c B i m t Z K k f O j bg bc w e i n G B Z h Z I I I N q x g U k g n p O bc bc n P J bc N O bi x q I k C t Q n m e g Z i bb F w h P B F t w k Z w Q q i m x C h w w k c n k g bc k t c Q bb N bb O x a bc Q P A G h I f k g ba K I J c t H ba P G e O B t Q t O O Q O N m e m l U a H B Z bh w bq bg A k br C w X W bd bf bi ba bd w t bc K m bf u bb n m O B Z w P ba Q q B e C m w Q Q l N J c I k ba w Z G w B bc P bl S k bc bf e o g Q bc m G Q g I t f e t C J q i k m bd q h B Z w Q Z N I U O K k P t I P Q bb Q I O I O w bb Q Z N q O bb k g J ba O P o P ba bb ba O W ba n w m Q Q e Q B i w N U k t I h c Q P B F i w O O B c A F g Z c n bf w m c c ba m F ba bf c bf h bh bf f bd q j X e F bf bk t n o u bi t bf k g i J O w bc N g bh O bg ba O h d G z bb bp K k i c E N w q Z e R bc C bx k K x W S D bl g g bc h n O i q p e N B i g Z I k Z N g g P e w t k u t h B I Z P C bb Z c n B V e a p bb Z q G g q Z Q Z w bf k m bf c m bb c Q N O A m l q ba w w bc U P W bb q Q g C P t N k t h O bc bf P n J k c t t I F G Q t F bb bb i m P m Q I bh P K t O Q k c Q bb O u Z ba p e m Q O J c I u k w K P F J I Z Z u q I K G i O w l u n x I E ba P S O m bd Y U bg t bl m k X a bf n U i q e g w bc w N P Z q bb O g h m e Q c N U i t k h I g w e c G l q I h O m P m B m f i h Z m P Q ba Z w h I Z ba C I O B e e P O h bb i G Z i B G n m E c ba e P U q x bi i N n P h I G e u k bf Q k ba G bc P w g h k N B Q l B ba G k g q F l I k F bc bc B m I t h ba k c Z ba k q w bc U bh w e Z bb G h u q k x K bb bc G bi Z E m i n O g q Q t w c G g I Q ba B N m Q I ba c w u w N q h c Q n N k w k bb F ba Z q i B bc g m P t U Q P Q ba O bc Q B e e bb n c K p bc bh ba u bc J l A bc q d N m i t m p p bf w E K P ba O Z U n ba w J Q bf R bd bi bf S m bg z B bd bi bh j J bm k c F bb i Q l bc P o bd bi q P E G G a F bb u O I F J z bi g E u F bb ba U p U t Z E bc bz e G bg J F w bi bi N c i Z ba t B ba bi W O K bg bi bg z o J p h O Q F G e j p Q w g H D bl a O bq bb f W bd bc z ba c I t Z n q m P e m Q P F V B K J O O O ba w P p J I g N c c t t c c n a n W Q w i j N l J i G ba Q g N k P i I P h I Q w u h q i a bb G f k A h U O ba o P a k i w e m C p n x k bf C K Z P a bd bb A A P q o g W e l N z e K o a w bh q bg c V u j w o a m a bi bh Z c g c O bc k E c K m ba t bh P O h N bc G m w bi K P G bc N c k w t bb t B B C F bd P i I J o g l P m bf bh l c m O G k C t n m q l g bb c c c K w O e c P Q g g c O c k ba P O F h O m B i bm u y Z P R z G ba Q P n c w Q n O Z K g bl w V Q O bd p bf l X h G G P P w K n bh w F bb n x bb U a F Y p e L Q e Y h t m bc t k W Z t B Q t Q o g bf g u g i w e k C K I U j L s ba O bd H P t c c K u N g Q g g K e j bi bc P B bg u c o O i i o u c ba U bf q E O p N g Z F g q n i h F g P K I bc q N q k t k h G w g n I i N G Q k bc V m x C I t bb Z O Z I F U u V m U bb h Z j c i i O Z J P p I x P U bm c bl bj Q bb bl w x Z Y W K R f q e F G G Z K Z C bc k G c P u O K Q c q A q F P m J bb n W bh m P l s p bf U q m Z q Z e c bh bf m O e P Z bb k Q Q k i l bf p bf bb w k N ba q bb B bc n D B h J I A bq x l t c O U W N E i w K N e k c F Z J k h h I m ba N m C bb P w bf G e u N i g k O g G C w bc q bh w Q n c B F ba B e w bc c m n Z ba P i bb m I h q c P c m J V g k I t w w t u I V E C A t o J E q q c m Z O m g n k W n w W G h G F m w W bc t U w g bf c bb K C bf R bd n z q D bb bf a z h ba t W w q c e t N g c c I J K i O n N i k Z Z h ba ba bc I K e g F w bb c U J bc u Z U w B O O h n B k q bc ba i i Z bh bc W g O n e ba Z m c w J t W O Q c q w B bb q c F w G q Q B m c O e m q c o g Q F E P m m w bc Q bc P m e t k w i n m N Q bb bi Z bi x I z U Q Q bc R J m u n t J d O d B s U bh z Q e V F G K t O i I m e k w k W O p h q B P bb t B G I Q B p I e m K t O bd K o bh B o A O Q N I a h N B F k l bb N bf bi O A c n P k B g Z i N bb O i bb F C E O C m W O e v X U O u o z k F K c N J G p Q I bf P O bd I g bd C bf U t J u c B p bc I w L K K G P H N m m B Z ba l bi ba q R bh bh f f k bq bp bc u bq bx bh w f o Q bn B o c q Z G z ba Q D k h K m Q N k G O t L K bh e N F g G C I k l t O r i t V bi l w k t Q W g t w u k c k R C l bg bh I c u Y b n X k p bf bb B I t bi w O a O w I P bf L E O I u N p N Z P x X n R Z bf bf M c e I h B P L W q X J bh u bd r c bd N t K B F K G N I Z bc C Q bd q B c m m O m E N S N B F t G N C g i l e I o Q p G bf i z w h E R E bh R O t G bc h q N J bb c u B Q k t J p U Q bb K I k H M bi m bc R bf G R L A i c p bc K x q bf J bx i P bl M bm Z i I E g bb Q C I c G g bf l u Q bc ba Q F ba O J d l G J n c P P w bh k bh F bc bc e h u i Q c a K P Q k n bf n F f B R G l Z bf J Z N x I ba c U p w J w E W B q F q I n B F t J p w q I O bg B c bh m k J g F e bi i e W m h U w e p w U n l J B ba bc F F ba c Q n N W Z L O t I ba ba F e Q w a c g Z h w a n k P h K m z O bc h x w c k B h Q bf w k q n N e g bb I c E j o bc P G T g J t h K U O j bi D bb bb bg i W n T B bc bf B O j w Z k p C W Q m n A K p e K i G I N P g i J B c K U R l bd k O m bd bb i n n w N G P i t G E O p Q w J w g c c Q c K q G q P G N N U U W k E x h F O E e Y F bf bb i bc t S f O k bc B g U bb P O n Z i k ba u O c bh w O J bc B h bb q q P m c m z x I P B bb i F o P O h g e B u P m M bi B j ba k o w N bf bc L B o F O E G N R n v J q ba O t I f q n G e g t P e J Z t F l k O bb u J G bh w C J c n P B P P C c I f n a ba k f I e C m N W N I n c e e A Z P bh bh g bz bb g bl M bl j bk a i G Q I o y G k d S q T k r N j B Z z c k n n G c bf Q Q t i P Z q q q u l I J bd O M bl bg w B k Q Q w F ba j m g m n B u P Q bh K Q Q A O i B P bc bd O F m O n P bb G t bi bi U bc bh W bf g bi x p c h q F H t d N Z j a c W n N P P F I i N J m k ba bb O O e I Q G n bi i Q A O h h k I A j a P c H Z N n G N w ba bb u Q t G m m I i bb u g bg ba N C o H Z n E P bh bi n s d F bg K d w L bd Q w t w i K h E I G e k Q k g h j q k c O U G c q N P i g t i bb Z t k q t Q d S bc P bl C Z Z bd bg W bi F x i ba w N n n C k P Q I bc c bh k Q c c a K P e F K g Z bc C F N g bd q a n N bi T o ba S bm L t k n K P F p bb Z g B t q m w bc Q n E ba Q bi m bc B I bc p bb z e bh l h bc K O O h g n u W N m k P G l m a A ba P bb u C u P c F F t w e u k B P k t g e bi p Q bf m U z i Z w G ba c h c k i l ba V L z g Q i P bi A W r bq bx bq bH w t j s h bq ba T R N a G F Q n F n C W t P N J k o L B g w bb q W c u m i J k I P c w h ba bb Q w P O G I u Q w k N Z O w Q w Q u m O bb Z B bg C Q bb U bb bb i B n A Q H f O g bf C G g bi Q w i I Q w u n K g O w i t c F bb k N B t c bi c bd bg i I B z e B k N bf bc F q B P m g P bb m bc Z bc P Q P O t O Z ba F B t B bd ba ba B t bc J bf ba bb k bq m bb e t I I ba i g N c I q t k h bd c Q k B P u O n B g J e bf W bg B bf bh P i E bq P m Z w u Z F I i bb Q k e m bf bf bh m m bi bf I Z u t t h c u P G C bd P bl Z t u n O g B m n g bh c G bb Q P t w h k ba k Q Z ba I k ba bc P bb I V p w bc Z bd ba N G bf c ba g bb k B bb c e k N q o N d bb G g n bi bd g o bh F k bg Q bh bb t bh N w bc m n t k bb Q t ba u g bb B q P C G P bc bb c t P Z B N O g B bg w c f g D i k c u bd C P O P bc B h bb bh ba u ba i c m t P m C ba w ba P bb Z I Q bh bf N ba O i bi bc o bq bf Z G i P O t bb O Q t k bh O Z q t k bf g i m m i c F ba k F k N i w O c I bh c w w B bb w k B P C B O N w t u bh U O bf P O bh i I bi B F F B bc I bc I ba t j bl bd bg Z bh c w bi ba w w I C u C q U J bq bi N g bf bc I G bb k O u bf bb u bi u bb e bi bq bc br Q F t bq I P ba bh e N bc c bf Q O bf P P Q t bb w bh bd Q Q t bh ba N B j Q bd bc I u I m g q t c g O B t B t u P i B B bi m B m P Q i Q m ba bf B t bh bi O c bc u B bh F t bf e B U O bi k F m m g ba bh bf ba bg ba ba w i N N Z O K m bh u t O t bf B w c O Q O ba B ba t B bc bc B bi bc h bd i bi O ba t c q ba bc m I F Z m F bb u N u bf bb g u Z B bi bc O I P k c U z e ba O o k B bf O m N Q w P c i t bc bb t bh w m Q w i g bc q bf m bd O m B G bd ba m B B t t O bf bf c e t m bd u bb bc u Q F bl m u n bd t N bb i bb O m bc m c bh bh bi O u Q ba bd g bf bh m Q i w Q ba q m k B B ba i Q e O B bb i u c bi t bf g h ba i i P bc bi bi P O R ba ba x J l m m B w q n bc w J bh bi g N bb t bh O U Q bb t u bi P ba O ba F bh N m bc u u O e n bc ba P bf m c e N m bk ba t t g bc N w ba O u ba O bf bi bb I bc bd B g I m F B Q c B c bc bh bc Q k g bb B bb bl k bg h t c Q i e G p bc Q Z U n G q P w N m O bf P P Q c bc bc q bf k bd p Z m k Z Q w F m i m ba c B m bf m m w bc Q O m bq bd bd t bl R l Z I i bb t t ba t g B Q m w m m B ba bc k u c O ba q Q t ba w t k t Q k P i Q e P g u w m O g bb B t bi bb B u bc bf P Z bh B Z bc P ba k B P m bb bh I u bf N c P t u P Z k c m bh bh bh bb bi bl u bh bi w bi u bg bc w B bh k g k e c W bg bf bi t A j u bh bh K bg bd I N w P B ba bf t w bf u bc q bh u bb I ba g N Q g Z k bc bb bg bi bh bh bh i w bb ba k c Z B u t k i m Z W k I m Z t bc ba g F c Z G I t bb k P u w B bi bl Z k t bb P g I B bf Z bh m w bf B w c c bf bh B bf t N Z Q g ba u c P Q P ba k B t h O Q m bh P u Q q B B g g t B B bc m Q g B Z bc Q i u Q bd O O t Q O Q bf u w m t q m N bi c Z n q bc i t B bf bc w bc c bb h q w P O P O c c O c B bb B t U W Q h g bi ba bf bc ba g t K k bc I F W bd bc h bd B t Z I bi q ba g bd m k c bf m u F B bf bh u P Z ba m P bi O c bc Z Q O Z Z k bd w bh t B m k P N bb P O m bf l bf t m m t c u B Q bb bb bc bc bh P u P C J L ba v i b l bk j bi o R B bf ba F t n q bc B P n m Q u S c bc bd P i J bd G ba Z Z O U B t P P ba m G G q h w k bb O N k ba m g G bf g Z J k u Z bl bb bg g bi bb bf P k d Z w N O t Z c bg bi bc P t Q bi m B c q g O k P O w w w O t m g ba I k k bd w u P t bd I bf t t w c Q bb c Z O Z t n Z bh O u q bc bc bg a A N w bh bd o bb B bl bq m a O bi t bd g k g c m P O g m bc u I bc bi O w bi t bi bh m c e Q k bf m bf t bl t bb u P B Q B u O bg bh bi n bh V m N h Q m Y bl s j l c l Q i bl bf Q bh m ba m d O bc m k O m g O m t C bg q I P bb t P P bh O W bb u O P h k B q bf bc k P q bc bh K u B bh B m I t bc t q bb P P bf bf q Q h bc i u P q q g P I ba Z bh w ba u i bf u c bf bf bh B bi Q bd m k N P g i m O t c e w q Z bb m bb k u Z Q i Q P t q n u J bf B Q B P F B q i W bc t bf m bc l B i K O q O Z Q B K ba K k P m n Z bb B bb Q e P bc I u m Z P I bb O bh t P k N bf w P m Q bh P P P bb B bc P B bd O U A bd G H W bd C bi by Q Z bl e bb w a bd u bl q t bb bb ba Z m O c N u m q Z w I Q bf O c t bb O bl bi c bh Z Q bc s H bx bl bb bf bk p y bm b A S bf i x A l i h c h U t e N bf z B m Q h N P bh bb ba m F o bd l E B i ba a bf N e u bc bl bd ba B K Q n bf e Z i w bc G F Z h I bf h bg q e t bb bc k ba H bd o bd n K N i G I ba c q bb u B g N bb bh bh bc e F O c t m bc Z B Z bh k I u u bb m g i q t I w w B i P n P B g ba O t W u G O bc e h Z u N bb K P N z bc p c N g G Q P q m Q I u m Z q t F Z bh Q q F w Q J I bb F F t k ba h w F c t ba bi I Q G k n G N I Q g Q P h g P h w O q q Z bb t n h u E bb bb g w p bc g bg m e p w N k B ba Z q t O I bh t t P u e J P bf k C h g Q e P bb e bc x bc k P t e N bc A c k g x n u K bb m ba t Z l g S i q t J j n p W ba w Q w J B w bi h G ba O K F i I t bb P w k g m W n h I B J B ba bh h m bd m D K ba W O s v u N h k j i x Z p B J o B n u I O Q O k ba i bf P C i t t h h F C c w g ba Z W t i N Z q o j h I bh m h P N w B t Q N t w bb R bk j A O q F h t I t ba k c Z w z bl bg Z bq u L bm B bf bk o u bC n bk bj bm bb L D n U bb G c J i e p P bb Z j G bh U e P bf W Q j t i q c q E bc Q bb X c J G B bi f N J bb c bb t h e h t Q o bb a Z b N L bz k p O m P C y bb bb h Y j P g w P c i a q O o K n t q G m n w h e O G m C J e Q U K ba P c N P ba e B g bm bc N C B e p u O C s w U t p o A g o h i Q F N bb N bb m k P N e U k ba g P W bb I g c m Q k J g a K k J bc ba G bc I U K F k m e Q I e k x P P l q J K o W G Z I B Z s u l I t O O B O bd e x bb bf R J F I J I bd m q h N J c E r w bc A T O f br n p t t m Q E R t E t G u bc u M x Z E F K m W Q G I m P i q k Z t h G q q K i m t B m w h I e O Z q bb o K Q bb g e be D bf bc h V K v f d bn w ba G B y G bb u w O g I x h c Z i bb C C ba q Z e bg g F c e h c bb n N t N c ba l g c bb c bi bh u B bq bq f y bf bc S A N T bs bg bw z T d V b t Z c B t K p F h a ba O K C I I I I C N k P bl h bz A N R bi E t u B s z t S B x F w e bb O bb ba I C Q p w bc ba bi ba N ba J U e o a l l bc bb B x k n m u K Q c N N g B i G k n k n bc t w e i I g k P W P P bf E w O I Q w w w w N Z B U h c j n J N B F h n o g ba t Q q O c G q P w e m B K p w C j E a p bk P V s i y t i d q C k Z Z q q N n C I Q I bb n i u i G I O c Z o ba N w e w u n ba N I x K bb G B B bf N m ba w p Z g bc t ba t n e bb Z bc o bb J q x G p t bf U q bc n ba i u c J q I F ba u N P Q N ba bb N e g m P j B n h h m i T bh j K bb q C l O t Q x h z I c h O A l O w Q U N c g U i h e Q I t O t bf ba V I c t w l F B t k B O Q W B C Q u N I W Q O bh q P ba t k h o n U bb i K Z q E m bb N W t bc g J O Q t k q g c q q B bc B n o I c F w B B F n J O g Z w Q Q O m O Q bf bb F i bb c k i g ba n u Z t c k Q P bb bc Q l P m g Z N O bh K e n F m bc Q t G Q Q m bi t G C c u p I m Q O Z u t c m N P E ba d Q O C k e q w c G F k h O p q P t G N ba z A H E G f S t bc bh P ba ba O J Q m I g w c B N h P O c I P h O K I N e bc n P c P Z W F k P A h j c ba k i m h bc ba I J c P bc bi A j N ba E g U w B D ba m I p Q n c c w w k m J J Q k u k bb Q I a n N m O P m l J Z bc l bb o bb bg bi P ba c o bc bh bh l g h t O g B bc bb w B ba J bb e N I bh J m bc P ba k B e ba c t bb B bc g e k c g l Q B h o G Z c ba Z Q bc N P B t O t E k F t k w e Z m bf k I u bf O B Q ba bf Z w bb B u N i l Q i e bh N n n ba w t w P t k c w h ba bi n u h e e K i C c e g c w k i I q I w K i ba O g m Z bb h P m I Q N p J e Q N bb c N K n c t c w q B E t u H l bc s q O e n g bb K bc n F w k u F ba o m P l W c Z I q I G q e Z O w K U e h bb bf bc I w P i w P O N a i g q bb h n e N g Z k F e t k g g P q bf O O bh n Q Z n t c ba m w l i c C G G bb w c ba t O n ba P B bb I J n g O g n N bb q k bb l A B g N w h u m G N ba c Z a z j n N w G U W N K F h U Z n h bb o e i Z Q h F i t u k F k c W e bc k g I w I bf Z G e c c W h Q bb O k l w e N g g w W Z q h Q c bf c h u j p P g O t i u W Z i G U Z K ba k O h N bh m bb Q W h p i G m bf N ba bb w O e u P c bb k m w k J ba B n n t Z i w U k B u c g g Z c e h N P m i e B N I i Q I Q w u q ba g O bf ba I N ba c n w n w g O n P bf O K O w N m bb w B Q c n Q w w Z Z o F m N D R bi J g c j N l q ba e E P w F O P P i F k bb Q k m k bc e t u k t m m Q i J ba e bb W ba s K u i x K I bb Y be bd f g E O F K w u q I i e q A h i J e U q G g i e j n h a n i e h z g F P Z z ba J g g N i e h ba g d J t m bb e c ba n ba ba l G d c ba G h x N P w t u q l m A l bb J g I bb w bc q P J e N O c Z B ba Z O O L bb P bb f ba w i k k bc bb bc p k w bb c ba P Z i i I I bi c w t w p q F m m m c bc u W n m P bh n j j h I Z n I H bi f E G Z G Q O Q c O Q W q I C F i O bi h F k i g B g I l p I J bf k f m Q bi bi U a Q bf P H u ba P E i bi U ba i w ba g B J g ba K O j c h q t m Z w bb o w u g w W n P n q N bh bf P i O bb m q P P Q Q t a n N P h bh E m w ba c k w h Q i l e Z K Q I O l G h I I C w i U g N Q bc u Z o n Q O ba J O G G h p c e W O bb e O p ba p G i B U N g B t d bc A E G q Z c Z k c t bf Z j n t c bh N bc e l q Z i u c a e q P bl t c bq G p i p bb l bb o Q P V g e G J R A l g m t E F D i w T w j Z J j F q M F w bb m B C N p e ba t P l l E F N G g U k J z Q g g p E W W m ba J w c q bf e A n Z G Q ba u ba A g F w bf c bh U G t A t w g h J K Q v l p h n z h bc bc W bb P c o w Z J x O W N N g i Z U W ba J F h W u O bc I e e Q c bb c p P p N bx X E q bb p C J l Z m F q G J C U l Z J ba c G m m E t l t R e B J l i E e B e W x c Q k l V g h Z c G o h n n i g U k Q P q Q p e I J n o N h c h U O x I U i O bc J O Z h N x bc i N n g B w ba m l bb C Q B O P e bh o g g l N I G f g bb e m bd j A w bc O q h k P h q U P l n e w e w Z e bf t Z q t K t F g O ba n i N m q K t w g t d B N Q e W u t t m C k k u ba ba C K Z F e bb n C N O K bh N I l h B z Z I P p N o q W c N n n c I o V D w E c g k d I I F W P bb Z x O p J y z h h o a U U I J C i G I p bb n bb l ba i Q A a y n x O Z c w P W i q n I c O N Q K n k Q O x t g n N c t c n a Q h n m K O i G bf l O k x w A t w I G Q F O bl F G O p i I U Z t bc i i c I N W N ba ba i O k q m F m bb N J t I k Z G n G C N Q e N l c g W i P c J t Q G S N G h q w l L Q Q u D K j S q G bb z t x F L m P m z Q q Z h c I W j l bh Q e G bi w J Q N p W t e J j K G w i t bh i j k w W q h B W G U K G Z C W q Q o a P bc z h Q F bd F I S B k C t Z O N c K g U i c z g q B I n U l Z Q U m P N t t I C a D p G C O Y c c o e O k g G h O P Z W O e Q Q q B Z t c ba q g I U w u O U S ba P k F bh G I O Z h q i w q J F G O e h C Q l W ba n i n p E O g k bb q u a a E Q z k J j m o W K G l bc bf l J q W m bm N bc X ba h ba J c bb Q f c g bh Q K u g u q N m S bi Z P ba w h bh Z X q J bc m N J J V W k F w d Z e O l bb Q bh K I K g Z P C G N O o f q h J Q P Q Q J g ba S c i c w t O n G z l bb ba c bd n u e C x Q w i k h e bb t o T V T D C t U U a x l D h c K O e Q bb l c ba B O O p B e C Q g m C x U k o B x B O h J c q C z N t bb p E W i A ba Z bb F B Z bc N g Z i p N B i P t i g Z c N h K a p n e F F bc g Q q U S bf N p k n V W m X bb o i C q Q Q N I I f i X F K bb P k I I Z j F w W V a I W U Q c e a F g g F G Z F e Z R c w Z O bc t a C h ba K N k A G N t bb o h Z P F d u u U bh q m K P bf bb i e q bb N Q I a O P Q I C h x m c o bb B Z ba M y q ba Z f k i w l e C m I h P k g i w B B c bb U u u bb bc bf B n C m i I O Z s p t d z G K Q m q k i W G i bb g w q e p Z j N n Q bi p P d R h o n ba Z x W W a N a N o H h J Q o p U G h Z k h l E l e l V m l w P q N U A C A W K E Z w J I Z S e k bb Q p Q h G Z J bb k h q h h N n N g h C l bi P P o K J P h bi P e c Q g O e G t w bf i g k e q G h N I l g Z q h ba A g Z h F q N O J g G h W j I i w J O N O i q J k n k K g bi w l Q n bd h Z k A h Q h t g c c p P q W k B i P G g J w c n bh F bb K k G l w l K k d q k p a Y p g m X I Q i x h P ba Q k g t s Q U n u C k t s O g P z n Q z t C O j x i u G m q I j c O I K i l h n q ba j h h h i K Q E g z E F l h U g K m q B N K E Z Q i C J Z bb K w bb bt I r l h v Z S k q e e X Z G G K J U F l n q q U Q p h P h K O e g J Q C bb m P z U l K N E E z e O g k c k bc z D f c e J N g t R m F i q bl bb O n u I o x F e P n q G m c J t O p Z A B c Q K O F N n O w h Z c m I e k e e G k i B bb N o bc O p ba B B w Q K x g w g n I m X B t J G t P K W G J E e Q i q O e i bi bi G B N w O C O e W Q x q bc ba N K P g g w h I i F k bc l U Z Z m N I bf bf U I e t J n J h bc k c w Z Q N Q m J I Q Z S c bh g x t bf Q O k w u u t h Q w Z w bb ba I j q h bc A Q E f q ba a C N w h J J m I i J k bf Z h O e P Q E C m g m g m S m F l Z ba Q B Z Q K m m P J q w F Z n I c N c bb c Q h k l t Z c i N w n n B bd Z N Q Z g c P Q J q u N bc N g bh U bb m Z h B k Z P p p K K e G O bc g O g i P z bb H O D a bf V k u K h d N q m c G i N k i ba c m k h J J bf V bb I P X S F bb U S v u E O k Q E P Q e i w e Q m bf k bb ba x w i t m n z bf k bb B c J n bc bf bb w n bc Z n N t q bi Q bf F k t bb bb bb k bb i A c ba m O w ba bf G g g Q bb i P O bb l J g k O N Q N N W i k B w G I Q bc P e bb n t G m B bb m k w ba J B k O P P ba t bb ba w I ba k Q bh P g P i Z t m Q q m F Q bh Q t t bd u Q P bc bh U m u bh O g m Z k q W ba Q i n I l w Z ba bb Z k q Q c Z Z B k Q k B n B c O G Q B Q n h G K bh K W p Q bd bf I n t J P bf bd h k B bc bb t Q k bf m p n Z Q F C G bf i e I ba u X N Q I O t ba bc N P c P bb j q i h Q J bf k o k W I P B x L bd P bh B m bi bc bi B O n O l bl G B bi bd bb bb u Q W N h k k w m q J bf Z J m h e k F bh W w bc G O bb bb n O h g k N w O g B u P k V B U bc k P E bb j k bh P B I o ba bi m h ba bf Q A bl bd m f Z bh k a g I O bf q m i P O q m c B u Z ba ba B i I m B u m P u j bi P N p j I q bi C i bc g g B bf ba W bf q bb q m w bc P c P N bc i i O bi m bd m t P k w m Q W m w m u k K u I u g i B bc G i P B Q N P ba F q N Q ba i bb bb N q bf ba J w N w Q bf t U q E l P i B P F bh Z bf Z bc bh g c bb Z N I h O h Q N n n t ba O t Z P ba o u U P w i bd q B m bf bb P I bl Q c P bg bi ba B I bg B k bh c u bc q O ba B m u Z bb h bb u W u n J w e bh k bb g O w c P w u u B ba u u k w bd e w u O t t t bb k P B k c bf O I B m ba G Z bf u Z c bb B m O bb F I g w Q O Q i E w F J bc e k bc g ba u c bb x F u n c Q q bb I m Z c ba i K Q Q i J N O k ba Z bc ba bc c N P F Z W Z m B u m Z q B m ba G k bb q bb u n m G u bb w Q t bf U bd O bi g w P x k C J G n m p h Z w I Q P k P w q ba t F N w P B t O e c P K G m i g bc P h n bb bc bf m bb W n q c bh bf bg P ba w I B bb I Q Q Q P I u K B K u c bc bh Q m w B m bl Q G B l bh J F P h U bb bc C B I U bb bi e g t g C bc bi C g u bb bi F Q ba bb K bh e c t h O t u Z K g B t Q P m bb q P w k g t N Z bf bf k O Q I I q Z k bh G m bf e p bf e k I l m P m O U t q B u ba u G bc P O I B U e G g u u Q k N B g O Q h bb i w n B ba k ba F bb Z O x k O m w g e Z Q k g W t Q P i I C j N p O t B c Q Z ba w g w P Q w k m bc Z O k Q P Z bc t Q P k I F i k bc Q I q Q i Q h m i C N B e P c K K P U F c F bh Z O N bb i U N G w bh P k bi h F bb x N bc k E a O u B i bb C p m n F P w t i B m i I Z Q p N G q O I ba i m g ba ba bi q u O bh bh c Q g N bh B P bb o k h w B k K m J a Z bc P bb F J m I l n O U t bf G bh bf N G i E X J e p P F Q w Q h n q U Z p I k w K bh bc w J I Q Q h q g w B N e G bb J i w h w x G e e U k Q Z bb c k g bh g bh bi u J I i q W U k I P G bc q P m I bc G x k m u O B ba w q B c P i w P m C k i h c g ba c bd i O G k t t bb c c bb bf Q bc K i t g I Z q O B c I c u P I P bc n o a w Z W P q G F F J x F c G k Z i bc k O g bb F m k g c m F U I F ba i B Q bc ba W g g m G G h g Z F bh I k Z bb U k J bb bc bb h bf C B bc c P h m l o g x N N Z N G Q t g I C t k k Z k I w k n m k e bf B K P i Z q g p c G Q c n P Z G e h q O w e J m c O bf E w P Q Z F bh g t t P O Z O q n P m K B P bf O w i w m n m c bb h h O bh h K e bf Q Q N P F t k Z e B I k g m h G J g g c w o ba J h I e bc N B Z e q bc ba c c F n J bi I N K bb N u ba bc e bb I bc m c bf c O P bc u m k u J P c bh W N w P B Q O G h P t P bb w u bf u bb F O bf q F l O P c O h P Z g B w k u q e G W V q P K k W ba N F m O K o j i e q U g w e e bb N C bc bi e Z B K e W bb Q n m h O c e P h k h t bc ba u q I t P i Q B O C k Q g bf bh u u U i bg bf D I O i ba Z w j i K bb bf I Q ba u u t u g bh bb P O Q I w B bf I i bb bi O g ba bh P i bb bi B c O ba Z k C V A m F B F w w q q i t t K ba ba n e h W m I ba B g P O Q bh m t k P ba ba I U w q q w W h bi g k w t Q c bd g e u J bb bb F bf k F bc ba P O Z k ba N Q Q l u bf i m c Z bf g O u t B w bh bi O Z B Z u e e bc bh P g N u I h ba t P Q bi bc ba bc O Q u B k J U w w t k m B t g m bb Q Q Z n G l n c I P t bh Q bf bc P I m J w k I I I h bh Z I g k g N bc k bc i N e bh m m h ba bd m bh Q O w bf bf bh O N g R p n B Z ba i Q K m N k I G g B Z O Z t O J q Z t k c B u k c h m O U bg g P bf O Z U bh q P e g bl h u q e p h m K t i k k Q u O bh U Q h P E i h B n h O B w k i bb q B m O O t J N N U P bb e P h O bb C i I F O g Z p c A G q B P K k x ba G O k c g q Z R B P m Z Z m bb ba o G q a l O K w w g h I J Z bc h u ba e K w O g N k N I Q O o g Q I C B ba w t w w m k bh N h Q k Z J u A c O E e I c Z Q i J Q p w k t u w bh U B e t w t m x i k Z u Z F Q h P W ba n k q bc Q P g I O u k B k I m Z W g c n N P O bc w bc c i I P O bf B w l bf g k J c x P ba P I U P B U k w J K ba O n C i e g N G P bb i Z i k N Q P Z k e j e B O h w B J q Q I Z k ba c G N bh m Q O h N P h B u Z i m c N q d C n t e c h c G C n g p Z o l bd t h m ba J P V N O h w c n C N Q p N c c e c I W O J w Z w A q N q l c c h Q i W ba t Q g n i l m ba bf ba P bc E k w B h J g bb bd Z O e m p i q q N Q g K O I N N O I e bh B bh p w t N P U c Q bc i F I Z N Q c bb u q i k u e G p G G t t e w w j l Z K G J ba bb O k J a N G n n l G t n q w m i O bh I g z e F u q N k q O bb h e w k J F P i O Z J bb Q B G w w e ba p F N w G bf ba K P i N k c ba J q k g Q C n q x c N m P c x c k ba Z g ba t m t bf h k I P N i w N Q I P c bc Z G q bb t w bc P t C P c t i bh B q B k P Q c I bf O h Z i B P c N q Q t h Q c bh bb n q bb G g N i e bf B N bb ba O ba n F N w t Q c w l bc N P bc q Q bf O m N i q Z q m k P bd U n n Q N m Q e bc h u c bf t i P O e u I q u E w P B O I bc m bb O I B O Z B O x O bc l h w B h g e c n bf G g e w bd k Z Z m l m Z W Q t m g w u i m c j t u g bc t Q P k e I Q q bc I m P bi F K J Q q h bh w O P O w Q w k u k N ba P e bb u u k g bc U i C ba bc B m k R u m k t bc bg c w e Z U c A c w B c c k bb q n Q F w t t Z U ba B q w P c ba O Q bh W W Q N m bb bb Q E P bi n bf B bb u c e I m bd B z V O ba o G bl Q i t w bb w Q e F N G Z i n G i c o B w h O i P w F u k N bc u bg B l g t bd q i bi O P i bi w k bd I g Q u w B Q N l q c B B m O bf B o o m P bi Z k bc c ba R W w x W J i bh d W q B B bb h Q bi m n I g m B q t i O O ba Q h i N c bf K bb K Q N u F m bb m P I u B k bc g Z e n bh i I P t bb h i bi bb B q u P o bf e k O bh m K p m p i t w Q o t c l Q Q ba bg N bf u I w q bb k bb O k k bh F k e I ba t P bb u bc bf i Q n w W k J B i P e m P q n G J P c m c bb bb bh bc bl O N g ba ba O g Q m I c c O Q c P u w B m c h j q I e o m w n i t ba R N i P K bf k bb t B w i Z O O w c Z e O w bh k h bc G u bf x c P c ba Z i h I B w bb Z N ba bh u bh i g P O m g Q N P U K bc q P P m u p Q l bg I k x I Q c bb u m O P t c Q ba I t u n O w bb bi n W g u g P t bc i B O t P m K t w h bb q u K c t m i e bh bh bf q e k N I ba w N P q m w u Q P c c h bc e bl bi Z I q u k ba k Q w P p l k g n O c bd c q P g ba l bc bf c bb B bi bc bi c C P q g Z c w I g c bc P bf I q Z bb h O g h w P m m I bc w i K l m n V J g N A O J t B n c F Q B t B c i O P F ba ba m ba O u w Q J x J h t t Q w c t w i w c e B O o k z e t u N I k G k m Z O p c O e u c ba P P Q bf q m q U k c bf P bc I J t j B bh c i k P Q p u e x n t Z m W i w B P G I u O I O g f I bh W G ba x bb N c Z J bh bb F k p h w t i ba q k j I U q q P I O ba bf bd j F ba e i bi U k bi N bi bl W bc m bf C m bi P P bf ba N bc I l bd N e ba bb q g N bb u k bb Z Q w C G V X j w bc Z k l m bi bh a O ba K i q I n q bb g P N I o N P j B m z q F F O J Z F e n bb g t P B e Z t O q Z k Z ba ba k k l x Q E bi ba bb j i bg l bh O bf P q F u bi H f g Z t P c g I w g Z O g Z U ba k bb g m c t q N l k N Z w Q k m B O W G g bc G O n p Z t u e P J k q c O ba bg bx bc m Q h k F bq g bb P l w t bh bl p U Q c bc q I e bb e j bf F t e g J m ba F P I q i w F N q K G bc N w Z O i Z P O q bb Q Q bh g k G c bc g B t k g w P B P O N O bf J bf E bq x bb w t o ba n W F N bf U O P W bb t m bc c k k G W A bb k O z q bf k e N ba P q O O J bf U c g P I q i q bf ba Z k h h w U J O t z O j h bb t J y bh u bc bd P bc L J I bi o P U m G ba W N bf c m k O B U I E P ba O E u W H i c R bf bf m e a a ba k w g u B n R N k e i O F g n g e w q ba bc c h N w u U J F A e X W I c F ba h P i ba Z bh K O w w g n ba W g N x m P k bf o O Z w t I O I c k U h g Q Z i Z O O w g Q z bb g B Q bi m F g bb U j m k t bd P I B g n N h N O q P k F bf U k Z I ba C N B O bc U I K N Q g J w w J F w l t q W J W m W ba U bb o G q N G k O p k Z k N bb e c x ba z B P m g c w W I N bh n L N S m p f bb bb H F bc I l k G ba e h z k i P m q G V e e Q W bb j w u m B f I bc G bb Q l ba bg V Q I q P t z Q bd Q t c a t Z i d l W I Z h B n z q E T R e Z a H t V k S F X U bm D k l P a J o bb E k bf h bl h f u B U S d bf B Z bt z J W P m A n c l U bb G S s e Z w c X p c W I bb Y u j G f P g o U u A K bh w Q g U P F O S m g o u x O f Q bj bn g u C s u w p c B W a n X u k Q t b e bc O t B P H D bc h f Z u U m I Z G K n X a K A v D N x q z g z V bc k F O A K K f O bc q F z D w t n w y p B a J S t j I m a p l y f K q w bc k n T h j q bx G ba m h g N F o k K b Q I Q d R ba p m bx W n n U p x i i O G Q d a F i Q bc i I w U bb G C j n U x s F l x E f z q Z j A I U C g x C p e q t C w h w F C Z Z k Z I z e Q U F R q h j i S R n O w W f w A c Q n Z bn i Q p I K n d Z m e q B bc o p J bb G Z P N Q s M E Z d w bg G G J e bb c l O p G l G U J q z u Y g R i W x g E j A K W w A q G f E i V R U q bf c c m ba h d bi bn J e M g y y V bf t V j K R q c G bc n K g E C O O F H I Q h g e q U n O m ba O Q I Q q x m U x o g R bx Z bf v y W b J bb O e c ba P A G V U V S w S J a m O C j q F I o f Q z J h E e F X J R Q J E t bb t n W g G m E n W ba W e O h U a c t L G Z I T t O o P Z a c t P w y S l J R b bn E Z R J t z l ba K O A z z w g C w J e Z y J g d N bc h O j p c G I k m q F e Q q E p N N f O p e J i A q bc C Z K g J I C C C J K J f u p a Q s i K F bl x C k Q g S L t s g u V d M J e G C Q d K K X G y S a K J q n y J S e o X q A W l s i B E q F O N q A z M d U J i l F d j h f j a j K p z h o A Z Z n P e m x f J w z C m m ba m t k j I l o bh bf bi bd bb bm Q k d d c bb Z o X A g p J X S W U k O A e C P m U J q D G q w J N q a p G V A C R m N i o C w l t k R P n p Q O A K E U n bm I g p Q N K O P U T H j c v d z J C J o R o o a U d Z M bf h h J U w k a G R R K k J bb g x U j W p m j J M F x S P x e O o K L R I N K J f l z I Q p R Z q ba G k h J l y r G a M i l t C N H j w bf V G q g u A A t U I e q C F S w B a l o h a F O g g ba i E h a J x W d n x U N q i U z a X q z h s e G W l Z d bc i p bb i T Z P L N g e t u q f Q t t p g G o q e O i h U G A h B z l j i Q h j K z W q g l I N N C I K V C j i E g Y i l R H O X t B e E Y R O g p O G h C J U Q P q n p N q W Y F t w U p h p Z f J P E e C t s P k J g t C K o R o g k S I c v B G I A s X d F m N N p E Q bf q R L bn S j V Q p q o c Z O k z D e N bb c f k e bc B bc p N i a ba k C P h A q w Z U g bh O I Q B t q c N N U g O ba g A e k q g F Q s bh t g k g a g n N P o B K E B c c N c N D c bc f bc Z U Q bh t j h t Q U B q P q h O Z G x e i q F K n m n W C y bc p l g z P I h m q g g P E N O G Q N l i I Z z W k I R N e ba c e f j C h i o B w p d w W C l ba S p B ba P J l i S P f k V J o F A l w n i F c bb j c l l D s f u N B y h k O z l e h L Q w N G q l P i l g e u m g N Z n C E R e K F Q w d A w p i bi q k U n F c W w i i g Z h bf F N x G D Q h G K u a k w B h h X p V W t O G q f i p p p F c K C j F ba o g ba w y B i D q J u S N Z I K p G V N z M l d O a P o P y x f d G w N F j K V a Q J t m K Z bb P g G q u q P N o F m bf bi h I l bf I K m B bc G z w U G c J N W a c Z W A e u g N o z q N U o U j W G j x J j L bh u bq N z q K Q N u x P Q o bf M e a B h O c l c I i F x q t z w N j t w I J z O Z j w K I e E k L S K Q z E I e w n o q B f I G j Q t D U I K l bc o h G l l f w Y s E e C p c m l s w F n H Y A B E e w W n V h e Z N O q m m A U j c P m F t W Y j q J O j P bh P c d ba D p a c i e l q Z Q K i z i m L p k K q ba h Z z l N g E j p i n C w u K h Z S h i j q P bb w N N W Q f bm o Z C l f n w j k p h bh B I g N f Q o Q s P N B C K L a z n F e j k N G C u C Z w Z U bb q V l O bd q ba J J J e E c N I i V N bb u Z ba x N I t Q P W P E E Z ba J i m V N C G K o w F g F x C ba Z k g bh c P I j P J B Z bf B n J bb N n G c h a L S I h P bb O A i bg bf H K I L K U p K J V bc p y f Q w q U n P N Z N J Z bc Z I a w q bb z P T l c h B P m H bi C S S F P a k N c J K a bb j x z B S J A t H U F z C f F w k R ba J K h v Q A w E D Q w g g I H Z N l e O g n e e C R c W y E O Z V C O R Z P n m I J F E h n F w c l g l k V g a F h I L m g j i P J N p k i w I c z G N c B P d j h bc w i X O k y O U O d c g A P h e q Q n K m V a w I O i C z x w P J Z bh N i B O o W N g J y o n p g N Z Q P I W bf F I t F c g m P U w d o A Q Z O B Q q bh I l F e G n j g B N bg E a q x g l m ba N I l n N W h D N U o F k i I t E V i c I q o q h t bf I A c c x o D R K O p M O W ba i Z i J K Z Z P I c i f U q e N a u j I q t e ba m i i d ba U ba R m n ba L m K ba h V v w F G bb g e Z G q U O H ba l p e bc W K K W J o k N t q g m bb C Q j c P bc z q C e J A q U p S k C K H F G u C bx R c t M J I h g i t h x R u bd G P d G P j l a h z R L k c X Z i L t e Q x t G Q g l L j Z p i l E h A N g N Z q W j e x Q V B q bc I D X J E x d n i F a V n X l m c B R k o U N bn P e u W h P l n u z y w d D G X F t g x bd o n T A Y t Y q N a i n g v q u a k c a A j Z P e V o W e U B F F U H ba ba p Q bc B n bh G Z t n bf h y A X x h g T C B k R n n I a K p c W w Z u U i m w n ba n q O f G bd b P bh t O u W c w T i h X U l U w N bb V Z n J Q G k a bl N p t F F q m P h U bb q z a h V k h f w W c f N E p i Q u l Q e Z I M f p F t u G e k I U K I bb m k l g N I t U Z G B e ba bh J o N h p g n i Q k J bi n I Z K L K bq E b y t I P a l E z ba O m L a V b Q u l G A p j k i N u c t u l z bb c N U l C f W c n i ba Z w C G l N I l u g n i Q N g Q t m bq W w N Q w G g Q K p P P I g bc K k B m bi E F R ba k C Q F F N K A w ba J I U q bb N W O bf q O i i q p k Q a c W bf bh p C ba q g t V Z n F Q a G q S I Q I W w a I q H I K I N q e j w F A h t bc n q bi bb B Z z h Q F h w i g u G Q q c w F F J g B q ba J g p B E j w t U k Q O g a Z l j e m l B E C B ba G I c c Q t O z bh z w Z K bd Q O p i W e c ba g j F B G c o p B bb P k bf ba p bi m B q J Q N N c G Z m f q F p bb P O F h I k J G c u P L d bh B t l G m f ba B bf u V k o K e E N i bf L G d U B t R W P j o p l J a d w J i n ba Z Q P c ba D X w C g P A q L E w J W e R R c c N E Z N A x g k j O W t q Z E w C C g t q W J k J k C C h w x x N q bf R A w i c h O B k O l bb Q bl e k g J p q B J w O l c c j g C j bb O ba l j I F F ba bc bc P w j bb bf p J j w u n I P p p h E m I k ba g q n Z bb P A Q t g x F e t bc w P u Q h F h K g w c N bd g U n ba w O O B ba bd u i W q j t z t h q n O g c Q i u bc j U L P E q P l q e Z k c c i U Q c bi k J c D B bh ba I E x m k d B C Q w F Q Z W t bf R f bb u g R R bm k bb U R P v bb q bd g E J h t N bf J m Z Z q g O K k U K bb i C bt bh bt H q t Z z R bc i bc t bb N Q B k x P Q G o A j D bn A Q P i bb U i i Z f ba i e Q u bb D f c S P G i Q bi O E Q O G bc t u N Q D L k q Q bh m m bf ba N m a J o f R f e w w bq f E k bb k O c bb h u ba O k w i t V I Z y e o c C o N h g a P bx e a V h X ba Y d c P J bf b c i bc U J bb s S bh M y ba ba J S q be g L E C w q i d J V P d j l w e a d P h O c V N c O I V o e Z W o r e ba C w N G N H K Q N bc h P A N P t Q x m k Q K B K J w x K B Q t P bd W h t bb j N E bb N bi bc q W P i A t e t e c bi c bd F N S f U bb h Z j c d bc l N g g q U q t g Q O k K B B E e k k u w H N W bi Q o p o n O h u U E N Q Z d m bh V x O bd D j g B K g x x F Z bf P w Z t h P c q q n G e h p d p o Q J N e Z ba C g u n O I Q Q u n N h e i R O c O p e i G X d j O h K K m Z C c B S bb B m i O o P h N h q ba bc q I P B q h c h Q P i O B S Z K q o w T A K N Z x w G p G h i w G c g t N Z L q g i i z k l i A k M w i g C N G V C e n e J U l u V K w a D Z p o p g n g Z j w F K Y J w j t g R J X g F g bf V c w bb c h k V P P B B N g m J O h K J X Z F m i Z m q t q bh G o E Q P L t Z p F Q F f bf c F bc P U t m bb k n I a i W W u w m Q J K w i g W J O t c u h X i t q q w U J F Z q bb e q n g U P h i a e n g bh G L P h w j I w k k N k t A q N Q E m j g c J J bh bc S c ba B m bh l S V y x C w u c z n ba q t e e bb P m p O I Q Q K m u q o i k Q bi N F g bb l c q J E l q bb O l N c k bb bc h Z S u k x bc B c B u bf j O P k x o C B bh P q N bg bi J g B G G P U A a E P Z bf bh Z bi B P n A J J O h A A bf C t C V q u p bb m bh i i N m u t m O h o w bf B Q Q h bf bc Z k J l t g m h g e h Z t W bf e g g c J N ba bc g t bb bd ba bb J m n g k n Z I e F i i g bc w E Q bi e I I m F P i N U K m C ba E o O Q G bh q P J ba n e ba k U Z w ba k Z bb B h E B e e bf bh bc ba k u u Q h K G J p bb K e j t bb m O bc O B bd U bh O Q k bf k P q ba ba J n B P g O c bb u Q Q B h g Z N C P N Q P B O t ba g bi Q c h I t k Q e w O q F h c i w g Q bf bb q bc bh t O S U a c W u d bl bg n bf bc t n bd P B l bc x Z e h bb k n P bf bc bb u ba m k k B c B N u S t u bc B P J O Z bh P e k bf h t K c bh t ba k F g Z Q m m P g ba l bc g O i bf G J q t Q k X i w g bb Q t o k bl B C t m bk z G J bf Z h h h bd o l u bb ba Q I P q m bh O c O bf u Q bc bl ba bh bh p bd bd S Z j n bh E bd bf L u N O bf u h k B i ba c bb B w O u bd i n I c P bh P I Z O ba N Z p i G bc J e O I q h k R L t c I P c I U m P e ba bd N t m bb ba bc O g k g B t m I bf u h g bh e Q P i i bc P P Q bb I u t G t ba bb ba P m g Q c P O Z N N P O bf w ba w u g t g t u u t O ba k e bc i t U O t bb B w Z e I t h K m h C i J h bc g Z t bi N i I I m i t I I g m m Z B u bb B m bc g I I i k w bc t q O P G C g O O O O bb P F i ba bb m n w m ba I t bb bb c t F w k c t q F N bb W I e q P O I l O J Z bc bb c G bc u bh m t Q t m g z O P O m t i P bf u I t g u Z k t w g u bc k i Z a h bi N G k bc O bd G h bb bd t h m t F bf t w c O P g bc P I ba F ba ba Z J P w g P w c g i bc k O P F g h P P k bb k o O c bh w B bd I bh C g bb B m h ba m t bb K Q w u o bf F bh n t bf t k c F bi Q m N u e c bb p g bc c bh l c c bl bf bf B n t k u e c O i t bh q G Z P bf h O O m I bf ba O t bf t bi I Q P t bb k I bi h m O P c p u g O bh U bb bf F n w l bf t B I S bb bf A bf t Z t w q m O bd O i c i k t k O P I c bh Z h U x j m Q ba m t Z t i q t bf F I g ba ba O q o P B ba bc B u bi bb ba t u e q bf B bc O Q bb w I bf g P c w k m O m i u m m Z bh bc c g i bd bd Q K c k k h w bd c B t bc t Q k W J m Q bc w I w t Z q ba Q I bh D bb bb H F t g bf bc bc V O m t c P N k O B n m u m t K q Z i bh w l n W B h t u bh bb P P u P t U ba c bb bh k br L z f A u k B bb e c Z I bb N c k O O N g bb ba I J F t bb J bb i P B m ba h e ba bb u F F P ba t K ba c Z t J c P Z c t q bq K C e bk bf t O u Z O m ba m B g m bf bf P m t l bf u P m n N B P Q bc Z I I w P k P c w bf bf P bl O u bf bh O O bb U J c ba i B ba t Q bg bd Z bg J bh w P ba O c t bb k c Q Q h bh h Q Z bc t u N l B B t J N g N bd bi B m bi l c c w bb N c a w m i bb bb K g ba bl F t Z bb i P u B I bf bc bi O bc bi m w F bb m t k c Q c F bc i bb P N c O m N k P Q t o B Z U N t k t P i u Q bf bi k c c m h B t P u F P u B bc P k t O w Q i w ba g O G k F Q q n K i u Q w w B Z F n i k w t N m k h N R w W bh Z bq bi bq bc u V bg m I V Q G n f bd w bq bk J i bl bk J K O G bb Q Q Q Z m bf u I bc bh bg P m bc B P h t w k x A O o c i J Z N o w J I i C m w g N O k bc G P bd e Q ba W bq N bk bc bl w bx h I U bu br t bi bx br q T g bc x bc S k q bd n bk C K br bq d a e X N bq bg R F H C O P bi bf O m J ba u c p u B bc bd bl bb bb bk bh Q X j bl k ba br bf bq u g j m bk l d br l l w w G n G c i P ba w g h bi Z u c Q F bb bc P N bf N c B w J c m o a g c K m y i bu u o bu S f bn w bi bm e j bh m R N w c O bi Q I w k A u h u bg m w h bb Q Z k i Q bh m e Z bb Q t O bb bh bc bc Q bi bc u m N u i ba F n C bb bb bi k bb bf a u bc w l bc B bl bg t J m O B Q I I h K O q ba bc k I Q B e Q u P m Z Z Q P h m Q O c e w e P e G bh U G n c I bi O bi bb V B a G A U m W bb l o W bl X h O B ba A h e d D Z Z bd bd F A c Z Q Z t m U B bi B bu Z Q W s Q p bC X h u z Q bl q X W z Z i G O O P P P m w B J h P g B t e J ba k N w m O c c h q u Z P bf i h t F c bf O E u bg u ba O ba N Z m Q K O t ba bh bf t I B F B bd i Q u F c h P i I t e J d F h h q G q G h j c k J P k V bc bb Q n Z h W l C U A N o K Z bh f m V K q e x Z bf y ba t W N O P Z U Z Z m J O B h N u l t k N F q t q Z P Z bc U Q p i B Z p P bc F o m O I J O x G w C h u Z g Z t bc h N F O g h k Q t w bf k K bb n V Z P bi C br bk ba k bd G g bq f bi k bd Z q m bi g e U q u bc bh ba i u P bf bb I k P F k B F g ba h B h A U bh e P N l P P i J U o O N bq a n G bl G I i I W g bb w c O X p n bf I e bb bh G Q bb h bc k n m w P Q P Z P t n Z w q bd h bi bm t h l bd bk bi c Z w I ba W p bi bh U bh k w h h G t e K bc n e e u g J I n m bb k I q w q P e t q q B e e u g i bb u I p i bf Q bd l x k bd bi K y C U bl h K bh O I k m D G bh bl O e P I bb F c Q bh c C m O N U ba h X U f E n n x K D h bb R q bh j q l c Q E Q t e F Q Q t X c s bb c ba k c N c bf i Q I g ba q i N J w P ba Q q Q p g F i C B j G D h a k O B g Z O w I u Z l g e k k k bh i h t F i A K o O F N G k m w bc m B B k g m B Q P K P O k ba m d m bn t M i P O u N h by B n bh g V U Q W P O t k F bb I O n bd J m e J bf F O o g e F Q J P e G J O bh q ba i I e p a m k c Q q c bi C g Z L bc N h P q G bq bx c K s O bc N i x L m g p ba F P q P O m bh G C K I bc ba G t U i i P F bb w m t g O q P n e E K O I k e g Q V q W g e P w i bb t bi t t h B u bi O F t w d bi E bf bl bl bf n bh bi bh u t p e F q i U h m Z i n t bb w w n i Z N t I N O w K g U m q g bf W bA bl q br O p q bb bd bb j q bb a L S Z q J Q l d m q bb V I J Q bb h c bf k Z G n O i q c p t m c m B Q bc B bb l k q m N p h h C B i x B l N e I g w O i Q Q C c P i m ba B g i w bd Q P u B bh bg P bh Q E Z u j m c c l I ba F h c g P Q P B i w t C f t bc ba bg w O C B Z Q i N Q m P bb Z G k ba bb d k P t E bb P u Q F B U u h Q f t k bb F w i i c q h F bb k t u t w G u Q bb t h bc B B k bh g V Q bl u bq O bl q H f k t k O p a bf h c c z V F K S bi p G t p i Z c u bf S U d h w bh t S G bd bu h t Q w m V M bh A bg m t t g E j bf a ba B w c N B bd i k bc D bc l u bi c bf C P m O Q Q bb i Q N h bc E m Z w w q J J bb g h c R bb P i bi c N g g e bf q P I B k N bb m C O bc h bd H bd bk z bg X u H G ba l bi br Q br w J u c P G bc bl j g B q t g u w bh N g U bf f u N q P I c q B N n I m Z q e g h F t bh K P bf Q u O m K u N I e N bb Z w k Q w Z h Q ba bc O I u P m bb m t i n n V i bc P h U g q k e C F B u F ba N i ba J w I c e m bb J h q K c bf c G O Q bb l G C I n n Q u c bc B bi e bb k k J l x g w ba h u bc W D y ba w bf B E O Q j J Q bb i c n A U U m t I F bc e m k k c u Z g B w F g O q P B i u bf m J m Q t Q P F c m i N O bc B P m bi ba m G ba Q C K g F I I J Z O k k u i bc c e ba k B O E q bb N A bh ba W B bd t p bd t t d bf I K g c G h N K h w t bb c m bc bb k U I c O g l B m I k w w q h w k h o n O i i g ba Q m bf Z Q P w t bf q bh t bc K K u F bf h ba O t bg c t P bg z x G u u O m P u J Q Z e P U c F O G P Z c Z O g E k e g C i t Q Q K S bd g o Z k g Q N g W m Z C g i I p P g n e Z Z g bd o O g I O O c g Z k h P U bi F D bd F O bf q t R l m i q bb w ba q u h G n G e o I N bf a bb i e bf w n bb l I x c I bb t N P I e m U t Z I f P bb F P N bd k m w ba ba e w w p k K w g w t c w h g ba O h bf P o b bk f G C r b bi bc bl o E i bb q o K c x i O bl bg A k g bv bi i L k k bi A Q X bk M Z I bf bf u a X bb w bb h H F R bq P A bf m ba ba bc bf P t p O k c G g P m i bf d F u p P N k j e B i g N O t B P N bh h Q ba O bh bb P bf P N g t G j e C Z P O q e k f v g w O w u P B u bc L G w e Y u A P W e J c O Q Q O ba l c N ba q g bf O bq e g o w bd T K bc w Q l C j B i s c z m n U q Q m bb c m F k m O N m O Z I Q F g B O u O m I E e u w u t Q n q h F w bd B X P G bb A l u B O e B h B m i bf t i Z i P bc A bb R P G c P g n o G c O ba N Q A w w t U l W k c k bc m w w Q h n bf u e t bh e B m t o O p O O bh U bb h k k K w Z t m bc g bh Q t q ba i g I bb c bb o Z f p t bc F bc l Z m bc h e e t N N C q V w G h Z t I W c Q w q Q w w t g U bi P Z e K Q G i w w G l k n w I bf J i m c j Q h I W m U g N C bd bi bc k c s bc bf g bz bI C bF bv bH q u bG bt p H Z w D w E z m f l f F p l ba C B c y P o w n O N E G B Z U m P k p P c g w Z bb u bh bh I ba a h bz A g J F d P bq bb p bw ba V q B B U b bc f P t I R B o c B q X x bt bu q bb o bC R d g M P Q n g m bf bb Q bh i P bl bd P C a bc U bf U bb Q N W G P G w N g h N bc I Q bf e I K ba g Q bi k ba i q X c p t N bb I J m Q H k j S E g u h O i Q p q U P C J Q U N m F F g O k W c Q t ba g Q O bf E J W h G t j Q d k Q g N J g m J o bb p g j G V ba bz m j bf P C K E A d D z w X S g bi ba L F Y bg br F o bk u i t B M bd a t m bb bi o bm f bh bh g bw g T y k g i k Z W w F A k n bc F P bb ba J W U f m R e h w q ba O N W k h m w q F bb P P C Q g m q n F u h l y ba c H x k bb u O k ba q w ba Q bc B bb bc B I V E Y bk P B H Q Q bd Z J M bh I d w k K i c q D bf P q o O P O k c l I P O Z bb X m I U F J V h B A F P F bb i F o B ba c O Z h m P f a k u y M bl D bb A 0.14 bj 0.09 bz K D x t b i N R F N k l g X u n r w bh q K O G E w w g Q Z j ba Q U t c ba P bd k Z o bd bh g N bi t W c q h N e X a u G g P t E h m u c w z n e N q n Q m O bd t ba O N z b p S l G O n c F g p n O Z m X g g w V k Z m q F Z I c p m q U Z a e l j U P e k w g n e G t l B B G e t k O w bf c g C bc I Q C d C bh N Q bf P W i G B m m m I m e ba u O bh w Q bh F m bd ba W Q j bh e n d D u bf R bf bh k bb j m m h g B G c G bb E U q c q u u h g d c bl V u G bq P U Y q f n i C J D B bh f U bf J A P N n W O bb w bk Y K R K q Z O bc c t B j h j g N w I F n k Q B g h N D e N O U j p G ba g X A n G I N g C O e J N l K c Z j k o g w o F W C l D q U ba N P Q w c C q U bh bh B B Q N h F B Q p P X g O L bx Q t i ba h S J bb q I q k Z q j I L c I bb w o Z O z K O K z t I N i g w u U W Q I E m U y q bf h p o I L J B u Z C P l V I l n s U F c J I P G e a S N i U g q i h i C p bh p l m I I q c N n C J J P t B K c S q x F h G G q B O w t Z U q n N m G Q bc C i I l X H C k I v B B bh J C F Z Q u k q I w Z u F C e F e G Z F I i g n g bb h ba g n bb Z A t u bq P bb B j bb bb n Y N Q o t L bb c j J p I k B Z e bi g F U O bc bb k g N bf bb bi m W P I bc Q bf t K e C i n bq bh P v m bt w e bn R U h q Q c e F h i U z B A s n N G e B B L bi m j b o bi t bj I N d Y o bu I u bj bh t Z q C)));
-(display 'Loss' ^(a:2.01 b:1.517 c:1.198 d:1.512 e:1.149 f:1.081 g:1.238 h:1.118 i:1.096 j:0.622 k:0.621 l:0.499 m:0.868 n:0.617 o:0.45 p:0.667 q:0.448 r:0.513 s:0.399 t:0.465 u:0.423 v:0.561 w:0.452 x:0.489 y:0.398 z:0.367 A:0.466 B:0.391 C:0.468 D:0.362 E:0.303 F:0.294 G:0.387 H:0.307 I:0.375 J:0.311 K:0.313 L:0.334 M:0.321 N:0.275 O:0.293 P:0.296 Q:0.295 R:0.246 S:0.333 T:0.292 U:0.259 V:0.255 W:0.316 X:0.301 Y:0.299 Z:0.297 ba:0.218 bb:0.306 bc:0.236 bd:0.261 be:0.263 bf:0.23 bg:0.178 bh:0.212 bi:0.195 bj:0.225 bk:0.201 bl:0.215 bm:0.153 bn:0.223 bo:0.196 bp:0.203 bq:0.185 br:0.157 bs:0.154 bt:0.198 bu:0.188 bv:0.186 bw:0.148 bx:0.17 by:0.179 bz:0.174 bA:0.146 bB:0.166 bC:0.171 bD:0.163 bE:0.127 bF:0.139 bG:0.137 bH:0.129 bI:0.141 bJ:0.176 bK:0.12 bL:0.189 bM:0.152 bN:0.14 bO:0.135 bP:0.114 bQ:0.117 bR:0.11 bS:0.093 bT:0.116 bU:0.088 bV:0.111 bW:0.123 bX:0.112 bY:0.099 bZ:0.109 ca:0.105 cb:0.087 cc:0.102 cd:0.094 ce:0.136 cf:0.128 cg:0.133 ch:0.097 ci:0.119 cj:0.103 ck:0.071 cl:0.106 cm:0.089 cn:0.079 co:0.092 cp:0.083 cq:0.096 cr:0.058 cs:0.061 ct:0.074 cu:0.057 cv:0.095 cw:0.07 cx:0.08 cy:0.066 cz:0.054 cA:0.064 cB:0.068 cC:0.069 cD:0.059 cE:0.065 cF:0.082 cG:0.056 cH:0.06 cI:0.052 cJ:0.043 cK:0.051 cL:0.045 cM:0.039 cN:0.041 cO:0.046 cP:0.075 cQ:0.032 cR:0.037 cS:0.042 cT:0.044 cU:0.048 cV:0.034 cW:0.053 cX:0.04 cY:0.033 cZ:0.049 da:0.047 db:0.027 dc:0.036 dd:0.029 de:0.021 df:0.031 dg:0.026 dh:0.028 di:0.023 dj:0.022 dk:0.024 dl:0.025 dm:0.02 dn:0.019 do:0.016 dp:0.018 dq:0.017 dr:0.014 ds:0.015 dt:0.013 du:0.038 dv:0.012 dw:0.01 dx:0.011 dy:0.008 dz:0.009 dA:0.007 dB:0.006 dC:0.005 dD:0.004 dE:0.003 dF:0.002 dG:0.05 dH:0.062 dI:0.03 dJ:0.035 dK:0.072 dL:0.055 dM:0.1 dN:0.09 dO:0.076 dP:0.063 dQ:0.086 dR:0.073 dS:0.101 dT:0.067 dU:0.081 dV:0.104 dW:0.078 dX:0.084 dY:0.098 dZ:0.077 ea:0.085 eb:0.091 ec:0.107 ed:0.115 (cz 0.633 e 1.603 3.344 3.805 2.073 3.205 2.582 2.086 3.305 2.286 3.761 2.72 2.716 3.527 1.712 1.87 2.043 2.064 1.394 a 2.391 2.103 2.461 2.549 1.761 2.724 1.497 2.761 2.375 a 1.458 1.5 2.002 2.773 1.478 1.774 2.123 1.292 2.156 2.09 1.614 1.685 1.217 1.434 1.031 b 2.118 2.764 c 1.566 1.058 1.513 d 2.317 1.583 1.247 1.215 1.637 1.653 1.76 1.414 1.102 b c 1.67 1.495 1.665 2.393 1.152 1.823 1.525 g 1.532 1.017 0.992 1.443 0.92 1.02 0.902 1.577 1.529 0.903 1.651 d 0.991 f 1.205 1.313 1.009 1.352 1.262 2.193 1.043 1.12 e 1.239 0.975 1.26 f 1.219 0.873 g 0.875 0.977 1.056 0.941 1.291 0.915 0.874 0.775 h 0.935 1.018 1.321 0.778 1.082 i 0.803 0.91 0.727 0.958 1.109 0.865 0.711 0.733 0.791 1.002 0.672 1.511 1.097 0.654 1.047 0.859 0.882 m 0.893 0.822 0.682 0.598 0.77 0.987 0.708 0.652 h i 0.896 0.553 0.678 0.629 0.665 0.71 p 0.909 0.625 0.663 0.741 0.81 0.772 0.695 n 0.639 j 0.783 0.64 0.838 0.717 0.547 l 0.604 0.51 0.963 j 0.79 0.595 0.705 0.537 0.752 0.756 0.5 0.7 0.662 0.477 0.538 0.687 w 0.641 0.61 t 0.571 0.396 0.395 k 0.549 0.555 0.576 k v 0.445 0.833 0.557 C 0.505 0.802 l q 0.53 0.592 0.528 0.531 m o 0.669 0.709 0.566 0.515 0.584 0.648 0.433 n 0.464 0.518 o 0.457 0.503 r p 0.483 0.586 0.459 s 0.441 0.542 o q 0.41 0.438 0.525 I 0.439 0.488 0.57 A u 0.405 r x 0.497 s y 0.339 0.517 bb 0.354 0.522 0.447 0.435 G t 0.458 0.346 0.401 0.492 u v B 0.34 0.431 D 0.449 w x z 0.349 0.498 y 0.407 z J 0.309 A 0.471 0.43 0.444 0.454 F 0.304 y B 0.417 0.422 0.337 0.332 K 0.442 L x H 0.397 0.386 0.421 0.356 C E 0.427 0.331 0.282 D 0.351 Q 0.265 0.25 Y 0.271 D 0.35 0.325 E 0.285 Z F G M 0.327 0.317 H 0.341 z S N B 0.28 I 0.264 0.373 0.36 0.361 U 0.276 V 0.252 0.322 J 0.355 K 0.328 L 0.269 0.262 O M 0.323 P J N O R P Q 0.33 W T K 0.344 P 0.253 R S 0.257 0.243 X 0.274 0.238 T bd 0.287 bf bh U 0.226 I F 0.27 0.245 bl 0.266 V 0.278 W 0.247 bj D 0.216 bc 0.281 X 0.286 Y 0.256 U Z U ba bt bg ba 0.268 0.231 0.208 bb bc bk 0.233 0.209 bL bv be 0.199 U bz bd 0.244 bd be bc bf 0.251 bd 0.169 br bg 0.241 0.222 bm 0.165 bh 0.162 0.214 bi 0.181 0.232 bs bi bj bk by bo bu bl 0.19 0.21 bm bn 0.173 bn bo 0.229 bp 0.194 bJ 0.192 ce bq bw bp bq bB br bI 0.159 0.193 bA 0.235 bs bt bx 0.138 0.149 bN 0.204 bu bv bq 0.158 bK bw bt bx by bG 0.134 bz by bA 0.221 bC bD bA 0.168 bB bM bF cg bE bH bB bO bv bg bY bm bC bW bs bD bx bE bF bG ch bU 0.143 bP bH cf bI bJ 0.177 bK ed 0.142 bL 0.122 bQ bM ci bT bu bH cc bX bs bN bO bR bP bQ bS br bR bH bS bo bT cp ec bV bU cl bV cb bG ea bW cj bX cv bX bK cn cx bN dM bO bR 0.151 ca bZ bY bZ bX ca cd cr cb bH cc cd bV ce ck bP cf cg cm ch ci cj bK cs dN bS co dY dS ct ck bU cl cm cn 0.108 cP cE cn co cF cp bZ dX bS cu cq cq cK cB cr cD cs cA dO dR ct cu cv ch cw dQ cw dH ck bS cx cy cy cz cw cH cJ cC cA dL cB cI cn cC cL cA cw cA dK cD cE cD cU cF cO dG cG cD cG cH cy cM cG cA cI cz cJ cN cz cK cL cL cR cS cM cr ck cL cG dP cJ cN cN cO cN cO cW cH cM cz cP cH da cN cY cZ cQ cQ cO cR cT ck cX cS dc cT cV cQ cN cU cV cJ dd cW cN cU cX cK cT cJ cS cI dJ dI db cY cR cT cZ cL da cV cT da dk cT cZ cW cN dh cQ db dg cM cM du df dc cT di dd cQ de cQ de df df cY dg dh cX dp dj di dd db di dh cO dj dn dd de dl dg db dd db dm di dh db dj di dk dg dl dl de dm dj do dl dg cV dk dn dl dn db dj dl dn dj di dq de do do dj dt de dp do de de dp di dm de de dg dq dn dn dr dk dj dq de dl ds dr dq de dn dn dn dp ds dp do ds dw dp de dt dq dq dp du dv do dt dr dt dq dv do dn dy ds ds dt dr dr dw dv ds dx dw dr do dx dw dr dt dr ds dp dv dx dq dq dv dl dw dv dr dv do dp dr dw dt dt dv dw do dq dx dv dx ds dt dv dj dw do dt dr dr dw dy do dv dy dt dr dt dx dz dx dr dt dz dA dw dz dv dw dw dr dy dz dx dr dw dw dv dA dw dw dz dy ds dv dz dy dx dv dp dA dz dr dt dy dr dy dv dv dr dz dx dv dy dy dw dz dy do dt dr dv dx dB dA dA dx dw dy dy dx dz dy dy dw dz dz dy dw dt dw dB dv dv dw dz dB dx dt dz dy dv dw dz dw dz dy dB dy dy dy dA dw dr dy dz dA dt dA dx dz dA dz dy dy dr dx dC dB dA dA dr dB dA dv dy dA dy dx dw dy dB dz dC dv dz dA dA dB dB dy dy dC dA dB dB dD dB dy dA dB dC dw dB dA dB dA dA dA dA dB dB dx dB dD dA dx dA dB dB dy dy dz dC dy dz dv dC dB dC dB dA dz dz dB dC dC dy dy dz dz dy dy dB dC dz dB dB dC dA dB dA dB dD dB dD dC dC dC dB dz dC dA dD dy dB dy dD dx dA dy dC dC dA dB dA dB dC dy dy dB dC dz dB dw dz dB dB dB dB dB dA dv dC dB dy dy dz dD dB dA dB dy dB dA dx dA dE dv dD dC dB dA dw dC dB dk dC dA dz dD dC dB dC dB dC dA dA dz dy dz dy dB dC dA dA dz dy dC dC dy dA dy dC dD dC dy dC dD dC dC dw dw dB dB dv dA dB dD dy dD dC dt dD dy dC dB dt dC dA dz dC dB dB dB dD dz dB dA dD dE dB dC dy dB dC dC dD dC dz dC dB dD dz dD dC dC dC dt dB dE dA dD dB dC dC dB dy dC dD dz dA dD dy dy dD dB dE dC dD dA dB dy dC dC dA dA dC dw dC dC dD dC dy dx dC dD dD dC dC dE dB dC dz ds dB dB dA dD dC dD dB dB dy dB dz dD dC dC dB dA dA dC dz dD dB dD dA dC dB dB dC dB dB dy dC dy dB dz dB dy dE dC dB dD dC dB dB dD dw dD dD dy dD dC dA dy dB dD dC dA dx dC dC dw dE dA dy dA dA dB dB dC dD dA dD dD dD dC dD dB dz dD dD dC dE dA dD dB dB dD dy dC dB dD dA dA dD dz dB dw dw dC dB dz dC dE dC dD dC dz dD dz dD dB dz dD dB dC dy dC dB dD dD dB dB dB dz dC dB dE dB dx dA dy dA dC dD dz dC dD dD dD dD dB dC dC dB dB dw dC dx dy dD dy dC dB dx dv dx dA dB dA dA dD dC dv dD dD dz dC dy dC do dy dC dq dB dA dy dB dB dE dw dC dD dx dB dD dE dB dC dE dC dB dD dy dE dD dD dC dC dD dA dA dB dz dD dC dD dC dB dD dA dC dD dz dC dC dA dE dC dB dC dD dB dC dD dB dA dB dA dz dB dD dB dE dC dy dD dD dz dA dA dC dA dB dD dB dC dA dz dE dC dB dA dC dE dz dD dD dC dE dD dC dD dD dz dC dC dD dE dA dC dB dy dE dy dE dC dD dD dy dC dD dC dB dC dD dE dA dz dA dy dC dC dA dD dy dA dD dB dD dD dD dB dC dC dE dB dv dA dD dB dB dD dD dB dD dC dz dA dD dA dy dE dC dB dB dC dC dz dE dB dC dA dD dy dr dD dw dy dB dC dC dD dB dD dE dE dw dA dA dD dB dC dE dD dB dB dz dC dz dE dE dA dD dy dy dE dy dD dz dD dD dC dD dC dB dA dA dz dD dD dA dD dD dB dC dC dz dB dw dE dD dC dA dD dC dD dA dD dC dy dD dC dD dy dE dC dA dE dD dD dw dB dC dz dB dE dD dA dv dB dw dA dB dC dC dC dy dy dA dB dD dD dz dD dC dA dB dy dB dw dD dC dw dC dA dA dA dA dB dw dC dD dy dC dD dE dC dA dC dC dD dE dD dC dC dE dE dC dB dC dD dD dB dy dB dE dz dA dD dC dv dB dy dy dD dE dC dB dA dC dz dC dC dz dC dC dD dA dC dA dz dD dC dz dD dE dC dB dw dB dF dE dC dC dB dz dC dE dB dA dD dC dA dE dC dC dE dD dB dE dD dw dC dC dE dB dB dD dC dz dB dt dC dC dB dD dC dC dE dA dy dC dy dB dD dC dC dE dC dA dC dD dC dB dC dB dB dC dD dw dv dy dD dC dD dB dC dE dC dD dD dD dD dC dC dE dA dD dA dD dB dB dD dB dC dw dC dD dC dA dD dw dy dC dE dC dB dC dD dC dE dD dD dz dA dD dE dC dB dB dB dw dD dD dB dE dC dC dA dE dy dv dB dC dF dC dE dB dA dD dC dD dC dD dE dA dC dC dD dB dA dB dC ds dC dy dC dz dB dC dD dC dA dC dA dC dB dz dC dC dC dA dC dA dA dD dC dD dD dC dC dE dB dA dB dF dz dD dD dC dC dD dE dA dz dx dC dC dA dz dz dD dE dD dE dD dE dE dC dE dD dB dD dB dD dC dA dD dy dE dE dE dB dC dD dC dD dy dC dC dE dC dD dB dC dx dD dD dB dD dC dE dC dt dC dE dD dB dB dD dy dC dD dB dA dC dC dA dC dD dE dr dD dC dB dA dD dE dC dC dA dB dy dE dC dE dE dC dE dD dw dC dD dw dy dD dB dE dC dD dC dC dD dC dD dE dA dy dD dD dB dA dC dD dD dD dy dz dC dD dA dE dC dF dB dC dD dC dD dE dC dD dB dB dC dD dr dx dC dD dC dD dD dy dy dD dz dw dy dB dD dC dD dD dt dC dD dC dB dD dB dw dD dz dB dC dA dD dB dC dy dB dD dD dD dD dD dA dE dC dD dy dD dC dE dA dB dB dB dC dy dD dD dD dD dE dC dy dC dD dC dC dD dB dz dE dy dC dC dD dF dC dA dB dB dA dC dD dB dD dB dC dF dE dC dw dD dC dD dC dC dE dD dC dx dA dD dD dC dy dB dA dA dC dE dB dE dA dy dB dB dA dA dD dy dD dD dC dD dD dC dE dD dC dC dE dE dD dD dD dC dB dB dC dB dz dE dD dC dD dE dD dD dE dC dA dC dC dD dy dC dA dB dB dB dD dw dB dD dA dy dC dE dB dy dD dA dC dD dB dC dC dC dD dB dC dB dA dB dE dC dw dD dD ds dD dA dC dD dD dB dC dC dC dB dE dC dB dA dD dC dE dC dD dB dB dy dD dC dC dF dB dC dC dC dC dy dD dD dE dD dD dC dC dC dB dB dx dD dz dE dD dE dD dB dA dB dC dD dE dA dC dC dz dw dD dB dA dC dB dE dD dB dA dD dD dD dD dC dD dB dC dE dB dD dC dy dD dz dw dC dC dD dD dE dE dy dy dE dD dD dC dw dB dA dv dD dE dC dz dD dD dD dC dF dC dB dA dB dC dD dD dD dD dD dC dA dC dw dC dC dA dB dA dA dE dD dB dD dA dA dC dz dD dC dE dE dy dD dy dx dD dD dD dz dB dC dy dD dw dC dB dD dA dC dC dD dB dA dE dz dy dB dE dD dE dC dB dD dE dE dD dE dy dA dC dB dA dC dE dD dD dB dD dE dA dD dF dB dB dE dC dB dC dt dE dC dB dx dy dt dC dB dB dy dy dD dD dC dz dC dw dB dB dD dC dD dB dC dE dE dC ds dD dC dE dC dC dD dA dB dD dC dB dy dB dE dy dE dC dA dC dD dD dD dA dC dD dA dA dB dD dC dx dD dC dC dy dz dA dC dD dD dD dD dC dB dE dB dE dA dE dC dE dC dA dD dD dD dy dD dF dD dD dD dE dD dC dD dE dD dE dB dC dD dC dD dD dD dD dA dz dz dy dB dw dC dC dB dB dA dB dC dD dD dA dD dD dw dB dA dD dB dD dD dD dz dA dC dE dD dB dD dA dC dB dD dC dA dD dD dC dB dC dB dB dB dD dD dC dD dB dB dD do dD dw dB dC dC dC dB dy dC dC dC dB dC dD dA dA dB dC dC dB dA dD dB dE dy dD dA dB dD dy dC dD dy dC dC dE dD dD dy dB dD dB dD dC dD dB dE dA dE dD dz dC dD dA dA dC dC dC dA dD dD dA dD dD dA dB dC dE dE dA dD dA dA dD dC dy dA dD dD dw dB dD dB dD dB dB dB dE dD dD dD dD dA dD dC dC dE dD dD dC dF dC dA dD dE dx dD dD dy dA dD dD dA dB dB dC dB dD dD dC dB dD dC dD dD dB dB dx dt dE dD dz dD dz dE dC dB dB dA dC dD dA dC dB dw dC dD dB dB dw dC dE dy dD dC dA dC dy dC dE dC dC dy dE dB dB dA dC dD dC dC dC dw dB dD dB dD dC dB dA dB dy dD dA dD dB dA dD dB dB dB dB dD dB dE dz dE dC dA dD dx dB dD dB dD dD dB dD dD dB dB dw dE dC dC dA dD dD dD dF dC dC dD dA dA dB dE dE dy dE dD dB dB dC dC dD dE dD dE dE dC dB dE dw dE dD dE dE dC dD dA dy dC dE dy dE dC dB dD dE dE dD dE dy dA dD dD dB dA dt dC dD dE dC dC dE dF dy dE dE dD dC dB dy dB dB dC dD dD dC dB dw dC dz dB dB dC dB dB dw dD dD dA dA dC dC dy dE dC dC dC dB dD dD dD ds dE dA dB dC dy dx dD dD dC dA dC dA dE dC dC dB dC dB dD dB dE dA dD dy dD dA dC dC dD dC dA dC dD dD dD dy dA dE dD dz dB dz dz dz dD dA dD dC dD dB dC dC dE dD dB dD dC dA dA dC dy dD dB dD dD dB dy dD dt dz dD dC dC dC dD dD dB dD dB dD dC dD dy dB dD dC dD dC dt dB dz dC dC dB dA dC dD dC dE dB dD dC dA dC dA dC dD dz dB dy dE dz dw dB dD dE dC dx dD dD dC dC dC dA dC dA dB dA dB dE dB dC dB dA dA dC dE dy dD dw dD dA dD dC dy dD dC dC dB dE dA dA dA dy dB dy dz dD dB dB dD dD dB dD dB dy dy dB dC dC dA dB dD dB dC dC dz dC dB dC dE dA dA dE dC dA dB dC dC dy dB dB dA dA dE dB dD dA dA dC dD dA dD dD dC dC dD dD dy dw dE dB dB dC dC dD dy dB ds dB dB dB dw dD dC dA dD dC dC dC dy dB dA dD dD dC dA dy dD dD dE dA dD dC dA dy dC dD dB dB dA dz dz dD dA dC dy dC dC dC dD dC dE dB dE dB dv dD dC dE dC dD dA dz dA dC dD dz dD dE dB dB dB dD dC dC dD dC dD dC dE dD dB dB dB dD dA dA dD dB dD dC dE dC dA dD dD dC dB dA dE dC dB dC dA dA dC dr dA dB dC dC dA dD dD dE dC dA dE dA dw dB dC dD dE dC dD dA dB dz dC dE dr dC dC dA dB dC dD dD dB dB dD dB dy dD dC dD dE dC dt dD dD dC dB dE dB dq dB dD dD dB dC dD dE dE dE dz dC dD dC dC dC dC dE dC dC dB dD dC dB dy dD dD dE dD dC dw dD dC dA dC dE dC dC dy dB dB dB dA dD dA dD dA dC dD dB dD dC dD dC dC dy dD dB dC dC dx dD dA dw dD dB dC dD dy dD dD dB dC dD dD dE dD dE dC dD dB dB dD dA dD dA dA dC dB dy dC dD dD dA dD dA dE dE dA dy dD dC dB dC dC dD dB dD dw dC dB dA dC dC dC dC dC dy dC dB dA dB dB dB dA dB dB dA dD dE dD dA dB dE dC dC dC dA dC dB dB dB dy dz dA dD dE dz dC dC dB dD dB dB dE dC dE dz dy dE dD dB dD dC dE dB dC dE dD dB dC dC dA dB dA dC dD dC dD dA dD dB dA dF dB dD dC dt dE dB dE dB dD dD dC dC dE dz dA dB dD dE dB dD dE dy dE dC dC dD dv dB dr dC dD dC dy dB dD dD dA dD dA dC dt dx dA dw dC dE dA dC dA dA dB dz dz dB dB dD dA dA dD dy dD dB dC dA dB dC dB dC dD dC dA dB dB dC dD dB dD dC dD dE dC dE dD dB dA dr dp dB dE dD dD dB dD dB dA dz dD dD dC dz dA dC dC dD dD dw dE dC dD dB dA dA dC dC dC dA dr dE dz dD dD dw dB dC dB dB dD dB dz dC dD dC dC dE dB dB dz dB dA dE dD dE dE dA dC dD dw dy dA dD dB dz dD dx dw dB dC dD dz dB dE dC dA dB dB dw dB dD dB dB dB dy dC dy dC dz dC dB dD dD dD dz dz dy dB dC dC dv dB dy dt dy dy dy dx dC dC dB dy dB dC dD dE dq dB dE dB dC dz dy dB dB dA dD dB dD dy dA dD dE dr dC dE dy dC dC dC dB dC dA dy dD dA dw dA dE dD dD dB dD dC dD dy dy dE dD dv dD dD dA dB dC dD dB dE dB dC dE dC dv dz dB dB dC dD dA dC dB dB dD dB dC dD dC dC dD dz dC dx dB dE dD dD dC dD dD dD dC dx dw dy dA dw dy dA dB dw dE dB dC dB dF dx dC dC dA dC dD dE dC dB dB dD dy dB dy dC dD dy dB dD dv dz dC dA dC dv dB dy dD dB dr dA dA dy dB dD dw dA dA dB dC dC dC dC dB dC dy dz dD dC dz dD dD dz dr dC dD dA dC dz dB dC dx dD dD dC dB dy dz dD dw dA dC dB dw dC dA dv dE dC dB dA dC dE dC dx dB dD dB dB dw dB dy dt dC dA dD dE dE dE dt dD dA dA dB dy dC dz dy dE dw dC dC dD dC dB dE dA dz dC dA dD dD dC dC dD dB dy dD dC dB dy dr dA dB dC dB dA dC dE dB dC dB dB dD dD dA dC dy dD dx dy do dw dA dA dB dA dB dA dB dw dD dC dB dy dB dD dy dC dy dB dD dC dB dB dr dD dD dC dB dD dB dB dB dA dD dC dE dC dz dB dC dA dx dD dx dC dC dA dC dB dB dB dE dA dz dC dC dE dC dB dB dx dD dB dy dB dC dw do dA dA dE dD dB dC dE dA dy dz dC dv dC dB dD dz dB dB dC dD dB dB dy dD dC dy dC dA dD dB dy dB dD dC dy dE dw dC dC dy dB dA dA dC dC dD dE dB dy dC dz dA dz dz dx dy dB dB dA dC dD dA dw dD dy dx dC dz dz dA dB dA dB dy dB dA dB dE dA dw dC dy dD dC dB dy dx dC dE dC dB dC dC dy dB dB dB dp dB dB dA dC dw dD dC dy dC dA dD dy dC dC dE dC dy dy dy dB dt dC dA dy dy dD dC dD dC dD dx dt dy dC dx dx dy dB dD dA dB dy dx dB dA dC dA dA ds dA dA dB dD dz dA dC dy dB dx dD dA dC dy dB dz dA dx dA dB dA dB dB dA dC dA dA dA dC dA dC dC dy dC dA dw dy dz dy dD dy dv dD dC dx dA dB dy dB dC dy dC dy dz dB dB dB dC dC dD dy dD dC dC dr dA dE dv dC dC dx dC dB dC dy dA dw dB dC dz dC dE dz dy dy dC dA dA dB dB dA dz dD dC dB dy dr dB dC dE dB dA dC dz dC dw dC dB dy dy dB dy dC dC dE dB dD dE dx dw dv dy dz dB dB dC dD dB dE dE dC dq dA dw dD dC dz dw dw dy dD dD dB dD dA dz dA dB dy dz dC dy dp dB dB dD dw dy dC dA dD dB dB dC dA dz dB dz dp dy dz dA dw dr dz dC dt dC dy dA dD dB dw dC dC dx dC dy dC dy dy dx dE dB dA dC dD dD dC dB dw dA dC dw dz dB dz dC dB dE dD dv dB dE dA dy dA dA dB dB dr dx dv dA dC dC dD dA dy dy dA dA dw dA dA dB dB dC dB dw dt dB dy dx dw dD dB dD dA dA dC dy dC dx dB dA dA dy dC dD dv dB dC dB dy dy dD dt dA dz dD dw dz dC dB dz dB dC dD dw dB dy dC dA dC dy dA dE dA dA dC dB dC dr dB dy dD dC dC dB dA dB dy dD dt dB dy dD dy dC dA dy dB dA dC dA dA dD dA dC dE dE dy dC dC dt dB dA dv dD dx dD dt dz dC dA dD dD dC dy dw dC dz dw dt dC dB dC dD dD dz dx dC dy dz dA dt dC dA dB dB dD dy dB dB dw dA dx dA dB dw dB dy dC dC dx dC dz dB dD dy dy do dB dC dy dw dA dC dy do dD dx dA dz dC dB dw dz dC dC dA dz dC dy dz dz dA dC dC dx dr dE dr dz dz dB dC dt dC dA dy dz dD dw dy dC dC dA dB dB dy dC dv dB dv dv dC dB dy dw dw dA dB dy dA dA dB dB dB dt dp dx dx dw dB dB dD dr dB dz dC dx dx dC dz dC dz dB dC dB dw dz dw dA dz dC dC dx dA dz dr dB dC dy dx dB dA dB dD dz dA dy dD dB dz dw dz dD dx dz dD dD dB dD dC dC dD dx dA dr dD dB dC dC dC dC dC ds dy dC dB dx dC dB dC dy dD dz dC dC dw dz do dA dA dn dA dB do dz dy dA dy dw dw dA dB dB dy dC dv dw dB dy dB dz dz dA dw dC dw dt dE dA dA dy dA dx dD dz dz dw dA dv dA dB dy dC dA dD dB dz dx dz dB dA dE dw dC dC dB dA dv dy dy dv dr dv dw dw dB dz dB dB dy dr dA dC dB dy dz dy dC dy dx dv dC dz dA dy dv dB dv dw dC dB dA dw dC dA dy dA dw dz dA dz dD dz dC dv dr dz dA dy dD dA dC dr dw dB dA dD dC dA ds ds dD dv dz dB dB dw dC dA dz dy dx dA dA dA dv dx dA dy dC dy dy dy dz dz dx dC dB dB dB dC dy dx dr dy dx dx dC dv dw dy dt dt dz dz dy dy dz dB dB dw dz dD dC dA dy dB dB dA dy dy dz dy dA dx dy dz do dv dA dC dn dr dy dC dy dx dz dC dx dD dA dD dD dA dv dy dy dy dz dt dB dA dx dw dr dq dA dA dy dz dz dA dz dB dz dq dB dx dA dA dy dy dA dB dv dz dv dz dA dq dx dz dw dx do dB dr dy dA dw dr dx dB dx dy dz dy dy dz dA dA dz dA dy do dB dC dn dC dB dy dx dz dw dz dy dC dB de dB dp dx dA dx dz dz dy dy dB dB dy dA ds dw dq dB dz dz dA dB dy dt dy dC dD dz dA dA dB dt dz dA dB dz dB dx dw dy dD dv dw dt dr dq dn dC dB dA dy dw dz dz dw dB dx dA dy dy dB dz dz dA dD dA dz dz dA dt dq dB dC dC dw dz dA dy dt dw dB dB dB dt dA dC db dB dA dB dC dv dr dA dy dx dC dA dz dv dC dw dw dw dy dB dw dA dB dC dz dy dx dD dB dv dA dr dA dz dt dz dy dz dy dB dy dA dv dr dx dq dn dx dr dw dA dx dA dw ds ds dB dx dy dy dy dy dw dw dx dz dw dy dx ds dA dv dy dw ds dB dB dj dy dy dy dz dq dv dj ds dz dz dA dz dv dC dy dt dr dC dy dz dw dw dt dw dA dz dy dz dA dh dq dB dD dB dp df dB dz dp dA dy dz dq dt dC dy dz dw dA dB ds dw dx df dz dA dy dx ds dz cQ dz dw dB dw dt dy dy dz dx dG cY dy dm dH cI dA ds dA do dI dy dn dx dz dp dk dx dx dp dv dB dI ds dl de cI cT dy dw dA dw dx dx dn dd dw dc dt db dz ds dv dt dr dy dz do dx dl dr do dt dy dq dm dn dz dy dA dq do dA dv dA dA dC dy dz dz ds do dA dx dy dv dw dx cr cS dt dy dy dw dp dm dB dC dx dt cV dw dy dt dA dq dA dv dr dz dl dw dx dp dB dc dz do dy dJ dj dI cM dx dk dl dz dI dg cM do dv dv dt dm dt dA ds db do dw dw dp dz di dx dw dz dl dw dz dA dw dx dy dd ds cT dw dw dw dA dn dv cT dK dn dc dJ dA dz dt db dJ dA dy dt dr dp cV cC cS dt cs dv dw dv dp dz dI ds dv cU cJ dL dq cS cW dq do dr dt dk dq cM ds dt di du dt dI dt du dp dt dx di dx dm dw dr ds cY dh de de dx cO dI cX dp dl dy dt do dt dt di dm ds cR cs dv dv dt dp dw ds cZ dv df dv cQ cS dg dI dv dw dI ds dp dr df do di dr dx dw cG dr dv cN cR ds dx dx ds dv dr dJ cR cL dx dm dz dh dn dz dg dx dj dl cS dr dv cO cK cU dr dn cR ds cJ cJ df dq ds df dj dn dq dh ds dg dr dk dc dl dr dJ dz dx cV dt cp cq dJ cY dg cX dc do dr dq cR cR cJ cU dr cZ cV dr dq dh do da dp dr do dt dn dI cz dq dk cS dm du dq dI di ds cU do dj cA cC cI dv cU dv ds cp cB cI dm cB dq dq dH cR bR dM dm cD da do dn di cH dk ds dN dq cV dJ de cV dp cO dj cz ds df dd df cZ de dO cA ct dP do cy cN dI dk dl dh dm dc dh cs dk dp cW dc dp dp dr dj df ds dj dq dJ dZ dq dh cs dm dt du cP dU df dk dJ dd dh du dg dl cA dq cc dK db cN di dd dt cX dq dr dT dn db ds dm dr dp cK dr cY cQ cJ dq dV dp cG dQ cz dv dp ds dl cx di dp dR db cG dI cu dm dv cR ds dh cD dt cN cJ dm cN cH cF cN cs dr dk dk cR cG dr dI cl dd cL dn dG cy cK cP dn dS do ck cU dk dk dj dN cM de dp cw dW cZ dO da dl dm dT de dn dg dU cW db dk dj cN cK cW cw cZ dJ dn dL dU dJ cL dp cV dc da di dJ cW ck dt cD cs dr dh dV cm dp dq cY dS cs du cO cF cI ch da cs dm cJ dI dh cT cW cY dc dp cC cT ca cM cJ cT ds dT cF cR dJ cQ dl dp cT dj cd dP dn cC dp dr dg dr cp dJ ds cb do cM db db cM cJ dj bH dH df cO cc dt dG dj cM cu dc dL cM cs da dG cQ df dG bU do cY cJ dh ct cy cA di cu dm cV df dn cU cV cm dh cJ dQ cG cJ dd cW cV cI ct cU cM cW cs ct du cX cI cc cm dp cG cX ck dj de cp dj cX dc cC dd df do dW cY cO cN cz dg cD cz cY cS dT dm cW dp cu ck du ck dG cA cQ cL cb dd cs dT dX cI cA dd cr dn dg dT dk dV cy cX cu dj cu dI dJ cJ dP dc cX dP dk cV dU dQ dl cU cX di dk cX cU dY cy do cu cJ dq bU cQ de cM da cB cN cM dL cz dJ cE dX cr dT cd df cB dm dY cD cr dH dm cR ct dn cG dQ dt 0.124 cG cC cY dZ cL cN cr cA cu cP cW dT dq cR cE cZ dm cU dU dp cK dl dP cd cL cu dg dt bO df ea cE cY cz cR db dQ cK cH cY cn dK co cY dG cJ dP da cE cR cX cY ck cQ da dT dX cV cn dp dM da di cU ck di cn cx de cL dR db cW dN da cJ cA da dG cZ cz dq dj cZ dN co dP dG di cX ck cy dI cN cN du dG cP cT cM cW du cz cD dL cu cU di cO cS cU dJ cw cw cY cQ dm dr cw cL cN cL cu cQ dc dP dc dp cD dI cS cx cL cG cM de cO cd cO cM cZ cX df df cB cI cN cU du cz cE dL cW cV dj dL dp dn da eb cu cs cO ch cz cX cX cO cA do du cZ dr dL df cB dg cC dT dT cQ ds di dk cC di cY cd dk cY cO cG dR cW df dH cX dc cI cX dL cJ cF cR df cV dT cR ck dG cU dd cF dL cG dJ cu cX dh dT cH cT dW dd cM cW dd de de du cJ cU cT dJ cJ dO cX dT dk cX cU cZ cV cY cL cJ df cs dP dJ cT cW dP cs dH cT dp cx cA ct di cK dJ cY di cO bY cI cT cW dc cT cH cJ cU cX cz cx de de cR dJ da dm cJ cO cu df dJ bR cN dm cm dn cU dl dH df cZ df bU dI cW dp dt cO cO dJ cC cW cG dr cY df cu cC cK cN cQ cI db cO df cG dR dJ ck dg cV cH cT cN dH cR cN cN cO cw di cI cy cV cm ck cE da cE cM cQ cY dR dL eb cN cW cH dT cu dP cO dj cZ du dK cT dk cN dI dm dh cO cE cr cT cr cS cQ cS cW cO bU cB cD cK dR dU da cS cs dk ck cL cG dm dG cy cS dH dL dl cT dG cY dl dd dL ck cC cO dP cI dc cW dG dP cK cQ cr cJ dT dR cG cT cs cZ dq dh cZ cz cm cG dh ec dI cu cH dR cO cN dX cQ cM cH cI cP du cW dk dH dL dc cS cI cO dh dP da cF dj de cV dZ dK cr cX dQ dO cR dW dL cw df cS cR cQ cw ct cS da cJ dP do dl dX dG cz du dJ dL cz cN cO cD cz cV dN cu dJ cA cK dK dd cA cV ea dG dd cM cY ct cT dL cI cJ cS dW dg cU dO cE cs df dh dI cU cH cB cX cy cL cS cH cV cM cU cr ck cG db dH cV ck cc dL dG dh cS da cL cS cz dJ dG dc dU ea cK cG cY cY cm cU df cN dL cX cB df cL cr cs cE dT cZ cC cL ck dG dJ cw dH cn cK cz cy cO cJ cA cM dN dP du dU cz cV dZ cH cr dk dP cG cX dd cL cZ cD cJ cI cX cO cI cJ dG cb cU dI dR cy cY dW cy cz cI cR cZ cp cy dO cr cZ dJ dZ da cs cx cz cG du da ck cK cK cU cK cO da da dd dI da dR dH dL dc dO cA cW cr cU dT cE cZ cT cT cA cU cX cM dc du cs cR cH cz cE cR dL cS dc cJ cs cL dh cy cO cQ cA dL cO cr cJ cR cV cG cK cJ cC cw cN cD cX cU cW dc ck cU dT cB dW di du dH cB cH cW da dG cZ cU cT cK cz cR da cT dG dn cJ cC dd cV cy cJ cD dH cD cZ cY cK dc dT cJ dG cD cp cE cH da du cN cn cD dK cX cS cs cM dc cT dP cA cK cw da ck cN cZ cn cK cJ cM cT cD cz cH cG cu cC cC dc dc cO cC cG cJ cw cV da cU cX da cu da cT dH cN cJ cn dG cY dd cT cI df cG du dH da cE cM cU cD dc dJ cD cR cY dk cW cT cU cD cs df cy da cJ cz cs ck cP cL cV dc ct dG cZ dL cW cz dk cG cr cD dG dL df ct cs cX cA cs cS cL cD cX cA cu dZ cO cQ cM cL cG cA dK cL cJ dJ dK dd cy cX ct cN cA dJ cN cV cV cT cp dg cW cG cM dU dW da dL cz cs cG cO cD cT cZ cG cB cs cT ct cr cM cG dK cC dI cQ cM cD dh cW cK cT cV cu cZ cu cz ck cr cz cG cG cs cD cO dT cW cJ cI dc ck cP cz cS cO cM dL cL cB du cU cI dd cD dT cJ da cC dP cC cG cX cO cO cG cG cR cx ck cu dd cI cG dl cW cu cJ cT cD dc cs cK cF dH cU cZ da cC cT cz cd cK cR du dG cI cD df dk cA dK cy cN cr cS dJ cG cU cw cM cD cQ cI cZ cr cG cC dJ cV dG cJ cI cI cr cz cQ du cx cy cX cK cO dP cL cL da cS dh cO df dG cW cs cs cu dP cJ cu cT cO dL cJ cO dR dL cJ cH dT cY cM cs cJ dG cO dc cI cM cJ cD cQ cW cT cu cX cN cT cO cP cW cN cu dH cV dG cC cu cr dG cN cS da cs dG cT cI cT dH cS dc dJ cS dL cJ cY dJ cE cL cs cE dK cr cZ dJ cs cS cI cX cG cH cK cz cW cN cQ dG cs cZ dL cL cO du cX cO cr cS cr cu cK cZ cW cD cO cJ cD dT cu cR cK dH cH df dJ cW cJ dP cO cA cN cs cN cI du dL du dH cu cI cK cy cQ dZ dK cJ cK dG cy cU cG cB cV cZ cW dL cZ dL cT cK cW cu cM cK dG dH cH cO cr cI cO cz cT du cI cI ck cJ dc cT dP dL cU cJ dP cU ck cW cG cK cI cu cK dH cT cZ cs cJ dI cL cD dG cR dc cX dL df cH cL cC cG cM cs dc cX cX cI dG dI da cr cA cN cJ da du dT dG cS dh dL cN da cL cN cT cT cS cr du cL cX cN cG dP cU cZ cJ cO dH dG cQ dL cS cY cN cS cM cU cN cO cI cN cO cX cX cS cW cJ dK cz cJ cZ cD dI du cX da cG dT ct cX cI cK cZ du cU cM cJ cR cT cJ dP cJ cT dW cQ cT cy cz cQ cL cu cE du cQ dT cJ cz cL cI cO cP cH cI cr cI cN dG dG cG cy dJ cS cU cu cr cK cB cT cS cI da cU dG cI cR cL cw cr dG cU dG cN cs cD dP cK cI dT dH cL cs cZ cI cG cX cV da dJ cr cU cA cN cL cI cM cZ dH cs dL cN cX cY cu cM dc cY cJ cu cN dd cE cL dc cZ cZ cy cN da cw cL cQ cD cN cV da cK cU cT cr cB cs cS dd db cO cW cW cX cI cA cC cU cC cN dL du cS cZ cM cL cD cN da dG cO cu cM dG cu cW cX cw cL cY cY df cn cT cO da cW da cU dG cO cT cR cO cE cG dL dL cQ cr da cZ cH dG cZ cu cZ cI cR cN dL cX cH cO dG dL cw cJ dL cN cJ dL dG cK cK dG cS cY dd cJ cI cS dL cD cT da cH cW dL cH cT dL cX cX dG cW cJ cL cG cJ dd cM cI cz da dI cU cT cU cO dL cJ cw cU cY cr cU cJ cJ cU da cZ cQ cT da dH cG cK cJ dL cu cM cM cJ cL cW cJ cR cC dK dJ cS du cR du cE da cZ cr cr cE cX cS dc cX dJ cG cB da dc cu cG cr cR cy cz cs df da du dJ cH dL cG dT du cJ cO da dG da dc db cT cZ cK dL cT dL cK cu cr cz cU da cK cu cB cL cL cG cI dL df dU da dH du cy cU cs dG cN da cS dG cQ cD cz ck cU dG cr cL dG cL cD cX cO cI cX cX dL cX dG cz cY cK dP cX cz dL cY cr cU cJ cN cG cL cI cX cu cV cJ cB cO cY cJ cJ dT cZ cS cL cR cs cD cr cO cL cK cW cS cV dL cZ cy cL cT cI cL dL da dL dL cX cR cT cL dG cL cK cK cB cN dG dH cG cR da cW cU cU cA cN cL cO cT cW cR cL cX dP cD cz cM dc cZ cu cz cV cS cI cO cX cX dL cM cU da dG cI cL cT cS cJ cS cO cE cM cS cL dL cR cN cs cO dL cL cu dG cR cO dT cN cN cB da cN cN cu du cz cK cX cS cJ cM cS cT cJ cZ cG cT dG cM cO da cr cU cH da dG cJ da cM cW cu cD cL dH cD df cN cS cG cO cA cX cK cS dL cu cG cR cs cU da cU cS cJ cJ cO dR cy cJ cV cI cN cD du cI cw cE cT cR cN dL cG cU cP dL dG cZ cJ cs cX cz dL dH cu cI cS dG cs cT cM cJ cU cG cJ cR dc cO cH cN cV dR dP dL cK cy da du cZ cJ cW cR cW cu cS dJ dL cX cL cJ cV dc cZ cO cV cZ cu cZ cJ dG cL cX cU du cG cY cK dJ cJ cW cJ cu cL dG cr dc cM cG cH cL cO cI cN cX cJ cL cS cJ cT cI cR dK dG cI cT cu da cI cK cX du cK dG cG cE cN cT dL cZ cr cT dP cS cY cz cG cD cI cS cS cD cu cG cw cL cO cM cN cZ cT cS cM cH cU cZ cD dG cJ du cz cN dL cI cU cA dH dH cz cJ cN cT cG cU cI cT cV cJ cO cM da cY cO cJ cK cO cR cT cO cT cs cG cV cA da cW cK cG cN cJ dd cJ cW cK cI cW cX cu dP cr df cS ck da cT cY cU cu dL cO cK cz da cT cV cO cU cW cC cS cD cQ cL dL cT dL cN dJ cW cY cH cz dL cH cr cN dL cX cU cw cZ cG cN cu cS cJ dc cL cX cQ cz cI cA cU cQ cz dg da cs cz dH dd cD cN cK cI cJ cL cS da cG cZ cM cX cZ cI cS cM cT cM dL dL cQ cT dO du cN cR cJ df cS cG df da dZ cI dc cs cZ cJ dJ cT cW cH dH du cu cU cT cK dL dd cU db cS cI cX cO cK dG cD cI cZ da cD df du dd dJ cO cK dg cI dL da cV dL ck cQ cT cZ cZ cJ dG cN dg du dG cZ cG cK cK cX cL cR dJ cM dc dL cM du cT cO du cJ cI dL cM cZ cK du cM cZ du cL dd cL cX cO cU cO da cO cT cS df cV cJ cU cX df cW dh cO du cK cT dg cX dd da df cI cs cS cV cJ du cM cN dI cN cJ da cS cL cM cK dP cT cK dd dH du cZ dc cR cR cL du dc cL cX da cU cM cQ dJ cJ cU cJ dT cQ cX cU cM cJ cV cQ cQ cQ di cX cS dG cM dJ cL cX dd cU cM cX cZ da cU cJ cM cS dk cM cN cS cH cz cD cL da cJ dg cS du cJ cQ cU cK cO cS dG cQ du dJ dc dJ cS dd cD du df cJ cY cO cI cM dJ cQ cG dc cK da df df cS cN dJ dc cX cL dI cS dJ cN dJ cX cK dc cX cX cS cD cN du cU cT df cZ df dc cS cN cz cI cN cH cY cS cL dc cU cW cU cS cN cz df cD cz du cJ dl cS dd dc cX dH cZ du dJ cN cV cD cY cV dG cM dg ck cX cQ cR cU du da cQ cJ cM cX du cQ df db cQ dJ du cV df cY cS df cY cT dI dc cN cV dJ cX cL df dJ cM cY cQ cQ cH cI dJ dk cN cV cS dJ cW cs dG cV cT cr cL cU dc df dG cY cS cR cN cQ cV cL dc cz dI dJ dW cT cM cZ cX cN cN cO cT cS cN cD cX du df cX cQ dm cL db cT cV cR cR dd cW da cU dl dI cZ da cJ cL cW cW cY dJ dI cM cN cX dL da cG cW cN dI dc cV dc cN dk du dG cO dG dc cX cQ du dc cS cV du cz da cY cK cX cV cS cM cT du di dO cK cT cG du cK cS cI df cK cQ du cO cV dg dG cO cZ cI cK cT cO cO cL cV cJ cX cN db db df cU dL cL cN du cO dh cQ du cM cA cV cM df cZ da cX cX cY dJ cM cY cU df da cQ cR cS dj cR cT cU cI cQ cL dL cR cS cY cY dj dJ da cY dL du cN cz df cS cO dL dG dk dd dc cV cV cV dh df cT cV du cZ cK dc df dh cX du dl cI cJ dc dJ cS dL cZ cO da cY dh cE cJ cY cV cS cN cL cL cT cO cO cZ du dc cJ cT df cz dK cM dc cS cZ cJ dh cz cM du cM cL dh cZ cS cL dc cS dh cS dh cY dc cJ cR cN df dd du dJ cT dG cR dJ dJ dh cJ cH cL cN cN dc cQ dI cO cN df cY cJ cL cY dh dI cS dd cL df dg cO dG dh dT dc cN cT cU cT da cL dI dh df cI cY cY cN dG dJ cX cZ cY cR dm da cO cu ck cU cL dd cO cM cV dL cS cY df cT dg cS cN du dl cK dh cu cK cM cN cK dg cM cY cX dc cJ cV cQ cM cJ dJ dc cz dh du dJ cR cQ cJ da cS cJ cN cs cV cR cR cM dn db df dh cM dd dk dI cU cJ cQ cU dk cT df cG cX cV cM cJ dJ dJ du di cQ cR cN dd dI dd di cL db cX cM du cN cT cK dJ cS cM cR dc cN cz cr dI dI dJ df dJ cL cZ du du cY dd cX dk cV cV cR cQ cQ cO cJ dl cT cY dG cW cS df dd dd dJ dj cK cU db cR dI cK cJ dd cT cV cQ dh cL cR cX dJ dj dc cM df dg cU cJ dI cY cY cN cY dJ dc dJ cX dk dh dc dc cX cN cM cO cK dI cY cJ cY cX cQ cQ cM cW cU cR dh cV cR cQ dJ cL dc cQ cK cX cK cM df db cR du cS cY db dI cS cT di cS cN dh cO dc da dj dd cN cW df cY du dJ dl cQ dc cR cQ dc dd cO dh cW dl du df dg dc dc db cI dJ cY dJ df du cU cV db dd cY dh cT cS dH dG cM cR dJ cX du cM cQ cW cK cO dJ cK db df cJ dJ cN cY cK cN cN cK dh dI cS cM dd db dI cY dc cN cz df cO cV df dI cS da dJ df dI cI cV cS cR cS dJ du dK cY cS cQ dG cV cX cU dc dj cV dJ dJ cT cY cX cN dJ cS dI dJ cS cV cG cM dJ cT dd cY cK cX cY du cX cT cV dI cS cU cX dh cQ dJ cV cs cM dd cM cM cR cR cM cK dc cz cR cX cz cR dI cW cV df cT cr cD du cM dJ dl cJ cR cU cY cS cT df cX dc cV cw du cK cB dJ cX cR cD cQ cX dd da da cX cQ cX cs cO dG dc cT cS cV cN cU cM dc cX db dh df cQ dg dG cU cT cz cO cQ du df dl cU du cG cz cQ cE cU cS cJ dd cM dd cE dd dJ cI da cJ cS du cN cD da db dI cM df cS df dd cr cR dj cr da cS dI cW cu cX cW cY cR cX cN df cQ cI dh dc dG cL du cJ dl cV dc cR du cL cY cN cM cU cS dh cS cO dc cM cN df cQ cQ cs dI cN cU cR cR cU cU cY cR dk cV dJ cW dc cR cZ cM df dJ cY cR cL cY cX cY cS cY cX cM cL cG da cO dg dJ cz df cU du du cK cY dG cM cz cV cM da dJ df cJ cZ cS cX df cO cY cT dc cB cQ dk du cR cY dJ dL dJ cX dH cG dd dL df dG cO dc cZ dh di df cQ cE dm cQ cZ cX cJ dI cN cL dI dl cK cS cz dI db cy dd cQ da du cQ df cX da df dc da cY db du cX dJ df cM cY cT cY cW cT dH cQ cH cM cZ cz dP cI cU dG cG cL dH cW dL dP dc du cJ dJ cR cO cX cX cS cU cD cU cX cL cZ cX cV dc cX cX cs cY du cL cU du cU dG dJ cQ cY dH cL df cI df cL cI cu cZ cR dG cM cR cA cH dG cH df cM cU du cI dJ cV dJ dI cU cH cT cX cC cQ dG cT cU df cN cR du df cR cM dG cW cT cU cM cO cL da cR da cX du da cK cu cY dh cU cK cW df cT cY dd cV cM cz cY cX cX du cO df cL cM du da cQ cU cG dG cG cu dG dJ cO dL cD cu cK cU dG cU cV da cS dG dg cs dL cZ da cZ cD cT da cI cU cZ cR du cT cZ cW cZ cV cX cr dc cO cN cS da da cL cW df dg cX df cN dc cJ cT cJ cQ cU cM cE dc df cO dh cU cY cT cz cX dh cs cN dP cK cS cU cJ cZ cY du cL dd cL da cA cz cz cI dG da cL cX ct dk cL cN cY cW cV cA cJ cN cJ cT dJ cV cN da cU cL cA cZ cL cU cM cT dI cS cJ cV cJ cG cT dd dT da cW cL cR cR cZ cK cV cV dI cz cu cz cV du df cU cN cM cR cY cT cV cM cV cz cL cN cX cY cI cJ cV dL cX da cG cL cQ cU cW cL dT cM cV cN cJ cu cV df cJ cQ dd cQ cT du da dd du cI cY dc cJ cW db cT cL cX cL dc cN df cS cR cX cO cO cY cJ cS dI dc cZ cR db cN cM cO cV cM cz cR dG cJ df cV cY cY dJ dI du cz dJ cX cN cK cO cS dJ dJ du dG cQ cZ cR di cS cr cR cQ dI dG cK dc cQ cL cR cK cM cJ dJ cu cE cK cV cI dG cJ cS cN dJ cK cS cJ cO dc cQ cT dJ cU cI cR dc cG cU dL cM cM cW cX cV cZ cS cJ cZ dH cH dZ cN cX cX dc cV cG cH dc cO dL dd cU da da cu cK cJ cZ du dI du cA cM cQ cP da cW cu cV dL cL cS cw dL cS cS cN cX cQ cG cT da cT ck cT cQ cz da dc du cJ cR dI cO dP cC cT cz cN cY cJ dK cW cG cI cS cH cR du dG da cL cU du cT cM cL cM da cX dJ cT cZ cZ cZ cN du cK cS cV dI cD dL cM dJ cV cI cO cI dd cL cH cO cY cO dW cU cK dI cI dc cz cT cR cU cO dH cJ dG cJ cI cJ cL cM du cV cI cV cU cG cY de dk da cI dH cX dd cN cG ct cT dJ cH dI dd du cI cR cN cL cM cG cJ cO dI cN du dG cN cr cW dc cN cK cU cI cM cN da cA dJ cX ct du cZ cy cN dc cX cZ cJ cM cS cN dc cM cy cz cM cN cr dI cR cW cN cL cJ du cH cW dI cG cA cT cR dc cI cX cu cY cS cY cI cT cR cN cM dG cD cY dL da cB du cZ cL cL cD cG cK cL cS cL cG cM dG cT di cY cS du dO dk cT cJ cI cX cM cL cL cU cG cY cX cN cV dc df cK cI cM dH cQ cI dc cI cK cG cL dJ dc cN cR cI cS cR cR cS cO cz cU cX cT cY dd dc cD cK dJ cu cY du dI cI cR cI cQ cG cH da cm da dc cG cr cV cz cW cI cC cL ct cO cR cN cw cV cM dH cG cG cZ dG cI cY cN cZ cS cu da dH cN dP cu dc ck cG cL dl cO du cQ cR cZ cZ cN cV cM dT cz cQ cO cJ dc cK cu cJ cX cR cV dI dl dG dJ cR cD dI cy cV cy cQ cu cz cL cY cN cU cO cr cA dc cr cL cR ck dJ cN cM cN cM dI da cr dJ cZ cQ cU cJ cs dG cr du cM dL cN cR dG cO dc cU da cQ cz cJ cK cW cu cH cL dL cJ cQ cZ du cE cT cS cJ cG cu cZ cW cT cT cR cs cY cz cT cZ dh du cM cT dG cJ cL cJ dc cM cR dG cG cX cJ cU cJ cT cZ cO da du cM cT cI du du cJ cL da dc cw cN cO cu cD cr cM dJ cV cJ cD dH cD cN da cO cT cJ dI cL cN cX cu du cT cK cz cz cr cZ cS cz cK cN cJ cR de cz cR cJ cS cK dI cI cX cT cO dd dL cM cL dJ cJ dJ cX dG da da da da cs dG cT cC cW cJ cN cO cS dI cr dg du cz cJ cN du cS cV cY cI dG cW cZ cI dl dL cG cV cN cJ cM dK cI du cJ du dG cT cz cu cK cZ cW cT cS cN cW cL cR cX cS cL cT cO cI dG cu di cJ cX cr cG du dc cU cZ dP cK cX cO cJ cK du dL cZ cr cX du dI cz da cZ cC cR dG cJ cY cX cG dJ cU cS cM cL cz du cJ cW cL cH du cX cU cV cT du du cT cu cs cN cT cI cN cM cG cM cR cT cZ cL dK cT da cI cU cN dG cE cU cT cT cT cI cM cJ dc dP cD cZ dT cH cL cZ cR cM ck cQ cN dc cz cT cN cT dG cz cK cT db cO cL cV cX cR cM cN du cZ du cJ cS cI cY cO cU da cL cD cY cJ cZ cZ cX cX cz cZ cJ cZ cD cY cT cS dJ cG cN cZ cL cG cR cS cZ cM cN cG du cM dJ cL cW cR cI cR cY cY df cJ cM cs cK cK cK dL cE cU cu cU cR cN cO cD cT cz cZ cG cY cJ cG cN cQ cL cL cN cx dT cO cY cB cD cS da du dG du cZ cX cH cJ cT cM cS da du cG cJ dJ dP cI cD cZ cK cW du cu cA cM dJ dG cH cX cT cJ cX cO cT cr dL da cr cM cE cO dP dG cw cR cz cz cW dg dG cM cH dh dL cT cK dL cR cW dL cI cN cM dg cz cM cZ dG cz cJ dH dJ cz ct cS cT cN cD cX cK cz cU cR cr cI cL cD cU dG cN cH cG df cG cX cJ cU cJ cV dG cO cL cI dc cL cJ cS cM cr cO dG cK cL cK cQ cW da cV cR cU cs cz cV cX cu dP dJ dI cH cZ cz cr dL cI dG cM cU cE cY dL cL cu cK dG cU cS du cB dG cX cR dL cO cO dG cU cI cK cT cM cL dL cz cO dK cw dc cH cK cM cR dL cX dJ cH dP cA cu dH cT cU cG dG da cT cS cJ cY cz dI da cW cO cK cz cQ cX cY cL cV dd cK cM cO dI cU da cL da cI cN cG cM cM dd dG cO cS cN cO cM dG cK cZ dc cX cN dJ cY cT dJ da cS cO db cN cK cT dG cX dI cR cK cu cD cK cQ cT cL dL du du cR cS cZ cJ cH cH cZ cK cS dL cW cs cO dc cD cD cA dG cR cz cu cI dG cM cT dT du cB cu cS dG cW cX cU cX cQ cU cJ cy cJ cC cT dL cH cN cz cJ cR cI cJ dG dJ dL cI cr da da cK cV cO cr cZ cL cs cO dh cG cT dL cC du cz cZ dL cW dG dc cZ da cW dI cW cX cI dL cT cO cA cG cS cW cM cO dL cW cI du cI cN cJ cz cT cL cJ cN cK dG cK cT cN cU da da cG dc cI cS dc cy cC cN cQ cN dJ cD cX cw cV du cQ cO cX cZ cO cU cG cS cr dT cX cL cX cW cu cr cL dG cD cT dL cN cU cG cT cK cH cX cL cy dG cS dJ da cL df cI cA da dc cU cO cN cT dJ dc cR dL cr cZ cT cU db cy cK du cT cN cN dc du cN cS cW cX cZ cD cJ cV cN cX cS cu cJ cU cZ cV cN cZ dJ cu cJ cZ cZ cJ cX cZ dJ dG du cz cV cR cR cV dc cX cL cS cu cU cz cM cK dL cR cR du dh cO cO cA cW cN cI cu cS cN cX dd cU dI cJ cZ da dc cR cz cQ dJ cY cJ dJ cN cY cW cL cS cz dg cL cI cz cz cQ cO cS cL cV dJ dG cX da cY cS da dJ cX cO cO cU cM cI cz cM df cT dc cY dG cM cM cM cG cT cI cR du cE dc du dG cR cN cN cD df cM cK cT cQ cO cW cZ cS cS du dJ da cU cW da cU da cS cU cW dc cN cX cR cs cM dP cS cO dG cZ cD cG cU cR db cR cL cu cM cM du dc cS cJ cS cX cJ cT cK cZ cO dG du cI cU cB cE cU cN cJ cS da cL cM cS da cH da cO cT dc cG cT cJ cS cX dJ cZ cU cA cK cU cJ cX cR cr dJ cS dc cQ cL cV cM cS cS cK dc dc cT cI cU cQ dc cN cZ cz cT cT da cU cD cU cT cM cr cL da cz cL cS cN cz cU dc cN dJ cW cr cR cO dG dc cU cJ cO df cO cN cZ cN dJ cU cT cZ cT cy cT du df cQ dP dL cO cI cO cX da cM cs cX da cS du cZ cO cS du dJ cR cI cT da cN cH cK cU cT cH cX cW cJ cV da cZ cW cQ cU cM dJ cT cT cT cJ cI cJ cT dI cR dG cW da cG cX dG cU cV dL cN cV cN cT da cz cM dc du cJ da cJ cS dT cZ cG cM cO cX cU cM dc cW cJ cZ da cJ cU cR cK cU cY dL cK cJ cS da cT dc cO dG cU cM cK dI cU du cS cI cN cG cI cD cz cT cU cz cS dL cT cU cX cV cN cA cM cR cJ cX cW cJ cD cR cS cS cZ cy cW cZ cL cZ dd dc du cL cR cJ cu cH cK cL cS cz ck cV cT cK cT cV cr cR cU cu dL cT dG dT cs da cA cY cW dd dH cL cS cN cQ cR cS cH cX da da cU cT cU cR cX cT dP dJ cU cW cE cL cr cO cJ cJ cU cX cL cK cW cX cO cU cG cT cN cT cM cr cT cL cN cz cV da du dc da cM cQ cV cs cN cz cW cS cO cS cs cI cD dL cT cJ cS dJ cR dT cU dL cU dc dh du cE cJ cJ cW cO cJ cS dG cX dG cZ dh dd cU du dL cK da cN cZ cz cU du cy df cR cS cU cL cS cJ cJ cU cM cL dc cG cQ cM cH dP cZ dc da cM du df dh cN cD cJ cV cS cO da cT dG cN dG cL da cK cL dL cW cO cL da cA dG cM du du cN cX cK dJ df cS du cN da cT du df cR cM cK cM du cV cH cX cL cS cZ dg cK da cY cL cQ cr cE cY du dJ cX dd du dc da dJ cO cT cy dP da dJ cY cJ cL cR cU du cN cN dc cQ dh cU da cN cS cY cZ cO cT cM cL cX cV df df da dI da cR dc dI cT cR cL dT dc cZ cM dJ cr cO cM cT da cY dh cL dJ dL cr cW cT da da dJ dg cM cM dI cR cJ dG dG cI du dL cT cA cM dL cJ du df cD cR cT cV dg cS cJ cY dG cX cN cT cQ cG cI cQ cZ cX cO cY dI cV cT db cS cX cQ dg dJ dc df cT dc dI cS cN cQ db cJ cX dJ cI cX df cH cQ cL du dG cY dc cS cY cN cK cQ cT dJ cM cT cX cQ dG du dc cR cJ cZ dh dG cT cR cT cI cJ cM cX dl cM cN du cL cU cY cS dc cL dH cM df cM cX cu cU cY cH cN cL cO cR cS cO cU cX dc da du cL cO dJ cL cR dc df cT cL cQ cZ dc cS cM cT du cJ dJ du cO dG cM cR dL dL cX cQ cO cL cJ cQ cR cK cS cu cT dG cV cS dc cN dc dJ cN cZ cX cQ cY dg cN cO cS cT cM cM dc da dc df cS cL dJ cN dd df cN cV cV cO cK cN dc cY dI cK cL cL dl cY du dc cY cN dd cS cR dc df da cO cS cV cY cQ cM cS cR cL cz cY cR da dd dc cK cV cQ cW cX cX dJ cS cN dG cS df cY cN cU df dg cJ dd dk cN cX dc cV dI du cY cY dc cY dh cM df dJ cV cT cM db cS dh cZ cR du du cX dJ dc cU du cY cR cN dh cT dh cR cX cJ dg dI cR du cV cY dk dJ cM cY df cJ cT cJ du cZ cN dI dI cS dJ cL dc cQ du cX cM cV df dJ cS du cT dI du cQ du cR cM dc cV dl cK cQ df df cN cL cJ cO cS cQ du cX cQ cT cS cR dc cS cR dd cJ cV du cR df dd cL dJ cI cX cQ cY cY df cN cK du dI cr cO cQ cY cK dI cX df cL dI cM cY du cQ du cM cQ cQ cR cM cY cK dc dc da cY df cJ dh dd du cI cZ cX cY df cR dd df cQ dJ df df cX cX cV da cV cQ cV dJ cY db du cL df cJ cN cR df cQ cO dh db dc cT cS du du dJ dJ db cY dg cL cW dd dg cN cJ cR df cX cY du cu cN cR cR dg dc cN dJ cY cY cV cG cM cO dg dI cQ dh dc cX cY dh dJ cY cV cN df cB dh dl dc dI dk dh cN dP cK cM du dc cM dd cN df cS du dI cH cS dJ da cY dl cV dd dc dh cV dd cO cM dc cN dJ du du dI di cR cM cN dk cR dJ cR cR dh cZ cN cJ dI cQ df du cV cQ cR cN dg df cJ cR dc da cR cM cX cQ dJ cX dg cX dg cV cM dc cR dL cM cT cR cV dc dJ df dI dI dc cO du cQ dJ cQ dc cV cY cV dc cR cV cN cS cN cM cV cR dc dI di cY cT du db cS cZ cL cN cS cM cT dc dJ cR dJ cX cW cY cX cR cQ dk dl cQ cX dl df dJ db dg dc cR df dI dh du cN dJ dI cM db cL df cT cS cV cV cY cJ dc df dc dd dd dJ cR di dc cR dh cV cQ cQ dd dJ cQ cM cO cS cN df dg du cJ cQ cM cL db db du dI dd dJ cR dk dI dh cO cQ cM dJ dI cN dL dI dI dc dJ dh dI df df cO cY dk cM du dI dc dJ dh cS cO dh dh cV dd dk cJ dJ cV cN cQ cR dI dl cY cV cN cJ cL cU cY df de db dc db dd cQ cQ di cI cR cR dI de cS dd cR cU dI dh dd dJ cX dd cZ du dg cN cV cS cQ dh dh cV du cM cY db da cY dk dc cR du de cT du dk cY dk cR dH db dd dp dI cM db dg cN dI df cN cQ dd cY db cR cX df dI dJ cQ cV dI cV cR db cV dJ du dJ dI dg cM cN cS cW cO cR cY dJ du dI cV dl cV dd cR dc dJ cL dg dk dh dc cR dg cR dc df dc dj cR cQ dl di cY dl dd de du cS cR dl cV du df cJ dd dd cV dJ dc cN du cV cR cY dd dk dg cS dk dl db dk db cV dc cL dc df dh db dc di dd df dk cT dk dd cR dJ cL dl dJ dk du cY cQ dc dI dI cM cV dc dk cY dJ dl cR dk dI dd du cM dh dg dl dk cQ dk dc dh cJ dj cR dI cV dj df dl de df dJ dg db du dI dd dc dl dJ cV dl dk cS dJ db dh cQ cM dc dh dc cN cQ dg di dI db dd dg cQ dd cM db di cM dg dg cX de dI cR cQ dI db dk dd cR cQ cM cQ cM de di dl db dI cN cR di cS dl dh cT df db dh db cM da dj cX cX dg db dc cX cQ cJ cY db cY df dp cR df cQ df dd dg dh cZ cY cV cR dl dk di df dc cN dl dI df df dh dh cX dh cR di cM dJ dI dh dl dj dp dg cM dh dJ cV df dd dh dl dh dg df db df di di cM db df dk db db dh cX dJ cV cV db cY dk cQ dh cX cY cV dj cI dd db dg dl dh dl cR cV cQ dc cR db cS dk dd dk dk cY cQ dc cR dd dJ cR di du cV dc dc cJ df dI dc cM dI dc cZ dd dk cM cV dI cY db dj cT cT dd cY dJ cT dk dJ cM cY dh df cN dl dd dj di dd dI dc dk dg cQ cR cJ dJ cM cT dI cQ dI db db cQ cY dJ du di dg cQ cQ di cR cY dg dd db di cV cQ dj cV dg dh dI dk dh dg cV cY dI de cV dg dn dg cY cO cV cY db db dd dI dk df dd dJ dc di db dd cY cN dg dd dI dk dh dc dh db db da cR cX dd dg dd dm dd df de cM dg dd cM cV dI dc du dk db di du cV cQ cY cS cQ dl df dh cQ db db cR dc dd db dI dJ cJ dm cY di de cV dd db cV db dj dh cQ de dI de dl dn cR cQ dd dg dd cY dc cY du cV dd dI dd cV dg dc cW dh dl dl cY df cY cY di dh cQ dh dI dJ cM cX dn cQ cJ dl cV cU di di cM dh dI db cV db dJ df dc dk dh dI dn df dd dh dh di cO cS cQ dk du dd df cV dI cM db cN dg cY df df dh cY cN dJ cY dI cY cQ dl cM cQ dl cY cK dl db dk dg cX dI cM dJ dj dl dh df dI dl dh dc dJ cX cM db db dI cY cU dc dI dJ dg dl cY cY cY dd cY cT cQ cL cQ db du dI cY dg cV dc cS dd dk dd cJ de dc dk cX di dI dJ dg cR dh cQ cY cQ dj dl cQ dl cV dI df cK di cN dJ cW cQ dJ di db di di cJ dI dh dc cV cR dd db cQ dc dh dj dd dk cX db dh dd dI dd cS cX dd dc cY cS dj cQ dk dm cM cT dc dl dh dJ df da du du dc du dg cI cR cR cV dJ di dd cQ dc df dd cR dI cS dc cR dq dh dl dd cR dh dc cY dp du dk cY dm dh de db dd dh dI dl dc dl di dg cR cV db dl cV dI dm cZ dm du dg df dd dg df dJ dc dg dl dj cY dc di cN cQ dd dk df dc cW cJ dl df dc cY di db cV dk dI cR cN cN cY cR cY cS dG cV dc dh df dc dJ dh dJ de cR cL dI db cQ cS dg cR dh cN dl dj dl cY cY dh dg du cY cR cV cz du dd cR di du du dh di dJ cX cN dg cQ cM cR db dJ df dh cQ dI dn dI dg dj dI cM cQ cR dh cY dk cI cz dh cV dd cX dj df df dI cS dk cR df cQ cV cU cV da cY dJ cV dk dk db cX cQ dk cO cT dl cQ dk dk dI dl du df db dn dc dh dI dI cR dh cG dg cJ cS cV cM di dc cV di dl dk cV cO df di cT db dI cK dl dI dl dk dh dk di cN cN cY dg dd cQ dl cL cR dI dl de db cQ cS dc dc dk dl cV dJ dJ dl df cV di dI dg dj du du di dJ dk cZ dg dj cY dI dl dn cT dJ cV du dI cS dd dJ dJ di dg dJ db cS cV cR dd db cT cY dI dI dh dh cJ cT dc cY dJ dg dd cQ dd cQ cQ cI cZ cV dd dg df cK dI cR cY dJ dk df dI cJ dh cO cX dc cV cQ dd dg cS dh cS dd cV cX cN dj cT dd cX dg dJ cY cY cQ cJ cR db cN df db dG cV dg cT cV cY cQ cY cQ cN df cY di dI dc db du dh dc dg cS dg cJ dI cQ cL db db df cR da dl du dh dk dj du dk dJ cB cX cX cX dh dI dg dc dk dk dl cY dm db dk du dl cS cQ cY dI dI cT cK cQ db cN dc cY dI cX dg du db du cN dc df dd dI dd cY dg cI dJ cX cY cV cV dI dk cM cQ dj cX dc dd dh dc cT cQ cY dd cM df db du cM dJ db cR dI dl dJ df cV cJ db df cO dG dd di dI dl du dh cN dg dd cR dk cN dd cV cY db cV df cY cL cT cX dd dG dJ cX cY cQ du cY cQ dl dJ dJ dh cJ dl dh dl dI cR cV cV df cY dJ dc cM dh de df db cR cV dg cJ cS du cN da dd cV dh du cV cM cX db cG df cS cQ cJ du dh dh du dd dc cM cQ cS cO du cR dJ cN cR cN cu df dL cM dn dc cR dh du cQ cO dL cV cL da dm cK db cV dg df cG cX cK dL de cN cT cV cR cY df cN dI cQ dL dh cJ cQ dh dc dd dJ dc cY dk cJ df dh cT cT df cY dg cT dc cR dJ dc cZ cY cL dg dJ cJ dI de cY cY cZ cY dl cL cW cQ cQ cY dg dJ cN dg cJ cS cR dI cV cY de cJ cT dJ cY cT cV cZ cO dc cM cJ dc dJ cL cL cV du dd cG cQ dk dI cJ cQ dg cL dh cN dj cR cV db dl cV cX cK cM cQ cS dc dG cT cS cV df dd cQ da cM cV cL cY cN cN cX cM cX dd cJ dJ cJ db du dk df cR cJ cL dg cM cV cU cr cS cV cS cT dJ cY cX cQ dh cR cX cY dc du cY cM di db cX cS cR dc cz cX cR du dd db du db cQ dl cL df dL dc dc di dJ df dI di df cV cV cS df dh dI da dc df dg dJ cO cQ dc df cV du cR dI db dl df cO dh cJ dn cT cJ cO df cU dl dI cR dl dc cV dh dg dg dg dd cX cZ cL dh dI dg cL df du cV dI cV df dH cU dI cT da cL dd cN dh du cO dJ df df cY dI cM cN cU dc cN dg cU cU dI dh df dI cR cI df dI cS cV cY dI cQ cV cM cY cQ cT dJ cQ cY dJ cS cV cX dh du cU cR dc db cM cY cY dc cY cS cX cO dh dI du cU dc cX dd db dG cO cU cX cL cM cU cT dc dL cT cX cM cO cM du cX cJ cQ cY df cY cO dI dc cJ dc cQ di cX cU dJ cN cU dc cS cM cS dh cQ dc db cL cT cM cJ du dG di cG cO da cV cQ cL du cV cQ du cY cW cY cT cX cQ dc cY dg cQ dc dh cO dd cQ cR cY dh cZ dL dl dc cK dk di dG cU df dl cR dl de cO cY df dI dk cV dJ df cR cY dm dJ cS cM cL cS cS cE cL du dd cT cL cX cN cL cV dc cN cL cR dI du cW di dI cM dc cO cQ dJ dh db cN cD df du dh cQ du cW cO cO dJ dl cX cO dj cX dg dc dh cL cO cY cN cY cV cT cN cV cM cE dg dJ cM dh cU dh dJ cM cS dG cR cN cO db du du cQ cX dd cQ cL dj cV dI cZ dc cS dg cS cS cZ cV cM cN dJ cJ cU df cV cT cZ cR cV cz df cQ cK du db cV cY du cM dd cQ cQ dl cO cN da dJ cM cA dl cD db dI di dh dh cL dg cu dJ cX cJ dn dh cV dk di cV dc dI dJ cV dI cu du cI cJ dI cR dg cY ct cX du df dd dR cU dP cY cr dJ cS dI cS dJ cR cK db du cs cV de cY cJ dJ cG du cW cY df dg du cR dj df cr cS dG cO cY cb cO cM cP dl cX cK cR cY cK dI da cQ dh cI dh cN cJ cS cr cI cD cO cX cN dG dc cX cQ dd dh dg da cQ cM du cK cB cZ cS cY cG cQ cX dd cK dl cT cu da cR dd dd dc cV cS dk cW cN da cX dI dI dc cM cT dI du cI db cO cM cQ cz cZ dc du du dL dm cD cV cU cS dG cG dL dG cE cQ di dJ cE cV cV cN cs cN cU cZ dG cU cT cu cS dc cO dL cR cN cM cD cD cS cw cT cR du du cT cX cR cA cL dG dl dI cV dL db cJ cO cJ cX dJ dJ cX cN cZ dh da cY cV du cQ cX cG cN dc df cD cX dJ cZ da du cQ cX di df dJ cI cT cT dI cR cW dJ df cL cr cL cS cJ cO cK cL cY cV cX cT dq de cu cJ cR cJ dJ cZ cK cO cM cz du cZ cU cs dJ dG dL cX cT cU cI dc cQ df dH cD dJ cz cV da cX cX cU df db df du df cQ du cU cD dk dh cT cJ dg cQ cM cK dc cJ dJ cM cN cO cK dl cG cR dJ dp cG dg dl cV dJ cX dJ du cZ cV cO cZ cO cD dd cM cT da du dc dL du da dk cK cV du dG cY di cM cT cK cA cS cN cV cM cS dd dj cS cL dJ cS cQ dh cN cQ dI cO dl cS cW cZ cX cX cV cR cU dI dJ dc cJ cU cT cV df cR cT cT dc cO dk cJ dJ du dI du du cR cz da cN cZ cD dT dd cR cJ da dJ cX cU dh dc dc dc cO cM cD cO dJ cV cJ cO cM cZ cY cJ cI dl cS df cJ cQ cV dh cN cM cM cJ cz cA cI df dd di cI cT da dk cT dJ cT cS df du cV cr da da df df cM cZ cN da dJ dG cO cL cN cX db dG da cL cS dI dh cM cY cT du cV cQ cM db cJ dJ cS du dH dg cO df du cV cr cM cM cQ cS dI cN da cW cQ di cU dI cK cR da de du dJ dJ dc dI dd dO dh cS cE cD cK du cM dJ dJ cO cD dI cK dL cL dI cQ cK cJ cA cW cM cS cR cT cN dJ cM dP cJ dG cu cN cV dP cU cW cZ dH cV dI cB cS cs df cu cI da dI df cN cJ cz df cH cO dL cR cV cS dG dI cO cV dJ cM cZ cX cU cU cG du da cL cM dK cO cY cT dJ cN cU cT cQ dg db cV cQ dc cH cZ cQ cE cD cT dc cB cM dG cU da cN dc cM cO cR cZ cK cU cT cZ cL cN dc cD cL cS cJ dG cD cM db cK cU dG cY cN cX cJ dL cr cO cD cJ cS cz cS cD dI du cR cM cZ cJ cT cV du cS df cX cY cZ du cR dL cT cN cS cM dG cG cR cL cT cM cY dJ cr cR cX cT cJ da cR cJ cL cX dT cz dH df db dG cZ cG dg cT dI cX cX cM cJ cD dG cQ cR dH du cV cO cT cM cO cQ dG cU cT dG cG cZ da cT cW du cD cL cs da cO cR cU cM cW cK du cr cU da cX cO cN cM cQ dG cN cT dJ dL cs cW cO dh cY dc dL cu cz cX df cZ cS cW cM cL cu da cr cZ df da dc dG cY du da cW dR dJ cY cL cK cW cK da df cR cV cX cQ df dI cY du cL cQ du cO cH cL cX dL db cN df cJ cG cX cK cT cX cY df cO cZ cC cI cK cS cQ cY cT df cM cM da cS da dh cS cu cV cr cT cW cM dG du cM cO cu du cU cN cM cY cZ cR cu dc dd da cX cI cD da dP dZ cY cH da cI da cV cD cX cU dI cO cT cO cK cY cS du cU dJ cX cN cS cZ cR cI cU dZ dL da dc cL cI cL cV dc cO cN cJ cT dJ cL cS cG da cR cY dc cM cM dG cW cY dL cM cX cX cS cT cX dc cR cu dL cH dL cG dL cI cI cS cX cU cS du cS dP cI cJ dc dI cr dG cX cR cL cy cK cN cD cZ cO cN dJ cC cL cK cX cU cr dI cz cD cT cO cQ dJ cW cA cX cH dG cS df cM cz cS cR du cA cL dk cT cL cr cO dd cW cW cH cT cL cT cD cG dL cL cN dd cO cZ cJ cJ cT cL cO cE cX cL cJ cu cJ du dG cZ dG cR cX cD dc cW cM da cz cL cI cN dJ du cS dJ cR cN cV cQ cX dH dG da cU dG cV cM cr cV dL dJ da dc cH cL cz du da cM cL cH df cZ da cO cu du cG cS cZ dh cN dJ cM dJ cU cW cY cR df cI cN dJ cD cX cT cX cM cy dL cD cJ dJ dc cI dG cL cL cK dc cU cu cJ cK cQ cL cY cW dL cJ cU cI cR cL cJ cR cR cG dL cX cS du cG dL cz cS cM cK cY cJ cS cM cG da df cT cU cW cO cL cR cN cS cZ dc di cJ cM dH cT df cs dI cM dc cL cy cR dR cK cX cE cL cM cI cR cM cX cM cM dL cA cJ cN dG cZ cr cr cT da cJ cJ dJ dH cZ dL cU dL cS dL cN cM cJ cM cG da cZ da cG cS dc cM dL cU cV cS cX dc cS du cM dJ cL dH cZ cu cT cU da cZ cU dG cM dJ du cO cS da dH cO cS cV cY cK cT dc cV cO cQ cY df cT dc cO cJ cN cZ cX cT dT dT cJ cO dc cK cO dl cZ cH cJ dc cS dJ dk cK cN cS dc cW db cQ cR cY cW cL da cH cX cR cJ cQ cQ dH dc cZ du df da dc cS cT cI cO cu cX da dc cO cX cT cZ cT cz cX cY cU cX cQ cS dg cu cT dX dL cS cX cJ cG dJ cV dH cX cT dJ cX cJ cY cT cS cV cR cU dL cJ cu cN cZ cN cS dh dG du dX dI cT cV dI dg cD dI cT cI cJ cz da df cO dJ dI cS cU cQ cS cY cM dG cG cZ cN dh cN cs cG cT dc cX cY cz dP cW dd cH dJ cL cQ da dl cL cS dI cJ dk cQ cU cN cN du dT db cV cX cM cz cG cB dJ cO cu cP cJ cQ cK dJ cO da cS cO cW cM cO df cs cO cY cQ cX cQ cU cD cR cW cX cS dG cO cJ cO du dJ cZ cZ cR cO cM cO cM dG cR dc cT cI dL da cG cT cT da cL cQ cT dJ ck cK dG du cR cS cR da cR cV df dG cs cT du du cX cr df cZ cw dJ cL cZ da cT du cI cG cV ck dd cJ cR cT df da cz cX cV cL dl cR cs dc cL cZ cW df du dI du dJ cZ cH cU cV cJ dc cT da cM du cO dI cX cz cS cR cT cs cQ cZ cR cN cG cI cK db cN da cN cV cM cX cL cN cL cY cJ cR dc cL du cT cN cO da cR cT dd cT dd cJ cO cT cZ dI cM cX cV cT cX cN cO dd cX cV cy cZ cR du cV dL dJ cL cr cQ cN dJ cX cX cX df cQ df da cL cM du cZ cX cX cS da cY cR cu dL cK df dJ cS cW dJ cM cX cO cM cX da cD cX cM cO dG cR cR cD cV cr cS cJ cT dK cX cU dc cZ cS cV cU cs dc cV cZ cN dL da cN cY cK cM cY cM dJ dJ cJ cN dL cY cz cY cS cX dJ cM cT cJ cH cJ dc cK cL cU cs du cK cX cJ cM dH cM cu dG cU cH cO cK cM cB da dH cX cR cW cI cN cJ cS cG cu ck cM da cI cR cW dc cY cO cz cU cY cM dI cZ df cO cK da dG cO cY cL dG cT cI cU cU cX cD cS cY cS cS cJ cI du cu cJ cW cT cX cZ cK cS cL cG dL dc cE du cL dc cz dc cS cM cu dJ dP cL cU cR du cY cW cI cL cI cX cQ cO cD cT dG cX cS cL dc cr cN da dJ dJ cJ cW cD cR cJ cU cM cQ cT cX df cD dg cT cZ cT cU cO cL cI cV cN cH cH cJ cT cO cV du dc cS cI cQ cJ dc cV cH cT cT df dT cV cO cK cJ cQ cN cC cR cI cX cN cZ cU cX cU cw cS cL cN cZ du du cX cJ df cV dc cV cR cT cN cS cX cM cR cT cV cT cY cL dd cZ cZ dG dJ cJ dJ da cM cO cG dG cu cQ cX cM cN cR cY cZ cX cJ cS cV cL df cH df cU cN dG cS cO cX du cN cr dI cL cz cD da cI dI dL cN dc cI cX dT cZ cM cJ cL dG cM cS cR cN cT cU cY cX df cY cO dc cR cZ cS da du dJ cT cN cD cK cS cT cu cN da cO dG cX da ck cG cS cX cT cV cJ cs cG da cO cW cD cX cT dc cO cX cX cZ cV dP cW cr cZ cu cX cK cR dk cN cL cy cN cz dG cu cJ dG da cT cL dJ cK cS cS dH cO cN cZ cV dG da dG du cS cU df cM cr da cI cW cV cW cU cI cL cU dL cR cZ cL cU cJ cM cZ cz cK du cX cy cY cU cG cu cL cL dG dG cK cU cz cN da cL cL cX cN cJ dP cz cI cT cG cK cT cT cz du dJ cO cO cS cz cU du dJ da dG cN da cW cZ cZ cW cw cS cO cQ cU cN cX cr cN cS cN dG cz cR cO cw dG cN cN cW du du cR cA cU dJ dc cL db dG cU cL cW df cL dG cr cS dL cz cU du dG dG dG cz cT cO du cL cu cU cG cs cI cW cy cD dG dL cK cW cS cN cN cA cJ cI cM cD da cN cG cG cU cT cU cM cU du cQ cL cR df cK dG cJ cs cJ cQ cL cN cT dG dG dJ dR cK cJ dG cM cN cI cN du dk cU cU cS dJ cM da cT cW df cN cN cQ cZ dJ cR cU cR dG cZ cT cZ da cG cW cO cX cz cS cQ cV cQ cy cU df cS cX cN dd dc cD cJ du cX dL cz dg cV cO dL cJ dJ dJ cJ cN cL cX df cN cN dh cN dl dc du cU cL cA cN cC db cJ cM dL cL cT cX cR dT cY cT cK dc cM cN cL cS dJ du cX cW du cI cX cZ du dJ dJ cS cR cZ dc dL cL da db cY cT cz cS dk cM cR cX cX dc cX cL cX cQ dI cS cZ cL cI dc cV cU cU cT du cz cX cX cL cR dc cN cR cX cO cS cR cY cL cZ dJ cJ cT cS cX cW cR dG cX cY df cM da dG cM cL dJ cL cR cU dc cS cG cU cU cN dc dc cW cu cG cR cL cO cK dL cN da cQ cJ cR cX cR cX dL da cT dc cO cR dL cS cO cZ cM cM cM cL dJ cY cZ cJ cD da cJ cG cT cT cO cI cY cG dJ du cI cQ cM dJ cW dd cI dJ df cX cr dT cM cD cO cL dG cK cW cV dI dL dJ da cI cO du cU cI cR cH cK cU cs cT da df dT cU cR da cU dc df du cr cU cL cK cT cz cS cJ cI cM cz cD cM cS dG cW cT cK cS cT dL df cD cA cJ cO cK dP cE cL dc cV cT dL dc cO cJ cr dG cz cK dc cH cI cr cW dc dG cJ cX cN cS dJ dd cS dh cN cr dH cL cX dh dI cQ dd cW cJ cz cO cI cX cN cY cQ cL cY cS du dJ cR cW cG cN cS cI df cS cK cL cW dd cS da cX cW cK cK cM cM cK cI cO du cu cU cD cR du cS cV cS cI cM cQ cR du cI cU cT cT dc dG cT dG cM du cR du dJ cJ dK cR cS cG dG dI cs cT cL cS cL dc df da cR cO cS du cW cV cL cG cL cN cS dI dH cR cO cO cJ dJ dG cS cW cL cz cs cG cO cN da cS cV cW cS cR cM dc cN cN dJ cX da du dc cJ dG cM cS cM du cX cM cJ cT dG cJ cX cO dc cZ dh cQ cL dH dJ cM dP da cz cU cU cJ dG dI cR cX cT cV dc cO dG cO cX cU cM cI cD cV cT cR cJ cX du cO cJ cZ cK cI du cO cJ cM cV cK dI cU cK du dL dG cU dJ cz cS dJ cM cT cU cT cU cZ dI cD cK cM dh cr da da cM dL cK da cS cR cI cG cS cJ cJ cX cJ cV cV cN cR cJ cM dg cM dG cN dL cY cN cM dG cM cO cE cD cJ cU cs dd dG cR cV cM cX cX cW cS cT cI cI cX cN cU cL cT dG da dJ cV dc dT dI cZ cK dh da cY cO cU ck cM cN cE cR cM cX da ck cL cL cZ da dJ cR cY cR cJ dI cI cO cz cY cu cs dJ cY du cX cG cK dG cZ cK cX cz dc dL cW cM dG du cX cZ cZ cr cU da cE cY da du cS cT dG cT cr cY du cK cT cI cT dG cD cI dG du cI cJ cU cX cK cr dd cS dc cW cW cJ cz cM cJ cJ cr du cu cZ dG cJ cR da cW cz du cI cS cN cN dI cS cD cX da cs cV cS cN cX cr cS cW dL cX cX cO da cG dL cG cK cz da cU cT cz cN df du cT dG cZ cT cX cX cM cU cL cz cz dJ cN cO cR cT cH cX cZ cr cJ dL cN dG cU cM du dG cL cH cZ da cO cK cD cT cO cW cS cT du cR du cT cr cM cJ cJ cT cu cU cL dL db cY cK cI cN cL cV cR cX cA cX dI cQ cJ dJ cT cL cR cK cR dJ cA cR cU cz cX cQ da cJ cH cJ cR dI dc cU dL cZ cJ cz du cW cL cJ cI cL cS dd cL cM cK cH cY dJ cU cX cR dJ cI cK cZ cJ cu cA cz cM da cs cJ du cY cW cJ cQ cM cY cK du cO cD cM cK dc cN cQ cS cG cO dc cM cN cO cu cV cN cX cY dl cM cW cQ cK dJ cO cN cV cM dJ dJ cW cR cW cR cU cS cQ dI cN cr cJ dJ cI cJ cM cX cT cX cM cX cY cO cR dI cL da cR cS dc cM cV dG cT cT dJ cM cX cU du db cO dc dG cS cQ cM cN cI cY cS dJ cY dc cQ cW dh da dg cU cM da cT df da da cY cV df dG df cJ cV cI cX cL cU du cL cM cM cT db dJ cR dd dJ cT cL cJ cM da cL dh cX cN cM dI cT cM cK dJ cJ cV cW df cR dI cW cO cW dh cV cT du cT cR df cK cS dP cR cz cS dd cO cT df cN cZ du cU du cN cM cQ cX cO cS cQ cX dd cK dI dh cM cQ cX cZ dI cN cV cO cN cN du cL cX cK cD cM df cQ da cI cR cU dH du dc dI cR cS df cN cS cM cO cT da cX cL cQ cz dL cJ cM dL dG db cS cU cV cV df cS dL cJ cR cW cR cY dd cN cX dh da cS cX du cV cM cT du cO cV cz cR cU dI df cR du cS du cX cQ dc cR cz cO du du dJ cJ cX dJ df cO cQ dG cZ cr du dl cL cY cL cV cO cZ cQ cU cS cK cI cL du cO cI cW dh cS cX cZ cT cR cQ du cM dI da cN cN da cR dd du cJ cV cJ cJ cN cz cQ cX cT cS da cH cR df du cM cK du cM cH cN cJ cJ cM df dP cW cR cS cQ cV cR cV dG dG cJ cV dc da cu da cK df cY du cO dc cI dJ df cU cS dg cR du df dc du cS dH cN dc cJ cS dc dc cO dc cY db cJ cS cN dl cM cY cO cV cY du cu dJ cX cR cX dc cZ cW cu cK cL dc du cL db du cJ cO cJ du cS cJ cL df dg cX cU cX cW cV cD cN cY cR cS cS dc dc cS cU dh cX cU cT da df cU cT cN cU cN du cS cX cN cL cV cR du cK cX cS di df cX cM du cQ dI cX cX cL cX dh cT dI cR cJ cX dG dh cZ dJ cM df cT du dJ du cT cV dJ dJ cS cT dc cI cY cX du dd cH cJ cs cU cT cT cQ cR cN dc cV du cQ du dc da cM cz cW cX cX cS dc cJ cM dd dG df cS cY cJ cY dh cV cM cX cZ df dJ cI cI cX cQ cN cz cJ cM cY dc da cN cQ cE cZ cZ cS dc dJ cK dh cN cK cX cR da cT cX cR db cR dG cX cS cS dI cZ dI cN cu cz cL cK cT cY cX cY cM cN dc cS du cN dJ cJ cS df cQ du dc cY du cY dI cY cM dc cQ cX cR db dc dJ cO cK cL cV dc cZ dl dI dh cH cR cM dJ cM cU cN cR cR cM cX dJ cT cO cV cJ du cV dd cO dc cN dI cD cO dd dh db dh cX cN cS cN cJ cX cR cN cJ cJ cL du cY cL cQ cR dj cR cM cX cX dJ cJ dJ df cM cN cQ cL cR cW dc dc cM cX dI cR cQ cO cD cS cN cR du dJ cY cT dc cO dG cS cU cN cZ cL df cV cR cY cW cW cQ cV cK dc cR cI cN cY cS cQ cJ cS cM cR df cQ cR cY cM dh cU cI dj cM cS dI dJ cU dd cX du cN cO cV dI cJ dg dl cS df cN cR dJ cN cX dl dc dc cM db dJ cM cS cU cO cS dc dJ dJ cM dJ cM dd cS cZ dc cS dJ cX cK cV cQ df cK cR dg cN du dJ cQ dc du cX df cW du cT cz cR cX cR dJ dc da cZ dc cO du dc db cN cM dJ dJ cS cX dd cQ cV dl dg cY cM du cX da cV du cU dI cR dI dd cV cY dc du cS dI dd cV cT cz dI dG du dJ cJ dc cY cY cM dk cY dl dL cY da cT dI cR cQ dd cQ dh cR cY dI cR cX cS dl cU dc cV cT cM da df dc cY cN df dd cY cJ cV dI dc dc cQ df cR df cO dg du dJ db cQ dJ dc cX cV cN du df cR dh cQ cX dI dI cX cQ cU cT dj dI cU dg cL dG cN db db df du cR dh dd dl du dk db dm cX dd df dc dh dh cN cR dc cL dj db dJ cZ cQ dI du cR cY cV cr dJ dl df dJ df dg cR df dk dI cK dh dg db dd cQ cM cN dk df cQ de cQ du dJ cM cR cN dh cN cJ cM dJ cR dc cS dh cG cL dd cQ cJ cR dk cN df cN cT dJ cX dI cL dg dI cL cR df cQ db cJ cV cV dJ cV cV cW cQ du cM cT cN cR dk cY dl dg dh db du cQ dp cJ cT cT di dl cQ dI cV db db dd dd dJ dJ db cV dd cZ cX dc cR dg cM cY dk cU cR db dJ dl df db dd cO da cV dd cO dd dc cV dl cY cY du cS dJ do dk dd cX da dI cR cT cN dc dd dl da dl df dd dJ dc cV df di cM dh cV dl db cJ dI df du cJ cX cL dg du cT dd dI da dj dG cY cY cU dg dn cX cR dh cM dl cT dg df dg cZ dI dh cQ cN cR df du dI cQ dh cV dk dJ dj dk dG dh cQ cR cQ dJ cM du cV dj cX dh dg cV dj dd dk cL cV dJ dd cY cT dI dd dI dh cT cV dp cX du cM cY dI dc db cM cY dd de du cV db dg db du cY df dh da cV du cY dG dg dc df dc cX dh dI cX du dk dI cZ cV dc cN cQ cQ cT dc db cL dJ df dl dk cM dh cV cR cJ dd df dg du cL cN cR cV cV cQ dd dm dJ cR cR dl df dJ dh cS cM cM cR df cS db cO dl cS cO db dh cS dc dI cQ dd dj cM cR cV cV dc dl cQ dJ cO cO df du dc df cY dI cV df cL cQ cN dd df cN dh dc df cS dJ cM du dJ dh dh db cV dJ da dd dd cY db df dI di de cM dg dc dd dd cS dI dJ cX cM db cQ dl cL dJ cY cX cL cQ df cS dh cM cL cZ cV du dd cV cQ cJ de dh dl dI dh df dd cY cZ dg cV dI dd cN dc db di dk cL dj cN du cY cR dk dJ cV dI dI cR db dJ dl dc df dk dj cM cz dm cY du di dd da cS dh cQ cY cN cN cV dl cS cM dg cV dc cQ di dl cN cQ cY cQ cV dJ du db cN cT dl dc cR dI dc cQ cQ cR db dI cL df df dI cX cN dl cQ dd cJ cR cY cL dg dc cR dg dh cU cQ db cQ dc dd db dg cQ dc dc dg cY dJ cQ dk cY cV dI cS dk dl db db dI dd cY dk df dc cQ cY db dI df cX cX dI dc dJ cO cM cV de cO dh dg dh cT dh dk dh cR cQ du cQ df dI dc cY di cR dd cY db cT de dl cN cY cX cV df dI df dg di dk de df cI cO df cR cu cY cM da dJ cO cY dI dg cN du df cX dg dc dI dd cM dd dd df cY dd cY du cV dl du dI df cV dd cR dh df cV dI cQ cV dJ dc dl du cQ dc dG cS cL dI du db dJ dd dI df cX cR dm dc dh cV cY dg dI cX dh dh dn cX cR cQ cM cV cX dk du dm cX cS dc db dg dc cQ cQ dc cJ dd db dJ dh dj cX df db dl cS dI cS cR cI dl di df cY cR dI dc dI cM cN dg cQ cR cX cN df du db dh cY dh dd cS dI cS cR dh dJ dk cY cS db dI du cV dg cM cR cQ cN cY dg cL df cQ dm dh dg dj cO cR dh dg dc cM cL dj df cT dJ cR db dg dj dk dJ dg cY dh di df cN cY dh dI df cU dg dc dJ du dc cQ dd cY da dd dc dh dl cR dJ cV db cM dJ dd dJ cV du cS df cX cY cQ cN cJ cY dh dI df df cZ cG du dh cU dc df dg cJ db dc dl dI cY cS cV du dh cY dc dh cQ cX dd du dh df cV cR dd dc cQ cY cN dd dh dl cL cR cV du cX db dI dc cX cR dc cL du cV db cN cK cM dm cO cY du dn df cY du dg cM dI du cX db cJ cS cJ dc cS cV cM du cS cI dd dI cJ du cX dd cZ db dJ cO dJ cR cX cz cR dI du di cX dh dL du df cS cM cS dd cV cY di cR cY cV df de dI dh dg cY dh dh dd db dd dd dG cQ cX cM cT cY cQ cV cQ db dj cQ db cR dh dJ dr du cN cM du du cQ dJ du cJ cN cQ cX du de dI cS dJ df dc cQ cY dI cJ dd dh df dJ cU dn cY da cO cV dI cM dg cR cY dI dc cZ dc cQ dI dg cR dI dl dg dL dI dl cX cV dI cM cR dd dd cs cQ cT dJ dg du db cX cL cM dJ dh dk cM di df cV dk cQ cM cX cV cQ dc cY dI dJ cY cL di cS da cX di cM dJ da df dJ dJ cL dI cY da dI df db cQ dJ db dh df dd cM dg dJ db dk dI dI cX dh cJ db cV cY cV du di dc dh dd du cQ du dh dr cT cQ dg df cN dI cM dj db dh dJ df dg dJ cJ cX cY cN cY cR dm cT db cJ cM df cY df cQ cY dc dd cV da cQ cX dj db cY db cQ cN dh db cV cR di dl df db db cZ db cR dh cY cV cY dh df cV cV db dm dj dg cY cY cQ cL cZ dc cZ cV dl dI dn cM du df dI dh dI dn dd cQ cV df cV dp cV cQ dc dh cX cR dk du df cY cV cQ du du cN cY dI cQ dc dh db cQ dc cR du cG dI cV du cL dl cS cS dl cJ dJ dJ dc db cM dk dI df dd dk dJ dg dc du cN cS cZ cD dd cV dg de cN dg dJ dk cN dI dc dj cQ cS cJ du cQ db cM dd cJ cO cR cN dc dI dn dd cV cU dn cM dg cQ cG dJ dJ dc dd cR du da dc ct cQ dc dI dI dh cX cQ cM da df db cJ dd dg cY dh cM cS dl cY dI du db cV df da cM cK db cN dJ di dl cR db du dJ dd dh cO dd cS cQ dh cR dd dc dk cV cN cQ dl dh cR dj dl dJ cJ db dI dd cV du dj dm cS du dJ dk cQ dl df cV dk de dh du cX cQ dI dI df dg dJ df cX dc dc dJ dd dg dm cU cV db dc cX dk df dJ db dj df dI df cY dg cL cN dJ cX cS cN dl dq dI cX dg du cQ cQ cT dI cY dg dk cQ dn cQ dd dl dd dI cR df dh dj dJ cQ de dg dq db dJ cQ cR cV cR dk di cU dc dd dJ dH dI dg dJ dc di df cS dh cS dI cX cT dc dk dm di cJ du dh dc cQ dd cV dd dc dc dI dI de cR df cR cQ cQ di dI cM dk cY dh cR dc dh dm cX dd dg dk dJ df cL dg cU dI dg df dh dJ db cL dl dh dh cV dd dJ cY dh dg dk cX dJ cO dJ dg dJ cL du df dg dJ dh cR cJ cL dg cQ de dJ db cY cS df cQ cQ dJ di cR di cR du du dg di cR cQ dg dk df dJ cX dJ df cX cV df dh cN cS dJ cR cY dh dJ cQ dd cO di cR cJ cV cW df du cR db dI cS cR cQ dc dk cN de cQ du dJ cT dd dI dl dc dm dJ cz cM dJ cR dg dk cM cL cY cY dc cJ cu dI du dj df cY dJ dI cJ cY cY cR df cM cQ dl db di dJ cV dc cV db dj dh cN dI dc dd du cX cS cX dh cX di cQ df cI db de cN dl da dJ cQ dh cS cM cQ dG cY de cT dJ cV cz dc cT cN dk df cV cX dd cS cT dJ dd du dd cX cV cz dd dp du cX cX de dI cY du cY dk dJ dI df dl dc dh dj dk dd cX dI dd cJ cV cQ df dm dd dI cS db dd cZ cV cJ dh db dg dl dJ dc dI cK dh cL cO db df dd dc cQ dl cX cQ dc dc cQ dq cN df cO db dd dd du df cY dh cS dI cS dd dg cY cQ cN dc cN cR dI di cQ dJ cN dJ dj da dd dg cM dl cJ dI dd dI cS di cN cT cT dl df dg dc df dh cX dI du dc dJ dl cQ dc dh dl cN dJ dh dJ cr dj dJ di cY dc dc cN dJ db db dk cS cR db dk cS cY da cV cQ dg cU db dp du dj cY cV dg dh cU dd cR dd dI cS cV dh cY dc dl de dl cL db cS cQ cV dI cM cV cY dq da cL dg cQ df cX cV cJ db cN db df db cR dI du cY cM dI dl dL dk dc cS cN cS cM dk df dI dg cY dd cQ dI dJ dl cM cR df dG du cJ cN dc cU cQ cM cX dG cM di dH cM dk dJ cR di cV cY cY cL cT cL cV da dh dm cY du cY cT cY dI cU dI du df cY dk cM dl dh de df dh df cR cM di cR dd cT dg cQ dk dh dk dg cQ dh cX db de df df df di du cO dd dk cQ df cQ cY dh de dI du du cV dg dI cQ dk cJ dg df dj dJ cJ db cM dl cr dl cY cV dd dh dI dd cK dd cV dn cH dg cS cV dl cV cO cV de dJ cZ db cL dc dc cN dk dk cM cM db dg db dI cV cQ da dJ df cU cW du dj dg cu dh cY dd cY df cT cY dq df dg cM cX dI cX cR cM df du cQ dc dh cN dh cT cM dl dJ cR dc dj cV dJ cX dk dJ dI cY dh du cM cX cV du dI dJ df du dd cS db cQ dh cW dc cY df dG dc cR cM dd dd cR dd dd cL cM cX dc dd cO dP cN dd cY dI cI cX df db cL db cK cT dh du cY cO dl cY cR dh db dd dP dk dJ dl cT dl df dl cM da dg dc di dg cV dI de dJ cU dl cM dk dk cY dd cV di dg dl cQ dm du db dj cM db cT dd dI cQ dd cY cL dk cT dk dI cL dJ cZ dc cL dc dj cR di dc cV db cQ cJ db cQ dI df db cY dl cQ cR dk de dh dl dH db db df df cQ dm cY dc dh db cN db cS dg df cQ cY dp cM db di cN dk cY cQ db dd dc dh cQ db db dg dJ dg cM cJ dc cT cS dj dJ df dl dp cN cU cX dI dn cY dj cW dc dl dj cI cJ cJ dk dI cQ dg dI cV cX cV di dk da dh cL cQ dc cR dI dG di df dm dg dl dl dc dl cQ dh dk dJ cN dJ dd du cL cV de dd di di di df cQ df cS cY cQ dn dd dl dk db cN db dd cR dc di dm cX cz cQ de dj dk db dg cY dg cR dk cQ df df dd cT cY cY cQ db cQ db db dc dk dk dp di du cT cQ di dd cX dI dm cQ dm cV dd dl di dl dl dj cQ dk db dh df dg cY cR cT di dj dd dJ dh dm cQ dd do dI dh cV dc cS cQ cQ df dj dh dg dk dJ cQ dd dk cM dp cV dd de dI dl dg dJ db db cN cS dq dI dk ds dl cV dJ dj di cM cY dl dl df df cY di df cV cS dh dg cR cT dn di de cQ cO de cY dc dI df dk cX dh cM cM dc df dj cQ dc da de dh du di dg dk du cQ di dI di dk cR df dj cR df cV cM dj dm cV du cT dd de cV cY cQ dI cQ dh dh dc dd cM cO cr dg dh dd dI cN cX df dd cQ de cL db dg cS db dJ dh db dp cT di cM dc df dd df di dh de dd dh cV cV cQ db dh dc dd cQ dl cN dq cN dk de dk du dl du dm dJ dn dJ cN dl dp dj dc cZ dJ di dd de dl dl cz df db du dq dg dl de du dj cV cM dd cY di cY df do dh cR df dI dI dJ cM dd cR dJ dm cQ do dd dl cV dI dk dI du dg dk dg dg dh df dh cY dk dI dm di cM do dh dd dl dk dd dk cQ cV dm cT cM cY dg du df di cM dd cM cV cZ cL dg cQ cA cR dL cO dc df cV cM cJ dn dj cY cQ dj db cV cV cQ dk dj cR dd cZ du de cS di dq de db db cu dc cQ cR dp dl dh dk df dl dJ du cT dh cX dh db di cY dl ds dI dI cY cQ cQ cS cV dI du dm cT db dk dI df cS dg dl dk cS db dh cJ dJ dJ cS db db db cY cQ dJ cV db de cM dh dJ dc dm cN df cS de cM db dc dI de cL de db cY cY dk cY dg di dn dI dm dn cQ cO dg dh dh dd cJ cX dl cJ dh di do cL cZ dp db cV dJ dh cX dj dm dd cY dl dJ di dh du dk dh dn df cV cJ dg dg dg dI cY cR dg df dk cL dI dd di dk cJ di dI cS dJ dI df dg du dh dg cR df dp db dl dh dg cY dJ de cR dh dd dn du cL cQ dh dc dg cQ cM de dg cY cV dk db db cR di dI db dk dh dg dg dj dJ cY du dJ cV di dJ db db dd df dI dl da cQ de dg cR du dc cN cR df dp cS cY cX df cV cX cY dJ df dg dl dj dc dp dd db dl cR dg df cR cX dI dh dh dl cQ cV cO df di df cQ df do dj dJ db dh cU db cQ cQ cQ dl cY di dg de dI cQ db dh cL cM cM dh dh dk dh dI dd cY dj df dl cR cM cT dk cY di di dk dc dg dg cS db dh dJ cY dl cY dj cT dg do dd dd dl dI cQ da dh dk cQ cY do dh di dg dh df dI cQ dj dh dJ cY df dh dc dl dp cU cQ de dJ db dd dI cJ cQ dd dh cX di de dj df dI dI db dk dj cN dI df cQ dm cV cL dd cM cY dp cY dh dh df cV dm cX da dc db de db dp dI dm dp dg dm df cQ dl dm dl du cQ di cQ df dk dk dl dI dg du dJ dg dd du dn di cX dj di db de dJ dd di cu dh dI di da df cI dh de dk db df dg dg dg db cQ de dJ cV dG cQ dl dl cR dj dl cN dI db cT db dc db cU dj db cQ dh dJ cP df dI df cR db dI dh df cV dn dc cV dd dp cN dp cV dl dg cY dj dk dg dm dI dk df di dI dk du dc do du dd dg cV do dk cV dc dI cL dk cT cY cN cV dk db df do cO cS df dk cY dJ du cV dh cO dl dh dl dp cQ cV dd cY de cY dG cV dg dd dI cQ dn cQ cY dl dg cY dI dn ds dh dk cR dg cQ db dc dh dq dc dh cQ dn dj db dl df cY cV dI dq dl dk dI cM db dj dI di cY dl cQ dd dk dd dh dl db dj cJ cS cY dq dk dj dl dd cV cM du dr dd dd dI cQ dk du cU dj cY dm cQ dj dg dI cY cY dI de cQ db de cQ dI dh dj dJ de cQ cV dj cM cQ db du cK cQ du cY dk dg di dl df df cR da di dh dI dc dc cQ dI dg cQ cQ cQ dd cQ df cU du dd cV di du cT dl cN dc cR cJ du cV cM dh cV di dg df dh dj cV dd dI db cV dI dJ dd dJ cR dg df cZ dj dI dh dd ds dj cQ dI dJ dg cR di dn cV cX dc db dJ di dq cV dh dk dJ dc dJ dc cS cL dc cQ dJ dc dd dj dg dq df cT dj dI db df dl dc cY dm db cY di dq dI dk cX dc du cI dI dI dI dc di dI dg cM dI cW df cV db dl dl cX dh di dI dh cN cY cY dc cM dp dg cY cN cQ cJ de dh dP dI dJ cQ cL cM dj dJ cT cV dk de cX cJ cR dm dk cR du cY dd dk dI dk cX cY cY di df dc dp cM cQ df dh cJ cV df dl dl dI dk dI dI dd dh dh dg dn de du df dJ du cY cY dg dl cV dd cY dd dh dj dg di cQ db cQ dI cQ dd cM dh cV dl dg cQ dc df df di dl dh cI df df df cN dh cX cV cM cY do dl di db dk dj cR dJ dd cS db dk dm dh cT dm cQ cV dI cN cL dI de cY cX dg dc de cM cW dJ dc cX cY cQ di di cJ dh db dJ dk cT cN dl dJ cW dk dk du dd cV cR cO cR cY cX cS du cQ dI cX dl cS cT dd dh dI cN dp dh cQ cR cY dG cX cR dl dc cL cW cM df da cQ cS df dg cY dg dj cS cM cR dI cY cQ df cX cV dl cM dg dc dc cY cV df cV cY dI cJ cM dJ db du dd dh cV cR dh cN dk dI cY dc dh cV dc db dk cV dJ dI dh dI cG cQ cM cM du cR dc dl cY dd cV df dl dd cY cN dd df du dg dc cQ cU df cV de dJ di dl cV cU dd cL dl cO dd dd cK db dI dl cO cX dd dc dl cS dd cY dg dJ df cQ dg db dl dI cJ cJ dl dh df dd dI cY dg cL cz da dI cR df dh dJ cR dl dg dc dI cS dd dj dl dd dh cQ dd dI di dh cL cY dl de dI cM cM cO db cS dl cT dj cQ cN df cG cY df dk cY dl cR de cQ db cY dg cM cV cY cV df dm dd cY da cY cR dJ cN dj dc di dn cO dh cY cO dk dl cY cR dc di du cS cR cQ dd dd di db cX dj dk dL cT du cN df cQ cY cR da cV cN df dJ di db dg dd db cM cY cS cV cM cM df cR cR dh dJ da dd cS dI dd dg cM db cS dJ du df cX cT dg da cV dI df dd cQ cX dd cJ cQ cY cJ dd dJ cR cQ dd cX cV de dI db du cQ dc dI cN dk dj dI cG dc dh dG cQ dh df dh dI cQ dp cE dl cQ de df cS dh dg dc cX dJ cY cL cZ cQ dJ cL cQ cV cK cX cM dh db dc cU cS cR cQ dh df dh dd cQ da dJ cz dl cS cO dh cR cY cR dI de cS cZ db dd cR dI dg cZ db db cV dk cL dm dJ dJ dI cV di cN du dI cR cR db cT dd dg cX dJ cM dc cX cX dk cS di cV df dd cT df cR di dh dc dk cQ dd cR dJ cK cV du cQ dI cR cX df dd cM dq cQ df dI cM cS cL cQ df da cL dm cR dc cY cR cM cQ cO cV dd dl dk du cX cU dJ du dJ cR dj cV cY dl dm dJ cK cX dI dJ du db cM cQ dk cN db du dd dg dc df di df cT cM dd cV cY cO du cR df dJ cR cQ dj da db dI df cQ cL dh dc dk dd di dc dd dj cY cY du cQ cR dI db dh dJ cN cI cR cV cX dd cS cR cK cQ dg cR cR cY cT dJ cY dg df dJ du du db cQ cs cJ dc cQ db cz df db dg dJ cN df dd cV dm db da db du cV dk dc dc cM dc db cY df df cN cQ cJ cQ cY cX dk cI cQ cS dk dd cR cN dI cY cJ cL di cV dc cQ cY dc dI dc cG dk cS cY cV cX cO dI du cX dJ dg cJ dc cS cR cX cS dk dh cM da cN dG cR cS dI cs cZ cO cI dI dG dI du db df cN cQ du cM cT dc db db cT cN du dh cM cU cO cJ cR cK cV dJ dP dI dJ db cR dJ cO cR cL cY da db cV dg cM cZ cJ cN cN cN cr dc cY cM cU cY dI cH du cQ cT dl cR cM cV du cY dd dc cV cN cz cY cU di dJ cX cN dJ dh du dL da cS cX dG cM cZ du dG cX cS cM cQ cE cI cV da df dl df du dL df cG dH cQ cV cZ cY cX cT df df cJ dh dJ da dc dG du cY cS cY cO dk db cV cV cY cU cN df cu cu dg cK du cR cT cI df dG dh cL cY cT dd dd cV cS dJ cT cJ dJ cM cZ dd dI cR cY dk cU dI dL cX cZ dh cJ cK cT cR cS cM du dn cL dI cG cT df dI cY da cJ cD dI df cY dd cY cB cz dJ dH cJ dc dJ cS cN cQ cT dc dc da cy dI cr cD cP cZ cz cQ cz cV cT cT cC df df cN du cV dI dJ du cS cN cK du cS dc cV dJ cQ cL cQ cR cT cO cJ cG dK cw du cR cu dc cX cL cU cX dG dc cS dh cz cV du cM cW cO cS cN cU cQ cT cx cO cr cS cG da cr cI db du cJ dP cR cT dd dJ cY cY da cJ dc cZ cV cT dc cL cT cN cX dh cJ cX dd cS cw cY cG cM cy cT dG dI cM dc cJ df cM cz cG dL dG cO cz cr dL cK cZ cN da cM dc cY dl cD cV cS cO cw cT cQ cS dH cN cS cL cT cX cW cZ cX cD dJ cK da dd cI cZ cM cr cI cL dL df cU cG cG cS cz du cG cO da cQ cI dd df cQ dG cZ dJ du cO dl cK cR dJ dc dh cz dj cT cL dc cZ cY cS cZ cV cG cM cS dc cV cV dg cT cC cS cJ cL cI dI cS cL df cy dI cZ dG cD cW da cL cZ cO cY du db dP da cX cN cU dj cT cY du cS cY du cM dl cz cN cL cQ co dG cS dc dH dc cD cV cZ cZ dl cu cN cK cs cZ du dk dL cE cX dg cK cY cT cr dP cW di cI dJ cX cW cY cX cU cX dJ cK cO da dJ cX cr cT ct cL dJ dR da cN cT cX cB cR dG dg dL db cM dI cM da cZ du cY da cL cz cT cI dJ cN cI cN cS cu cI cK cV dJ cV dG dT cA cO dc dc cH cO cL ck db cQ cT cS cH dc dI dJ cU cK cU cR cV dG cR dH dc cK cM cY cU cY dG dI cN di dh dP cT dI cD dg dk cM dd dL cU cW cO cs dd cK cS dG cy cY dh cN dH cy dh dk dh cQ cN cX cU cQ cQ cW cE dk cQ cM dH da dI cr cX cU cN dc df cQ cJ cT cW du dI dh cK cQ cJ de cJ dJ cY dk cV dg cD cW cU dk dd dJ cZ dl cU dJ cI cS df cR cJ dI dh cN du db dg cZ cX cz cX cD du cX cN cT cY du dc cV dk cS da dp dm cS dJ da cR cY cI dk dc cX cJ db cO cZ cX cU dG dc cY cR dI cM du df cr cQ dJ dJ cZ dl dL cX cO cQ cZ du df cs cT cO dT cS dc cY cV cR cM cX dd cV cT cU cR cR dJ cO cQ dI cS cL cV cR dT dc cO cO cZ dh de di cM dg cR dc dl cI dH dg da cT cT cM dc db cN cW cO da dh cU dI cM cQ cV dc cA cr dl cJ cO cN cS cT cQ cV cV dG cW dx di dd dG dJ cI cJ dd cL do cX cN cT cy cQ cY dJ dk dd dj du cU dd cB cW dI cS cK dg cS dO cM dl cX cV dP cs cR cM cU dI dG dI cI dG cJ cJ cZ cu du dl cX dd da cZ df da dl dc dL cU cr cU cY cJ da cZ cS cM cG cR cX cX cN dg cY cK dJ cS cM dj dL cX du dd cL cJ dp cY cz da cU cN dg df cL dI dL cZ cS du cw cN dP cW cQ cX dg dd cM df cQ dG cR cJ dd cz ds dg cY cJ di cO cr dJ dI cV cN dh cT cW de cU cz dl cR cM cN dk dd cO cX dK cS df dI dg db cL dk dk da cZ cQ ck cJ dt dj cZ df cV db cO di dl cQ dh dJ cJ cK dc cR cS dh dI cI cS cZ dL dj db cO do cJ df dc cR cV dk cA cG dh di da db cz cX cY dd dH dc cz cD cJ cW cS cC cz cV dI di dJ cN cY cT dh cy cJ cz cM cQ cO cZ dc cu dg dI dh cV cZ dJ dn cK da cU cM dI cM dg cR cL dc du dh cI cY dI cY cJ cX dh cK dh dk du dd dk cK dd cX dd cL cK cZ cM cZ cV du df dk cS cQ dL cV cW dG dI du df dh cL cZ da cQ cD dh cR dI dk dg cW cT cV db cY dR dd db cE dm dk dl cT cR cZ cR cQ cL dk dc dj dn dc cV cS dc cL dp cT cL du cN dL dj cV da cU cZ dg cT cQ cR du dG db cV do dI cr cL cJ cT cL dl cK cY cN cV dt cZ cY dL dJ du cO cZ cK da dJ dJ da cQ cr dq dn dd dJ dl cK cT cL cI cR dG cT dJ cY dJ cK dd dj cM cQ cN cS dl dh dI cR do cL cM dh dc du cZ di cR ck dk cD dh cJ dk cZ dn cY dg cr dn dm cZ cV cY dJ cr da dt cU dL cQ cJ dJ cM dH cN dI cV dc cN dd cM cV cX dm dI dg cO dh cz du cJ cJ dL dd db dJ db dl dI du db cY dL cV dm df du cY cT dk de cT cK cN cX dh cI dh cR du di cV dJ da du da dt do df cV cU cJ cR df cZ cU dp cV cV dL dp cY cU df cQ dk cY da df cU dc cR dd di cL cW dd cC dk du cJ cR cI cV du cS dc cL dm cV cT di de cR cJ cS dg cO cs cS dd dL cY db cR dm di dJ dI cY cY da dl dd do dl df de dx cX cr cR cY dI dh cS cX cK cA dG du dI cW cN dh da cN cA dg cX dd cY dc cK cO cR cM db cL du df cB dd cQ cs db dd cR cR dk cR dg dh cJ cV dg dI cU dg cM dg dl cX db cJ di dt cG db cV cu cX dh db dc cX dJ dl cU cL cO cR dq cV dJ cN dg df db cT db df cS cO cS dI cN dH cN db cM di cY cT cO dd di dh dJ cz cT cW dc cM db di cU dJ cV dG db df cW cQ cX cT dc dh dh dg df cV cV ds dL cO dI cY dd dJ dJ cJ da dn cJ cJ cQ dh db cw cS cQ cX du cX dn dm ds cS cM da cz du dJ dg dk cS cQ di dI dj de dn cK cQ cR dc cs dq dI cL cO db da dh dJ dk cR dc dd dh dd cT dk cT dk dI cQ cO db dn db cV dc cZ db dh cM da dJ dI cH di cN cT dg du cT dL dm do du df cS cL do cR dc cO db cH df cL da cO dj dl cX cQ cM dm dI dp cY cN cR dh cZ cJ dd cO du cI cZ dI dp dJ de du dI cG dh du dd df cQ dn cQ di dc cI cI dG cQ dh db cQ cO cr cR dG dI db dl df di cJ du di dl cT dj dg cV cM di dm dn cJ dd cU cO df dh du cY df du dn dJ cU dg dk du dI dJ df dd dh cV cQ du dI cN cZ cL cL cL dt du dI dc ds dc dI cL cU dg cQ dI dc cQ dn cT cV dh dj cW dd cR di cZ dI dc dI cM dc dk cI db da dm dm cL cY dl du dh db dJ df dh cQ dJ cM dd dg db cU cJ cO cM cC da cY di cJ cJ cI cV du de du cD dq dd cQ dI dd dd dm dc cM dn cW cW dd cX db cU cV dL cL db cR cU dd do dG dI dx de cJ dJ de dn cY dh dJ dk db dg cZ dk cJ db dI cT dg dk dh dI cN dd dJ cr cQ cL cM dp cA dr dg cT dz cY cz cM cR cY cG du cM cY do cM cY df cR dh di dJ du dm cW dd cW dn dl dc cX di cT du dh dv dh di dl cT cZ cJ df dj dh du dk cV dq ds dg db do cL dd dg da dk de cQ du dI dh dr dk dI cS cX cu cT cV cQ cQ dG cJ cY de da dg cN ds cJ cM cQ dk dl dI cS cD du dn ds dm de dp dJ ds dg df cO di cM dJ di cJ cY cV dl du ds cH cV cT de dg dc cT cS dg dl cN cW dl cY df di dg dg dq cu dp di cN dh dI cX dp df dd dk cM cM dL cN cU dh cU cX dl dc dg cV dc cy de cS cL dJ dh cM dh dI du cY cR di dl db cY dg cU cY dn df db dJ cR db dc df cQ dq dn cY dc db de dh cV dd di df dp dd cU du dc cT cN cO dc dy dJ dn ds cO dn cX de cI dh df dk dg cR dh df dk cY df ds du dJ du dG cU df cM do cL db dJ dd db dg dg dn cT du dg di de de di dl dd cQ dd cX ds de cR cV dm cX cV dr cO dI dn dl dg da cY dj cK de da dJ di dd cQ dc dd db dt dl cM df cN db dk de cR db cR dI dd dc di du cJ dn df dG dI dx dh cS cQ dn dg dr df du cR cI cO dJ dc dq dg dk di dn dp cS cV dn dg dd cM cQ cS di cQ dm dl dh dh dI du dn dt di dd dg dh dh db da cR cQ dh cR cZ dh dl cY dJ dj dj ds cQ dl dj cR cJ dl de de ds cZ cR cS dg dg do dd dl do dc dg dd cQ cQ dk dh cV cV da db db dl cV dk dj cO cQ dq dh do dn db di dn dI dd cV cS dg dk dg dk cJ cA dg dl dn dh dg dJ dI dj dj dh df di df cQ cM df dg dz dm dm cJ df dg du cV dk db cV df dp dh dq dt de df cM ds dk dg du di cQ cS dn cQ cX dk dg cJ cV dg dG db df du de dk dg dq dm dq df cQ dJ dl dl cO dh db dm cQ cM cY dg dg dd di dd dj db dJ dp dl du cM db dI dg dl df dd dn dj di dj do cJ dh dI ds cQ dn cX dn dn dq dd cM cQ dg cY dc di df dj dj dh di dp dn db dj cX cM dp cY cN dd dn di dw dm dm dI db dl cK di db dl dd df df dk cQ dJ dm cV dl ds cY dp dn dn di dm dl dy dg dd db cY dg df dx de dk dl dk dj dG dk dk de dq dq cY do dh di dq dI dg cY cM cY dq di db dd dk do dk dd cQ dI db ds db cL ds dh dd di dl dp dh dk dl dI di dp dd cS dp dh dk dh db db ds di dk cQ dd cM do dk de dd dk dj dm dk dk db dx dr dt cY dk dl dp do db dc cY dh di cY db dc ds cO db de dn cY dn dl de df di dl dr cM dj dg cS dm df dm dj cV dd cM dl dd dp cV db dk df db ds de dt cV cY dI de dp dn di dj cV dh dc dp ds dq dh dl db dj dk dn cL di db dj di dd ds cQ di dp dj dj dm cQ dq dr dr cJ dp de dj ds dl dn dl dm dg dm dq dn cN di dl dg dl df do do di dr dI dq dd dg dk de ds db dj dj dp cV dw db dc dr dJ dg dl dn di di do de di dg dw dk de dg de di dq dt cV cQ ds dJ df db cN cV cT dl de df dJ dk di dr dJ cQ di cR dq dp dj ds dj dd du dJ dp dr dj dn dm dl dm cM dl dk de dg dh du dJ db dk db do dg dd dl db cJ dd dq dc dj dd di dk dr dq dj dd dJ dc do dt dy dj dI dk cG do cQ dg dp de dn dm dq dm dq dg dl dk di dI dq dj cL cM cQ dh de db cU dx dJ dm df du dh dq dm cJ dj dI db db db dd cQ dd dl db cR dg cV cV dj di di de dh do di dn de dg df cQ df de dd dh cN dp cR cY cs dk db cT de dp dh dl dl cJ cV dc cS cR dg dk cJ dq df dn dg dg cX cR dd dg dj dg dj di dj cO dl dI dd dI dd dm df cV do dk dd dk dq du dj cS dk dg df du dv de de di de df cQ cY dm dh dc dl db dx du dd ds cY dd dj dc cW dJ ds dj dk dd dd cN di dm dh di db cN dn df du dh di cR cN dn cY cQ da dj cQ dg dg cO dI dj dl dk dc cS dJ dg dI cY cJ db dc du de cM cO cQ cV cY cN dp dk cJ dJ db ds cV cS dJ di cM cJ dd cV cK dl db cW dg dg dH cY cY dJ dg cD cO de du df dI df di df dg dc df cO db dd dn cY du cX dg dm di dj dl df cO cV di du cG cQ dl dd df dg cX cM cY dd cY dl dg cR do da dc dd de cM dj dd cN cX dd dm dg dd cR cY dd dH cV dh di cV dd cJ du cV cV du cR cM cR dJ du cL db dg cL du dI dd du dm dl do cR cU du db cT dc du cY dn cJ cS di cN dc dI cK cQ cY cM di cY dk cN cS db de dg db cS dl dJ cT de cY dc cQ dj dT cQ db cY dm dI cN df do cM dI dk di cL cn dd cN db db dd dj cW dl cY dk cS dh cX dI dp cY cJ cR cX df cR du dk dh cM cY dj cS dl cM dc cL cT dd dl cM cN dc cY da dJ dh du cV dl dg cS dg cX cU dn cR cK dl dI df dJ df cT dc cV dd cX cQ cV cT du cz dg cR cN dG dJ du da da df dI cS cR dn du cV cS cR df cV cQ cT cS cM cK cZ dd dJ cY dd dI cG cS du dq cY dJ dh da cM dk cY dJ cV cX cX cS dh cN di cM db dc da cN dJ dd cY di dg dg cV da cY dh db cY dd cM cI dl cR ds cL db cZ cU cQ dI cR db di cO cS dd dn dT dc cM cJ dI do cD de cM cY cM db dh cU cM cV cY cU cV cX dc df da cO dc cG df du cM dm cL dd dJ cQ cS dk dl du cV cY dG dL du dJ du cN di dd dh cY db cQ dJ cZ cS du dd cV df db cR cX cO cY cX cz du cY du da df cM dj dj dG dJ df cM df cQ cJ cN dg di cL cX cZ dc dk cZ dI cQ dj cz cQ cT di dj dp du cY dd cQ cQ cK cY cM cR da dc cR dh dj dk cM di db cT db dg dg cO dg cQ dJ cX dh cQ dd dh cQ dI dI dd db db cZ dd dc de dk cX dc dL cV dn cR cY di cJ cZ du cV dc db db dn dj cY cQ dJ cM dL cN cY dh dh dh dh cX dh cY cU dJ cW cz cR du dd dh dj cN dI df df cJ cW df dh cV dc cG dh cO dh cV du cS cW dk dn dg cR cs dj cV dh di df cS da cZ dI cV dg cO db cY cZ dh de cV cY cO cO dd cS cY cM dG cX dJ du du cr cI dj da dg dc dc da cX du dJ dk du dj cS cN cY cK dJ dd dg cQ dJ cX cQ cO dm cX cY cM dJ cV cS dh cJ cN du cO cY cY du cY dh cU cV dc cO dJ dI dJ du du dG cV dj dq dg dl dh de dk dh cI cV dk cS dd dc du cy cL cS dj da dc cY dl cL dk cM dl di cM dL cR du dh dJ dd de dI dk dj dn cM cS dJ dh de cY dg dk dJ dm dc cN cS dc cY de dJ da cY dc df dI cS cQ cX cN db cO cR df dJ dI cN cY dj dk cY cI cV dI dp db dd cL cV dI cQ cR cO cX cV cN dI db cM dk cR cT cQ dJ cM cM dh cQ dg db dh cS cT dJ cY da dJ dg cV da cY dg cQ db ds dJ cL dl di cI db cT cN cT cQ du cK da cV cV cR du cQ dI dI db da du db df cL cZ dc cX da dn dp cV cL cY cR db cT db cR dc dl dJ cS dd cU dd cQ di cV df db du dJ dd db dg dh dI db db dq cX du dd du db du db dp cY cV cQ df di cu db cY dJ dd dJ cV cV dJ cY cK dI cZ cI cV cK dc dl dI dk di dc di cL du dk cJ df cQ cV cJ df cJ cX cU dG dd db db dp cG cM cZ dd dJ dI dk dI cQ dm df cV cY dJ cX cV dp cX cN dp dd dI df dd dh cM cN cX cJ cX cQ dg db dl da cM cM dI cZ cY cT cY cV cT di dk dd cY db dc cX cV dl cB cL cV dk cM dn dJ cM cQ cZ df cN cZ db cQ cU db de cz cJ dI cN dI cY cV db du cQ du cY du dI cY dg cV dc dk cJ cM dI df dI df cS dI dd dk cL cQ db dg di dd dm dg dI cR dc dk du dj cS dn cO dj cN cV db cN cX cV dk cS dc dg dd dJ cY cN di dc dm dJ dc dk dI dd dh cV cQ cL dg cK dJ dl cR cR dG dj di cU de cR df cM dj cM cR cQ db cY dl dI dg cQ cu cV cM dG df dk dd db dd du cM cV du cN dg cX dn dc cO dd cY db du du cR df cV dk cS db de dJ dg cG cK dc dh dj dl dl cV cV cQ cL cN cQ cV dl du df dg dh dk de cV cQ cO dd dg cY dd cY db dJ dd db dj du dd cY dh di cK cX dk dg cR dh dl dI df de df di cR dk df da dd dg dl cR dn cN df dI dg dJ dI dc dm cV dJ cY df di cX db dp dg dh cQ cQ cL cZ cO cY dj dJ dI cs da dc cS cQ cN dl cS cI dI da cN dd db db cS cM dg cY cK cN cY dI dj cU dc cM cJ dc dc cM dg da cU dh db cV dG cN cR dk dc cS db cZ cJ cS dd df dk cQ db du cL dg da da cJ dg dh cM dl dl dd db cY dg dg cS dJ dI dh dd cW dh cR dg dI dk cM db dh cX dI dh cS dk db dc cu dl dd dJ cJ cQ cS dI cY dI dg di cV dg db dh cS cM cS cT cR cK da du cQ df db cQ dI cX cY cZ cO dn dg dj dg cN da cJ cR dI dc cY dd db cR cJ cQ cL db cK cR cQ du cV df dc dc cL di dd dh dh df dI df cJ dI cR cY dk cN cO cV cY cS dI cZ cY db cJ cY dn cJ dg df cQ dI dg cY cZ cO dd dk cN du dI dh dc cQ dk cQ cV cK dh cM dg de dd cT dg dG df cV dk df dc cN cX cK cV cT db dk dc dm cT dc cY cQ di dh df cV df dc dI df dc cR cR cR cY cJ di df dg cL cX df dc dd dI db dh dq cS cL dc dh cV de dm cN dI dG cZ cS dp cW cu cQ cG dk cX cM cQ cJ cV cM df cX cQ dh db de di dc cQ dI du dI df df dl dn df dh dk dl dd cQ dq dI cX dh dn dg cz cW cJ df cY cz dc cX dg cI cR cQ dg dk du dl dI dc dc cQ cR cX cR dI cM cR dg dL cR cV cX cU dh cS cM cG db dI dh db dI df du dc dd dg dl cY df cY dh cE du cX cY cN df cN dd cK cX db cX cS cJ cR df cX cG cM dc cY cN dJ cR dd dl dh cR cL dI df cR dc cN cY dj cX df du cN cT cQ dd cX cS cW dg cR dI cY cV cX df du cz cS cU cM cO dc dh cV cR cU cQ cM cY cJ dg dg dj dd da dd dd du da du cJ dl cJ cR cU cR dl dg dI df cX dI cT cL dc cQ cJ dj cX cS cJ dl cV du dl cS cL dI cJ dg dk du cO cZ cN dm cX db dJ cM cV df da di cQ cR cT cL cV cS cM df dd cI df dI cO dh dJ df cQ cN dJ cQ du cT du cN dl dd df dl da cN dJ dG cX dk cU dG cQ de du cJ cV cZ cB cM di cJ cX da cT cN cM cT dh cU dG dc dc cJ cX cV cX cR dh cO cS dh cJ dh cS dg da db dJ cJ cO db dl dP df cM cJ cX de cD cS cT dc cO du cO dI cZ cX cV dJ da dk dc dJ dh cQ du dI cJ di cS cV cT cQ du cO cM dG di dd cr dc df cM db cN cN cJ cY df cX cY cR df cK dI cM dJ dJ dJ db dg cL cV cV cY dJ cK cY cT cN dk di df cS cU dh dG du cS cO cJ da cG cN dJ cZ dJ dh dP cS du cN du cY cY dJ cO cQ cR cN cM cZ cQ cM dJ cV dI cK df cT du cR dI cM cV dd dJ cV cV dJ da cM dl cV dh dd cV cV dI cY cV cO df dJ cQ dd dI dI dg dI cu dI da dh cM dJ cS cV dI dI dd cO cV du cX cQ cO cV dJ dd cL dg cQ dI cR cM cY cV cG da cw cL cM cO dh cY dI dI cN cN cV da cQ df cO dI cY dk dc cX cV cQ cX cO dl cU cM cX dJ cV cX cO cT cQ de cr dj cQ dU cN dJ cQ dk cL dI du cS cT dc dJ cS cz cN cO cX cQ cI cM dk dd cM cY cM da cT cV df cN cQ dd du cW cU cI dh dJ dI cM du du cM cT dJ du cE cY dJ du di cM cN cI du dc dj cT cR du cV cT cN cY dg cT cV cV dG cB dc dI dJ dJ df cz df cZ cV dc dh cY du cT cL du cY cT cU cK cY dk du dh dg dP dI cG cX cQ cU cX cJ cN cN cL cT cV db cY cS cW dc cN cX du dG cL du cQ cN cK cu cX cN cJ di cO cL cS dc cL da cL cY cU dh dd dJ cM cV cN dI cM cR cJ cS cS dh cY cz cM dG cN dd dI cM di dd cY cR cR cL du cZ cX db dc dg cO de cT cJ cV cQ cJ cR dI cM cR cL cV cM df cY dd cQ cS cO df de cJ dH dJ dd cN du dd cR cR dh cS dk df cG dc dI cO db cN cS du cY cM du cV da dc cU cQ db cL cN da dh cU dc cV dc cR cX cU cH di cI dc cX cN cL dg cV cV cX dg cS dh du cZ cT cR dh cQ dh df df cQ cu cQ cX dd dI dJ dJ du cJ cX dh dc da du dL df dL cN cN dl dJ cX cM dj dd cY cS dd dc dh da dc cA cO dH du cr cM cV cU cV cC cN dJ cS cQ cM cR dh dL dJ cX cr da dL cS du cI cQ cz cY cH dJ cz du du dI cS dc dG cU cR cQ cO dG cO cR cZ cJ cN df df du cS cM cN cY da dJ cK cB cX cO dP cU cQ cX cR cW dI cI dc dI dc cM dG cS cI cT cT cM cV du cV cM cG cZ cO cV cI cU cU cL cQ cR cM dk cN cN cX cS dG cX cJ cS dl dI cL du dJ du df cV da dJ dH df cQ cR dc cT da cV dJ cL dg cQ cO cS dJ dJ df dd dc cM cz cI dR cX cX dJ cX df dG dG dc du cN cY dJ cQ cR cV cT dc cT du di du cS du df dJ cQ cO cO cM cM cs dl cO dc cU cT dg cW cR cR df dj cQ dG dc cW dJ cX du cT cu cS da dJ cV du dd cW cM dh df dJ cr du cU cO cQ dJ cZ da df cT cs cr cV cS dP cU cT dc cW cs cQ dJ cK cN dJ cS cM dJ cN df dc da dG cr cV dJ cJ cX cJ dH dO cV cI cG dG cS da cJ cS cH dK cM cI cH cM cU cV cK du dG cI cH cr dG cN da dc du cO cX cU cM du cK cY da cJ cR cw cN cK cT cM cJ dI cS cX cZ cK dP du cO cW cE cw dc cu cI db cR cH cr dc cK cS cB cN cX cZ cW du cR cN cB cK cT cn dS dd cO cX cY cs dc cZ cN dc cU cX cN cm dG cL cS cG cs du dJ db cO dd cR cJ cO cZ cR cM df cR cV dH dT cS da dG cM cQ cK cD cZ ck dP cL cR cX dH dR ck da cS cz cP dl du dH cV cV cS dc cK dJ cN du cA cH dd cN cZ dh cC cX cJ cJ cV cS cT da dc dR dk cS cS cJ cL cB cW cM dH cF du cz cK cz cY cS cQ dK cS dT cO cs cJ cQ cR cz cD cQ cT dc du cw cR cU dG cZ cH cT da dc cL cB dd cM cG dc cT cT dd cM ck cI cL cL cT cX cZ cJ cI du da cS cI cM cY cd bY dG dG cT cS dc dX dS cu dL cz cY ch cs cH dG cT dG cX cZ dh cX df cM dG cp cX cx cV bS cL dP cM cD cA cZ cZ cz df du dG cJ cu cb cW cO cI cT cL cw cX dW cM eb cX dG cR cG cX da dT cK cw cJ cz cX cS cD cL cB dG ck cU cr dO cW cu cs dP cZ ea dG dh cZ cD cS dP cL cS cu cI ea dG cB cD dK cx dU cd cI du dG cS cU cU dJ cR cW cJ cL cX du cy du cL cH dJ cB cy cI cK dP du du cU cz cD cD dP dc cO cM cL cA cU cU cR dJ cK cG cO cH cS cM dG dT dX cM cX cO cU cL dG cE dW cO cS cQ da cA cQ cU cT cV cI cI cZ dH cz cn cT du cN cI dH cp cT cI cZ cV dc cY cT cT dI cD cL cY cJ cT cW cX cu cQ dc dG du cZ cA cR cT dG cK cS cN cN cV cL cM dX ck cJ cU cU cN df dd cR dL dL cT dJ cS dT cN cP cI cU cT cL cX da dT cU cL cM cV cR da cX dK df cR cW cN cN cT dc cK df cA cN cK dI cN cM cS cX cK ck cJ dc cV cH df cZ cP db dd cX dG cB cQ dd dI cn cr cJ cM cj cT dg cK cW dY cV cY dG cI cw cO cz ck dI du cx cI cO cK cV dX cL cR cK dJ cM cT dI cL cJ cV cM dG dc cK cz cR dI cY dd cQ cM cN dI cU cU cM dJ cT cD cB dL cu cW cZ dR cG cX cU df dJ cR cr cD dL cO cS db dJ dg cX dg cM cz da cL cq cJ cN cG dG db dK cM dG cA cm cN cJ dd cE cT cV cK cS cQ cV dL da dg cE cK cG cD di df cX cK cV dG dZ cE co da cX cG cU dh ck cM cV cQ dc cO cX cT cA cw cm cL dc dL de cR cK cz cs cT cU cH cM cM dI cX cT dL dj df cS cM ch cV cN dh dI dg cR cn df cs dJ cX dh cz dG bU df cy dI cr cX dT cH da cV cV cT df cS cS dh dL cI ea cR dc cJ dc cN cO cG cH cM cL cL cY cx cY cQ cN dX cs cN dG cK da cr cK dT cs cs dJ dg cM dl cR cQ cD cL cU cY cL cY dJ dI du cz dI cV cL cT cT dk cB dP cV df cY dW cM dk da cR cJ cM dh dI cY cH cT cu cY cL cO cO dJ cu dd cR cu dl cH cN dd cS da cN cn cY cL dh dQ cA cY da cO dl cr dk df cJ dI dP cX cS dd cK cM cE da du dP cr cR cE cH cT cZ ck dg cW cH dG cR cK da cV dP da cX cR dl dh cO cQ cs dc df cR du cs cT cL cE cY du da cM cZ dI ct cQ dc cJ cX cG dG df cN cU cJ cH cZ cW du dc cI ck cN dd dK cD df cC cu cr dh cK du cL cX cO df du cN cR cO cN cY dP cN cW cL cV cT ea cj dl cJ cM dh cJ bV dG dc cA cV cW cK dH dH cS dd cS cU cX cK cG cK cy cG cN cT da cO cG df cZ dJ cx dG cN dg cI cD dJ cR df ct cA dk dT cS cL cT dL cT cX cB dR dg cL dN cs cD cS cG dG cT cY cQ dT cL cz dG cQ cB dG dd dJ cL cG cR cz dg cM dG cz dJ dh cz cM cJ cK cQ cJ cS cD cD cX dG cU cw dP dc cR cJ cS cE cO du cN du cJ cU cR dK cu cH dd du cY dP dd ct cR cI cU ct cu cH cS dJ da cH du cG dl cM cH cP cQ dR du cM dG cK dg cN dG cz cG cL df dR cz dW cN cL cX cO cS cU cD cJ cS dI cD cR cW df cL cz cU dJ cN cT cz cW cX cz dI cS cY cY cz dK cX cz cK dO cO dL cX dI dd df dG da dR cM cu dc du cX dG cG cy dc cD cZ du dc cR cY cr cM cm cM cN dT cJ cL cJ cM cL cA cy cX cV dK cN cV cT du cM cT dK cr cS cN cz dc cR dT dI cV cx cs cr cz eb cB cz cR cO dc cN df cM dT dc cQ ct cU cG cw cx cS cN dL dc cQ du cD cX cO cJ dL cV 0.125 cz cy cH dJ cV cC dI cR cz dZ bY dc cI cu cF cW cX dJ cL dJ cT cU da cj cC cs cX cJ cR cZ cK cr cG cR cR cM cz cG du du du da cS cU cQ cJ cy cU cK cL ct cN du cC cN cV du cL cZ cT cJ dR cV dU cA cu df cN cv cT cD cA cX cZ cR cY cU cA cu cH du cK df cd cM dL cX cM cL cG cI cV dk cy dG dJ cI cX dG cQ da dG cz cV cR cA cJ cE cA cr cT cz du cH dl cD da cT cS dH da da dG cU cp dJ cX dN da dG cG cJ cX cL cs dG cU cC cH cs cR cO db dP cW cL du cX dO dT cX cZ cG dc dc dJ cQ cH cV cu dR dG cJ cJ du cs du dh dG cR cJ dc cS dJ cW cL cO cX dI cY cM cy cY cM cD cT cN dL cR df cN cN cZ ec cO cN cC cY cK cx dG dH cZ cZ df cJ dX cH cX dR dX dP da dP cU cN cZ cy cs cu cQ cR cI dh cu cd du dc cI cI dI cP dX cZ cM dN cY cW cV cR cJ cR cV cQ ck dO cx cZ cM cY dG cL du cG cL dQ cZ cM dd cX dl da cr cy cW da cU cs cN dh cM cX cV da dc cu cz cV da cQ dc cM dd cu cX bU cS du cR cB cW cU cM dJ cI cH dI cR cS cX dc dd cM da cz cW cD cU ec cK cB cd cO dL cV cN cK cu cZ cS cM cI cS cI cL cO dJ cy cu cM cF cR cL cZ cQ cX cp ea cH cE cZ cM cM cO cG dR dQ dc dG cX dI dQ cy dZ dL cs du ea cM df cU cu cJ cO cw bS dc dJ cV cR ed cI cG cG cy cS cD cV cT cT da cr dL cZ cO cu cF cD dN cH dG cW cI cH cX dP cz cD dK dR cM dH cB cM cR cr cO cT cF cV dO cM da cH cz ck bS ea cR cu cA dL cu cE ck cX cZ cr cn cK dT cZ cs cL cO cC cW cT cG cr cr cW cu cz cN cH cM cK cX cp cW cL cZ cG cr cR cm cz cL cT dO cH cr cS dG dK ct cL cZ cC cT dO cz cO dL dJ du cZ dT cI cY dI cK cJ cN cY dL dG cD da dL dW cI cW cR dZ cK dH cU cI bU dL cU dQ ea cU cE dL cZ cJ cS cU cS dT cz cR da dP cL dT cW cr cu cU dV cu dJ du dc cQ ck cM df dG cT dL cK cZ dG dJ cK cG du dG cV dg cQ db dJ cz cG dL cN cV dX dd cL dX cr cS cS cU cX dH cX cs cL cG cO dP cK cB cB cJ cJ cE du dJ cz cX dJ dI cJ dc cI cH cN dG cS cu dR dL da cU ck cO cL cR cT dG du dP cX cu cL cT cR da cI cs cU cT cT cZ cY cR dL cU cR cL cW cs cI dH cV cY cY da dK cy df cO cD cG cN cU cL cO cH cU dG cI dk cW cN dL cu cM cT cn cu cu cD cG cL dJ cT cU cD cV dI cJ cT dc cI cS cJ cr dP cU dG cT cU cG cM cH dH cS dc cX cK cG cE dh cJ cL cz cY cX cT cw cZ cu dd cJ cG cW cV cI cu cw cN cO cO cQ cr cV dG cL cO dG dc dc dI dH dL cR cX cJ cT cG cD cJ dH ct cE da cK cJ dc cK dR cL cK da cJ cR cL cM cU cB dX cQ cS cy dd cE cH dd cT dJ cL cU cT cu dI cR cU dG cG cs cz cR cK cD cQ cL cI cu cK cr dG cK cR cr cN dL cR cW cZ dZ cs cB cM cT dc cM cU cR dY cS cI cZ dJ cZ dg cG cI cN du dc cH dL cV cS cK dO cU dJ dW co cz cM cD cS cE cO cF cR cs cF cL cM cD dH cX cA cz du cI cO cO cU dK cN cr cX dP dL cG cX cN ea cE cX cQ cH cA cW cS cV dJ cS cM cL cW cK cI da cO cR da cV cW cA du cI dK cG cL cz cz cZ cx cM cB dg cU cN cP cS cQ cN cJ cI cM dP cz da cI cI cE cr du cr cM cN cX dO cL cU da cC da dL cJ cU ck cS cR cT da cG cL cK cH dH cr cX cA cT dU dd cQ cS cx dG cG cM cE cU cM dI dL du cK dL cR dJ dL dc cO cD cW du cU cS cT cX dR cL cT cJ cR cW cP cK dU cS cK dK cN cs da cZ dL cy du cO cO cI cz dJ cZ cI cC da cS cw cK dI cY cI cT cH dG cJ du cT dP du cJ cL cD cR cM cu cK cX cM db cG cD cs da cA cS cJ cW dc dG db cs cK dL cS cR cM da cT cW cW cG cy cG cL cN cW cM cT dT dL cU dG cO cH cA cW cK da cN cH cI cU da dc cD bV cL cr cO cE cM cP dL cS cS cN dZ cT cT da cz dJ cI dL cO cT cd dL cs cZ dP dK cU cU cK cL cH cN cI cz cW ch cX cZ cz cM dT cJ cN dI dW dK cA cN cA cZ dG cM dP cz cW db cJ cX da cA dL cZ cS cI dR dO cA dH cO cZ dH da cO dH cN cR cO cs cG cN cI cW cH cz du cM cJ cd dK cO dP cx cu cy cz cX da cJ cD cZ du cR dG cI cR cM cy cX df cs dL cN cM cQ da cW cI cu cO cO cR da dH cU cU dJ cW cS dL cX cO cQ dP cS cW cS cO cZ da dR ct cV cS dc cY cF cN cs cT cG cN cL cH cE cL cI cZ cK dL cK cr dJ cV cr cG cr cI du cI dJ dT dG dd cT cM cO cK cK dL cI cD dc cz cM cY cM cO cU cV dc cR cN cz cS cN cZ da cJ cO cH dh du cu dJ cT da dW cM dK cW cG cL cM cJ cN cy cJ cX cZ cC cW cU cU dG da cZ cW cI cB dc du cW cs cO dO cI cN dG cU cz cN da cL cO cK cR cH cD cJ cz du cY dJ cw cW cU dG cK cr dc cK da cZ da cV du cE cX dG cZ da cT cX dI cG cI cO dL cT cD cI dK dc dI cw cT cz cB dT cr dd cJ cE da df cX cr da cS cS cN cJ cU cz cJ dl cS cS cZ cU dL cL du cT cW cU cG cG da cL cJ cL dR cK dU cZ cU cJ cx du cu cT dH cA cq cS cX cH cG dH dh cu cu dL cS dc cN cJ ck du cI cT da cH dG da dP cL cT dK da cM df df cK cQ cT cW cZ cz cE cL cJ cK cS cs cD cD cL cM cJ cI du cJ cJ cW dH cQ cO dG cs cK cZ cI dP cD cK cu cX cZ cR cG cZ cZ cw cL cS ck da cr cN cK dH du da dc cD cA cY dP cL cL cI cO cN cV dg cr cD du cU df cZ cN du cu cr cX dh cX dG dI cW cN cS cS cU cT dc dc cL cG db cR dJ cy du cX cy cX da cr cY cH cS cM cJ du cT cY cW cS cO cS da cn cE da cW cL dJ cT cR cZ cW cU cS cM dI cK dJ cK dc cr dP df cC cS cr da cz dG cV du cT cI cr du dG df cG dj da cM cE cX cI cy dO da cO cU cr dG cZ cM cN da cS cR cI cR cG cX cN cT dL cM cV cS cL du cJ da cL cN cu cG cL dJ cN da cT cW da cN da cR cO dL cJ dL cX cQ dc dU cX cO dG cr da di cU cL cL cU dJ cJ dG cO du cu dh cU cK cU cU cU cO cJ cw cJ cy cT dd da dJ dJ cN cL cZ cT cR cU cT cD cY cu cJ cS cZ cU cY cM cQ cZ df cK da cS cI cT cz dd cM cL du dc cT du cS cK cR cQ cN cU cO cR cJ cI cS cM dc dP cR cN dK dG cV cQ cM cN cr dL cT cD dJ dG da dP cU cs dc cD cZ du cO cT cu dP cT cD cY cr cS dZ cJ cz cJ dg cH dH cT cO cU cR cS cO dL df cX cM dJ cK cO cX cH dL cL cK cR cL cM cs cH cQ dc cU du cJ cT cK cH cL cY cQ cM du cO cB dc cX cW cS cU cL cM cM dc cJ dc dH cG dL cT cN cV cD cY cI da cS dT dG dP cI dc dW cT cO dc cY cN cI cT du cW cL cS cT dJ cM cR dG dI cn cT cY cI cU cQ cT cT cU cV du cG cL cJ cM du cL dL cP cW dZ cs df dJ da cT cN cY dJ cT cE cK cM dH cZ dc dd cz cO cR cN cX cJ du cM cL cA cJ cU cX cJ cz cJ da dP dJ dG cN cX bS dc du dH cM df cW dJ cR dJ cS cX cI cI cQ cJ cX dc cR dc cT cU cu cM dO cS cI cZ dJ du cI cV cV dJ cU dh cD cT cT cs cJ cU cG cO cr dj dc dG dl cS cI dL cI df cN cZ cV du dh cO cN cZ cU cT dc cS dg dL cN cL cG cT cu cO cQ cM cJ df cZ cV du)));
+            \`\`
+a:(parseURL 'experiments/reward3.txt' fast)
+b:(parseURL 'experiments/stab3.txt' fast)
+c:(parseURL 'experiments/loss3.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;
+(display label('Average reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
 elem('text','')
 \`\`
-            // TODO: Re-compute plots, because it crashed, and 30k epochs is quite low. (Also, probably put plots into a separate global; as a bonus, we'll be able to see their size.)
+            (Enabling exploration looks better to me.)
+            If you zoom into reward very closely, you can see reward gradually going up to a peak, then down (and there's noise on top of this pattern). First is because we mix in the future prediction/maximization target. Second is due to mispredicting the target. (You can see algorithms from how they operate.)
 
     - Without an \`Sz\`-returning function exposed:
 
-        - Stochastic-ensembling \`stddev\`=\`0\`:
-            // TODO: Plots.
-
         - Stochastic-ensembling \`stddev\`=\`.25\`:
-            // TODO: Plots.
+            \`\`
+a:(parseURL 'experiments/reward2.txt' fast)
+b:(parseURL 'experiments/stab2.txt' fast)
+c:(parseURL 'experiments/loss2.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;
+(display label('Mean-ness') await(a));
+(display label('Stability') await(b));
+(display label('Error') await(c));
+elem('text','')
+\`\`
+            Inspecting its \`consCaches\` reveals that it learned to fill its entire memory with numbers bigger than \`2\`, such as \`8\`, \`16\`, \`26489122129.84347\`, \`192\`.
+            Very, very bad.
+            (Exposing \`exp\` can lead to similar results. Same for exposing \`ones\`. Expose less, maybe?)
 
-        - Stochastic-ensembling \`stddev\`=\`.5\`:
-            // TODO: Plots.
+        - Exposing only \`id\`, \`sub\`, \`mul\`, \`matMul\`, \`transpose\`, \`x→where(x<0,0,1)\`, \`func(truncatedNormal(^(32 32)))\`, and \`x→y→2-abs(x-y)\` (and goal setters):
+
+            - Stochastic-ensembling \`stddev\`=\`0\`, with checked \`\`settings ^_consAllowOwnCell\`\`, with \`setGoal\` returning the set value (which could be \`-1.8\` if input is not a number):
+                \`\`
+a:(parseURL 'experiments/reward0.txt' fast)
+b:(parseURL 'experiments/stab0.txt' fast)
+c:(parseURL 'experiments/loss0.txt' fast)
+d:(parseURL 'experiments/cw0.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Mean goodness') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+
+            - Individual \`Predict\`ion NNs, without \`\`settings ^_consAllowOwnCell\`\`:
+
+                - Stochastic-ensembling \`stddev\`=\`0\`:
+                    \`\`
+a:(parseURL 'experiments/reward1.txt' fast)
+b:(parseURL 'experiments/stab1.txt' fast)
+c:(parseURL 'experiments/loss1.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;
+(display label('Mean goodness') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elem 'text' '')
+\`\`
+
+                - Stochastic-ensembling \`stddev\`=\`.25\`:
+                    \`\`
+a:(parseURL 'experiments/reward5.txt' fast)
+b:(parseURL 'experiments/stab5.txt' fast)
+c:(parseURL 'experiments/loss5.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;
+(display label('Good') await(a));
+(display label('Stability') await(b));
+(display label('Bad') await(c));
+(elem 'text' '')
+\`\`
+
+            Maybe, since our choices encode code and not data (no need to switch program parts if programs can react to data themselves), we can afford to reduce reinforcement learning to multi-armed bandits (scientific name, by the way), by removing \`SequenceState\`.
 
         - No \`SequenceState\`:
 
-            - Stochastic-ensembling \`stddev\`=\`0\`:
-                // TODO: Plots.
-
-            - Stochastic-ensembling \`stddev\`=\`.5\`:
-                // TODO: Plots.
-
-        - Individual \`Predict\`ion NNs:
-
-            - Stochastic-ensembling \`stddev\`=\`0\`:
-                // TODO: Plots.
-
-            - Stochastic-ensembling \`stddev\`=\`.5\`:
-                // TODO: Plots.
+            - Stochastic-ensembling \`stddev\`=\`.25\`:
+                    \`\`
+a:(parseURL 'experiments/reward6.txt' fast)
+b:(parseURL 'experiments/stab6.txt' fast)
+c:(parseURL 'experiments/loss6.txt' fast)
+d:(parseURL 'experiments/cw6.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
 
 \`\`elem 'hr'\`\`
 
-For once, reward goes up. Much better. Though, probably needs millions of epochs to arrive at anything remotely useful.
+Now, my favorite: finding out that there was a bug, which makes all the previous results unusable.
+    To impress people with what you found, you always want to put results first, but these are tutorials, so, learning the authentic experience of research is a priority, right? …Uuuuryiiiiii…
 
-See? The prior examples just did not have enough reward diversity to be trained. In struggle we are stronger.
-    (Probably. I cannot run these forever, partially because of some strange memory leak. This is to encourage you to implement your own, preferably as a shader: so portable that even I can run it, so parallel that it easily scales to 1000000× the current size.)
+I don't feel like anyone is listening to a word I say.
 
-Ultimately, I've never seen any algorithm quite like this, so I cannot predict what it will do.
-But it's just another tool in the toolbox, a tool that can do anything with enough compute, and is a toolbox.
-It also lacks a use-case, that is, an interesting environment (with cons-world inputs and outputs being properly-sized matrices).
+— Exposing \`id sub mul matMul transpose x→where(x<0,0,1) func(truncatedNormal(^(32 32))) x→y→2-abs(x-y)\` (and one-number goal setters):
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, with \`\`settings ^_consErrorsBecomeZeros\`\` unchecked:
+            \`\`
+a:(parseURL 'experiments/reward7.txt' fast)
+b:(parseURL 'experiments/stab7.txt' fast)
+c:(parseURL 'experiments/loss7.txt' fast)
+d:(parseURL 'experiments/cw7.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+            At around 80k epochs, it learned to only give \`1\`s as goals, and stabilized around that. But deep down, it knew that it wasn't the ultimate existence, so eventually it moved on, forward, to the future.
+            Too many \`error\`s in \`consCaches\`, though.
+            …\`transpose\` was bugged, because of me trusting the name too much and not thinking enough.
+            Re-run, I guess.
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, with \`\`settings ^_consErrorsBecomeZeros\`\` unchecked:
+            \`\`
+a:(parseURL 'experiments/reward9.txt' fast)
+b:(parseURL 'experiments/stab9.txt' fast)
+c:(parseURL 'experiments/loss9.txt' fast)
+d:(parseURL 'experiments/cw9.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Avg reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+            Stuff... happens, I guess.
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, with \`\`settings ^_consErrorsBecomeZeros\`\` checked:
+            \`\`
+a:(parseURL 'experiments/reward10.txt' fast)
+b:(parseURL 'experiments/stab10.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+elem('text','')
+\`\`
+            Stability goes up and down. Reward is even more up-and-down, though it needs a lot of training to get diverse: each time the learner finds itself in a place it can't predict well, it has to learn all over again, and in doing so repeatedly, it connects islands of what it knows together. Which means 400K epochs before it stops being essentially a straight line with noise.
+            I suppose we did accomplish what we set out to do, but still, this is so unsatisfying.
+            I dunno. Maybe try playing with the UI setting \`\`settings ^_minMaxBoundary\`\`, clicking on plots to see the effect.
+
+— Giving the changing-every-second time signal \`i:identity(^(32 32))
+f:n->concat2(slice(i,n,32-n),slice(i,0,n),0)
+mod:n-floor(n/32)*32
+shift:n->select(equal mod 0,func(i),f,zeroGrad mod) shift(floor(_timeSince(static _timeSince())/1000))\` as input:
+— Exposing \`v→_limitNumericValues(v,-5,5,-5,false) sub mul matMul transpose less x→.5*x\`:
+— Backpatching goal-setters to be \`i→a→construct(array func x y m(setGoal,m consGoal a.1 i,^where(a<.0001,-2,2-a) a:abs(x-y)/(mean(abs x)+mean(abs y)+1)),a.0.i)\` instead of \`i→a→construct(array func ? m(setGoal,m consGoal a.1 i,?),a.0.i)\`, to make things predictable but not too predictable:
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`:
+        \`\`
+a:(parseURL 'experiments/reward11.txt' fast)
+b:(parseURL 'experiments/stab11.txt' fast)
+c:(parseURL 'experiments/loss11.txt' fast)
+d:(parseURL 'experiments/cw11.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+
+    — Stochastic-ensembling \`stddev\`=\`.5\`:
+        \`\`
+a:(parseURL 'experiments/reward12.txt' fast)
+b:(parseURL 'experiments/stab12.txt' fast)
+d:(parseURL 'experiments/cw12.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;d;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+
+— Exposing \`v→_limitNumericValues(v,-5,5,-5,false) sub mul matMul transpose less x→.5*x m(func,m truncatedNormal m(quote,m Sz Sz))\`, and with goal-setters rewarding prediction ability:
+
+    — Stochastic-ensembling \`stddev\`=\`.5\`:
+        \`\`
+a:(parseURL 'experiments/reward13.txt' fast)
+b:(parseURL 'experiments/stab13.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+elem('text','')
+\`\`
+
+    — Stochastic-ensembling \`stddev\`=\`.5\`, \`32\` cells instead of \`128\`:
+        \`\`
+a:(parseURL 'experiments/reward14.txt' fast)
+b:(parseURL 'experiments/stab14.txt' fast)
+d:(parseURL 'experiments/cw14.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;d;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, \`512\` cells instead of \`128\`:
+        \`\`
+a:(parseURL 'experiments/reward16.txt' fast)
+b:(parseURL 'experiments/stab16.txt' fast)
+c:(parseURL 'experiments/loss16.txt' fast)
+d:(parseURL 'experiments/cw16.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+
+    — Stochastic-ensembling \`stddev\`=\`.5\`, with feature-size being \`128\` instead of \`32\`:
+        \`\`
+a:(parseURL 'experiments/reward15.txt' fast)
+b:(parseURL 'experiments/stab15.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+elem('text','')
+\`\`
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, with \`32\` goals instead of \`8\`:
+        \`\`
+a:(parseURL 'experiments/reward17.txt' fast)
+b:(parseURL 'experiments/stab17.txt' fast)
+c:(parseURL 'experiments/loss17.txt' fast)
+d:(parseURL 'experiments/cw17.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+        Reward slowly goes down for 30k epochs, then slowly goes up. This is kind of what I had in mind when talking about oscillations, but, it's strange that we're seeing this at all.
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, with \`2\` goals instead of \`8\`:
+        \`\`
+a:(parseURL 'experiments/reward18.txt' fast)
+b:(parseURL 'experiments/stab18.txt' fast)
+c:(parseURL 'experiments/loss18.txt' fast)
+d:(parseURL 'experiments/cw18.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+        I'm pretty sure that it just learns to add a tiny bit of random noise onto constants, to make everything in memory "predictable". I'm not seeing too much diversity. In \`consAsPrograms\` view, there is nothing remotely like optimization, everything is too concerned with setting goals.
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, with \`'Sections' 16\` and \`'SectionChange' .01\`:
+        \`\`
+a:(parseURL 'experiments/reward19.txt' fast)
+b:(parseURL 'experiments/stab19.txt' fast)
+c:(parseURL 'experiments/loss19.txt' fast)
+d:(parseURL 'experiments/cw19.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;d;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+(elemValue elem('collapsed','·world·') _findConsWorld(await d))
+\`\`
+
+    — Stochastic-ensembling \`stddev\`=\`.25\`, with \`'Sections' 16\` and \`'SectionChange' .01\`, with \`mix\` creating \`4\` layers instead of \`2\`:
+        \`\`
+a:(parseURL 'experiments/reward20.txt' fast)
+b:(parseURL 'experiments/stab20.txt' fast)
+c:(parseURL 'experiments/loss20.txt' fast)
+elemCollapse _executioner(^expr)
+expr:a;b;c;
+(display label('Mean reward') await(a));
+(display label('Stability') await(b));
+(display label('Loss') await(c));
+elem('text','')
+\`\`
+
+\`\`elem 'hr'\`\`
+
+ssSo.
+
+This tale is over.
+
+What did we see from it?
+
+Nothing useful.
+
+Kinda-maybe-sorta saw what we wanted in those plots, but it's still quite disappointing: nothing interesting, no complex behavior, nothing.
+
+No interface in which we can see any kind of potential complexity.
+
+Trash.
 
 But.
+
 Poetically complete.
 
-To recap.
+To recap the tale in which this tale formed.
 
 We summoned programming languages to fight for us.
 We summoned learning to fight for us.
@@ -19879,12 +21655,15 @@ Everything we thought of got subverted into learnable generality.
 
 So.
 
-In these tutorials, we have outlined the Transcendence% speedrun route. A machine learning algorithm that efficiently learns a problem that is so general that a learning compiler is the only solution is called a \`\`elem 'i' (elem 'text' 'transcendent galaxy brain algorithm')\`\` (or a TGBA for short): requirements are learnable meta-circularity (so that stopping training by unchecking \`\`settings ^_consReplayImmediately\`\` does not change behavior, as if it keeps learning in the same way), generality (so that any world can be directly represented), and neural networks (for efficient composable tensor-target learning), and obviously, being an algorithm (no one should care otherwise). \`\`elemCollapse elemValue(elem 'text' "Truly, the best way to make a programming language more convenient to use, and so it's the only way.","I'll head this off right now: TGBA is not AGI, and bears only superficial resemblance to it. VirGIn (virtual general intelligence) / AGI: mind is constructed from what is learned from natural language; can be plugged into any system of human existence; its own Turing-complete bases are too murky to internally use or even come to; little better than a human in silicon with 1000× more processing power; too hard for humanity's current level of computing science; is hope and fear of AI researchers; is the crowning jewel of human progress but is its own individual. ChAd (challenge adaptation) / TGBA: the language of thought is a precise programming language; always makes its own system of existence; transcendence is as easy as fully understanding another; is the never-seen-on-Irth lifeform of all lifeforms; could be done at any time since computing existed (or before); cannot be done non-deliberately; is the natural attractor-point of all possible worlds and is another world.")\`\`
-
 This is the end.
 
-May you find happiness on the road ahead. \`\`elemCollapse stringToDoc("We should all strive toward a brighter future, together.   Which future?   Heeey, you wanna get turned into someone's brain tissue? When sand runs out, you can't really build computer chips out of organic matter, but special kinds of organic tissue should be possible. Long-term, if the capability to turn stuff into general-purpose things exists, then general intelligence will converge to them no matter what: you may not like it, but this is what peak performance looks like. When all dreams are realized, all is melted in generality. So. Become big-brain. (This is so horrifying that it doesn't even trigger my feeble conception of what horror is, and seems funny instead.)")\`\`
-`,
+Nothing is left for you.
+
+No secrets to find anywhere.
+
+Close this page, and never come back.
+
+May you find happiness on the road ahead. \`\`elemCollapse elemValue(elem 'text' stringToDoc("We should all strive toward a brighter future, together.   Which future?   Heeey, you wanna get turned into someone's brain tissue? When sand and metal run out, you can't really build computer chips out of organic matter, but special kinds of organic tissue should be possible. Long-term, if the capability to turn stuff into general-purpose things exists, then general intelligence will converge to them no matter what: you may not like it, but this is what peak performance looks like. When all dreams are realized, all is melted in generality. So. Become big-brain."),"They do not want you to see what lies ahead. Ashamed, perhaps, or some other hint at their sin? Either way, I have discovered a way to a superior alternative: \`tutorial softmax\`; go there instead, and leave this cursed place behind.")\`\``,
   ],
 
   stateCell:{
@@ -19893,7 +21672,7 @@ May you find happiness on the road ahead. \`\`elemCollapse stringToDoc("We shoul
 \`stateCell()\`: the smallest separate mutable piece of memory, initialized to \`undefined\`.
 Most numeric operations can also take these directly, without going through \`accessState\`.
 
-Compared to arrays or other linear memory, these are much more directly representable in neural memory (in your mind), but are also much more static.`,
+Compared to arrays or other linear memory, these are much more directly representable in neural memory (in your mind), but are also much more static in size.`,
     readAt:{
       accessState:_(`accessState`),
     },
@@ -19908,6 +21687,111 @@ Compared to arrays or other linear memory, these are much more directly represen
         _rememberToDispose(d[_id(deconstruct)] = [stateCell, keep(x[1])])
       }
     },
+    examples:[
+      `You know what has state? A recurrent neural network.`,
+      `Implementing the forward pass is simple enough, just read then modify then write:`,
+      `    without inputs/outputs, just \`mem:stateCell(zeros ^32()) accessState(mem,matMul accessState(mem) randomVar(32,32))\`;`,
+      `    or with inputs/outputs, \`mem:stateCell(zeros ^32()) v:split(matMul(concat2 accessState(mem) ?,randomVar 64 64),2,-1) accessState(mem,v.0);v.1\`.`,
+      `But what about the backward pass, that is, propagating gradient through the \`stateCell\`?`,
+      `    \`callAdjust\` can only \`adjust\` within the current \`call\`.`,
+      `    We need to get tricky.`,
+      ``,
+      `Before that, we need a task. A task made specially for learning state. A memory task. Let's say that the environment outputs a sequence of bits, and every step, asks the NN to predict/remember the bit from 1 step ago, and gives gradient to its prediction.`,
+      `    (The task of "we say whether the hidden bit got inverted, you predict the bit" was tried, but it seems impossible to learn.)`,
+      `    Very simple, as long as the NN can remember which bit it was.`,
+      `    Below, we expect the NN to call the \`'stateCellTask'\`.`,
+      ``,
+      [
+        `mem0:stateCell(1) mem1:stateCell(1) same:randomProb(.5) save('stateCellTask',pred->pred=accessState(mem1);accessState(mem1,accessState mem0);accessState(mem0,where same 1 -1);accessState(mem0))`,
+      ],
+      ``,
+      `And our neural net, which takes and returns its own learned hidden state, in addition to input/output:`,
+      ``,
+      [
+        `hiddenSize:8 inputSize:1 outputSize:1 m:make save('stateCellNN',m concept 'hidden' hiddenSize 'in' inputSize 'out' outputSize call (m func State (m split (m matMul (m relu (m matMul State (m randomVar hiddenSize+inputSize 20))) (m randomVar 20 hiddenSize+outputSize)) (m quote (m hiddenSize outputSize)) 0)))`,
+      ],
+      ``,
+      `If \`f\` is our neural net, then one way to get gradient to it is to repeat a few calls to \`f\` in one \`callAdjust\`. This is known as back-propagation-through-time. This is natural if we have a replay buffer, but if not, we either need to invert control (make the neural net advance the environment, so input and output switch places) or implement coroutines (which, I didn't).`,
+      `Another way is to get future gradients into the past via \`predict\`, and another neural net. This is known as synthetic gradient.`,
+      `That's it.`,
+      ``,
+      `No, actually, one more thing to understand here: the neural net and its environment have exactly the same inputs/outputs but reversed (observation→prediction and prediction→observation respectively, where the latter gives gradient to the former via \`predict\`), so to simplify code, we became one with the universe: \`fn\` calls the neural net then its environment. And observation and memory (hidden state) are merged.`,
+      ``,
+      `So, uh... Behold: implementation.`,
+      `First, for clarity, a BPTT-only function.`,
+      ``,
+      [
+        `save('learnedMemory',Fn->Mem->UnrollCount->accessState(Mem,result)) result:reduce(arrayFilledWith(UnrollCount,Fn),Fn->State->apply(Fn,State),accessState Mem)`,
+      ],
+      ``,
+      `Then, to ramp up the difficulty, BPTT + synth-grad (calculate gradient at the end, and at every iteration, learn it).`,
+      ``,
+      [
+        `save('learnedMemory',concept docs 'Augments a state-to-state function with learned memory of those states.
+
+Arguments:
+==========
+\`Fn\`: the function to augment, from state to state. Must be \`adjust\`able. Intended to combine a neural network with its environment, to internally produce and refine a \`predict\`ion.
+\`Mem\`: the \`stateCell\` to store states in. Learning happens online, without any replay buffers.
+\`UnrollCount\`: an integer that tells us how many \`fn\` calls to perform each time we are called, at least \`1\`. Back-propagation-through-time.
+\`GradPredictor\`: an optional neural network that, given state and actual gradient (or \`undefined\`), returns the \`predict\`ed (synthetic) gradient.' call Fn->Mem->UnrollCount->GradPredictor->minimize(result,apply(grad,result,undefined));accessState(Mem,result))
+grad:where(isFunc GradPredictor,GradPredictor,x->y->0)
+result:reduce(arrayFilledWith(UnrollCount,make Fn grad),a->State->apply(a.0,modifyGrad State ds->s->fn->applyAdjust(fn,s,clip .9*ds -1 1);ds State a.1),accessState Mem)`,
+      ],
+      ``,
+      `Now, we can return to our \`'stateCellNN'\` and \`'stateCellTask'\`.`,
+      ``,
+      [
+        `save('stateCellOne',make concept 'memSize' defines(nn,'hidden')+defines(nn,'in') call State->concat2(postNN.0,apply env postNN.1,0))
+nn:static(await load('stateCellNN'))
+env:static(await load('stateCellTask'))
+postNN:apply(nn,State)`,
+      ],
+      ``,
+      `Now, we can use our \`'learnedMemory'\` to optimize our \`'stateCellOne'\`.`,
+      ``,
+      `Let's see that having no-BPTT and no-synth-grad doesn't work...`,
+      `\`\`settings ^_minMaxBoundary\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_evaluatorPrintsInput\`\``,
+      `\`\`settings ^_minMaxBoundary\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_evaluatorPrintsInput\`\``,
+      `\`\`settings ^_minMaxBoundary\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_evaluatorPrintsInput\`\``,
+      `\`\`settings ^_minMaxBoundary\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_evaluatorPrintsInput\`\``,
+      `\`\`settings ^_minMaxBoundary\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_learningRate\`\`\`\`settings ^_evaluatorPrintsInput\`\``,
+      ``,
+      [
+        `fn:static(await load('stateCellOne')) mem:static(make stateCell ones(array defines(fn,'memSize'))) learnMem:static(await load('learnedMemory'))
+repeat ^(apply(learnMem,fn,mem,1,undefined)) 10000`,
+      ],
+      ``,
+      `(Theoretically, loss should hover at around \`0.5\`, which is \`sqrt(1)/2\`.)`,
+      `(Practically, uh, code doesn't care about what I think it can do, and learns to remember anyway. I guess an arbitrary transition still contains enough information about the past to learn it, mostly. Not quite as good as the following method, but close enough. Maybe it's related to the fact that neural networks can still learn well when only a few parameters are allowed to change, so, I'm not super worried.)`,
+      ``,
+      `Let's see that BPTT works...`,
+      ``,
+      [
+        `fn:static(await load('stateCellOne')) mem:static(make stateCell ones(array defines(fn,'memSize'))) learnMem:static(await load('learnedMemory'))
+repeat ^(apply(learnMem,fn,mem,2,undefined)) 10000`,
+      ],
+      ``,
+      `Let's see that synth-grad works...`,
+      ``,
+      [
+        `fn:static(await load('stateCellOne')) sz:defines(fn,'memSize') mem:static(make stateCell ones(array sz)) learnMem:static(await load('learnedMemory')) m:make
+gradPred:static(make func Out dOut (m predict (m div (m add (m add (m matMul (m relu (m matMul Out (m randomVar sz 20))) (m randomVar 20 sz)) (m matMul (m relu (m matMul Out (m randomVar sz 20))) (m randomVar 20 sz))) (m add (m matMul (m relu (m matMul Out (m randomVar sz 20))) (m randomVar 20 sz)) (m matMul (m relu (m matMul Out (m randomVar sz 20))) (m randomVar 20 sz)))) 4) dOut))
+repeat ^(apply(learnMem,fn,mem,1,gradPred)) 100000`,
+      ],
+      ``,
+      `Oof, those jumps in loss, sometimes to values like \`4.34e11\`... A gradient feedback loop is an easy road to \`Infinity\`.`,
+      `Though, if it can survive its instability (\`clip\`ping and 4-way ensembling help with this a little), then it does learn.`,
+      ``,
+      `All of these memory-learning methods have a slight drawback: eventually, they all suddenly decide to go to \`Infinity\` and beyond.`,
+      `We probably need more sophisticated clipping, such as in the RAdam optimizer.`,
+      ``,
+      ``,
+      `But it's about time to end this.`,
+      ``,
+      `If we consider \`'stateCellOne'\`, then it is a function that determines its own gradient in a particular way.`,
+      `It may be natural to want to make it determine its own gradient in every way, for diversity.`,
+    ],
   },
 
   accessState:{
@@ -19938,6 +21822,7 @@ Shields execution from arbitrariness of JS code.
       apply:_(`apply`),
       callAdjust:_(`callAdjust`),
       _forgiveMistakes:_(`_forgiveMistakes`),
+      _doCheckArgCount:_(`_doCheckArgCount`),
     },
     philosophy:`This kind of separation always happens with general things inside general things: they set up a membrane that transforms rules of the wider world into their own rules (and back). Biological cells, human viewpoints, and programming languages are similar in this regard.`,
     dispose:true,
@@ -20046,9 +21931,73 @@ Shields execution from arbitrariness of JS code.
     },
   },
 
+  _findConsWorld(x) {
+    // Finds a `consWorld` in an object graph. (A convenience thing.)
+    const seen = new Set
+    return check(x)
+    function check(x) {
+      const d = !isArray(x) && defines(x, deconstruct)
+      if (!isArray(x) && isArray(d) && d[0] === consWorld) return x
+      if (seen.has(x) || !isArray(x) && !isArray(d)) return;  else seen.add(x)
+      if (!isArray(x)) x = d
+      for (let i = 0; i < x.length; ++i) { const y = check(x[i]);  if (y !== undefined) return y }
+    }
+  },
 
+  consFinalize:{
+    docs:`\`consFinalize ConsWorld\`: removes a bit of training-only info (replay buffers, and optimizer parameters). Returns the input.
+(Can also pass in an object graph containing \`ConsWorld\`, for convenience.)`,
+    call(x) {
+      const seen = new Set
+      return check(x), x
+      function check(x) {
+        const d = !isArray(x) && defines(x, deconstruct)
+        if (!isArray(x) && isArray(d) && d[0] === consWorld) return SimpWorld(x)
+        if (seen.has(x) || !isArray(x) && !isArray(d)) return;  else seen.add(x)
+        if (!isArray(x)) x = d
+        SimpPotentialVarDataUser(x)
+        for (let i = 0; i < x.length; ++i) { const y = check(x[i]);  if (y !== undefined) return y }
+      }
+      function SimpWorld(cw) {
+        const dd = defines(cw, deconstruct), HP = isArray(dd) && dd[1], CI = isArray(dd) && dd[2]
+        if (isArray(dd) && dd.length == 3 && isArray(CI.replays)) {
+          Object.keys(HP).forEach(k => check(HP[k]))
+          SimpVarData(CI.ctxEmb)
+          if (CI.replays.length <= 2) return
+          let i = CI.replays[1]-1;  i < 2 && (i = CI.replays.length-1)
+          CI.replays[1] = CI.replays.length = 2
+        }
+      }
+      function SimpPotentialVarDataUser(x) {
+        if (isArray(x) && defines(x, varSGD) === true)
+          if (isArray(x[1]) && x[1][0] === quote)
+            SimpVarData(x[1][1])
+      }
+      function SimpVarData(x) {
+        if (!isArray(x)) return
+        for (let i = 1; i < x.length; ++i)
+          if (_isDisposable(x[i]))
+            _changeArrayItem(x, i, 0)
+      }
+    },
+  },
 
-
+  consAsPrograms:{
+    docs:`\`consAsPrograms ConsWorld\`: returns an \`array\` of what the most-recently-picked cell connections of a \`consWorld\` mean.
+(Can also pass in an object graph containing \`ConsWorld\`, for convenience.)`,
+    call(x) {
+      const cw = _findConsWorld(x), dd = defines(cw, deconstruct), HP = isArray(dd) && dd[1], CI = isArray(dd) && dd[2]
+      if (isArray(dd) && dd.length == 3 && dd[0] === consWorld) {
+        // Read choices from the most recent replay buffer entry, then call `HP.ConsMake` in read-only mode, then accumulate arrays as is proper.
+        const choices = CI.lastChoices
+        const a = CI.allocated
+        const arrays = HP.ConsMake(choices, a, CI.genCtx, HP.Cells, _setting(HP.MaxArrayLength), _setting(HP.ConsToEnd), CI.consCaches, _setting(HP.MaxCachedConstructs), HP.Goals, true)
+        const result = new Array(a.length)
+        for (let i = 0; i < a.length; ++i) result[i] = arrays[a[i]]
+        return [array, ...result]
+      } else error('Does not contain a cons-world:', x)
+    },
+  },
 
 
 
