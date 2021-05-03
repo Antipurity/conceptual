@@ -7630,7 +7630,7 @@ neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
         // TODO: Run & fix ⑩♌. ...It runs, but, is the very-gradual decrease in mean change because of this goal structure, or because `clip` gives +-1e-3 gradient to clipped parts?
-        // TODO: Make `clip` give no gradient to clipped values, and re-run ⑩♌.
+        // TODO: Re-run ⑩♌.
       ],
       `Run.`,
       `What did we learn from this?`,
@@ -8354,7 +8354,7 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
             -2,
           ],
         ],
-        -1e-3,
+        0,
         [
           _(`where`),
           [
@@ -8367,7 +8367,7 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
             ],
           ],
           _(`_dout`),
-          1e-3,
+          0,
         ],
       ],
     ],
