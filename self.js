@@ -7003,7 +7003,8 @@ The adjustment is passed through to each arg.`,
       _(5696),
     ],
     merged:true,
-    docs:`Multiplication, as in \`5*6\`=\`30\`.`,
+    docs:`Multiplication, as in \`5*6\`=\`30\`.
+Also called Hadamard (element-wise) product, ⊙.`,
     argCount:2,
     dispose:true,
     interrupt:false,
@@ -7552,13 +7553,40 @@ grad:Cells->FS->(m func ? (m minimize ? targetSpace))`,
 targetSpace:mix(?,FS,FS,1,softsign,Cells)
 targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
 splitSpace:(m stack m(split,targetSpace,Goals,0) 0)
-grad:Cells->FS->(m func ? (m last (m gradMul (m predict (m sliceOff splitSpace 0) (m mean splitSpace 0)) .01) (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0))))`,
+grad:Cells->FS->(m func ? (m last (m predict (m gradMul (m sliceOff splitSpace 0) .01) (m mean splitSpace 0)) (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0))))`,
       ],
       `↑⑩♌ (Maybe return to "some cells give \`predict\`ion targets to others", but with the targets turning into what targets them (\`predict\`ing the average of the goal's section, dividing the gradient), for bootstrapping representations.)
       (Kinda like Bootstrap-Your-Own-Latent {https://arxiv.org/abs/2006.07733} or Momentum Contrast {https://arxiv.org/abs/1911.05722} but without momentum.)`,
-      // TODO: Make `creator` make the result define 'stateTransition'.
-      // TODO: Pass the state-transition function to the gradient-giver creator.
-      // TODO: Have a gradient source that predicts a multiplied-by-1.2 version of its past self, either directly in state or through a dense layer.
+      [
+        _(`fancier`),
+        `targets:mix(?,FS,FS,1,softsign,Cells)
+pastTargets:emaVersionOf(targets,.99)
+grad:Cells->FS->(m func ? (m predict targets pastTargets))`,
+      ],
+      `↑⑪♌ (Maybe return to "stick to whatever past you picked", with zero fancy tricks.)`,
+      [
+        _(`fancier`),
+        `targets:mix(?,FS,FS,1,softsign,Cells)
+pt:emaVersionOf(targets,.99)
+apt:(m abs pt)
+grad:Cells->FS->(m func ? (m predict targets (m where (m less apt (m mean apt)) (m mul pt .8) (m mul pt 1.2))))`,
+      ],
+      `↑⑫♌ (Maybe return to sharpening the past, like in \`examples emaVersionOf\`: push the smallest-magnitude values to zero, push the biggest-magnitude values away from it.)`,
+      [
+        _(`fancier`),
+        `targets:mix(?,FS,FS,1,softsign,Cells)
+at:(m abs targets)
+grad:Cells->FS->(m func ? (m predict targets (m where (m less at (m mean at)) (m mul targets .8) (m mul targets 1.2))))`,
+      ],
+      `↑⑬♌ (Same as ⑫♌, but without the stabilization of momentum.)`,
+      [
+        _(`fancier`),
+        `targets:mix(?,FS,FS,1,softsign,Cells)
+pt:emaVersionOf(targets,.99)
+grad:Cells->FS->(m func ? (m predict targets (m where (m less pt (m mean pt)) -1 1)))`,
+      ],
+      `↑⑭♌ (Maybe sharpen via simple bistability: bigger-than-average values go to \`+1\`, smaller-than-average values go to \`-1\`.)`,
+      `        Okay, this is WAY too much. Only compute can save us now.`,
       [
         _(`fancier`),
         `Cells:128
