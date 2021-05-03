@@ -7618,14 +7618,12 @@ neucomp:static(await load('neucomp'))
       `    When shared, the state likes to devolve into one 100%-correlated picture forever (sometimes, with spikes followed by settling into another picture). When per-cell, the state likes being random noise forever.`,
       `    When normalizing, it likes to settle into ±100%-correlated pictures. When only clipping, it likes being random noise.`,
       `    Peachy.`,
-      `    Both sharing and normalizing bring individuality into uniformity.`,
+      `    Both sharing and normalizing turn individuality into uniformity.`,
       `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ③♌ or ④♌ or ⑤♌? Surely they would start to compete, right?`, // TODO: Run this.
+      // TODO: Direct to `examples emaVersionOf`.
 
       // TODO: Make `creator` make the result define 'stateTransition'.
       // TODO: Pass the state-transition function to the gradient-giver creator.
-
-      // TODO: Have `varEma(data,otherData,momentum)`: no adjustment, but on calling, blends `data[0]` into `otherData[0]` and returns that.
-      // TODO: Have `emaVersionOf(fn,momentum)`: a function that recurses into funcs and replaces vars with `varEma`, then does `makeGraph` on funcs.
       // TODO: Have a gradient source that predicts a multiplied-by-1.2 version of its past self, either directly in state or through a dense layer.
       ``,
       `But.`,
@@ -7674,9 +7672,11 @@ dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(erro
 Outputs:(defines dataSource 'out')
 FS:64
 
-in:(m clip (m norm State) -2 2)
 Pre:func(accessState InMem)
-Post:m(func,State,m last (m predict in (m concat2 ^accessState(OutMem) m(slice,in,Outputs,Cells-Outputs) 0)) (m (grad Outputs Cells FS) in) in)
+in:(m clip (m norm State) -2 2)
+out:(m slice in 0 Outputs)
+dataOut:(m accessState OutMem)
+Post:m(func,State,m last (m display Perplexity (m zeroGrad (m exp (m sum (m sub 0 (m mul dataOut (m log (m where (m less out .0001) .0001 out)))))))) (m predict in (m concat2 dataOut m(slice,in,Outputs,Cells-Outputs) 0)) (m (grad Outputs Cells FS) in) in)
 
 GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
 
@@ -7685,8 +7685,6 @@ OutMem:stateCell()
 datapoint:dataSource(FS)
 cr:(creator (defines dataSource 'in') Cells FS Pre Post GradPred)
 save('datasetNeucomp',m concept 'outs' Outputs 'memory' (defines cr 'memory') call (m func Unrolls (m last ^accessState(InMem,datapoint.0);accessState(OutMem,datapoint.1) (m cr Unrolls))))`,
-        // TODO: We really need some metric, to measure how well we do on the dataset... But what metric? Do we just want perplexity? ...Yeah.
-        // TODO: Display perplexity.
       ],
       [
         _(`fancier`),
@@ -10991,7 +10989,10 @@ Particularly suited for Transformers.`,
     mergeAdjustment:null,
   },
 
-  varEma:{ // TODO: In a namespace.
+  varEma:{
+    readAt:{
+      emaVersionOf:_(`emaVersionOf`),
+    },
     examples:[
       [
         `v:randomVar(10,10) repeat ^(v=varEma(^0(),v,.01)) 100000`,
@@ -11049,6 +11050,7 @@ Used by \`emaVersionOf(Func,Momentum)\`.`,
         `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=clip(fo*fo*fo,-2,2)) 10000)`,
       ],
       ``,
+      `        Does not converge?`,
       `        \`emaVersionOf\` can stabilize prediction targets, which is desirable in machine learning.`,
       `                Prevents catastrophic divergence.`,
       `        Let us try:`,
@@ -11169,6 +11171,7 @@ Was that generalization too general and unexpected, quickly disappearing without
       varRMSProp:_(`varRMSProp`),
       varAdam:_(`varAdam`),
       varRAdam:_(`varRAdam`),
+      varEma:_(`varEma`),
       _maxGlobalGradient:_(`_maxGlobalGradient`),
       _adaptiveGradientClipping:_(`_adaptiveGradientClipping`),
       _willCommit:_(`_willCommit`),
