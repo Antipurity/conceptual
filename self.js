@@ -7491,16 +7491,19 @@ grad:Outputs->Cells->FS->(m func ? (m predict in (m mul 1.2 in)))`,
       [
         _(`fancier`),
         `in:(m slice ? Outputs Cells-Outputs)
-grad:Outputs->Cells->FS->(m func ? (m minimize (m abs in) -1))`,
+s:(m sign in)
+grad:Outputs->Cells->FS->(m func ? (m minimize (m abs in) (m sub 0 s)))`,
       ],
       `↑④♌ (Or maybe make each cell go away from 0, for competition.)`,
       [
         _(`fancier`),
         `in:(m slice ? Outputs Cells-Outputs)
 abi:(m abs in)
-grad:Outputs->Cells->FS->(m func ? (m minimize abi (m where abi<1 0 -1)))`,
+mn:(m mean abi)
+s:(m sign in)
+grad:Outputs->Cells->FS->(m func ? (m minimize abi (m where abi<mn s (m sub 0 s))))`,
       ],
-      `↑⑤♌ (Or maybe make each big-enough cell go away from 0, for competition between the few.)`,
+      `↑⑤♌ (Or maybe make each big-enough cell go away from 0 and each small-enough cell go to 0, for increasing surety.)`,
       [
         _(`fancier`),
         `in:(m slice ? Outputs Cells-Outputs)
@@ -7582,7 +7585,8 @@ visualize:result->end->displayOne(Visualize,shouldDisplay);(select _setting(shou
 neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
-        // TODO: Run & fix ⑩♌.
+        // TODO: Run & fix ⑩♌. ...It runs, but, is the very-gradual decrease in mean change because of this goal structure, or because `clip` gives +-1e-3 gradient to clipped parts?
+        // TODO: Make `clip` give no gradient to clipped values, and re-run ⑩♌.
       ],
       `Run.`,
       `What did we learn from this?`,
@@ -10968,6 +10972,49 @@ Particularly suited for Transformers.`,
     adjust:_(`_accumulateGradient`),
     mergeAdjustment:null,
   },
+
+  varEma:{ // TODO: In a namespace.
+    examples:[
+      [
+        `v:randomVar(10,10) repeat ^(v=varEma(^0(),v,.01)) 100000`,
+      ],
+    ],
+    docs:`\`varEma(VarData,CopyFrom,Momentum)\`
+The exponentially-moving average of another value (or \`varData\`, such as \`^0()\`): approximately, \`m:Momentum d:VarData writeAt(d,0,m*d.0+(1-m)*CopyFrom)\`.
+Used by \`emaVersionOf(Func,Momentum)\`.`,
+    interrupt:false,
+    dispose:true,
+    impure:true,
+    call(data, copyFrom, mom) {
+      if (!isArray(data)) error('Not varData:', data)
+      if (typeof mom != 'number') error('Not a number:', mom)
+      if (isArray(copyFrom)) copyFrom = copyFrom[0]
+      copyFrom = _num(copyFrom)
+      let t0, t1, t2
+      try {
+        t0 = mul(mom, data[0])
+        t1 = mul(1 - mom, copyFrom)
+        t2 = add(t0, t1)
+        _changeArrayItem(data, 0, t2)
+      } finally { dispose(t0), dispose(t1), dispose(t2) }
+    },
+  },
+
+  emaVersionOf:{
+    docs:`\`emaVersionOf(Func,Momentum)\`
+Turns a function (and all its dependencies, where needed) into an exponentially-moving-average-variables version of itself.`,
+    dispose:true,
+    call(fn, mom = .99) {
+      // TODO: ...How exactly do we turn `deconstruct`able things with `varSGD`-defining arrays into re-constructed versions of themselves?
+      //   Do we first do `bound`, in which we `construct` deconstructable things once (remembering them), not go into quotes, and turn `varSGD`s' `varData`s into `varEma`s;
+      //   And then `construct` those things a second time?
+      // Or do we want to implement the whole thing ourselves, recursively, with a Map?
+      // Or should we do `bound` per-func, putting sub-funcs into a found queue...
+
+      // Also, how do we not re-construct globals and funcs without vars?
+    },
+  },
+  // TODO: Have `emaVersionOf(fn,momentum)`: a function that recurses into funcs and replaces vars with `varEma`, then does `makeGraph` on funcs.
 
   _increment:{
     docs:`Variable-specific (\`varSGD\`/\`varMomentum\`/…). Keeps track of what to divide by in order to average gradients.`,
