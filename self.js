@@ -7463,23 +7463,24 @@ p:tf(io.0,zeros(_tensorShape io.1))
       `Code, code, code... there is no code. Let's make some.`,
       [
         _(`fancier`),
-        // TODO: Separate the computation of outputs into its own Transformer (or `null` if no outputs), and give that to Post. (This way, we can have both lots of inputs and lots of outputs without the quadratic attention blowup.)
-        // TODO: Make `grad` calls not need the output-count.
         `
 mem:(m stateCell truncatedNormal(m Cells FS))
-tf:transformer(Inputs+Cells,Cells,FS,0,0,softsign)
+tf:
+hidden:(m transformer(Inputs+Cells,Cells,FS,0,0,softsign) (where isFunc(Pre) (m concat2 State (m Pre) 0) State) State)
+outputs:(where 0<Outputs (m transformer(Cells,Outputs,FS,0,0,softsign) hidden weights(m Outputs FS)) null)
 creator:(concept docs 'Creates a differentiable neural computer.
 
 Though normally, the environment calls the model with inputs to get output, here, control is inverted. This makes making self the environment (for dynamically-self-determined gradient) easy.
 
 Arguments:
 ==========
-= \`Inputs\`: how many phantom cells \`Pre\` would give us.
+= \`Inputs\`: how many non-saved cells \`Pre\` would give us.
 = \`Cells\`: how many cells (vectors of features/numbers) there will be in the memory.
+= \`Outputs\`: how many non-saved cells \`Post\` would receive, in addition to the saved hidden state.
 = \`FS\`: how many features in each cell.
 = \`Pre\`: \`null\` or a function with no arguments that will return a tensor before the operation on memory (such as "what do we see and hear and smell"), visible to attention. Inputs.
-= \`Post\`: a function that will take a post-operation state, give gradient to it, and return it, possibly modified, for storage in memory. Outputs & gradient.
-= \`GradPredictor\`: \`undefined\` or a differentiable function from memory and \`undefined\`-or-its-gradient to its (synthetic) gradient.' call Inputs->Cells->FS->Pre->Post->GradPredictor->(m concept docs 'Give it how many unrolls this differentiable neural computer should perform. It will give you nothing, because who are you to demand anything? But it will do its own thing.' 'memory' mem call (m func UnrollCount (m await(load 'learnedMemory') (m func State (m Post (m tf (where isFunc(Pre) (m concat2 State (m Pre) 0) State) State))) mem UnrollCount GradPredictor))))
+= \`Post\`: a function that will take a post-operation state and outputs, give gradient to it, and return it, possibly modified, for storage in memory. Outputs & gradient.
+= \`GradPredictor\`: \`undefined\` or a differentiable function from memory and \`undefined\`-or-its-gradient to its (synthetic) gradient.' call Inputs->Cells->Outputs->FS->Pre->Post->GradPredictor->(m concept docs 'Give it how many unrolls this differentiable neural computer should perform. It will give you nothing, because who are you to demand anything? But it will do its own thing.' 'memory' mem call (m func UnrollCount (m await(load 'learnedMemory') (m func State (m Post hidden outputs)) mem UnrollCount GradPredictor))))
 `,
       ],
       `(Make it easier to create infinite-depth Transformers.)`,
@@ -7489,90 +7490,87 @@ Arguments:
         _(`fancier`),
         `
 targetSpace:mix(?,FS,FS,1,softsign,Cells)
-grad:Outputs->Cells->FS->(m func ? (m predict targetSpace ?))`,
+grad:Cells->FS->(m func ? (m predict targetSpace ?))`,
       ],
       `↑①♌ (Maybe, the good old-fashioned auto-regression: \`f(x)=x\`. May produce less diversity, but who knows, really.)`,
       [
         _(`fancier`),
         `Goals:8
 targetSpace:mix(?,FS,FS,1,softsign,Cells)
-targetIndices:cast(concat2 range(0,Outputs) floor(range(Outputs,Cells)*Goals/Cells)*Cells/Goals,'int32')
-grad:Outputs->Cells->FS->(m func ? (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
+targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
+grad:Cells->FS->(m func ? (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
       ],
       `↑②♌ (Or maybe make some cells produce prediction targets for other cells to try and match.)`,
       [
         _(`fancier`),
-        `in:(m slice ? Outputs Cells-Outputs)
-grad:Outputs->Cells->FS->(m func ? (m predict in (m mul 1.2 in)))`,
+        `grad:Cells->FS->(m func ? (m predict ? (m mul 1.2 ?)))`,
       ],
-      `↑③♌ (Or maybe make each cell be more sure of its output. If \`norm\` centers and shrinks the whole state, then this will make cells compete.)`,
+      `↑③♌ (Or maybe make each cell be more sure of its output, either negative or positive. If \`norm\` centers and shrinks the whole state, then this will make positive cells compete for positive-ness, same for negative cells.)`,
       [
         _(`fancier`),
-        `in:(m slice ? Outputs Cells-Outputs)
-s:(m sign in)
-grad:Outputs->Cells->FS->(m func ? (m minimize (m abs in) (m sub 0 s)))`,
+        `s:(m sign ?)
+grad:Cells->FS->(m func ? (m minimize (m abs ?) (m sub 0 s)))`,
       ],
       `↑④♌ (Or maybe make each cell go away from 0, for competition.)`,
       [
         _(`fancier`),
-        `in:(m slice ? Outputs Cells-Outputs)
-abi:(m abs in)
+        `abi:(m abs ?)
 mn:(m mean abi)
-s:(m sign in)
-grad:Outputs->Cells->FS->(m func ? (m minimize abi (m where abi<mn s (m sub 0 s))))`,
+s:(m sign ?)
+grad:Cells->FS->(m func ? (m minimize abi (m where abi<mn s (m sub 0 s))))`,
       ],
       `↑⑤♌ (Or maybe make each big-enough cell go away from 0 and each small-enough cell go to 0, for increasing surety.)`,
       [
         _(`fancier`),
-        `in:(m slice ? Outputs Cells-Outputs)
-targetSpace:mix(in,FS,FS,1,softsign,Cells-Outputs)
-grad:Outputs->Cells->FS->(m func ? (m predict in targetSpace))`,
+        `targetSpace:mix(?,FS,FS,1,softsign,Cells)
+grad:Cells->FS->(m func ? (m predict ? targetSpace))`,
       ],
       `↑⑥♌ (Or maybe make each cell determine its own target, via essentially an arbitrary transformation.)`,
       [
         _(`fancier`),
         `Goals:8
-targetSpace:mix(?,FS,FS,1,softsign,Cells-Outputs)
-targetIndices:cast(floor(range(Outputs,Cells)*Goals/Cells)*Cells/Goals,'int32')
-grad:Outputs->Cells->FS->(m func ? (m minimize (m slice targetSpace Outputs Cells-Outputs) (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
+targetSpace:mix(?,FS,FS,1,softsign,Cells)
+targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
+grad:Cells->FS->(m func ? (m minimize targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
       ],
       `↑⑦♌ (Or maybe, instead of giving prediction targets, give gradient to others. Probably too unstable to learn anything, but who knows.)`,
       [
         _(`fancier`),
-        `in:(m slice ? Outputs Cells-Outputs)
-targetSpace:mix(in,FS,FS,1,softsign,Cells-Outputs)
-grad:Outputs->Cells->FS->(m func ? (m minimize targetSpace targetSpace))`,
+        `targetSpace:mix(?,FS,FS,1,softsign,Cells)
+grad:Cells->FS->(m func ? (m minimize targetSpace targetSpace))`,
       ],
       `↑➇♌ (Or maybe, make each cell \`predict\` \`0\` in goal-space.)`,
       [
         _(`fancier`),
-        `in:(m slice ? Outputs Cells-Outputs)
-targetSpace:mix(in,FS,FS,1,softsign,Cells-Outputs)
-grad:Outputs->Cells->FS->(m func ? (m minimize in targetSpace))`,
+        `targetSpace:mix(?,FS,FS,1,softsign,Cells)
+grad:Cells->FS->(m func ? (m minimize ? targetSpace))`,
       ],
       `↑⑨♌ (Or maybe, literally make each cell determine its own gradient, via a randomly-initialized NN.)`,
       [
         _(`fancier`),
         `Goals:8
 targetSpace:mix(?,FS,FS,1,softsign,Cells)
-targetIndices:cast(concat2 range(0,Outputs) floor(range(Outputs,Cells)*Goals/Cells)*Cells/Goals,'int32')
+targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
 splitSpace:(m stack m(split,targetSpace,Goals,0) 0)
-grad:Outputs->Cells->FS->(m func ? (m last (m gradMul (m predict (m sliceOff splitSpace 0) (m mean splitSpace 0)) .01) (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0))))`,
+grad:Cells->FS->(m func ? (m last (m gradMul (m predict (m sliceOff splitSpace 0) (m mean splitSpace 0)) .01) (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0))))`,
       ],
       `↑⑩♌ (Maybe return to "some cells give \`predict\`ion targets to others", but with the targets turning into what targets them (\`predict\`ing the average of the goal's section, dividing the gradient), for bootstrapping representations.)
       (Kinda like Bootstrap-Your-Own-Latent {https://arxiv.org/abs/2006.07733} or Momentum Contrast {https://arxiv.org/abs/1911.05722} but without momentum.)`,
+      // TODO: Make `creator` make the result define 'stateTransition'.
+      // TODO: Pass the state-transition function to the gradient-giver creator.
+      // TODO: Have a gradient source that predicts a multiplied-by-1.2 version of its past self, either directly in state or through a dense layer.
       [
         _(`fancier`),
         `Cells:128
-Outputs:8
+Outputs:0
 FS:128
 
 in:(m clip (m norm State) -2 2)
-Post:m(func,State,m last (m (grad Outputs Cells FS) in) in)
+Post:m(func,State,Out,m last (m (grad Outputs Cells FS) in) in)
 
 GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
 
-save('neucomp',m concept 'outs' Outputs call (creator 0 Cells FS null Post GradPred))`,
+save('neucomp',m concept 'outs' Outputs call (creator 0 Cells Outputs FS null Post GradPred))`,
       ],
       `(Here, \`targetSpace\` and \`GradPred\` are simple point-wise dense layers, also called 1D convolutions. Will their representational capacity be enough? Do we want to make them Transformers too? Questions for the computer, later: the space of choices is too big to navigate by your nose.)`,
       [
@@ -7621,10 +7619,6 @@ neucomp:static(await load('neucomp'))
       `    Both sharing and normalizing turn individuality into uniformity.`,
       `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ③♌ or ④♌ or ⑤♌? Surely they would start to compete, right?`, // TODO: Run this.
       // TODO: Direct to `examples emaVersionOf`.
-
-      // TODO: Make `creator` make the result define 'stateTransition'.
-      // TODO: Pass the state-transition function to the gradient-giver creator.
-      // TODO: Have a gradient source that predicts a multiplied-by-1.2 version of its past self, either directly in state or through a dense layer.
       ``,
       `But.`,
       `No one likes running blind. Sure, it may have a rich inner world, but without proper inputs/outputs, we will never see it.`,
@@ -7673,17 +7667,16 @@ Outputs:(defines dataSource 'out')
 FS:64
 
 Pre:func(accessState InMem)
-in:(m clip (m norm State) -2 2)
-out:(m slice in 0 Outputs)
+hidden:(m clip (m norm State) -2 2)
 dataOut:(m accessState OutMem)
-Post:m(func,State,m last (m display Perplexity (m zeroGrad (m exp (m sum (m sub 0 (m mul dataOut (m log (m where (m less out .0001) .0001 out)))))))) (m predict in (m concat2 dataOut m(slice,in,Outputs,Cells-Outputs) 0)) (m (grad Outputs Cells FS) in) in)
+Post:m(func,State,Out,m last (m display Perplexity (m zeroGrad (m exp (m sum (m sub 0 (m mul dataOut (m log (m where (m less Out .0001) .0001 Out)))))))) (m predict Out dataOut) (m (grad Cells FS) hidden) hidden)
 
 GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
 
 InMem:stateCell()
 OutMem:stateCell()
 datapoint:dataSource(FS)
-cr:(creator (defines dataSource 'in') Cells FS Pre Post GradPred)
+cr:(creator (defines dataSource 'in') Cells Outputs FS Pre Post GradPred)
 save('datasetNeucomp',m concept 'outs' Outputs 'memory' (defines cr 'memory') call (m func Unrolls (m last ^accessState(InMem,datapoint.0);accessState(OutMem,datapoint.1) (m cr Unrolls))))`,
       ],
       [
