@@ -7358,7 +7358,25 @@ nx:m(norm,x)
 p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
 transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
       ],
-      `(Connect everything-to-anything then perform an operation on each resulting choice: add positional encoding, attention, add+norm, dense layer, add+norm, all repeated a few times.)`,
+      `↑①♍ (Connect everything-to-anything then perform an operation on each resulting choice: add positional embedding, attention, add+norm, dense layer, add+norm, all repeated a few times.)`,
+      [
+        _(`fancier`),
+        `realM:m(readAt,m _tensorShape Options,-2)
+realN:m(readAt,m _tensorShape Choices,-2)
+optAngle:(m div (m expandDims (m range 0 realM) -1) (m pow 10000 (m div (m range 0 fs/2) fs/2)))
+optPos:(m reshape (m stack2 (m sin optAngle) (m cos optAngle) -1) (m m realM fs))
+chAngle:(m div (m expandDims (m range 0 realN) -1) (m pow 10000 (m div (m range 0 fs/2) fs/2)))
+chPos:(m reshape (m stack2 (m sin chAngle) (m cos chAngle) -1) (m m realM fs))
+opt:(m reshape (m stack2 Options optPos -1) m(m,realM,2*fs))
+ch:(m reshape (m stack2 Choices chPos -1) m(m,realN,2*fs))
+opt2:reduce(arrayFilledWith(OptionLayers,m 2*fs Nonlinearity M),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),opt)
+p1:m(norm,m add ch attention(M,N,opt2,ch,2*fs))
+nx:m(norm,x)
+p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
+transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
+      ],
+      // TODO: Run & fix ②♍.
+      `↑②♍ (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
       `We have a model, so now, you know the drill: we need a simple synthetic task, to iron out the bugs.`,
       `We will use the source code of Conceptual (\`serialize Self basic {}\`) as input and output, to be predicted by a Transformer model.
       Or, actually, we want a few tasks (each task description would take a fixed-length slice of the dataset, and return the input and the output strings), such as:`,
