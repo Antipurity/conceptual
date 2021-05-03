@@ -7376,7 +7376,7 @@ p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
 transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
       ],
       // TODO: Run & fix ②♍.
-      `↑②♍ (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
+      `↑②♍ (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to, and attend to relative positions easily {https://arxiv.org/abs/1706.03762}: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
       `We have a model, so now, you know the drill: we need a simple synthetic task, to iron out the bugs.`,
       `We will use the source code of Conceptual (\`serialize Self basic {}\`) as input and output, to be predicted by a Transformer model.
       Or, actually, we want a few tasks (each task description would take a fixed-length slice of the dataset, and return the input and the output strings), such as:`,
@@ -11019,20 +11019,74 @@ Used by \`emaVersionOf(Func,Momentum)\`.`,
   },
 
   emaVersionOf:{
+    examples:[ // TODO: Test this bullshit.
+      `Bootstrap your own latent, with no explicit source of gradient except yourself? Self-determined prediction targets? Fact, or fiction?`,
+      ``,
+      `Now, of course, if you just \`predict\` yourself, nothing will happen:`,
+      ``,
+      [
+        `f:x->x@randomVar(20,10) mf:static(emaVersionOf f) N:1000 o:sliceOff(randomVar N 20,randomNat(N)) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=mf(o)) 10000)`,
+      ],
+      ``,
+      `And in fact, let's center the prediction targets:`,
+      ``,
+      [
+        `f:x->x@randomVar(20,10) mf:static(emaVersionOf f) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=mfo-mean(mfo)) 10000)`,
+      ],
+      ``,
+      `Cannot do anything useful without some method of increasing inequality.`,
+      ``,
+      `But what if you predict a sharper version of yourself, thus trying to solidify suspicions into either concrete features or lack of them?`,
+      `        This does need the output to be limited to a range, such as if it was put through \`softsign\`, to prevent divergence.`,
+      ``,
+      `Let's try a few variants of this without \`emaVersionOf\`.`,
+      ``,
+      [
+        `f:x->softsign(x@randomVar(20,10)) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=where(abs(fo)<mean(abs fo),fo*.8,fo*1.2)) 10000)`,
+      ],
+      ``,
+      [
+        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=clip(fo*fo*fo,-2,2)) 10000)`,
+      ],
+      ``,
+      `        \`emaVersionOf\` can stabilize prediction targets, which is desirable in machine learning.`,
+      `                Prevents catastrophic divergence.`,
+      `        Let us try:`,
+      ``,
+      [
+        `f:x->softsign(x@randomVar(20,10)) mf:static(emaVersionOf f) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=where(abs(mfo)<mean(abs mfo),mfo*.8,mfo*1.2)) 10000)`,
+      ],
+      ``,
+      [
+        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) mf:static(emaVersionOf f) N:1000 o:slice(zeroGrad randomVar(N,20),randomNat(N-5),5) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=clip(mfo*mfo*mfo,-2,2)) 10000)`,
+      ],
+      ``,
+      `Not quite as random-noisy, right? When everyone is equal, no one cares about anyone.`,
+    ],
     docs:`\`emaVersionOf(Func,Momentum)\`
 Turns a function (and all its dependencies, where needed) into an exponentially-moving-average-variables version of itself.`,
     dispose:true,
     call(fn, mom = .99) {
-      // TODO: ...How exactly do we turn `deconstruct`able things with `varSGD`-defining arrays into re-constructed versions of themselves?
-      //   Do we first do `bound`, in which we `construct` deconstructable things once (remembering them), not go into quotes, and turn `varSGD`s' `varData`s into `varEma`s;
-      //   And then `construct` those things a second time?
-      // Or do we want to implement the whole thing ourselves, recursively, with a Map?
-      // Or should we do `bound` per-func, putting sub-funcs into a found queue...
-
-      // Also, how do we not re-construct globals and funcs without vars?
+      if (typeof mom != 'number') error('Not a number:', mom)
+      if (isArray(fn) || !isArray(defines(fn, deconstruct))) return
+      const backctx = _invertBindingContext(Self.ctx)
+      let [openFuncs, emaVars] = interrupt(2)
+      try {
+        if (openFuncs === undefined)
+          openFuncs = bound(x => {
+            // It's very sad that we have to go into `quote`d subgraphs, and re-`construct` non-global functions without variables in them, but it has to happen.
+            //   (Unless you know better graph traversal primitives.)
+            if (typeof x == 'function' && !backctx.has(x) && isArray(defines(x, deconstruct))) return [...defines(x, deconstruct)]
+          }, fn, true)
+        if (emaVars === undefined)
+          emaVars = bound(x => {
+            if (isArray(x) && x[0] === quote) return x[1]
+            if (isArray(x) && defines(x, varSGD) === true) return [varEma, [quote, varData(keep(x[1][0]))], x[1], mom]
+          }, openFuncs, false)
+        return makeGraph(emaVars)
+      } catch (err) { if (err === interrupt) interrupt.stack.push(openFuncs, emaVars);  throw err }
     },
   },
-  // TODO: Have `emaVersionOf(fn,momentum)`: a function that recurses into funcs and replaces vars with `varEma`, then does `makeGraph` on funcs.
 
   _increment:{
     docs:`Variable-specific (\`varSGD\`/\`varMomentum\`/…). Keeps track of what to divide by in order to average gradients.`,
