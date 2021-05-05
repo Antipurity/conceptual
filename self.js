@@ -7466,7 +7466,6 @@ p:tf(io.0,zeros(_tensorShape io.1))
         _(`fancier`),
         `
 mem:(m stateCell truncatedNormal(m Cells FS))
-tf:
 hidden:(m transformer(Inputs+Cells,Cells,FS,0,0,softsign) (where isFunc(Pre) (m concat2 State (m Pre) 0) State) State)
 outputs:(where 0<Outputs (m transformer(Cells,Outputs,FS,0,0,softsign) hidden weights(m Outputs FS)) null)
 creator:(concept docs 'Creates a differentiable neural computer.
@@ -7583,7 +7582,7 @@ grad:Cells->FS->(m func ? (m predict targets (m where (m less at (m mean at)) (m
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
 pt:emaVersionOf(targets,.99)
-grad:Cells->FS->(m func ? (m predict targets (m where (m less pt (m mean pt)) -1 1)))`,
+grad:Cells->FS->(m func ? (m predict targets (m sign (m sub pt (m mean pt)))))`,
       ],
       `↑⑭♌ (Maybe sharpen via simple bistability: bigger-than-average values go to \`+1\`, smaller-than-average values go to \`-1\`.)`,
       `        Okay, this is WAY too much. Only compute can save us now.`,
@@ -7614,8 +7613,8 @@ epoch:stateCell(0)
 combined:stateCell(null)
 doCombine:img->as(combined,concat2 as(combined) img 0)
 corr:zeroGrad(correlation result)
-maybeCombine:img->n->ending->select(equal floor(n) floor(n/combinationRate)*combinationRate,doCombine,null,img);select(ending,img->displayOne(CombinedImages,img),null,img)
-visualize:result->end->displayOne(Visualize,shouldDisplay);(select _setting(shouldDisplay) doDisplay null zeroGrad(result) corr);display(MeanChange,mean abs(zeroGrad result-prev));display(MeanCorrelation,mean abs(corr));as(prev,zeroGrad result);as(avg,avg+avgChangeSpeed*(zeroGrad result-avg));as(epoch,epoch+1);maybeCombine(as avg,as epoch,equal env as(epoch));undefined
+maybeCombine:img->n->ending->select(equal floor(n) floor(n/combinationRate)*combinationRate,doCombine,null,img);select(ending,func displayOne(CombinedAvgCorrelations,as combined);save('CombinedAvgCorrelations',as combined),null,img)
+visualize:result->end->displayOne(Visualize,shouldDisplay);(select _setting(shouldDisplay) doDisplay null zeroGrad(result) corr);display(MeanChange,mean abs(zeroGrad result-prev));display(MeanCorrelation,mean abs(corr));as(prev,zeroGrad result);as(avg,avg+avgChangeSpeed*(zeroGrad result-avg));as(epoch,epoch+1);maybeCombine(correlation(as avg),as epoch,equal end as(epoch));undefined
 `,
       ],
       `(Allow visualization, as pretty pictures. It's not like we have objective metrics to maximize/minimize, but we can't fly completely blind either.)`,
@@ -7629,8 +7628,11 @@ visualize:result->end->displayOne(Visualize,shouldDisplay);(select _setting(shou
 neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
-        // TODO: Run & fix ⑩♌. ...It runs, but, is the very-gradual decrease in mean change because of this goal structure, or because `clip` gives +-1e-3 gradient to clipped parts?
-        // TODO: Re-run ⑩♌.
+        // TODO: Run & fix 10♌. ...It runs, but, is the very-gradual decrease in mean change because of this goal structure, or because `clip` gives +-1e-3 gradient to clipped parts?
+        // TODO: Re-run 10♌.
+        // TODO: Run 14♌ with both learned embeddings and sinusoidal encodings, to compare.
+        // TODO: Replace all the circled numbers with actual numbers, because they're hard to read.
+        // TODO: Run all 14 gradient-source variants, and preserve all plots and picture collages.
       ],
       `Run.`,
       `What did we learn from this?`,
@@ -8763,7 +8765,7 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
         `slice tensor((1 2) (3 4)) 0 1`,
       ],
       [
-        `repeat ^(slice(randomVar(60),randomNat(50),randomNat(10)+1)=1) 1000`,
+        `repeat ^(slice(randomVar(60),randomNat(50),randomNat(10)+1)=1) 10000`,
       ],
     ],
     dispose:true,
@@ -11030,18 +11032,19 @@ Used by \`emaVersionOf(Func,Momentum)\`.`,
       if (typeof mom != 'number') error('Not a number:', mom)
       if (isArray(copyFrom)) copyFrom = copyFrom[0]
       copyFrom = _num(copyFrom)
-      let t0, t1, t2
+      let t0, t1
       try {
         t0 = mul(mom, data[0])
         t1 = mul(1 - mom, copyFrom)
-        t2 = add(t0, t1)
+        const t2 = add(t0, t1)
         _changeArrayItem(data, 0, t2)
-      } finally { dispose(t0), dispose(t1), dispose(t2) }
+        return t2
+      } finally { dispose(t0), dispose(t1) }
     },
   },
 
   emaVersionOf:{
-    examples:[ // TODO: Test this bullshit.
+    examples:[
       `Bootstrap your own latent, with no explicit source of gradient except yourself? Self-determined prediction targets? Fact, or fiction?`,
       ``,
       `Now, of course, if you just \`predict\` yourself, nothing will happen:`,
@@ -11050,41 +11053,39 @@ Used by \`emaVersionOf(Func,Momentum)\`.`,
         `f:x->x@randomVar(20,10) mf:static(emaVersionOf f) N:1000 o:sliceOff(randomVar N 20,randomNat(N)) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=mf(o)) 10000)`,
       ],
       ``,
-      `And in fact, let's center the prediction targets:`,
-      ``,
-      [
-        `f:x->x@randomVar(20,10) mf:static(emaVersionOf f) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=mfo-mean(mfo)) 10000)`,
-      ],
-      ``,
-      `Cannot do anything useful without some method of increasing inequality.`,
+      `Cannot do anything useful without some method of increasing inequality, because equality means no loss means no change.`,
       ``,
       `But what if you predict a sharper version of yourself, thus trying to solidify suspicions into either concrete features or lack of them?`,
-      `        This does need the output to be limited to a range, such as if it was put through \`softsign\`, to prevent divergence.`,
+      `        This does need the output to be limited to a range, to prevent divergence. Having a few attractor points seems to work best.`,
       ``,
       `Let's try a few variants of this without \`emaVersionOf\`.`,
       ``,
       [
-        `f:x->softsign(x@randomVar(20,10)) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=where(abs(fo)<mean(abs fo),fo*.8,fo*1.2)) 10000)`,
+        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) N:1000 o:slice(zeroGrad randomVar(N,20),randomNat(N-5),5) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=where(fo<mean(fo),-1,1);null) 1000000)`,
       ],
       ``,
       [
-        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=clip(fo*fo*fo,-2,2)) 10000)`,
+        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) N:1000 o:slice(zeroGrad randomVar(N,20),randomNat(N-5),5) fo:f(o) (repeat ^(displayOne('Latent',fo);fo=sign(fo);null) 1000000)`,
       ],
       ``,
-      `        Does not converge?`,
+      `...Stable.`,
+      `Too stable.`,
+      `So stable that it does not even need momentum-based stabilization of prediction targets,`,
+      ``,
+      `        But if it didn't converge, on more complicated data than random?`,
       `        \`emaVersionOf\` can stabilize prediction targets, which is desirable in machine learning.`,
       `                Prevents catastrophic divergence.`,
-      `        Let us try:`,
+      `        Like this:`,
       ``,
       [
-        `f:x->softsign(x@randomVar(20,10)) mf:static(emaVersionOf f) N:1000 o:sliceOff(zeroGrad randomVar(N,20),randomNat(N)) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=where(abs(mfo)<mean(abs mfo),mfo*.8,mfo*1.2)) 10000)`,
+        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) mf:static(emaVersionOf f) N:1000 o:slice(zeroGrad randomVar(N,20),randomNat(N-5),5) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=where(mfo<mean(mfo),-1,1);null) 1000000)`,
       ],
       ``,
       [
-        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) mf:static(emaVersionOf f) N:1000 o:slice(zeroGrad randomVar(N,20),randomNat(N-5),5) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=clip(mfo*mfo*mfo,-2,2)) 10000)`,
+        `f:x->softsign(x@randomVar(20,10))@randomVar(10,10) mf:static(emaVersionOf f) N:1000 o:slice(zeroGrad randomVar(N,20),randomNat(N-5),5) fo:f(o) mfo:mf(o) (repeat ^(displayOne('Latent',fo);fo=sign(mfo);null) 1000000)`,
       ],
       ``,
-      `Not quite as random-noisy, right? When everyone is equal, no one cares about anyone.`,
+      `At best, it performs maybe 2x better.`,
     ],
     docs:`\`emaVersionOf(Func,Momentum)\`
 Turns a function (and all its dependencies, where needed) into an exponentially-moving-average-variables version of itself.`,
@@ -11104,7 +11105,8 @@ Turns a function (and all its dependencies, where needed) into an exponentially-
         if (emaVars === undefined)
           emaVars = bound(x => {
             if (isArray(x) && x[0] === quote) return x[1]
-            if (isArray(x) && defines(x, varSGD) === true) return [varEma, [quote, varData(keep(x[1][0]))], x[1], mom]
+            if (isArray(x) && defines(x, varSGD) === true && isArray(x[1]) && x[1][0] === quote)
+              return [varEma, [quote, varData(keep(x[1][1][0]))], x[1], mom]
           }, openFuncs, false)
         return makeGraph(emaVars)
       } catch (err) { if (err === interrupt) interrupt.stack.push(openFuncs, emaVars);  throw err }

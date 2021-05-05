@@ -82,10 +82,17 @@ In short, a \textit{Transcendent Galaxy-Brain Algorithm} is any algorithm that:
 \item Indirectly encodes a fully general model that is itself: has all inputs and outputs piped through its learned parameters, if any.
 \item Combines many simple cells into arbitrary structures: has potential for all-to-any connectivity, though it only has one particular connectivity at any one moment. All-to-all connectivity, such as in a dense layer, will dissolve structures.
 \item Makes these emergent structures locally interact as they define, in arbitrary ways defined only by those structures: allows self-determination.
+\item Is designed to run forever by modeling time. For example, using backpropagation-through-time and/or synthetic gradients for machine learning, or more generally, an infinite interpreter loop.
 \item Runs by itself, without relying on the environment to provide any of the above: otherwise, any algorithm would technically count.
 \end{itemize}
 
+    TODO: Separate locality of interaction more clearly, maybe? (Right now, it's entangled with gradient sources and connectivity, in items 2 & 3.)
+
+    TODO: Maybe include discrete-ness of emerging structures ("definite things fundamentally happen") as an item, potentially as a source of gradient to approximations (as was intended long ago)? (Because analog-only models ain't training, and no structure is emerging.)
+
 In particular, this permits a simple implementation: memory cells repeatedly modified by attention (between cells and cells-and-inputs), with self-determined gradient for cell interaction.
+
+    TODO: Find wherever we talk about self-determined gradient, and better acknowledge that this is self-supervised learning, not some particular thing.
 
 Now, to justify "what", we outline "why".
 
@@ -208,25 +215,15 @@ Modern machine learning systems often struggle with diversity: once data is lear
 
 \section{Experiments}
 
-We gave up objectives, and so we have no metrics to compare different configurations against. The best we can do is essentially eyeballing it.
+The main objective of this section is to justify the hypothesis that we can extract interesting representations from no data, only self-interaction. This regime separates approaches which take diversity from data and approaches which make their own diversity.
 
-    TODO: Establish clear hypotheses.
+Here, we only present experiments on the more interesting Transformer architecture: similarly to how creatures often evolve into crabs, machine learning algorithms often get outperformed by Transformer-based architectures.
 
-To fit our prior software and hardware constraints, we have implemented a machine learning framework on top of TensorFlowJS, which adds minor difficulty to our experiments, as we have to re-implement all infrastructure for every experiment. However, to implement the simplest Transformer-based version of TGBA, that complexity is unneeded.
+// We gave up objectives, and so we have no metrics to compare different configurations against. The best we can do is essentially eyeballing it.
 
-    TODO: ...Is that really worth saying?
+// To fit our prior software and hardware constraints, we have implemented a machine learning framework on top of TensorFlowJS, which adds minor difficulty to our experiments, as we have to re-implement all infrastructure for every experiment. However, to implement the simplest Transformer-based version of TGBA, that complexity is unneeded. TODO: ...This probably should go into Criticisms, if anywhere.
 
-    TODO: Should we put a paragraph and a few plots of the reinforcement-learning solution, or not?
-
-Similarly to how creatures often evolve into crabs, machine learning algorithms often get outperformed by Transformer-based architectures.
-
-    TODO: We need to justify:
-
-    TODO: - The grand challenge: demonstrating that non-trivial structures arise from training with no inputs. Do we have to learn t-SNE for this? How else would we analyze seemingly-random noise?
-
-    TODO: - See that autoencoders without input eventually collapse loss to 0, whereas self-determined targets keep up the diversity so there's always something to learn (sure hope so, otherwise, we have big holes in our "diversity" claims) ("the learning of data is already well-studied, so in this section, we try to learn without data; this no-inputs regime can highlight which approaches need diversity in their data and which generate their own diversity"); --- doesn't seem to pan out? Maybe? Damd it, should really run everything to completion.
-
-    TODO: - Few targets, because the most recent results on a similar architecture suggest interesting things happening with many targets (so, a plot of what happens as we increase the target count, from 1 to MAX);
+    TODO: - The grand challenge: demonstrating that non-trivial structures arise from training with no inputs. Do we have to learn & implement t-SNE for this? How else would we analyze seemingly-random noise? Maybe by better sharpening techniques transforming it into pattern-ful noise? Can only hope.
 
     TODO: - See whether self-determination improves performance on actual learning, probably on that super-simple "reverse strings" dataset because datasets are hard (or try finding some dataset on the Internet and try learning that);
 
