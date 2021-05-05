@@ -17797,7 +17797,7 @@ The parsed arrays are not \`merged\`.`,
     }
   },
 
-  _fastSerialize(expr, ctx = Self.ctx) {
+  _fastSerialize(expr, ctx = Self.ctx, returnAsArray = false) {
     // Walk expr and name all referenced-more-than-once nodes, then output them then expr.
 
     const backctx = _invertBindingContext(ctx)
@@ -17840,7 +17840,7 @@ The parsed arrays are not \`merged\`.`,
       indices.forEach((i,arr) => (result.push(names[i], ':'), putValue(arr, true), result.push(' ')))
       putValue(expr)
       result.push(')')
-      return result.join('')
+      return returnAsArray ? result : result.join('')
     } catch (err) { if (err === interrupt) interrupt.stack.push(visited, indices, decons, weakMaps, promises, promiseValues, promiseContainers, promised, result), visited = null;  throw err }
     finally {
       names && _allocArray(names)
@@ -17939,7 +17939,7 @@ Saves an object('s \`fast\` serialization) in the browser's \`indexedDB\`, to be
     },
     call(at, obj, doNotSerialize) {
       if (typeof at != 'string') error("Not a string:", at)
-      const str = doNotSerialize || obj === undefined ? obj : _fastSerialize(obj)
+      const str = doNotSerialize || obj === undefined ? obj : _fastSerialize(obj, undefined, true)
 
       // With localStorage, the below would have been: `localStorage[at] = str`.
       return new Promise((resolve, reject) => {
@@ -17949,8 +17949,8 @@ Saves an object('s \`fast\` serialization) in the browser's \`indexedDB\`, to be
             const db = req.result
             const transaction = db.transaction('saved', 'readwrite')
             const saved = transaction.objectStore('saved')
-            const r = obj !== undefined ? saved.put(new Blob([str]), at) : saved.delete(at)
-            r.onsuccess = () => resolve(str !== undefined ? str.length : 0)
+            const r = obj !== undefined ? saved.put(new Blob(isArray(str) ? str : [str]), at) : saved.delete(at)
+            r.onsuccess = () => resolve(str !== undefined ? (isArray(str) ? str.reduce((sm, str) => sm + str.length, 0) : str.length) : 0)
             r.onerror = () => reject(r.error)
           } catch (err) { reject(err) }
         }
