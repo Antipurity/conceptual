@@ -7304,7 +7304,7 @@ Implement.`,
         _(`fancier`),
         `mix:node->in->out->layers->nonlinearity->ExtraDimensionSize->(reduce arrayFilledWith(layers,m (m out out) nonlinearity) a->x->(minimix (m a.1 x) a.0) (minimix node (m in out)))`,
       ],
-      `↑①♈ (Complete the linearity of \`matMul\` with \`nonlinearity\` of, say, \`softsign\`, \`layers\` times.)`,
+      `↑♈1 (Complete the linearity of \`matMul\` with \`nonlinearity\` of, say, \`softsign\`, \`layers\` times.)`,
       [
         _(`fancier`),
         `shared:equal(ExtraDimensionSize,undefined)
@@ -7313,7 +7313,7 @@ firstSizes:(where shared (m in out) (m ExtraDimensionSize in out))
 dense:(reduce arrayFilledWith(layers,m hiddenSizes nonlinearity) a->x->(minimix (m a.1 x) a.0) (minimix (where shared node (m expandDims node 1)) firstSizes))
 mix:node->in->out->layers->nonlinearity->ExtraDimensionSize->(where shared dense (m squeezeDims dense 1))`,
       ],
-      `↑②♈ (To uncouple weights, we have to ensure that we multiply vectors by weight matrices, via \`expandDims\`; then convert back to matrices, via \`squeezeDims\`.)`,
+      `↑♈2 (To uncouple weights, we have to ensure that we multiply vectors by weight matrices, via \`expandDims\`; then convert back to matrices, via \`squeezeDims\`.)`,
       `(Honestly, it's probably so much more convenient to have lazily-initialized weights, so that we only need to specify the output dimension. But, I'm too lazy.)`,
       `And again, you have an option: single-head attention, vs multi-head attention.`,
       [
@@ -7323,7 +7323,7 @@ K:mix(Options,fs,fs,1,softsign,M)
 V:mix(Options,fs,fs,1,softsign,M)
 attention:M->N->Options->Choices->fs->(m matMul (m softmax (m mul 1/sqrt(fs) (m matMul Q (m transpose K)))) V)`,
       ],
-      `↑①♉ (Make each choice choose an option, or in other words, pay attention to an option.)`,
+      `↑♉1 (Make each choice choose an option, or in other words, pay attention to an option.)`,
       [
         _(`fancier`),
         `Heads:4
@@ -7334,19 +7334,19 @@ K:mix(Opt,fs/Heads,fs/Heads,1,softsign,M*Heads)
 V:mix(Opt,fs/Heads,fs/Heads,1,softsign,M*Heads)
 attention:M->N->Options->Choices->fs->(m concat (m split (m matMul (m softmax (m mul 1/sqrt(fs/Heads) (m matMul Q (m transpose K)))) V) Heads 0) Heads -1)`,
       ],
-      `↑②♉ (For multiple heads, we split up features (inner dimension) into parallelized heads (outer dimension), then do the operation, then put features back.)`,
+      `↑♉2 (For multiple heads, we split up features (inner dimension) into parallelized heads (outer dimension), then do the operation, then put features back.)`,
       `Now, choose whether batch normalization will be done (shifting and rescaling everything to 0 mean and 1 variance).`,
       `            Maybe you want adaptive gradient clipping, \`\`settings ^_adaptiveGradientClipping\`\`, instead.`,
       [
         _(`fancier`),
         `norm:x->x`,
       ],
-      `↑①♊`,
+      `↑♊1`,
       [
         _(`fancier`),
         `n:x-mean(x) norm:x->n/sqrt(mean(n*n)+1e-6)`,
       ],
-      `↑②♊ (For better gradient flow and learning \`\`elemCollapse func(examples mean)\`\`, add the input \`x\` to the output \`y\`, and normalize to \`0\` mean and \`1\` variance.)`,
+      `↑♊2 (For better gradient flow and learning \`\`elemCollapse func(examples mean)\`\`, add the input \`x\` to the output \`y\`, and normalize to \`0\` mean and \`1\` variance.)`,
       [
         _(`fancier`),
         `realM:m(readAt,m _tensorShape Options,-2)
@@ -7359,7 +7359,7 @@ nx:m(norm,x)
 p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
 transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
       ],
-      `↑①♍ (Connect everything-to-anything then perform an operation on each resulting choice: add positional embedding, attention, add+norm, dense layer, add+norm, all repeated a few times.)`,
+      `↑♍1 (Connect everything-to-anything then perform an operation on each resulting choice: add positional embedding, attention, add+norm, dense layer, add+norm, all repeated a few times.)`,
       [
         _(`fancier`),
         `realM:m(readAt,m _tensorShape Options,-2)
@@ -7376,8 +7376,8 @@ nx:m(norm,x)
 p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
 transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
       ],
-      // TODO: Run & fix ②♍.
-      `↑②♍ (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to, and attend to relative positions easily {https://arxiv.org/abs/1706.03762}: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
+      // TODO: Run & fix ♍2. (Doesn't seem to add significant advantages. Looks the same.)
+      `↑♍2 (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to, and attend to relative positions easily {https://arxiv.org/abs/1706.03762}: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
       `We have a model, so now, you know the drill: we need a simple synthetic task, to iron out the bugs.`,
       `We will use the source code of Conceptual (\`serialize Self basic {}\`) as input and output, to be predicted by a Transformer model.
       Or, actually, we want a few tasks (each task description would take a fixed-length slice of the dataset, and return the input and the output strings), such as:`,
@@ -7385,12 +7385,12 @@ transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options 
         _(`fancier`),
         `n:8 splitter:(concept 'in' n 'out' n 'needs' n docs 'The task of reversing a string.' call s->array(s,reverse(s)))`,
       ],
-      `↑①♋`,
+      `↑♋1`,
       [
         _(`fancier`),
         `i:7 o:1 splitter:(concept 'in' i 'out' o 'needs' static(i+o) docs 'The task of predicting the continuation of a string.' call s->array(arraySlice(s,0,i),arraySlice(s,i,i+o)))`,
       ],
-      `↑②♋ (Choose between those two tasks.)`,
+      `↑♋2 (Choose between those two tasks.)`,
       [
         _(`fancier`),
         `alphabet:'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. '`,
@@ -7488,11 +7488,10 @@ Arguments:
       `Now, choose the source of self-determined gradient, for that learned memory.`,
       [
         _(`fancier`),
-        `
-targetSpace:mix(?,FS,FS,1,softsign,Cells)
+        `targetSpace:mix(?,FS,FS,1,softsign,Cells)
 grad:Cells->FS->(m func ? (m predict targetSpace ?))`,
       ],
-      `↑①♌ (Maybe, the good old-fashioned auto-regression: \`f(x)=x\`. May produce less diversity, but who knows, really.)`,
+      `↑♌1 (Maybe, the good old-fashioned auto-regression: \`f(x)=x\`. May produce less diversity, but who knows, really.)`,
       [
         _(`fancier`),
         `Goals:8
@@ -7500,18 +7499,18 @@ targetSpace:mix(?,FS,FS,1,softsign,Cells)
 targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
 grad:Cells->FS->(m func ? (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
       ],
-      `↑②♌ (Or maybe make some cells produce prediction targets for other cells to try and match.)`,
+      `↑♌2 (Or maybe make some cells produce prediction targets for other cells to try and match.)`,
       [
         _(`fancier`),
         `grad:Cells->FS->(m func ? (m predict ? (m mul 1.2 ?)))`,
       ],
-      `↑③♌ (Or maybe make each cell be more sure of its output, either negative or positive. If \`norm\` centers and shrinks the whole state, then this will make positive cells compete for positive-ness, same for negative cells.)`,
+      `↑♌3 (Or maybe make each cell be more sure of its output, either negative or positive. If \`norm\` centers and shrinks the whole state, then this will make positive cells compete for positive-ness, same for negative cells.)`,
       [
         _(`fancier`),
         `s:(m sign ?)
 grad:Cells->FS->(m func ? (m minimize (m abs ?) (m sub 0 s)))`,
       ],
-      `↑④♌ (Or maybe make each cell go away from 0, for competition.)`,
+      `↑♌4 (Or maybe make each cell go away from 0, for competition.)`,
       [
         _(`fancier`),
         `abi:(m abs ?)
@@ -7519,13 +7518,13 @@ mn:(m mean abi)
 s:(m sign ?)
 grad:Cells->FS->(m func ? (m minimize abi (m where abi<mn s (m sub 0 s))))`,
       ],
-      `↑⑤♌ (Or maybe make each big-enough cell go away from 0 and each small-enough cell go to 0, for increasing surety.)`,
+      `↑♌5 (Or maybe make each big-enough cell go away from 0 and each small-enough cell go to 0, for increasing surety.)`,
       [
         _(`fancier`),
         `targetSpace:mix(?,FS,FS,1,softsign,Cells)
 grad:Cells->FS->(m func ? (m predict ? targetSpace))`,
       ],
-      `↑⑥♌ (Or maybe make each cell determine its own target, via essentially an arbitrary transformation.)`,
+      `↑♌6 (Or maybe make each cell determine its own target, via essentially an arbitrary transformation.)`,
       [
         _(`fancier`),
         `Goals:8
@@ -7533,19 +7532,19 @@ targetSpace:mix(?,FS,FS,1,softsign,Cells)
 targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
 grad:Cells->FS->(m func ? (m minimize targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
       ],
-      `↑⑦♌ (Or maybe, instead of giving prediction targets, give gradient to others. Probably too unstable to learn anything, but who knows.)`,
+      `↑♌7 (Or maybe, instead of giving prediction targets, give gradient to others. Probably too unstable to learn anything, but who knows.)`,
       [
         _(`fancier`),
         `targetSpace:mix(?,FS,FS,1,softsign,Cells)
 grad:Cells->FS->(m func ? (m minimize targetSpace targetSpace))`,
       ],
-      `↑➇♌ (Or maybe, make each cell \`predict\` \`0\` in goal-space.)`,
+      `↑♌8 (Or maybe, make each cell \`predict\` \`0\` in goal-space.)`,
       [
         _(`fancier`),
         `targetSpace:mix(?,FS,FS,1,softsign,Cells)
 grad:Cells->FS->(m func ? (m minimize ? targetSpace))`,
       ],
-      `↑⑨♌ (Or maybe, literally make each cell determine its own gradient, via a randomly-initialized NN.)`,
+      `↑♌9 (Or maybe, literally make each cell determine its own gradient, via a randomly-initialized not-trained NN.)`,
       [
         _(`fancier`),
         `Goals:8
@@ -7554,7 +7553,7 @@ targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
 splitSpace:(m stack m(split,targetSpace,Goals,0) 0)
 grad:Cells->FS->(m func ? (m last (m predict (m gradMul (m sliceOff splitSpace 0) .01) (m mean splitSpace 0)) (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0))))`,
       ],
-      `↑⑩♌ (Maybe return to "some cells give \`predict\`ion targets to others", but with the targets turning into what targets them (\`predict\`ing the average of the goal's section, dividing the gradient), for bootstrapping representations.)
+      `↑♌10 (Maybe return to "some cells give \`predict\`ion targets to others", but with the targets turning into what targets them (\`predict\`ing the average of the goal's section, dividing the gradient), for bootstrapping representations.)
       (Kinda like Bootstrap-Your-Own-Latent {https://arxiv.org/abs/2006.07733} or Momentum Contrast {https://arxiv.org/abs/1911.05722} but without momentum.)`,
       [
         _(`fancier`),
@@ -7562,29 +7561,34 @@ grad:Cells->FS->(m func ? (m last (m predict (m gradMul (m sliceOff splitSpace 0
 pastTargets:emaVersionOf(targets,.99)
 grad:Cells->FS->(m func ? (m predict targets pastTargets))`,
       ],
-      `↑⑪♌ (Maybe return to "stick to whatever past you picked", with zero fancy tricks.)`,
+      `↑♌11 (Maybe return to "stick to whatever past you picked", with zero fancy tricks.)`,
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
 pt:emaVersionOf(targets,.99)
 apt:(m abs pt)
-grad:Cells->FS->(m func ? (m predict targets (m where (m less apt (m mean apt)) (m mul pt .8) (m mul pt 1.2))))`,
+grad:Cells->FS->(m func ? (m predict targets (m where (m less apt (m mean apt)) 0 (m sign pt))))`,
       ],
-      `↑⑫♌ (Maybe return to sharpening the past, like in \`examples emaVersionOf\`: push the smallest-magnitude values to zero, push the biggest-magnitude values away from it.)`,
+      `↑♌12 (Maybe return to sharpening the past, like in \`examples emaVersionOf\`: push the smallest-magnitude values to zero, push the biggest-magnitude values away from it.)`,
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
 at:(m abs targets)
-grad:Cells->FS->(m func ? (m predict targets (m where (m less at (m mean at)) (m mul targets .8) (m mul targets 1.2))))`,
+grad:Cells->FS->(m func ? (m predict targets (m where (m less at (m mean at)) 0 (m sign targets))))`,
       ],
-      `↑⑬♌ (Same as ⑫♌, but without the stabilization of momentum.)`,
+      `↑♌13 (Same as ♌12, but without the stabilization of momentum.)`,
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
 pt:emaVersionOf(targets,.99)
 grad:Cells->FS->(m func ? (m predict targets (m sign (m sub pt (m mean pt)))))`,
       ],
-      `↑⑭♌ (Maybe sharpen via simple bistability: bigger-than-average values go to \`+1\`, smaller-than-average values go to \`-1\`.)`,
+      `↑♌14 (Maybe sharpen via simple bistability: bigger-than-average values go to \`+1\`, smaller-than-average values go to \`-1\`.)`,
+      [
+        _(`fancier`),
+        `grad:Cells->FS->(m func ? (m predict ? (m sign (m sub ? (m mean ?)))))`,
+      ],
+      `↑♌15 (Maybe direct state sharpening.)`,
       `        Okay, this is WAY too much. Only compute can save us now.`,
       [
         _(`fancier`),
@@ -7593,7 +7597,7 @@ Outputs:0
 FS:128
 
 in:(m clip (m norm State) -2 2)
-Post:m(func,State,Out,m last (m (grad Outputs Cells FS) in) in)
+Post:m(func,State,Out,m last (m (grad Cells FS) in) in)
 
 GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
 
@@ -7628,13 +7632,20 @@ visualize:result->end->displayOne(Visualize,shouldDisplay);(select _setting(shou
 neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
-        // TODO: Run & fix 10♌. ...It runs, but, is the very-gradual decrease in mean change because of this goal structure, or because `clip` gives +-1e-3 gradient to clipped parts?
-        // TODO: Re-run 10♌.
-        // TODO: Run 14♌ with both learned embeddings and sinusoidal encodings, to compare.
-        // TODO: Replace all the circled numbers with actual numbers, because they're hard to read.
+        // TODO: Run & fix ♌10. ...It runs, but, is the very-gradual decrease in mean change because of this goal structure, or because `clip` gives +-1e-3 gradient to clipped parts? TODO: Re-run ♌10.
+        // TODO: Run ♌14 with both learned embeddings and sinusoidal encodings, to compare.
+        // TODO: Run ♌15: maybe, the indirection is what's killing it. (Doubt it, though.)
         // TODO: Run all 14 gradient-source variants, and preserve all plots and picture collages.
       ],
+      // TODO: Re-construct the symbols and numbers of the previous run, and have a fetcher+displayer. Check that it works. ...Except, that needs a working Firefox...
+      // TODO: Incorporate bistability into transition dynamics, not into gradient. (Research attractor neural networks.)
+      // TODO: Try thinking about how we'd use meta-learning to make prediction targets adjust each other, if possible?...
       `Run.`,
+      `♈2 ♉2 ♊2 ♍2 ♌14 \`\`
+a:parseURL('experiments/tf_change_0.txt',fast)
+b:parseURL('experiments/tf_correlation_0.txt',fast)
+c:parseURL('experiments/tf_images_0.txt',fast)
+elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `What did we learn from this?`,
       `    (After we used the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
       `Well.`,
@@ -7647,7 +7658,8 @@ neucomp:static(await load('neucomp'))
       `    When normalizing, it likes to settle into ±100%-correlated pictures. When only clipping, it likes being random noise.`,
       `    Peachy.`,
       `    Both sharing and normalizing turn individuality into uniformity.`,
-      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ③♌ or ④♌ or ⑤♌? Surely they would start to compete, right?`, // TODO: Run this.
+      `    These two extremes are too common in generality. But ideally, we would see something that combines them. How is that possible to achieve?`,
+      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ♌3 or ♌4 or ♌5? Surely they would start to compete, right?`, // TODO: Run this.
       // TODO: Direct to `examples emaVersionOf`.
       ``,
       `But.`,
@@ -7664,7 +7676,7 @@ str:arraySlice(data,sliceStart,sliceStart+n)
 dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)),FS);array(oneHot(stringToIndices str alphabet,FS),oneHot(stringToIndices reverse(str) alphabet,FS)))
 `,
       ],
-      `↑①♍ (The perfectly legitimate (and synthetic) string reversal dataset. Hopefully, we can actually get it working.)`,
+      `↑♍1 (The perfectly legitimate (and synthetic) string reversal dataset. Hopefully, we can actually get it working.)`,
       [
         _(`fancier`),
         `
@@ -7680,7 +7692,7 @@ afterMask:oneHot(stringToIndices (arraySlice str maskEnd arrayLength(str)) alpha
 dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)) FS);array(concat2 (concat2 beforeMask theMask 0) afterMask 0,oneHot(stringToIndices str alphabet,FS)))
 `,
       ],
-      `↑②♍ (A generalization of "predict the continuation of a string": mask out a portion of the string, and ask to predict the original. Basically, BERT {https://arxiv.org/abs/1810.04805}.)`,
+      `↑♍2 (A generalization of "predict the continuation of a string": mask out a portion of the string, and ask to predict the original. Basically, BERT {https://arxiv.org/abs/1810.04805}.)`,
       [
         _(`fancier`),
         `o:2 i:3072 n:i+o
@@ -7688,7 +7700,7 @@ D:static(importData())
 ind:randomNat(arrayLength D)/n
 dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo expandDims((arraySlice D ind*n+o (ind+1)*n)/255,-1) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n ind*n+o),100),-1) (m o FS))`,
       ],
-      `↑③♍ (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version.)
+      `↑♍3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version.)
 (This CIFAR-100 data source is so low-effort: individual pixels as inputs, same as in {https://arxiv.org/abs/2103.03206}. There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
       [
         _(`fancier`),
@@ -9424,6 +9436,7 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
       _rememberToDispose.res = new WeakMap
       if (typeof FinalizationRegistry != ''+void 0) {
         _rememberToDispose.reg = new FinalizationRegistry(res => {
+          _rememberToDispose.reg.unregister(res)
           const prevDoubleDispose = dispose.safeDouble;  dispose.safeDouble = true
           try { dispose.not && res.forEach(_unDisposeNot), res.forEach(dispose), res.length = 0, _rememberToDispose.res.delete(res) }
           finally { dispose.safeDouble = prevDoubleDispose }
@@ -9797,11 +9810,12 @@ Simply asks/prompts the user to choose between \`Options\`.
 - Or make the context menu able to display plots for numbers-only arrays (updated when the array is updated, via \`observe\`, not a \`display\`-only debouncing thing). (Or both.)
 
 Also, allow multiple plots in the same, uh, plot.`,
-    docs:`\`display Label Value\`: displays a plot of all \`Value\`s at a \`Label\`. \`display Label\`: clears the display at a \`Label\`.
+    docs:`\`display Label Value\` or \`display Label Value StepSize\`: displays a plot of all \`Value\`s at a \`Label\`. \`display Label\`: clears the display at a \`Label\`.
 Browser-only.
 The plot can display the exact values at cursor, and be zoomed in by a dragged click (and zoomed out by a quick click).
 
 \`Value\` is \`undefined\`: delete the plot. \`null\`: initialize the plot if not initialized. \`'empty'\`: empty the plot (for overwriting).
+\`StepSize\` is the visual multiplier of each data index, which allows only giving data at regular indices.
 
 (There was a need to display losses during training. A day after, this appeared.)
 
@@ -9825,7 +9839,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       _noLossDisplay:_(`_noLossDisplay`),
       _minMaxBoundary:_(`_minMaxBoundary`),
     },
-    call(lbl, vle) {
+    call(lbl, vle, stepSize = 1) { // TODO: Handle stepSize appropriately.
       if (typeof document == ''+void 0) return
       if (_isDisposable(vle)) { // Display tensors asynchronously, so we don't wait for them. (To really ensure a particular order, `await` the result.)
         const env = call.env
@@ -9881,6 +9895,8 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
             })(L, lbl, dv)
 
           L.set(lbl, elemValue(cell, data))
+          if (!display.stepSizes) display.stepSizes = new WeakMap
+          display.stepSizes.set(data, stepSize || 1)
           const pre = _smoothHeightPre(L.get(display))
           elemInsert(L.get(display), row)
           _reflow().then(() => _smoothHeightPost(L.get(display), pre))
@@ -9924,7 +9940,7 @@ Click a plot to update it.`,
     _updatePlots.cells.add(cell)
 
     const text = cell.firstChild.lastChild
-    if (text && isArray(cell.to)) _updatePlotTooltip(text, cell.to.length-1, cell.to[cell.to.length-1], undefined, true)
+    if (text && isArray(cell.to)) _updatePlotTooltip(text, cell.to.length-1, cell.to, undefined, true)
   },
 
   _updatePlots() {
@@ -9958,10 +9974,11 @@ Click a plot to update it.`,
     // .cells (a Set), .fn (a `_throttled` mirror of this function)
   },
 
-  _updatePlotTooltip(text, x, y, makeEnd, exitIfNotEnd) {
+  _updatePlotTooltip(text, x, data, makeEnd, exitIfNotEnd) {
     if (!text) return
     if (exitIfNotEnd && !text._isEnd) return
-    text.firstChild.textContent = 'At '+(x+1)+', the value is\n'
+    const y = data[x], stepSize = display.stepSizes && display.stepSizes.get(data) || 1
+    text.firstChild.textContent = 'At '+(x+1)*stepSize+', the value is\n'
     text.lastChild.textContent = (y < 1e8 ? y : (+y).toExponential(2))
     if (!exitIfNotEnd) text._isEnd = !!makeEnd
   },
@@ -9976,6 +9993,7 @@ Click a plot to update it.`,
     if (end === undefined)
       end = el._end !== undefined && el._end !== el._len ? el._end : data.length
     else transition = true
+    const stepSize = display.stepSizes && display.stepSizes.get(data) || 1
 
     svg
       .attr("width", sizes.width + sizes.left + sizes.right - .5) // (Firefox/Chromium agree only with this -.5.)
@@ -10006,7 +10024,7 @@ Click a plot to update it.`,
           const x = this._x(i+1), y = this._y(data[i])
           focus.style('opacity', 1), text.style('opacity', 1)
           focus.style('transform', `translate(-50%,-50%) translate(1ch,0) translate(${x}px, ${y}px)`)
-          _updatePlotTooltip(text.node(), i, data[i], i >= this._len-1)
+          _updatePlotTooltip(text.node(), i, data, i >= this._len-1)
           text.style('transform', `translate(-50%,-100%) translate(1ch,0) translate(${x}px, ${y-20}px)`)
         }
 
@@ -10096,12 +10114,16 @@ Click a plot to update it.`,
     }
 
     // X axis.
+    const Range = [sizes.left, sizes.left + sizes.width - sizes.right]
     const x = (el._x || (el._x = d3.scaleLinear()))
-      .range([sizes.left, sizes.left + sizes.width - sizes.right])
+      .range(Range)
       .domain([begin+1, end])
+    const x2 = (el._x2 || (el._x2 = d3.scaleLinear()))
+      .range(Range)
+      .domain([(begin+1) * stepSize, end * stepSize])
     ;(_disableSmoothTransitions[1] || !transition ? xAxis : xAxis.transition(200))
       .attr("transform", `translate(0,${sizes.top + sizes.height - sizes.bottom})`)
-      .call(d3.axisBottom(x).ticks(Math.min(end - begin - 1, sizes.width / 80)).tickSizeOuter(0))
+      .call(d3.axisBottom(x2).ticks(Math.min(end - begin - 1, sizes.width / 80)).tickSizeOuter(0))
 
     // Y axis.
     let Min = mins[0], Max = maxs[0]

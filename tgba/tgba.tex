@@ -50,7 +50,9 @@ DeepMind's \textit{Perceiver} \cite{DBLP:journals/corr/abs-2103-03206} alternate
 
     TODO: Cite.
 
-The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality.
+The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality. TODO: ...Is it not, though, if we are thinking that it may be a solution to our boring-attractor problems?
+
+    TODO: Attractor networks; what exactly do we cite?
 
     TODO: Novelty search?
 
@@ -80,17 +82,17 @@ In short, a \textit{Transcendent Galaxy-Brain Algorithm} is any algorithm that:
 
 \begin{itemize}
 \item Indirectly encodes a fully general model that is itself: has all inputs and outputs piped through its learned parameters, if any.
-\item Combines many simple cells into arbitrary structures: has potential for all-to-any connectivity, though it only has one particular connectivity at any one moment. All-to-all connectivity, such as in a dense layer, will dissolve structures.
-\item Makes these emergent structures locally interact as they define, in arbitrary ways defined only by those structures: allows self-determination.
+\item Combines many simple cells into arbitrary structures, creating an internal graph.
+\item Makes these emergent structures locally interact as they define, in arbitrary ways defined only by those structures. In machine learning, this suggests self-attention instead of a dense layer. In a graph, this suggests local rewrite rules.
 \item Is designed to run forever by modeling time. For example, using backpropagation-through-time and/or synthetic gradients for machine learning, or more generally, an infinite interpreter loop.
 \item Runs by itself, without relying on the environment to provide any of the above: otherwise, any algorithm would technically count.
 \end{itemize}
 
-    TODO: Separate locality of interaction more clearly, maybe? (Right now, it's entangled with gradient sources and connectivity, in items 2 & 3.)
+    TODO: Maybe include discrete-ness of emerging structures ("definite things fundamentally happen") as an item, potentially as a source of gradient to approximations (as was intended long ago)? (Because analog-only models ain't training, and no structure is emerging.) ...Though striving toward discreteness via gradient doesn't seem to work well either; is it because multiple operations multiply the deviation, so the whole is biased toward constant functions?
 
-    TODO: Maybe include discrete-ness of emerging structures ("definite things fundamentally happen") as an item, potentially as a source of gradient to approximations (as was intended long ago)? (Because analog-only models ain't training, and no structure is emerging.)
+    TODO: ...So, what is left for us? Bistable neurons, rather than gradient? Mutual meta-RL? Is there anything else, at all?
 
-In particular, this permits a simple implementation: memory cells repeatedly modified by attention (between cells and cells-and-inputs), with self-determined gradient for cell interaction.
+In particular, this permits a simple implementation: memory cells repeatedly modified by attention (between cells and cells-and-inputs), with a form of self-determined gradient for cell interaction.
 
     TODO: Find wherever we talk about self-determined gradient, and better acknowledge that this is self-supervised learning, not some particular thing.
 
@@ -139,15 +141,15 @@ Connecting everything to anything may seem to require $\mathcal{O}(n^2)$ operati
 
 Each choice is relatively expensive, and executing $a+b$ on 2 numbers using 3 choices would be inefficient. As such, all functions operate on many numbers for efficiency. This imposes a separation between high-level cells and low-level features, and thus separates control-flow-dominated and parallel-processing-dominated workloads.
 
-To perform choices, reinforcement learning (RL) seems like a good fit, though that imposes the \textit{objective bottleneck}: each prediction target has to be routed through one number. For efficiency, we would like objectives to be implied through gradient on tensors. (In reinforcement learning, objective-setters have to compute the mean, imposing a bottleneck on learning. For example, when the mean is of one input, the system successfully learns to fill its entire memory with big numbers, the usefulness of which for downstream tasks is questionable.)
+To perform choices, reinforcement learning (RL) seems like a good fit, though that imposes the \textit{objective bottleneck}: each prediction target has to be routed through one number. For greater efficiency, we would like objectives to be implied through gradient on tensors. (In reinforcement learning, objective-setters have to compute the mean, imposing a bottleneck on learning. For example, when the mean is of one input, the system successfully learns to fill its entire memory with big numbers, the usefulness of which for downstream tasks is questionable.)
 
 We have investigated what is the best base to construct choices from. An obvious choice here is a simple Turing-complete programming language, for example, as function to call with arguments. It is sufficient to expose only numeric operations: not only is that Turing-complete, but also, neural networks are easily implementable on top of that. Fixed argument count per cell works best here, though it is still extremely difficult to train. Sharing weights or not does not seem to matter.
 
-However, instead of choosing many simple operations, so that generality can only arise in combinations of cells, it may be more efficient to have one big operation, as a general interpreter. It may also be efficient to make this operation differentiable and learnable. In fact, with this consideration, we arrive at the Transformer architecture \cite{vaswani2017attention} as the bulk of our algorithm, which applies multi-head attention to match queries (computed per choice) to values by keys (both computed per option) then applies an operation (a dense layer). A reader may be forgiven for getting the impression that this is a reinforcement learning paper. We augment each cell with memory and self-determined prediction targets: all outputs are put through a dense layer, then some cells become targets, others predict those targets. These targets share weights with learned cells and thus can alter each other, which allows evolution of targets. This should maintain diversity and thus allow us to train models with no inputs without collapsing gradient.
+However, instead of choosing many simple operations, so that generality can only arise in combinations of cells, it may be more efficient to have one big operation, as a general interpreter. It may also be efficient to make this operation differentiable and learnable. In fact, with this consideration, we arrive at the Transformer architecture \cite{vaswani2017attention} as the bulk of our algorithm, which applies multi-head attention to match queries (computed per choice) to values by keys (both computed per option) then applies an operation (a dense layer). A reader may be forgiven for getting the impression that this work concerns a reinforcement learning. We investigate several methods of self-determining the gradient.
 
 The algorithm here is a Transformer with memory and self-determined gradients. The best hardware to run this algorithm would be self-reconfiguring, massively parallel, analog, and with energy consumption that scales with the magnitude of the change in values. However, a GPU running IEEE 754 floating-point arithmetic also suffices.
 
-This allows us to do anything in any way forever. Cells combine into distributed approximations of all programs, which interact via gradient of future objective prediction. The indirectly-encoded program has no concept of gradient except as learned. Gradient sources interact in non-random arbitrary ways, which allows evolution. We argue that a Transformer with memory and self-determined gradients is an implementation of artificial general intelligence (AGI), when sufficiently scaled up.
+This allows us to do anything in any way forever. Cells combine into distributed approximations of all programs, which interact via gradient of future objective prediction. The indirectly-encoded program has no concept of gradient except as learned. Gradient sources interact in non-random arbitrary ways, which allows evolution. A Transformer with memory and self-determined gradients is Turing-complete but is a Turing tar-pit \cite{10.1145/947955.1083808} in which everything is possible but nothing is easy; we investigate what can make it do interesting things, without external data forcing it to.
 
 \subsection{Brain}
 
