@@ -299,6 +299,8 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       log:_(`log`),
       sin:_(`sin`),
       cos:_(`cos`),
+      tanh:_(`tanh`),
+      sigmoid:_(`sigmoid`),
       sum:_(`sum`),
       mean:_(`mean`),
       max:_(`max`),
@@ -7376,7 +7378,6 @@ nx:m(norm,x)
 p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
 transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
       ],
-      // TODO: Run & fix ♍2. (Doesn't seem to add significant advantages. Looks the same.)
       `↑♍2 (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to, and attend to relative positions easily {https://arxiv.org/abs/1706.03762}: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
       `We have a model, so now, you know the drill: we need a simple synthetic task, to iron out the bugs.`,
       `We will use the source code of Conceptual (\`serialize Self basic {}\`) as input and output, to be predicted by a Transformer model.
@@ -7632,20 +7633,19 @@ visualize:result->end->displayOne(Visualize,shouldDisplay);(select _setting(shou
 neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
-        // TODO: Run & fix ♌10. ...It runs, but, is the very-gradual decrease in mean change because of this goal structure, or because `clip` gives +-1e-3 gradient to clipped parts? TODO: Re-run ♌10.
-        // TODO: Run ♌14 with both learned embeddings and sinusoidal encodings, to compare.
-        // TODO: Run ♌15: maybe, the indirection is what's killing it. (Doubt it, though.)
-        // TODO: Run all 14 gradient-source variants, and preserve all plots and picture collages.
       ],
-      // TODO: Re-construct the symbols and numbers of the previous run, and have a fetcher+displayer. Check that it works. ...Except, that needs a working Firefox...
       // TODO: Incorporate bistability into transition dynamics, not into gradient. (Research attractor neural networks.)
-      // TODO: Try thinking about how we'd use meta-learning to make prediction targets adjust each other, if possible?...
+      //   How do we do this, exactly?
       `Run.`,
+      ``,
       `♈2 ♉2 ♊2 ♍2 ♌14 \`\`
 a:parseURL('experiments/tf_change_0.txt',fast)
 b:parseURL('experiments/tf_correlation_0.txt',fast)
 c:parseURL('experiments/tf_images_0.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
+      `        (What does the drive to compete lead to? Stagnation: some forever have, some forever lack. Possibly because averaging over all dynamic behaviors results in a static behavior, so, no diversity.)`,
+      // TODO: Run all 15 gradient-source variants, and preserve all plots and picture collages.
+      ``,
       `What did we learn from this?`,
       `    (After we used the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
       `Well.`,
@@ -7704,23 +7704,29 @@ dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(erro
 (This CIFAR-100 data source is so low-effort: individual pixels as inputs, same as in {https://arxiv.org/abs/2103.03206}. There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
       [
         _(`fancier`),
-        `Cells:128
+        `as:accessState
+Cells:128
+Inputs:(defines dataSource 'in')
 Outputs:(defines dataSource 'out')
 FS:64
 
-Pre:func(accessState InMem)
+Pre:m(func,m concat2 (m as InMem) (m as PrevOutMem) 0)
 hidden:(m clip (m norm State) -2 2)
-dataOut:(m accessState OutMem)
+dataOut:(m as OutMem)
 Post:m(func,State,Out,m last (m display Perplexity (m zeroGrad (m exp (m sum (m sub 0 (m mul dataOut (m log (m where (m less Out .0001) .0001 Out)))))))) (m predict Out dataOut) (m (grad Cells FS) hidden) hidden)
 
 GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
 
-InMem:stateCell()
+InMem:m(stateCell,zeros (m Inputs FS))
 OutMem:stateCell()
+PrevOutMem:m(stateCell,zeros (m Outputs FS))
 datapoint:dataSource(FS)
-cr:(creator (defines dataSource 'in') Cells Outputs FS Pre Post GradPred)
-save('datasetNeucomp',m concept 'outs' Outputs 'memory' (defines cr 'memory') call (m func Unrolls (m last ^accessState(InMem,datapoint.0);accessState(OutMem,datapoint.1) (m cr Unrolls))))`,
+cr:(creator Inputs+Outputs Cells Outputs FS Pre Post GradPred)
+crUnroll:(m cr Unrolls)
+save('datasetNeucomp',m concept 'outs' Outputs 'memory' (defines cr 'memory') call (m func Unrolls (m last (m as InMem (m readAt datapoint 0)) (m as OutMem (m readAt datapoint 1)) crUnroll (m as PrevOutMem (m as OutMem)) crUnroll)))`,
       ],
+      `Here, we provide the previous output as the next input, so that state unrolling can learn predictions even without gradient (gradient, in \`'learnedMemory'\`, would then learn to learn).
+      This approach to meta-learning is known as Memory-Augmented Neural Networks (MANN) {https://arxiv.org/abs/1909.08314} {https://arxiv.org/abs/1605.06065}.`,
       [
         _(`fancier`),
         `N:1000000
@@ -7738,16 +7744,11 @@ datasetNeucomp:static(await load('datasetNeucomp'))
 
       // TODO: Hyperparameter tuning: less feature-size, more feature-size, less cells, more cells, less goals, more goals; noise in inputs; autoregression instead of self-determination; no attention heads, more attention heads; more NN layers; shared dense-layer weights; no normalization, and adaptive gradient clipping; only memory-clipping; only memory-normalization; self-determined gradient instead of prediction targets; a Transformer in goals; a Transformer in synthetic gradient.
       //   ...But what are we supposed to see? It will all just be essentially-random fluctuations of arbitrary space. Don't we really need data?
+      //   ...And besides, isn't this tuning pointless if it's not done by a framework for tuning, such as \`a|b\`?
 
-      // TODO: Have a little framework here for training on a dataset: input gets shown for several epochs, then output \`predict\`s the output at the end --- given a function that returns input and output.
-      // TODO: Test on the string-reversal dataset (and maybe the string-prediction dataset), to see whether self-determination has any performance benefits.
-
-      // TODO: Make a function here for getting a random example from the CIFAR100 dataset, via \`arraySlice\`. ...Or should we convert the whole dataset to a tensor, and use \`slice\`?
-      // TODO: Try learning CIFAR100. See whether we can do anything at all.
-
-      // TODO: Demonstrate that RL using a DNC is possible, by reading goals from one output and performing the goal-maximizing action (& giving appropriate gradient).
-      //   TODO: Implement a multi-armed bandit problem: 50% of -1, 80% of +1, 20% of +5, 1% of +100. Try learning it.
-      //   TODO: Implement a grid-world (5x5 grid, with random obstacles and +1 rewards, all visible, resetting to the beginning every 100 steps), and walk in it.
+      // TODO: Test on the string-reversal dataset.
+      // TODO: Test on the string-masking dataset.
+      // TODO: Test on the CIFAR100+20 dataset.
 
       // "Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life."
       `,
@@ -8082,6 +8083,72 @@ To find the answer for a different base, divide the result by \`log\` of that ba
           [
             _(`sin`),
             _(`_inA`),
+          ],
+        ],
+      ],
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
+  },
+
+  tanh:{
+    stack:true,
+    examples:[
+      [
+        `repeat ^(tanh(randomVar(5))=.5) 1000`,
+      ],
+    ],
+    merged:true,
+    dispose:true,
+    docs:`\`a:exp(?) b:exp(0-?) tanh:\\(a-b)/(a+b)\`
+Output is from \`-1\` to \`1\`.`,
+    argCount:1,
+    interrupt:false,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.tanh(a) : _noInfinities(_tf(tf.tanh(a))) },
+    adjust:[
+      _(`array`),
+      [
+        _(`mul`),
+        _(`_dout`),
+        [
+          _(`sub`),
+          1,
+          [
+            _(`mul`),
+            _(`_out`),
+            _(`_out`),
+          ],
+        ],
+      ],
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
+  },
+
+  sigmoid:{
+    stack:true,
+    examples:[
+      [
+        `repeat ^(sigmoid(randomVar(5))=.5) 1000`,
+      ],
+    ],
+    merged:true,
+    dispose:true,
+    docs:`\`sigmoid:\\1/(1+exp(0-?))\`
+Output is from \`0\` to \`1\`.`,
+    argCount:1,
+    interrupt:false,
+    call(a) { return a=_num(a), typeof a == 'number' ? 1 / (1 + Math.exp(-a)) : _noInfinities(_tf(tf.sigmoid(a))) },
+    adjust:[
+      _(`array`),
+      [
+        _(`mul`),
+        _(`_dout`),
+        [
+          _(`mul`),
+            _(`_out`),
+          [
+            _(`sub`),
+            1,
+            _(`_out`),
           ],
         ],
       ],
@@ -9839,7 +9906,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
       _noLossDisplay:_(`_noLossDisplay`),
       _minMaxBoundary:_(`_minMaxBoundary`),
     },
-    call(lbl, vle, stepSize = 1) { // TODO: Handle stepSize appropriately.
+    call(lbl, vle, stepSize = 1) {
       if (typeof document == ''+void 0) return
       if (_isDisposable(vle)) { // Display tensors asynchronously, so we don't wait for them. (To really ensure a particular order, `await` the result.)
         const env = call.env
