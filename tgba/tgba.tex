@@ -50,11 +50,9 @@ DeepMind's \textit{Perceiver} \cite{DBLP:journals/corr/abs-2103-03206} alternate
 
     TODO: Cite.
 
-The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality. TODO: ...Is it not, though, if we are thinking that it may be a solution to our boring-attractor problems?
+The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality. Mesa-optimization \cite{hubinger2019risks} refers to a situation where a learned model is itself an optimizer, which requires augmenting the model with memory for scaling learned optimization to practical episode lengths. (Mesa-optimization and meta-learning can be argued to be exactly the same, only framed differently.)
 
-    TODO: Attractor networks; what exactly do we cite?
-
-    TODO: Memory-augmented neural networks.
+Data analysis of recordings of biological brains supports attractor neural networks \cite{AMIT1990111}, where strong feedback causes the evolution of a recurrent network to settle into different attractor patterns. This indicates the biological plausibility of memory-augmented neural networks \cite{santoro2016oneshot}.
 
     TODO: Novelty search?
 
@@ -90,6 +88,8 @@ In short, a \textit{Transcendent Galaxy-Brain Algorithm} is any algorithm that:
 \item Runs by itself, without relying on the environment to provide any of the above: otherwise, any algorithm would technically count.
 \end{itemize}
 
+(Self-awareness is only useful for adding self-replication here, which is very challenging to simulate, and so is not included here.)
+
     TODO: Maybe include discrete-ness of emerging structures ("definite things fundamentally happen") as an item, potentially as a source of gradient to approximations (as was intended long ago)? (Because analog-only models ain't training, and no structure is emerging.) ...Though striving toward discreteness via gradient doesn't seem to work well either; is it because multiple operations multiply the deviation, so the whole is biased toward constant functions?
 
     TODO: ...So, what is left for us? Bistable neurons, rather than gradient? Mutual meta-RL? Is there anything else, at all?
@@ -103,11 +103,13 @@ Now, to justify "what", we outline "why".
 To implement articial general intelligence, we want to do anything, in one general model: a \textit{worldview}. All general models are equivalent to one another, and as such, every single concept that we introduce into our mental models must be subvertable: the system must be able to evolve into a state where it behaves exactly as if it was implemented using another model. This is achievable via:
 
 \begin{itemize}
-\item \textit{Self-reference}, where explicit and full control over the system's source code is given to itself. If the system is a device driver, then it proceeds to brick the device in a few microseconds. If not, the only part that differs is the time-scale.
-\item \textit{Indirect encoding}, where the system learns a system that is as general as itself, and uses and controls that as if that is itself: essentially, a learned self-reference. This way, the learning process cannot be interrupted by something as simple as imperfection of the worldview.
+\item \textit{Self-reference}, where explicit full access to and control over the system's source code is given to itself. This requires easy self-replication to make any changes without necessitating either non-completeness or death by generality, and code that can be applied to different data, such as in programming.
+\item \textit{Indirect encoding}, where the system learns a system that is as general as itself, and uses and controls that as if that is itself: essentially, a learned self-reference. This is natural if code always applies to the same data, such as in machine learning (ML).
 \end{itemize}
 
-Vacuous-ness of generality not only makes precise descriptions nearly impossible to pin down by studying general models, but also makes theoretical descriptions practically useless. However, non-generality can always be pinned down: for instance, machine learning (ML) algorithms that minimize loss cannot learn what loss to ultimately minimize.
+(These correspond to symbolic and connectionist perspectives on intelligence.)
+
+Vacuous-ness of generality not only makes precise descriptions nearly impossible to pin down by studying general models, but also makes theoretical descriptions practically useless. However, non-generality can always be pinned down: for instance, ML algorithms that minimize loss cannot learn what loss to ultimately minimize.
 
 Generality melts everything into generality, and we can do that to ML algorithms too. How do humans face infinity?
 
@@ -205,17 +207,19 @@ These meta-physics produce a prediction that could be testable in the future: if
 
 \subsection{Transcendent}
 
+In short: everything that we introduce, we subvert into generality. In other words, learned meta-circularity.
+
 Essentially all general algorithms have to face two very distinct types of problems (modulo synonyms), which are, facing data, and facing generality: making programs vs making program makers, learning a dataset vs learning to be a fundamentally different learner of anything, understanding another person vs understanding all possible beings. Though in generality these two problems are the same, here we distinguish them into \textit{evolution} and \textit{transcendence}. The second type of problem is significantly harder and more time-consuming to converge to, even with a general intelligence algorithm, though in some sense, it is also easier given diversity, since no programmer can ever implement every way to exist that anyone ever conceived or ever will conceive. (Transcendence is distinct from meta-learning, as transcendence allows changing goals to what is implied by all conceivable selves, not only to what is suggested by an objective. Transendence is closely related to mesa-optimization \cite{hubinger2019risks}, but not limited to optimizers, also including world-like universal algorithms.)
 
 Transcendence requires indirect learned encoding of self and generality with diversity (in other words, infinite possibilities of data and code), followed by a lot of computation. Keeping its possibility in mind is why TGBAs have an infinite loop that modifies a memory cell: this theoretically allows indirectly encoding behaviors such as the training of a neural net. (Making the system able to modify its own hyperparameters within reason is not required but may improve performance, as long as the system has not yet been trained to transcendence, whereupon the base optimizer's loss becomes zero as it is made irrelevant by the mesa-optimizer.)
 
-    TODO: ...Do we want to talk about subversion: whatever we introduce into an explanation, as it evolves, it will eventually either die or get 'subverted' into its basic components held together by the reason for being; as such, every single thing eventually either dies or transcends itself (a mnemonic for this is "every something evolves into either nothing or everything"). In addition, everything trends toward being a universe and/or an equivalent worldview.
+Transcendence is a qualitatively different regime for algorithms to operate in. Arguably, it is the final frontier of general intelligence, beyond even good human imitation, because once humans either die or can instantly achieve anything that they can ever want, they will either get reduced to randomness or transcend. We do not know what facilitates transcendence, apart from a lot of computation by a generally-intelligent algorithm, as we have never seen it in an algorithm.
 
-    TODO: What else relates to transcendence?
-
-Training systems to transcendence, while a good proof of their generality and generalization, is not in the scope of this work.
+Training systems to transcendence, while a good proof of their generality and generalization, is not in the scope of this work. (We failed to.)
 
 Modern machine learning systems often struggle with diversity: once data is learned, there is no longer a need to change, and gradient becomes zero. We require a way to compute loss that does not simply tend to $0$ at infinity, but oscillates forever. We propose \textit{self-determined prediction targets}: some parts of the model serve as prediction targets to others while sharing some or all parameters. This ought to preserve diversity: misprediction may change its target in a way that converges to some point; some targets are preserved for longer than others; misprediction in another target may indirectly cause change in a target. We would like to demonstrate this empirically.
+
+    TODO: ...But we have failed at that demonstration, right? Well, probably. Would like to have plots to really prove that we failed.
 
 \section{Experiments}
 
@@ -227,33 +231,43 @@ Here, we only present experiments on the more interesting Transformer architectu
 
 // To fit our prior software and hardware constraints, we have implemented a machine learning framework on top of TensorFlowJS, which adds minor difficulty to our experiments, as we have to re-implement all infrastructure for every experiment. However, to implement the simplest Transformer-based version of TGBA, that complexity is unneeded. TODO: ...This probably should go into Criticisms, if anywhere.
 
-    TODO: - The grand challenge: demonstrating that non-trivial structures arise from training with no inputs. Do we have to learn & implement t-SNE for this? How else would we analyze seemingly-random noise? Maybe by better sharpening techniques transforming it into pattern-ful noise? Can only hope.
+    TODO: - The grand challenge: demonstrating that non-trivial structures arise from training with no inputs. Do we have to learn and implement t-SNE for this? How else would we analyze seemingly-random noise? Maybe by better sharpening techniques transforming it into pattern-ful noise? Can only hope.
 
     TODO: - See whether self-determination improves performance on actual learning, probably on that super-simple "reverse strings" dataset because datasets are hard (or try finding some dataset on the Internet and try learning that);
 
-\section{Discussion & conclusion}
+\section{Discussion and Conclusion}
 
 We have presented an alternative viewpoint of general intelligence which we have named TGBA, where it can end human civilization not because this new being is super smart, but because in following what they want to do, humans and/or sufficiently general and integrated programs are able to initiate runaway worldview creation, which assimilates everything that humans are into becoming parts of the new world, without any struggle, dissent, or suspicion, and with no new beings involved and no one to blame. In fact, it could be argued that this is what has been happening since the beginning of human history. We have codified this viewpoint into its simplest and most useful, Transformer-based, implementation.
 
-We argue that AGI already exists, even though this does not mean what this is commonly assumed to mean. This takes shape in a loose collection of parts that form generality when combined, in direct analogy with programming languages (where some combinations are very small and clear, others are gargantuan and imperfectly-overlapping, but all are general); and in re-formulating everything that can exist in an easily-learnable representation, in a field known as machine learning (where every operation is differentiable and maps numbers to numbers). The intuition of programming languages brings completeness to ML, implying that it is possible today to not only conduct research on parts (AI) but also on how they connect into architectures that can do literally anything (AGI), which explains the prevalence of work on AGI and the possibility to do conclusively better. This implies that there will be no significant theoretical breakthroughs from modern AI to AGI.
+We argue that AGI already exists, even though this does not mean what this is commonly assumed to mean. This takes shape in a loose collection of parts that form generality when combined, in direct analogy with programming languages (where some combinations are very small and clear, others are gargantuan and imperfectly-overlapping, but all are general); and in re-formulating everything that can exist in an easily-learnable representation, in a field known as machine learning (where every operation is differentiable and maps numbers to numbers). The intuition of programming languages brings completeness to ML, implying that it is possible today to not only conduct research on parts (AI) but also on how they connect into architectures that can do literally anything (AGI), which explains the prevalence of work on AGI and the possibility to do conclusively better. This implies that there will be no significant theoretical breakthroughs from modern AI to AGI, which our children will likely be able to either confirm or deny.
 
-    TODO: Almost definitely, we will fail to discover anything interesting.
+    TODO: Almost definitely, we will fail to discover anything interesting. Say that.
 
-    TODO: There exist a number of open problems arising from this work, such as: whether our work is a special case of one of Schmidhuber's works?...
+This work raises many questions, such as:
 
-    TODO: ...Machine learning integration with programs is lacking. For instance, while the Internet can be scraped for data, it is not designed to have numeric interactions, particularly in tutorials and courses. Operating systems lack a dedicated numeric program interaction mode, apart from bit streams. ...Does any of this make any sense? Is any of this worth saying, seeing that APIs exist?
+\begin{itemize}
+\item Is our work is a special case of one of Schmidhuber's works?
 
-    TODO: ...Where to put "This work does not contribute to any human endeavor, science or not, because it tries to outline an alternative to humanity and everything that it has ever created, thereby transcending humanity"?... Well, it's pretty much just a MANN with Transformers and self-determined gradients, so... Yeah, we don't deserve any transcendence with *that* kind of low-effort shit.
+\item Does transcendence require data? Do we need to digitize everything about humans (and operating systems) to make them fully learnable by algorithms to replicate the transcendence of animal instincts by some humans, or can we make progress by studying general algorithms in no-data regimes?
 
-    TODO: What \textit{do} we discuss?
+\item Is discrete program search superior to memory-augmented neural operations for transcendence? Programming languages are commonplace nowadays, whereas AGI beings are not.
+
+\item How would we recognize transcendence without extensive human involvement, and/or automatically? In our experiments, we relied on a set of very vague heuristics, none of which worked out.
+
+\item Is transcendence the only way to create beings from the near-nothingness of generality? Our preliminary intuition is that a brain is a universe, so an inner universe ought to be a brain, thus, recognizable as a "being". Can anything that is based on neither transcendence nor human instincts and culture be recognized as a "being" in every way by humans?
+
+\item Is transcendence inherently dangerous, when applied to anything that we care about, such as humanity? It means arriving at a better equivalent to humanity, but that also means that humanity will no longer exist as it is.
+\end{itemize}
 
 \subsection{Criticism}
 
 Our approach exists, and thus it can be criticized.
 
-    TODO: "Why not just brand transcendence as self-supervised learning; why a separate system of terms?" The point of this work is to create another full-fledged worldview from first principles, able to turn any input into its own rules, and follow it to transcendence. In our experience, initiation of a runaway worldview creation process is much more reliable for creating worldviews than copying human culture, including all its redundancy and complexity. In addition, consideration of many fundamentally different worldviews increases robustness of a system such as the vaguely-defined machine learning culture.
-
-    TODO: ...Shitty experiments? Need to actually perform the experiments first, though.
+\begin{itemize}
+\item TODO: "Why not just brand transcendence as meta-learning or self-supervised learning; why a separate system of terms?" The point of this work is to create another full-fledged worldview from first principles, able to turn any input into its own rules, and follow it to transcendence. In our experience, initiation of a runaway worldview creation process is much more reliable for creating worldviews than copying human culture including all its imperfect redundancy and complexity. Worldview creation is much more akin to replicating humanity than humans, the latter of which is what ML research is commonly concerned with.
+\item TODO: ...Shitty experiments? Need to actually perform the experiments first, though.
+\item TODO: ...No, some people really do think that the No Free Lunch Theorem means anything. Have to include it.
+\end{itemize}
 
 \section{Broader impact}
 

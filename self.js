@@ -7636,6 +7636,14 @@ neucomp:static(await load('neucomp'))
       ],
       // TODO: Incorporate bistability into transition dynamics, not into gradient. (Research attractor neural networks.)
       //   How do we do this, exactly?
+      //     GRU: z:sigmoid(U@x+W@h)  r:sigmoid(U@x+W@h)  h:z*h+(1-z)*tanh(U@x+r*W@h)
+      //     BRC: c:sigmoid(U@x+W@h)  a:1+tanh(U@x+W@h)  h:z*h+(1-z)*tanh(U@x+a*h)
+      //   ...How exactly do we operate on our multi-vector memory?...
+      //     Do we get funny with transposes?
+      //     Do we try adapting Transformers or something?
+      //       ...Even still: HOW would Transformers incorporate them?
+      // TODO: In `examples tanh`, try out the "repeat the sequence that you've just been told" example, with addition-based RNNs, and GRUs, and nBRCs. ...What about Transformers, though? Not care?
+      // TODO: Here, try implementing Differentiable Neural Computers, not in a lazy fashion, but actually doing things as they say. See whether it is still just as hopeless.
       `Run.`,
       ``,
       `♈2 ♉2 ♊2 ♍2 ♌14 \`\`
@@ -8091,6 +8099,81 @@ To find the answer for a different base, divide the result by \`log\` of that ba
   },
 
   tanh:{
+    tutorial:[
+      `This one deals with sequential state updating. So, fetch me some \`'learnedMemory'\` from \`examples stateCell\`.`,
+      `You know.`,
+      `Repeatedly transitioning from state to state, \`state->state\`. With gradient.
+      Internally, combining some input and \`state\` into \`state\`, from which output is produced.
+      So, we need to \`combine\` input and state (pick one way):`,
+      `1.1`,
+      [
+        _(`fancier`),
+        `m:make combine:x->h->IFS->FS->(m matMul (m concat2 x h 0) (m randomVar IFS+FS FS))`,
+      ],
+      `1.2`,
+      [
+        _(`fancier`),
+        `m:make combine:x->h->IFS->FS->(m add (m matMul x (m randomVar IFS FS)) (m matMul h (m randomVar FS FS)))`,
+      ],
+      `Combine these into a recurrent neural network (RNN) (pick one variant):`,
+      `2.1`,
+      [
+        _(`fancier`),
+        `m:make transition:IFS->FS->(m func x h combine(x,h,IFS,FS))`,
+      ],
+      `(Simple RNN.)`,
+      `2.2`,
+      [
+        _(`fancier`),
+        `m:make z:m(sigmoid,combine x h IFS FS) r:m(sigmoid,combine x h IFS FS) transition:IFS->FS->(m func x h (m add (m mul z h) (m mul (m sub 1 z) (m tanh (m add (m matMul x (m randomVar IFS FS)) (m mul r (m matMul h (m randomVar FS FS))))))))`,
+      ],
+      `(Gated recurrent unit, GRU.)`,
+      `2.3`,
+      [
+        _(`fancier`),
+        `m:make z:m(sigmoid,combine x h IFS FS) r:(m add 1 m(tanh,combine x h IFS FS)) transition:IFS->FS->(m func x h (m add (m mul z h) (m mul (m sub 1 z) (m tanh (m add (m matMul x (m randomVar IFS FS)) (m mul h r))))))`,
+      ],
+      `(Bistable recurrent cell, BRC {https://arxiv.org/abs/2006.05252}. I mean, pretty much.)`,
+      `And, the simplest possible test: given a sequence, remember its first item when the sequence ends:`,
+      [
+        _(`fancier`),
+        `
+N:100 IFS:1 FS:64
+m:make as:accessState
+inputMem:stateCell() hiddenMem:(static m(stateCell,zeros (m FS))) inputPos:static(m stateCell N+1)
+lm:static(await load('learnedMemory'))
+inp:as(inputPos)
+hid:(m transition(IFS,FS) (m where ^(inp<N) ^as(inputMem).inp 0) h)
+o:(m matMul hid (m randomVar FS IFS))
+fn:static(m func h (m last ^(select (equal as(inputPos) N+1) func(as(inputMem,sync(truncatedNormal(m N)));as(inputPos,0))) (m predict o (m where ^(inp<N) undefined ^as(inputMem).(inp-N))) ^as(inputPos,inp+1) hid))
+repeat ^(lm fn hiddenMem N+1) 100000
+`,
+      ],
+      `The survey of performance after 100k epochs is as such (averaged over the last 10k epochs):
+      \`N:10\`:
+              1.1 2.1: 
+              1.1 2.2: 
+              1.1 2.3: 
+              1.2 2.1: 
+              1.2 2.2: 
+              1.2 2.3: 
+      \`N:100\`:
+              1.1 2.1: \`0.38551461696624756\`
+              1.1 2.2: 
+              1.1 2.3: 
+              1.2 2.1: 
+              1.2 2.2: 
+              1.2 2.3: 
+      \`N:1000\`:
+              1.1 2.1: 
+              1.1 2.2: 
+              1.1 2.3: 
+              1.2 2.1: 
+              1.2 2.2: 
+              1.2 2.3: `,
+      `I tire of this exercise.`,
+      `I can do all of it in a day (except for the compute), sure, but what's the point?`,
+    ],
     stack:true,
     examples:[
       [
@@ -9365,12 +9448,12 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
       let iA = _isDisposable(a), iB = _isDisposable(b), sA = a.shape, sB = b.shape
       let a2 = !iA ? 1 : sA.length >= 2 ? sA[sA.length-1] : sA[0] || 1, a1 = !iA || sA.length < 2 ? 1 : sA[sA.length-2]
       let b2 = !iB ? 1 : sB.length >= 2 ? sB[sB.length-1] : sB[0] || 1, b1 = !iB || sB.length < 2 ? 1 : sB[sB.length-2]
-      const rowVectorA = iA && sA.length < 2
       try {
-        if (!iA) a = _tf(tf.broadcastTo(a, sA = [a1 = b1, a2 = b2])), da = true
-        if (!iB) b = _tf(tf.broadcastTo(b, sB = [b1 = a1, b2 = a2])), db = true
-        if (!iA || sA.length < 2) a = _tf(tf.reshape(a, sA = [a1, a2])), da = true
-        if (!iB || sB.length < 2) b = _tf(tf.reshape(b, sB = [b1, b2])), db = true
+        if (!iA) a = _tf(tf.broadcastTo(a, sA = [1])), da = true, iA = true
+        if (!iB) b = _tf(tf.broadcastTo(b, sB = [1])), db = true, iA = true
+        const rowVectorA = iA && sA.length < 2
+        if (iA && sA.length < 2) a = _tf(tf.reshape(a, sA = [a1, a2])), da = true
+        if (iB && sB.length < 2) b = _tf(tf.reshape(b, sB = [b1, b2])), db = true
         if (sA.length < sB.length || sA.length === sB.length && sA[0] === 1 && sB[0] !== 1) { const t = _tf(tf.broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]));  da && dispose(a), a = t, da = true }
         if (sA.length > sB.length || sA.length === sB.length && sA[0] !== 1 && sB[0] === 1) { const t = _tf(tf.broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]));  db && dispose(b), b = t, db = true }
         const r = _tf(tf.matMul(a, b, tA, tB))
@@ -11725,7 +11808,9 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
         ],
       ],
     ],
-    mergeAdjustment:_(`_mergeTensors`),
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
   },
     
   _predictFuture:_([
@@ -18544,7 +18629,8 @@ Ability to rewrite into an importable module.`,
     philosophy:`Writing the system's code in a particular style allows it to be viewed/modified in the system by the user, preserving anything they want in the process without external storage mechanisms.
 The correctness of quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite. Or by incorporating rewriting into the lifecycle.
 
-(Newsflash: a program that can inspect its own source is self-aware. A quine is the ultimate in self-awareness, much more self-aware than any human. But it doesn't seem magical enough to be true, right? What, you think you are above the consequences of what your words mean? Don't blame all implementations of your ideas ever made, blame your ideas.)`,
+(Newsflash: a program that can inspect its own source is self-aware. A quine is the ultimate in self-awareness, much more self-aware than any human. But it doesn't seem magical enough to be true, right? What, you think you are above the consequences of what your words mean? Don't blame all implementations of your ideas ever made, blame your ideas.)
+(To repeat: self-awareness is useful only for self-replication, and nothing else.)`,
     Initialize() {
       Rewrite.ctx = new Map(Self.ctx)
       Rewrite.ctx.delete('_globalScope')
