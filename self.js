@@ -3994,6 +3994,7 @@ Return \`_stopIteration\` to stop iteration.`,
   },
 
   _saveCaret(el, ch, i) { // → index
+    // TODO: Make restoration go into nodes as much as it can (possibly ignoring spaces), so that the cursor does not end up in a bad spot.
     if (ch instanceof Selection && !ch.rangeCount) return 0
     if (ch instanceof Selection) !i ? (i = ch.focusOffset, ch = ch.focusNode) : (i = ch.anchorOffset, ch = ch.anchorNode)
     if (ch instanceof Element) ch = i < ch.childNodes.length ? ch.childNodes[i] : _getNextSibling(ch), i = 0
@@ -7503,21 +7504,16 @@ grad:Cells->FS->(m func ? (m predict targetSpace (m gather (m zeroGrad targetSpa
       `↑♌2 (Or maybe make some cells produce prediction targets for other cells to try and match.)`,
       [
         _(`fancier`),
-        `grad:Cells->FS->(m func ? (m predict ? (m mul 1.2 ?)))`,
-      ],
-      `↑♌3 (Or maybe make each cell be more sure of its output, either negative or positive. If \`norm\` centers and shrinks the whole state, then this will make positive cells compete for positive-ness, same for negative cells.)`,
-      [
-        _(`fancier`),
         `s:(m sign ?)
 grad:Cells->FS->(m func ? (m minimize (m abs ?) (m sub 0 s)))`,
       ],
-      `↑♌4 (Or maybe make each cell go away from 0, for competition.)`,
+      `↑♌4 (Or maybe make each cell go away from 0, for competition. If \`norm\` centers and shrinks the whole state, then this will make positive cells compete for positive-ness, same for negative cells.)`,
       [
         _(`fancier`),
         `abi:(m abs ?)
 mn:(m mean abi)
 s:(m sign ?)
-grad:Cells->FS->(m func ? (m minimize abi (m where abi<mn s (m sub 0 s))))`,
+grad:Cells->FS->(m func ? (m minimize abi (m where (m less abi mn) s (m sub 0 s))))`,
       ],
       `↑♌5 (Or maybe make each big-enough cell go away from 0 and each small-enough cell go to 0, for increasing surety.)`,
       [
@@ -7642,8 +7638,11 @@ neucomp:static(await load('neucomp'))
       //     Do we get funny with transposes?
       //     Do we try adapting Transformers or something?
       //       ...Even still: HOW would Transformers incorporate them?
-      // TODO: In `examples tanh`, try out the "repeat the sequence that you've just been told" example, with addition-based RNNs, and GRUs, and nBRCs. ...What about Transformers, though? Not care?
       // TODO: Here, try implementing Differentiable Neural Computers, not in a lazy fashion, but actually doing things as they say. See whether it is still just as hopeless.
+
+      // TODO: ...How can we explicitly optimize for diversity? Can we cluster, and make similar cells become samer and faraway cells become distincter...
+      //   (Competitive learning, as opposed to error-correcting learning.)
+      //   Hebbian learning? Sharpening correlation? Correlation sharpening is a lot like Hebbian learning... Sharpen expandDims(h,1)*h by giving it the gradient of its own sign (diversity loss), MAYBE...
       `Run.`,
       ``,
       `♈2 ♉2 ♊2 ♍2 ♌14 \`\`
@@ -7652,6 +7651,14 @@ b:parseURL('experiments/tf_correlation_0.txt',fast)
 c:parseURL('experiments/tf_images_0.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (What does the drive to compete lead to? Stagnation: some forever have, some forever lack. Possibly because averaging over all dynamic behaviors results in a static behavior, so, no diversity.)`,
+      `♈2 ♉2 ♊1 ♍1 ♌15 \`\`
+a:parseURL('experiments/tf_change_1.txt',fast)
+b:parseURL('experiments/tf_correlation_1.txt',fast)
+c:parseURL('experiments/tf_images_1.txt',fast)
+elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
+      `        (Direct state sharpening makes the network settle into a stable state, except for 2 or 3 rows that were twinkling the whole time. Boring.)`,
+      `♈1 ♉2 ♊2 ♍1 ♌9: state very quickly (a few hundred iterations) became ±100%-correlated, and froze forever.`,
+      `♈1 ♉2 ♊2 ♍1 ♌5: 100% correlation.`,
       // TODO: Run all 15 gradient-source variants, and preserve all plots and picture collages.
       ``,
       `What did we learn from this?`,
@@ -7667,7 +7674,7 @@ elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean
       `    Peachy.`,
       `    Both sharing and normalizing turn individuality into uniformity.`,
       `    These two extremes are too common in generality. But ideally, we would see something that combines them. How is that possible to achieve?`,
-      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ♌3 or ♌4 or ♌5? Surely they would start to compete, right?`, // TODO: Run this.
+      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ♌4 or ♌5? Surely they would start to compete, right?`, // TODO: Run this.
       // TODO: Direct to `examples emaVersionOf`.
       ``,
       `But.`,
@@ -8138,41 +8145,41 @@ To find the answer for a different base, divide the result by \`log\` of that ba
       [
         _(`fancier`),
         `
-N:100 IFS:1 FS:64
+N:100 BatchSize:32 IFS:1 FS:64
 m:make as:accessState
-inputMem:stateCell() hiddenMem:(static m(stateCell,zeros (m FS))) inputPos:static(m stateCell N+1)
+inputMem:stateCell() hiddenMem:(static m(stateCell,zeros (m BatchSize FS))) inputPos:static(m stateCell N+1)
 lm:static(await load('learnedMemory'))
 inp:as(inputPos)
-hid:(m transition(IFS,FS) (m where ^(inp<N) ^as(inputMem).inp 0) h)
-o:(m matMul hid (m randomVar FS IFS))
-fn:static(m func h (m last ^(select (equal as(inputPos) N+1) func(as(inputMem,sync(truncatedNormal(m N)));as(inputPos,0))) (m predict o (m where ^(inp<N) undefined ^as(inputMem).(inp-N))) ^as(inputPos,inp+1) hid))
-repeat ^(lm fn hiddenMem N+1) 100000
+hid:(m transition(IFS,FS) (m where ^(inp<N) ^expandDims(gather as(inputMem) inp 1,-1) 0) h)
+o:(m matMul (m tanh (m matMul hid (m randomVar FS FS))) (m randomVar FS IFS))
+fn:static(m func h (m last ^(select (equal as(inputPos) N+1) func(as(inputMem,(truncatedNormal(m BatchSize N)));as(inputPos,0))) (m predict o (m where ^(inp<N) undefined ^expandDims(gather as(inputMem) inp-N 1,-1))) ^as(inputPos,inp+1) hid))
+repeat ^(lm fn hiddenMem N+1) 10000
 `,
       ],
-      `The survey of performance after 100k epochs is as such (averaged over the last 10k epochs):
-      \`N:10\`:
-              1.1 2.1: 
-              1.1 2.2: 
-              1.1 2.3: 
-              1.2 2.1: 
-              1.2 2.2: 
-              1.2 2.3: 
-      \`N:100\`:
-              1.1 2.1: \`0.38551461696624756\`
-              1.1 2.2: 
-              1.1 2.3: 
-              1.2 2.1: 
-              1.2 2.2: 
-              1.2 2.3: 
-      \`N:1000\`:
-              1.1 2.1: 
-              1.1 2.2: 
-              1.1 2.3: 
-              1.2 2.1: 
-              1.2 2.2: 
-              1.2 2.3: `,
+      `The survey of performance after 10k iterations is as such (averaged over the last 1k iterations):
+      \`N:10\` and \`BatchSize:32\`:
+              1.2 2.1: \`0.00018571616965346038\`
+              1.2 2.2: \`0.15670332312583923\`, which is very suspicious (since removing gates improves performance), and might be an initialization issue.
+              1.2 2.3: \`0.35765540599823\` (no learning: \`loss2\` divides the standard deviation of \`1\` by \`2\`), which is even more suspicious.
+      \`N:10\` and \`BatchSize:320\`:
+              1.2 2.1: \`0.00002087236316583585\`
+              1.2 2.2: \`0.0819961205124855\`
+              1.2 2.3: \`0.3416252136230469\`
+      \`N:10\` and \`BatchSize:320\` and \`_learningRate:.001\`:
+              1.2 2.1: \`0.00009141176997218281\`
+              1.2 2.2: \`0.0013414806453511119\`, or \`0.0004334516415838152\` when resetting \`hiddenMem\` to \`ones\`.
+              1.2 2.3: \`0.25446617603302\`
+      \`N:100\`: and \`BatchSize:32\`:
+              1.2 2.1: \`0.3912995755672455\`
+      \`N:100\` and \`BatchSize:320\`:
+              1.2 2.1: \`0.3873973488807678\`
+              1.2 2.2: \`0.38709601759910583\`
+              1.2 2.3: \`0.38819900155067444\``,
+      `(Non-\`1\` \`BatchSize\` seems to be critical for training non-simple-RNN transitions.)`,
+      `    (As is higher learning rate.)`,
       `I tire of this exercise.`,
-      `I can do all of it in a day (except for the compute), sure, but what's the point?`,
+      `I can do all of it in a day (except for the compute), sure, but what's the point? Especially since simple RNNs somehow came out on top, and results from {https://arxiv.org/abs/2006.05252} were not reproduced.`,
+      `One might even say that this tutorial is pointless, and should not exist. But this tutorial doesn't care what one thinks.`,
     ],
     stack:true,
     examples:[
@@ -16677,9 +16684,9 @@ A function/construct can define this with an integer, to collapse children after
       const weakMaps = []
       const doNotEmit = new Set
       let postDeconstructed
-      const prevSrlzStyles = serialize.styles;  serialize.styles = styles
+      const prevSrlzStyles = serialize.styles, prevSrlzStart = serialize.start;  serialize.styles = styles, serialize.start = _timeSince()
       try { postDeconstructed = deconstructed(arr) }
-      finally { serialize.styles = prevSrlzStyles }
+      finally { serialize.styles = prevSrlzStyles, serialize.start = prevSrlzStart }
 
       const resultElem = styles && typeof document != ''+void 0 && elem('serialization')
       if (resultElem) elemValue(resultElem, arr), resultElem.special = true
@@ -17769,6 +17776,9 @@ This is a {more space-efficient than binary} representation for graphs of arrays
       }
       if (i > start+4) s = [...s.slice(0,start), elem('table', rows), ...s.slice(i)]
     }
+
+    if (serialize.start && _timeSince(serialize.start) > 1000) // Cut off styling if it takes too long.
+      return typeof document == ''+void 0 || s instanceof Element || typeof s == 'string' ? s : elem('node', s)
 
     if (isArray(s)) {
       if (s.length == 3 && (s[0] === '(' || s[0] === '[') && (s[2] === ')' || s[2] === ']'))
