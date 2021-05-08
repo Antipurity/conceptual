@@ -3994,7 +3994,6 @@ Return \`_stopIteration\` to stop iteration.`,
   },
 
   _saveCaret(el, ch, i) { // → index
-    // TODO: Make restoration go into nodes as much as it can (possibly ignoring spaces), so that the cursor does not end up in a bad spot.
     if (ch instanceof Selection && !ch.rangeCount) return 0
     if (ch instanceof Selection) !i ? (i = ch.focusOffset, ch = ch.focusNode) : (i = ch.anchorOffset, ch = ch.anchorNode)
     if (ch instanceof Element) ch = i < ch.childNodes.length ? ch.childNodes[i] : _getNextSibling(ch), i = 0
@@ -4028,20 +4027,19 @@ Return \`_stopIteration\` to stop iteration.`,
 
   _loadCaret(el, index, into) { // → [ch, i]
     if (index < 0) index = 0
-    let j = 0, i = 0, result, arr = []
+    let j = 0, i = 0, ch
     _visitText(el, (s, el) => {
-      arr.push(s)
       const len = s === false ? 1 : s.length
-      if (j + len >= index) return result = el, i = index - j, _stopIteration
+      if (j + len >= index) return ch = el, i = index - j, _stopIteration
       j += len
     })
-    let ch = result
     if (ch && !(ch instanceof Element) && i === ch.nodeValue.length && _getNextSibling(ch)) ch = _getNextSibling(ch), i = 0
     if (index == null) ch = null
     if (ch && ch.special)
       [ch, i] = [ch.parentNode, [...ch.parentNode.childNodes].indexOf(ch) + (i ? 1 : 0)]
-    if (ch && ch instanceof Element && i > ch.childNodes.length) i = ch.childNodes.length
-    if (ch && !(ch instanceof Element) && i > ch.nodeValue.length) i = ch.nodeValue.length
+    if (ch && ch.tagName === 'SPACE') ch = ch.previousSibling, i = Infinity;
+    const maxI = !ch ? i : ch instanceof Element ? ch.childNodes.length : ch.nodeValue.length
+    if (i > maxI) i = maxI
     !ch && ([ch, i] = [el, el.childNodes.length - (el.lastChild && !el.lastChild.textContent ? 1 : 0) || 0])
     if (into instanceof Selection) into.collapse(ch, i)
     else return [ch, i]
@@ -7307,7 +7305,7 @@ Implement.`,
         _(`fancier`),
         `mix:node->in->out->layers->nonlinearity->ExtraDimensionSize->(reduce arrayFilledWith(layers,m (m out out) nonlinearity) a->x->(minimix (m a.1 x) a.0) (minimix node (m in out)))`,
       ],
-      `↑♈1 (Complete the linearity of \`matMul\` with \`nonlinearity\` of, say, \`softsign\`, \`layers\` times.)`,
+      `↑\`♈\`1 (Complete the linearity of \`matMul\` with \`nonlinearity\` of, say, \`softsign\`, \`layers\` times.)`,
       [
         _(`fancier`),
         `shared:equal(ExtraDimensionSize,undefined)
@@ -7316,7 +7314,7 @@ firstSizes:(where shared (m in out) (m ExtraDimensionSize in out))
 dense:(reduce arrayFilledWith(layers,m hiddenSizes nonlinearity) a->x->(minimix (m a.1 x) a.0) (minimix (where shared node (m expandDims node 1)) firstSizes))
 mix:node->in->out->layers->nonlinearity->ExtraDimensionSize->(where shared dense (m squeezeDims dense 1))`,
       ],
-      `↑♈2 (To uncouple weights, we have to ensure that we multiply vectors by weight matrices, via \`expandDims\`; then convert back to matrices, via \`squeezeDims\`.)`,
+      `↑\`♈\`2 (To uncouple weights, we have to ensure that we multiply vectors by weight matrices, via \`expandDims\`; then convert back to matrices, via \`squeezeDims\`.)`,
       `(Honestly, it's probably so much more convenient to have lazily-initialized weights, so that we only need to specify the output dimension. But, I'm too lazy.)`,
       `And again, you have an option: single-head attention, vs multi-head attention.`,
       [
@@ -7326,7 +7324,7 @@ K:mix(Options,fs,fs,1,softsign,M)
 V:mix(Options,fs,fs,1,softsign,M)
 attention:M->N->Options->Choices->fs->(m matMul (m softmax (m mul 1/sqrt(fs) (m matMul Q (m transpose K)))) V)`,
       ],
-      `↑♉1 (Make each choice choose an option, or in other words, pay attention to an option.)`,
+      `↑\`♉\`1 (Make each choice choose an option, or in other words, pay attention to an option.)`,
       [
         _(`fancier`),
         `Heads:4
@@ -7337,19 +7335,19 @@ K:mix(Opt,fs/Heads,fs/Heads,1,softsign,M*Heads)
 V:mix(Opt,fs/Heads,fs/Heads,1,softsign,M*Heads)
 attention:M->N->Options->Choices->fs->(m concat (m split (m matMul (m softmax (m mul 1/sqrt(fs/Heads) (m matMul Q (m transpose K)))) V) Heads 0) Heads -1)`,
       ],
-      `↑♉2 (For multiple heads, we split up features (inner dimension) into parallelized heads (outer dimension), then do the operation, then put features back.)`,
+      `↑\`♉\`2 (For multiple heads, we split up features (inner dimension) into parallelized heads (outer dimension), then do the operation, then put features back.)`,
       `Now, choose whether batch normalization will be done (shifting and rescaling everything to 0 mean and 1 variance).`,
       `            Maybe you want adaptive gradient clipping, \`\`settings ^_adaptiveGradientClipping\`\`, instead.`,
       [
         _(`fancier`),
         `norm:x->x`,
       ],
-      `↑♊1`,
+      `↑\`♊\`1`,
       [
         _(`fancier`),
         `n:x-mean(x) norm:x->n/sqrt(mean(n*n)+1e-6)`,
       ],
-      `↑♊2 (For better gradient flow and learning \`\`elemCollapse func(examples mean)\`\`, add the input \`x\` to the output \`y\`, and normalize to \`0\` mean and \`1\` variance.)`,
+      `↑\`♊\`2 (For better gradient flow and learning \`\`elemCollapse func(examples mean)\`\`, add the input \`x\` to the output \`y\`, and normalize to \`0\` mean and \`1\` variance.)`,
       [
         _(`fancier`),
         `realM:m(readAt,m _tensorShape Options,-2)
@@ -7362,7 +7360,7 @@ nx:m(norm,x)
 p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
 transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
       ],
-      `↑♍1 (Connect everything-to-anything then perform an operation on each resulting choice: add positional embedding, attention, add+norm, dense layer, add+norm, all repeated a few times.)`,
+      `↑\`♍\`1 (Connect everything-to-anything then perform an operation on each resulting choice: add positional embedding, attention, add+norm, dense layer, add+norm, all repeated a few times.)`,
       [
         _(`fancier`),
         `realM:m(readAt,m _tensorShape Options,-2)
@@ -7379,7 +7377,18 @@ nx:m(norm,x)
 p2:m(norm,m add nx attention(a.2,a.2,nx,nx,a.0))
 transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices (m matMul reduce(arrayFilledWith(ChoiceLayers,m 2*fs Nonlinearity N),a->x->(m add p2 mix(p2,a.0,a.0,1,a.1,a.2)),m add p1 mix(p1,2*fs,2*fs,1,Nonlinearity,N)) weights(m 2*fs fs)))`,
       ],
-      `↑♍2 (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to, and attend to relative positions easily {https://arxiv.org/abs/1706.03762}: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
+      `↑\`♍\`2 (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to, and attend to relative positions easily {https://arxiv.org/abs/1706.03762}: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
+      [
+        _(`fancier`),
+        `in:(m concat2 Options Choices 0)
+t0:(m transpose (m add in mix((m norm in),fs,fs,1,Nonlinearity,M+N)))
+t1:(m transpose (m add t0 mix((m norm t0),M+N,M+N,1,Nonlinearity,fs)))
+transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices t1)`,
+      ],
+      `↑\`♍\`3 (Now here's a brave proposition: throw away most of the things above, and do a dense layer on features then a dense layer on cells {https://arxiv.org/abs/2105.01601} {https://arxiv.org/abs/2105.02723}.)`,
+      `        (This is way more computationally efficient than unrolling everything into one vector, and dense-layer-ing that.)`,
+      ``,
+      ``,
       `We have a model, so now, you know the drill: we need a simple synthetic task, to iron out the bugs.`,
       `We will use the source code of Conceptual (\`serialize Self basic {}\`) as input and output, to be predicted by a Transformer model.
       Or, actually, we want a few tasks (each task description would take a fixed-length slice of the dataset, and return the input and the output strings), such as:`,
@@ -7387,12 +7396,12 @@ transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options 
         _(`fancier`),
         `n:8 splitter:(concept 'in' n 'out' n 'needs' n docs 'The task of reversing a string.' call s->array(s,reverse(s)))`,
       ],
-      `↑♋1`,
+      `↑\`♋\`1`,
       [
         _(`fancier`),
         `i:7 o:1 splitter:(concept 'in' i 'out' o 'needs' static(i+o) docs 'The task of predicting the continuation of a string.' call s->array(arraySlice(s,0,i),arraySlice(s,i,i+o)))`,
       ],
-      `↑♋2 (Choose between those two tasks.)`,
+      `↑\`♋\`2 (Choose between those two tasks.)`,
       [
         _(`fancier`),
         `alphabet:'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. '`,
@@ -7420,6 +7429,7 @@ io:call(^array(inTensor,outTensor))
 p:tf(io.0,zeros(_tensorShape io.1))
 (repeat ^(display(Perplexity,zeroGrad exp(sum(0-(io.1)*log(where p<.0001 .0001 p))/batchSize));p=io.1) 100000);save('transformer',tf)`,
       ],
+      // TODO: Run & fix \`♍\`3.
       `(We also plot perplexity {https://en.wikipedia.org/wiki/Perplexity}: the lower, the better we predict test samples.)`,
       `(Remember to lower the batch size, if your GPU memory is not enough.)`,
       `After training, we can query the model:`,
@@ -7493,7 +7503,7 @@ Arguments:
         `targetSpace:mix(?,FS,FS,1,softsign,Cells)
 grad:Cells->FS->(m func ? (m predict targetSpace ?))`,
       ],
-      `↑♌1 (Maybe, the good old-fashioned auto-regression: \`f(x)=x\`. May produce less diversity, but who knows, really.)`,
+      `↑\`♌\`1 (Maybe, the good old-fashioned auto-regression: \`f(x)=x\`. May produce less diversity, but who knows, really.)`,
       [
         _(`fancier`),
         `Goals:8
@@ -7501,13 +7511,13 @@ targetSpace:mix(?,FS,FS,1,softsign,Cells)
 targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
 grad:Cells->FS->(m func ? (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
       ],
-      `↑♌2 (Or maybe make some cells produce prediction targets for other cells to try and match.)`,
+      `↑\`♌\`2 (Or maybe make some cells produce prediction targets for other cells to try and match.)`,
       [
         _(`fancier`),
         `s:(m sign ?)
 grad:Cells->FS->(m func ? (m minimize (m abs ?) (m sub 0 s)))`,
       ],
-      `↑♌4 (Or maybe make each cell go away from 0, for competition. If \`norm\` centers and shrinks the whole state, then this will make positive cells compete for positive-ness, same for negative cells.)`,
+      `↑\`♌\`4 (Or maybe make each cell go away from 0, for competition. If \`norm\` centers and shrinks the whole state, then this will make positive cells compete for positive-ness, same for negative cells.)`,
       [
         _(`fancier`),
         `abi:(m abs ?)
@@ -7515,33 +7525,19 @@ mn:(m mean abi)
 s:(m sign ?)
 grad:Cells->FS->(m func ? (m minimize abi (m where (m less abi mn) s (m sub 0 s))))`,
       ],
-      `↑♌5 (Or maybe make each big-enough cell go away from 0 and each small-enough cell go to 0, for increasing surety.)`,
+      `↑\`♌\`5 (Or maybe make each big-enough cell go away from 0 and each small-enough cell go to 0, for increasing surety.)`,
       [
         _(`fancier`),
         `targetSpace:mix(?,FS,FS,1,softsign,Cells)
 grad:Cells->FS->(m func ? (m predict ? targetSpace))`,
       ],
-      `↑♌6 (Or maybe make each cell determine its own target, via essentially an arbitrary transformation.)`,
-      [
-        _(`fancier`),
-        `Goals:8
-targetSpace:mix(?,FS,FS,1,softsign,Cells)
-targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
-grad:Cells->FS->(m func ? (m minimize targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0)))`,
-      ],
-      `↑♌7 (Or maybe, instead of giving prediction targets, give gradient to others. Probably too unstable to learn anything, but who knows.)`,
-      [
-        _(`fancier`),
-        `targetSpace:mix(?,FS,FS,1,softsign,Cells)
-grad:Cells->FS->(m func ? (m minimize targetSpace targetSpace))`,
-      ],
-      `↑♌8 (Or maybe, make each cell \`predict\` \`0\` in goal-space.)`,
+      `↑\`♌\`6 (Or maybe make each cell determine its own target, via essentially an arbitrary transformation.)`,
       [
         _(`fancier`),
         `targetSpace:mix(?,FS,FS,1,softsign,Cells)
 grad:Cells->FS->(m func ? (m minimize ? targetSpace))`,
       ],
-      `↑♌9 (Or maybe, literally make each cell determine its own gradient, via a randomly-initialized not-trained NN.)`,
+      `↑\`♌\`9 (Or maybe, literally make each cell determine its own gradient, via a randomly-initialized not-trained NN.)`,
       [
         _(`fancier`),
         `Goals:8
@@ -7550,7 +7546,7 @@ targetIndices:cast(floor(range(0,Cells)*Goals/Cells)*Cells/Goals,'int32')
 splitSpace:(m stack m(split,targetSpace,Goals,0) 0)
 grad:Cells->FS->(m func ? (m last (m predict (m gradMul (m sliceOff splitSpace 0) .01) (m mean splitSpace 0)) (m predict targetSpace (m gather (m zeroGrad targetSpace) (m static targetIndices) 0))))`,
       ],
-      `↑♌10 (Maybe return to "some cells give \`predict\`ion targets to others", but with the targets turning into what targets them (\`predict\`ing the average of the goal's section, dividing the gradient), for bootstrapping representations.)
+      `↑\`♌\`10 (Maybe return to "some cells give \`predict\`ion targets to others", but with the targets turning into what targets them (\`predict\`ing the average of the goal's section, dividing the gradient), for bootstrapping representations.)
       (Kinda like Bootstrap-Your-Own-Latent {https://arxiv.org/abs/2006.07733} or Momentum Contrast {https://arxiv.org/abs/1911.05722} but without momentum.)`,
       [
         _(`fancier`),
@@ -7558,7 +7554,7 @@ grad:Cells->FS->(m func ? (m last (m predict (m gradMul (m sliceOff splitSpace 0
 pastTargets:emaVersionOf(targets,.99)
 grad:Cells->FS->(m func ? (m predict targets pastTargets))`,
       ],
-      `↑♌11 (Maybe return to "stick to whatever past you picked", with zero fancy tricks.)`,
+      `↑\`♌\`11 (Maybe return to "stick to whatever past you picked", with zero fancy tricks.)`,
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
@@ -7566,26 +7562,26 @@ pt:emaVersionOf(targets,.99)
 apt:(m abs pt)
 grad:Cells->FS->(m func ? (m predict targets (m where (m less apt (m mean apt)) 0 (m sign pt))))`,
       ],
-      `↑♌12 (Maybe return to sharpening the past, like in \`examples emaVersionOf\`: push the smallest-magnitude values to zero, push the biggest-magnitude values away from it.)`,
+      `↑\`♌\`12 (Maybe return to sharpening the past, like in \`examples emaVersionOf\`: push the smallest-magnitude values to zero, push the biggest-magnitude values away from it.)`,
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
 at:(m abs targets)
 grad:Cells->FS->(m func ? (m predict targets (m where (m less at (m mean at)) 0 (m sign targets))))`,
       ],
-      `↑♌13 (Same as ♌12, but without the stabilization of momentum.)`,
+      `↑\`♌\`13 (Same as ♌12, but without the stabilization of momentum.)`,
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
 pt:emaVersionOf(targets,.99)
 grad:Cells->FS->(m func ? (m predict targets (m sign (m sub pt (m mean pt)))))`,
       ],
-      `↑♌14 (Maybe sharpen via simple bistability: bigger-than-average values go to \`+1\`, smaller-than-average values go to \`-1\`.)`,
+      `↑\`♌\`14 (Maybe sharpen via simple bistability: bigger-than-average values go to \`+1\`, smaller-than-average values go to \`-1\`.)`,
       [
         _(`fancier`),
         `grad:Cells->FS->(m func ? (m predict ? (m sign (m sub ? (m mean ?)))))`,
       ],
-      `↑♌15 (Maybe direct state sharpening.)`,
+      `↑\`♌\`15 (Maybe direct state sharpening.)`,
       `        Okay, this is WAY too much. Only compute can save us now.`,
       [
         _(`fancier`),
@@ -7630,35 +7626,28 @@ neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
       ],
-      // TODO: Incorporate bistability into transition dynamics, not into gradient. (Research attractor neural networks.)
-      //   How do we do this, exactly?
-      //     GRU: z:sigmoid(U@x+W@h)  r:sigmoid(U@x+W@h)  h:z*h+(1-z)*tanh(U@x+r*W@h)
-      //     BRC: c:sigmoid(U@x+W@h)  a:1+tanh(U@x+W@h)  h:z*h+(1-z)*tanh(U@x+a*h)
-      //   ...How exactly do we operate on our multi-vector memory?...
-      //     Do we get funny with transposes?
-      //     Do we try adapting Transformers or something?
-      //       ...Even still: HOW would Transformers incorporate them?
       // TODO: Here, try implementing Differentiable Neural Computers, not in a lazy fashion, but actually doing things as they say. See whether it is still just as hopeless.
 
       // TODO: ...How can we explicitly optimize for diversity? Can we cluster, and make similar cells become samer and faraway cells become distincter...
       //   (Competitive learning, as opposed to error-correcting learning.)
-      //   Hebbian learning? Sharpening correlation? Correlation sharpening is a lot like Hebbian learning... Sharpen expandDims(h,1)*h by giving it the gradient of its own sign (diversity loss), MAYBE...
+      //   Hebbian learning? Sharpening correlation? Correlation sharpening is a lot like Hebbian learning... Sharpen expandDims(h,1)*h by giving it the gradient of its own sign (diversity loss) (but with non-trash gradient), MAYBE...
       `Run.`,
       ``,
-      `♈2 ♉2 ♊2 ♍2 ♌14 \`\`
+      `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`2 ♌14 \`\`
 a:parseURL('experiments/tf_change_0.txt',fast)
 b:parseURL('experiments/tf_correlation_0.txt',fast)
 c:parseURL('experiments/tf_images_0.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (What does the drive to compete lead to? Stagnation: some forever have, some forever lack. Possibly because averaging over all dynamic behaviors results in a static behavior, so, no diversity.)`,
-      `♈2 ♉2 ♊1 ♍1 ♌15 \`\`
+      `\`♈\`2 \`♉\`2 \`♊\`1 \`♍\`1 \`♌\`15 \`\`
 a:parseURL('experiments/tf_change_1.txt',fast)
 b:parseURL('experiments/tf_correlation_1.txt',fast)
 c:parseURL('experiments/tf_images_1.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (Direct state sharpening makes the network settle into a stable state, except for 2 or 3 rows that were twinkling the whole time. Boring.)`,
-      `♈1 ♉2 ♊2 ♍1 ♌9: state very quickly (a few hundred iterations) became ±100%-correlated, and froze forever.`,
-      `♈1 ♉2 ♊2 ♍1 ♌5: 100% correlation.`,
+      `\`♈\`1 \`♉\`2 \`♊\`2 \`♍\`1 \`♌\`9: state very quickly (a few hundred iterations) became ±100%-correlated, and froze forever.`,
+      `\`♈\`1 \`♉\`2 \`♊\`2 \`♍\`1 \`♌\`5: 100% correlation.`,
+      `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`1 \`♌\`4: 100% correlation, but with a few lines, and some picture-changing activity at the beginning.`,
       // TODO: Run all 15 gradient-source variants, and preserve all plots and picture collages.
       ``,
       `What did we learn from this?`,
@@ -7674,7 +7663,7 @@ elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean
       `    Peachy.`,
       `    Both sharing and normalizing turn individuality into uniformity.`,
       `    These two extremes are too common in generality. But ideally, we would see something that combines them. How is that possible to achieve?`,
-      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in ♌4 or ♌5? Surely they would start to compete, right?`, // TODO: Run this.
+      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in \`♌\`4 or \`♌\`5? Surely they would start to compete, right?`, // TODO: Run this.
       // TODO: Direct to `examples emaVersionOf`.
       ``,
       `But.`,
@@ -7691,7 +7680,7 @@ str:arraySlice(data,sliceStart,sliceStart+n)
 dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)),FS);array(oneHot(stringToIndices str alphabet,FS),oneHot(stringToIndices reverse(str) alphabet,FS)))
 `,
       ],
-      `↑♍1 (The perfectly legitimate (and synthetic) string reversal dataset. Hopefully, we can actually get it working.)`,
+      `↑\`♍\`1 (The perfectly legitimate (and synthetic) string reversal dataset. Hopefully, we can actually get it working.)`,
       [
         _(`fancier`),
         `
@@ -7707,7 +7696,7 @@ afterMask:oneHot(stringToIndices (arraySlice str maskEnd arrayLength(str)) alpha
 dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)) FS);array(concat2 (concat2 beforeMask theMask 0) afterMask 0,oneHot(stringToIndices str alphabet,FS)))
 `,
       ],
-      `↑♍2 (A generalization of "predict the continuation of a string": mask out a portion of the string, and ask to predict the original. Basically, BERT {https://arxiv.org/abs/1810.04805}.)`,
+      `↑\`♍\`2 (A generalization of "predict the continuation of a string": mask out a portion of the string, and ask to predict the original. Basically, BERT {https://arxiv.org/abs/1810.04805}.)`,
       [
         _(`fancier`),
         `o:2 i:3072 n:i+o
@@ -7715,7 +7704,7 @@ D:static(importData())
 ind:randomNat(arrayLength D)/n
 dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo expandDims((arraySlice D ind*n+o (ind+1)*n)/255,-1) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n ind*n+o),100),-1) (m o FS))`,
       ],
-      `↑♍3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version.)
+      `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version.)
 (This CIFAR-100 data source is so low-effort: individual pixels as inputs, same as in {https://arxiv.org/abs/2103.03206}. There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
       [
         _(`fancier`),
@@ -7752,14 +7741,6 @@ datasetNeucomp:static(await load('datasetNeucomp'))
       // TODO: Run & fix `'datasetNeucomp'`.
       `(To \`'neucomp'\`, we added a sampling from a dataset, and the providing of inputs and the prediction of outputs. Visualization of the output error may be poor, though.)`,
       `
-
-      // (Individual dense-layer weights... States look much more random, unlike previously, when we had bouts of 100% correlation, and things eventually become highly-correlated squares.)
-
-      // (Autoregression vs self-determination... Loss spikes of 0.03 vs spikes of 1. But it might be because auto-regression learns to predict better, or something like that. Maybe autoregression seeming less pattern-y and more white-noise-y was an illusion. Need to print pictures every 10k epochs.)
-
-      // TODO: Hyperparameter tuning: less feature-size, more feature-size, less cells, more cells, less goals, more goals; noise in inputs; autoregression instead of self-determination; no attention heads, more attention heads; more NN layers; shared dense-layer weights; no normalization, and adaptive gradient clipping; only memory-clipping; only memory-normalization; self-determined gradient instead of prediction targets; a Transformer in goals; a Transformer in synthetic gradient.
-      //   ...But what are we supposed to see? It will all just be essentially-random fluctuations of arbitrary space. Don't we really need data?
-      //   ...And besides, isn't this tuning pointless if it's not done by a framework for tuning, such as \`a|b\`?
 
       // TODO: Test on the string-reversal dataset.
       // TODO: Test on the string-masking dataset.
@@ -21983,7 +21964,7 @@ Everything we thought of got subverted into learnable generality.
 
             Ah, the disturbance that called you here: timelines jumping left and right, stopping and starting… Nowhere to be found now.   \`\`elemCollapse elemValue(elem 'text' stringToDoc('A good heuristic for how any thing develops in life is from "something" to "nothing" to "everything" (embrace, extend, extinguish): from blissful ignorance of an unexamined answer, to mostly-ugly big hypotheses, to an elegant small solution. This "first you build your confidence, then you get trapped, then they move in so they can murder you" path was followed by these tutorials, and you along with them. Now it becomes memories.'),'[Redacted an insult to reduce intensity]')\`\`
 
-            Wanna get turned into someone's brain tissue, tho? \`\`elemCollapse elemValue(elem 'text' stringToDoc('I know you do. When sand and metal run out, you can''t really build computer chips out of organic matter, but special kinds of organic tissue should be possible. Long-term, if the capability to turn stuff into general-purpose things exists, then general intelligence will converge to them no matter what: you may not like it, but this is what peak performance looks like. When all dreams are realized, all is melted in generality. So. Become big-brain.'),'Joke.')\`\`
+            Wanna get turned into someone's brain tissue, tho? \`\`elemCollapse elemValue(elem 'text' stringToDoc('I know you do. When quartz and metal run out, you can''t really build computer chips out of organic matter, but special kinds of organic tissue should be possible. Long-term, if the capability to turn stuff into general-purpose things exists, then general intelligence will converge to them no matter what: you may not like it, but this is what peak performance looks like. When all dreams are realized, all is melted in generality. So. Become big-brain.'),'Joke.')\`\`
 
 So.
 
