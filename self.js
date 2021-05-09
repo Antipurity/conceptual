@@ -7281,7 +7281,7 @@ Or, if you've never heard of Transformers...
             In programming languages, you usually want to specify a simple and Turing-complete set of operations to choose from.
             In machine learning, you usually want one big operation that includes all possible operations within itself: one interpreter.
 
-        + A Transformer also has positional encodings (\`concat2(x,randomVar(N,FS),-1)\` as input instead of \`x\`), scaling of the pre-\`softmax\` tensor by \`1/sqrt(Size)\`, potentially multiple attention heads (putting query/key/value through \`concat(split(Q,Heads,-1),Heads,0)\` and output through \`concat(split(attn,Heads,0),Heads,-1)\`, to process their parts separately for more diversity), skip-connections (\`x+attn(x)\` and \`x+mix(x)\`), and normalization (\`n/sqrt(mean n*n) n:x-mean(x)\`).
+        + A Transformer also has positional encodings (\`concat2(x,randomVar(N,FS),-1)\` as input instead of \`x\`), scaling of the pre-\`softmax\` tensor by \`1/sqrt(Size)\`, potentially multiple attention heads (putting query/key/value through \`concat(split(Q,Heads,-1),Heads,0)\` and output through \`concat(split(attn,Heads,0),Heads,-1)\`, to process their parts separately for more diversity), skip-connections {https://arxiv.org/abs/1512.03385} (\`x+attn(x)\` and \`x+mix(x)\`), and normalization {https://arxiv.org/abs/1607.06450} (\`n/sqrt(mean n*n) n:x-mean(x)\`).
             All the things that make learning behave nicer.
 
 So... yeah.
@@ -7380,10 +7380,12 @@ transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options 
       `↑\`♍\`2 (A version that adds a co/sine-wave-based positional encoding, so everything can choose the level of detail it wants to attend to, and attend to relative positions easily {https://arxiv.org/abs/1706.03762}: \`\`Cells:256 FS:64 v:expandDims(range(0,Cells)+1,-1)/10000**(range(0,FS/2)/(FS/2)) pe:(reshape stack2(sin v,cos v,-1) (make Cells FS)) (displayOne (make sin cos) pe);(displayOne correlation correlation(pe));^pe\`\`)`,
       [
         _(`fancier`),
-        `in:(m concat2 Options Choices 0)
-t0:(m transpose (m add in mix((m norm in),fs,fs,1,Nonlinearity,M+N)))
-t1:(m transpose (m add t0 mix((m norm t0),M+N,M+N,1,Nonlinearity,fs)))
-transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices t1)`,
+        `in:(m add Options Choices)
+t0:(m transpose (m add x mix(m norm x,fs,fs,1,Nonlinearity,M)))
+t1:mix(m norm t0,M,N,1,Nonlinearity,fs)
+t2:(m transpose (where equal(M,N) (m add t0 t1) t1))
+matMix:x->M->N->fs->Layers->Nonlinearity->t2
+transformer:M->N->fs->OptionLayers->ChoiceLayers->Nonlinearity->(m func Options Choices matMix(m concat2 matMix(Options,M,N,fs,1,Nonlinearity) matMix(Choices,N,N,fs,1,Nonlinearity) -2,N+N,N,fs,1,Nonlinearity))`,
       ],
       `↑\`♍\`3 (Now here's a brave proposition: throw away most of the things above, and do a dense layer on features then a dense layer on cells {https://arxiv.org/abs/2105.01601} {https://arxiv.org/abs/2105.02723}.)`,
       `        (This is way more computationally efficient than unrolling everything into one vector, and dense-layer-ing that.)`,
@@ -7429,7 +7431,6 @@ io:call(^array(inTensor,outTensor))
 p:tf(io.0,zeros(_tensorShape io.1))
 (repeat ^(display(Perplexity,zeroGrad exp(sum(0-(io.1)*log(where p<.0001 .0001 p))/batchSize));p=io.1) 100000);save('transformer',tf)`,
       ],
-      // TODO: Run & fix \`♍\`3.
       `(We also plot perplexity {https://en.wikipedia.org/wiki/Perplexity}: the lower, the better we predict test samples.)`,
       `(Remember to lower the batch size, if your GPU memory is not enough.)`,
       `After training, we can query the model:`,
@@ -7438,6 +7439,9 @@ p:tf(io.0,zeros(_tensorShape io.1))
         `REPL stringLanguage (make map 'call' (defines await(load 'transformer') stringLanguage) 'error' error)`,
       ],
       `Character reversing (of \`8\` characters) reaches perplexity of \`1\`. Character prediction (of \`8\` characters) reaches perplexity of \`1e10\`, meaning that a more complicated scheme is required to extract any meaning from text.`,
+      `        (\`♈\`1 \`♊\`2 \`♍\`3 \`♋\`1 achieves \`2.718616247177124\` perplexity, averaged over the last 10k epochs. It does need the character-count typed into the \`REPL\` to be exact, but it reverses pretty well.)`,
+      `        (\`♈\`1 \`♊\`2 \`♍\`3 \`♋\`2 achieves \`9.417750358581543\` perplexity, on one-character prediction, which is the same as "failed to learn".)`,
+      `        (Using a cross-entropy loss in \`predict\`, \`dataOut*log(predictedOut)\`, could probably result in better performance, because the model would not be incentivized to be very sure (be \`0\` when \`dataOut\` is \`0\`), only to maximize the correct label (be \`1\` when \`dataOut\` is \`1\`). This loss is also much more aligned with perplexity, so, you know: either optimize what you measure, or underperform.)`,
       ``,
       `However...`,
       `The capabilities of an everything-to-anything transformer are not exactly perfectly general.`,
@@ -7626,20 +7630,20 @@ neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
       ],
-      // TODO: Here, try implementing Differentiable Neural Computers, not in a lazy fashion, but actually doing things as they say. See whether it is still just as hopeless.
+      // TODO: Run & fix \`♍\`3.
 
       // TODO: ...How can we explicitly optimize for diversity? Can we cluster, and make similar cells become samer and faraway cells become distincter...
       //   (Competitive learning, as opposed to error-correcting learning.)
       //   Hebbian learning? Sharpening correlation? Correlation sharpening is a lot like Hebbian learning... Sharpen expandDims(h,1)*h by giving it the gradient of its own sign (diversity loss) (but with non-trash gradient), MAYBE...
       `Run.`,
       ``,
-      `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`2 ♌14 \`\`
+      `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`2 ♌14: \`\`
 a:parseURL('experiments/tf_change_0.txt',fast)
 b:parseURL('experiments/tf_correlation_0.txt',fast)
 c:parseURL('experiments/tf_images_0.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (What does the drive to compete lead to? Stagnation: some forever have, some forever lack. Possibly because averaging over all dynamic behaviors results in a static behavior, so, no diversity.)`,
-      `\`♈\`2 \`♉\`2 \`♊\`1 \`♍\`1 \`♌\`15 \`\`
+      `\`♈\`2 \`♉\`2 \`♊\`1 \`♍\`1 \`♌\`15: \`\`
 a:parseURL('experiments/tf_change_1.txt',fast)
 b:parseURL('experiments/tf_correlation_1.txt',fast)
 c:parseURL('experiments/tf_images_1.txt',fast)
@@ -7648,6 +7652,13 @@ elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean
       `\`♈\`1 \`♉\`2 \`♊\`2 \`♍\`1 \`♌\`9: state very quickly (a few hundred iterations) became ±100%-correlated, and froze forever.`,
       `\`♈\`1 \`♉\`2 \`♊\`2 \`♍\`1 \`♌\`5: 100% correlation.`,
       `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`1 \`♌\`4: 100% correlation, but with a few lines, and some picture-changing activity at the beginning.`,
+      `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`1 \`♌\`1: \`\`
+a:parseURL('experiments/tf_change_2.txt',fast)
+b:parseURL('experiments/tf_correlation_2.txt',fast)
+c:parseURL('experiments/tf_images_2.txt',fast)
+d:parseURL('experiments/tf_loss_2.txt',fast)
+elemCollapse _executioner(^a;b;c;d;display('Mean change',await a,10);display('Mean of correlations',await b,10);display('Loss',await d,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
+      `        (Autoregression has at least one thing going for it: it doesn't freeze, and keeps slowly changing the state.)`,
       // TODO: Run all 15 gradient-source variants, and preserve all plots and picture collages.
       ``,
       `What did we learn from this?`,
@@ -7699,13 +7710,14 @@ dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphab
       `↑\`♍\`2 (A generalization of "predict the continuation of a string": mask out a portion of the string, and ask to predict the original. Basically, BERT {https://arxiv.org/abs/1810.04805}.)`,
       [
         _(`fancier`),
-        `o:2 i:3072 n:i+o
+        `o:2 i:3072 n:i+o paddedInputSize:floor((n+99)/100)*100
 D:static(importData())
 ind:randomNat(arrayLength D)/n
-dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo expandDims((arraySlice D ind*n+o (ind+1)*n)/255,-1) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n ind*n+o),100),-1) (m o FS))`,
+paddedInput:concat2((arraySlice D ind*n+o (ind+1)*n)/255,zeros (m paddedInputSize-n FS),0)
+dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo reshape(paddedInput,m paddedInputSize/FS FS) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n ind*n+o),100),-1) (m o FS))`,
       ],
       `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version.)
-(This CIFAR-100 data source is so low-effort: individual pixels as inputs, same as in {https://arxiv.org/abs/2103.03206}. There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
+(This CIFAR-100 data source is even more low-effort than {https://arxiv.org/abs/2103.03206}: reshape the pixel sequence, without bothering with things like "patches that make visual sense". There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
       [
         _(`fancier`),
         `as:accessState
@@ -7854,6 +7866,7 @@ To reverse this, use \`stringToIndices\`.`,
     },
     call(lbl, vle) {
       if (typeof document == ''+void 0) return
+      if (document.visibilityState !== 'visible') return // Seems to leak GPU memory without this, very rapidly.
       let L = call.env[_id(displayOne)]
       if (_isDisposable(vle) && vle.shape.length == 2 && (!L || !L.has(lbl) || L.get(lbl).firstChild.tagName !== 'CANVAS')) vle = toImage(vle)
       if (_isPromise(vle)) {

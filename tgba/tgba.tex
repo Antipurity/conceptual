@@ -14,7 +14,7 @@
 
 \begin{abstract}
 
-There is no end to what can be learned and how. However, modern machine learning systems impose a non-general structure on what is learned and how: minimizing a particular loss function with respect to a particular model architecture. We motivate and introduce \textit{Transcendent Galaxy-Brain Algorithms} (TGBA): an evolutionarily-plausible approach to implementing general intelligence, which optimizes anything in any way. Using only a few basic considerations, we highlight the similarities between general minds and universes, and argue that they are the same. Among the implications are biological plausibility of Transformer-like algorithms, and that modern machine learning can almost build AGI, lacking essentially only refinement.
+There is no end to what can be learned and how. However, modern machine learning systems impose a non-general structure on what is learned and how: minimizing a particular loss function with respect to a particular model architecture. We motivate and introduce \textit{Transcendent Galaxy-Brain Algorithms} (TGBA): an evolutionarily-plausible approach to implementing general intelligence, which optimizes anything in any way. Using only a few basic considerations, we highlight the similarities between general minds and universes, and argue that they are the same. We conjecture that for achieving transcendence (AGI), machine learning requires environments that reward self-replication.
 
     TODO: Codewords...
 
@@ -78,32 +78,32 @@ Wolfram models generalize cellular automata to memory with arbitrary connections
 
 \section{Algorithm}
 
-In short, a \textit{Transcendent Galaxy-Brain Algorithm} is any algorithm that:
+In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any algorithm that:
 
 \begin{itemize}
 \item Indirectly encodes a model that is as general as itself. In machine learning (ML), this implies meta-learning (learning a learner), or more generally, Turing-completeness.
-\item Combines many simple cells into arbitrary structures, creating an internal graph.
-\item Makes these emergent structures locally interact as they define, in arbitrary ways defined only by those structures. In machine learning, this suggests self-attention instead of a dense layer, or pruning. In a graph, this suggests local rewrite rules.
+\item Has state: creates an internal graph, by combining many simple cells into arbitrary structures (connections might be implied rather than stored explicitly, as in recurrent neural networks (RNNs) in ML).
+\item Does scalable operations on state: makes these emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them \cite{tolstikhin2021mlpmixer} \cite{schlag2021linear}, covered in Subsection \ref{Algorithm} here.
 \item Is designed to run forever by modeling time. For example, using backpropagation-through-time and/or synthetic gradients for machine learning, or more generally, an infinite interpreter loop.
-\item Runs by itself, without relying on the environment to provide any of the above: otherwise, any algorithm would technically count.
+\item Runs by itself, without relying on the environment to provide any of the above. Otherwise, any algorithm would technically count.
 \end{itemize}
 
-(Self-awareness is only useful for adding self-replication here, which is very challenging to simulate, and so is not included here.)
+Such algorithms are AGI-ready, able to represent everything in the world usefully.
 
-    TODO: Maybe include discrete-ness of emerging structures ("definite things fundamentally happen") as an item, potentially as a source of gradient to approximations (as was intended long ago)? (Because analog-only models ain't training, and no structure is emerging.) ...Though striving toward discreteness via gradient doesn't seem to work well either; is it because multiple operations multiply the deviation, so the whole is biased toward constant functions?
+    TODO: ...Should we include competitive learning (vs error-correcting learning)? In particular, should we replace "self-determined" with "competitive" in text?
 
-    TODO: ...So, what is left for us? Bistable neurons, rather than gradient? Mutual meta-RL? Is there anything else, at all?
-
-In particular, this permits a simple implementation: memory cells repeatedly modified by attention (between cells and cells-and-inputs), with a form of self-determined gradient for cell interaction.
+In particular, this definition suggests simple implementations, the simplest of which is perhaps an \textbf{RNN with millions of units in state}, with a form of self-determined gradient for internal interaction and error-correction for external interaction.
 
     TODO: Find wherever we talk about self-determined gradient, and better acknowledge that this is self-supervised learning, not some particular thing.
+
+    TODO: ...Do we really still want attention? Will factorized dense-ness turn out ok?
 
 Now, to justify "what", we outline "why".
 
 To implement articial general intelligence, we want to do anything, in one general model: a \textit{worldview}. All general models are equivalent to one another, and as such, every single concept that we introduce into our mental models must be subvertable: the system must be able to evolve into a state where it behaves exactly as if it was implemented using another model. This is achievable via:
 
 \begin{itemize}
-\item \textit{Self-reference}, where explicit full access to and control over the system's source code is given to itself. This requires easy self-replication to make any changes without necessitating either non-completeness or death by generality, and code that can be applied to different data, such as in programming.
+\item \textit{Self-reference}, where explicit full access to and control over the system's source code is given to itself. This requires easy self-replication to make any changes without necessitating either non-completeness or death by generality, and code that can be applied to different data, such as in programming. (In particular, self-awareness is self-reference, which is mostly only useful for self-replication and nothing else.)
 \item \textit{Indirect encoding}, where the system learns a system that is as general as itself, and uses and controls that as if that is itself: essentially, a learned self-reference. This is natural if code always applies to the same data, such as in machine learning (ML).
 \end{itemize}
 
@@ -117,9 +117,7 @@ Generality melts everything into generality, and we can do that to ML algorithms
 
 A well-studied approach to doing anything is generating programs in a programming language. Every programming language is a worldview for use by humans: everything is a function, or everything is an object, or everything is a logical statement, or any combination of the above, and so on. All theoretically equivalent for program generation (as long as we prevent all possible crashes and infinite loops without sacrificing Turing-completeness), but practically inducing different futures on learners.
 
-    TODO: Are there papers on these paradigms? Can we reference them?
-
-Theoretically, all we need to do is to learn to generate programs. Practically, we need a lot of optimization to make a general ML algorithm practical. In particular, we want to make the base as simple and efficient as possible, which means having only one "thing" to compose everything out of. In fact, learners seem to perform best when we do not expose any human-oriented features such as stack-based execution or datatypes or exceptions, instead executing in parallel all the simple numeric operations at once (for example, $+$, $*$, and some non-linearity), similar to RNNs.
+Theoretically, all we need to do is to learn to generate programs. Practically, we need a lot of optimization to make a general ML algorithm practical. In particular, we want to make the base as simple and efficient as possible, which means having only one "thing" to compose everything out of. In fact, learners seem to perform best when we do not expose any human-oriented features such as stack-based execution or datatypes or exceptions, instead executing in parallel all the simple numeric operations at once (for example, $+$, $*$, and some non-linearity), similar to RNNs. In fact, all we seem to need are matrix multiplications and non-linearities, as studied in deep learning.
 
 To generate a program, at each smallest piece of it (\textit{cell}), the system must choose what function to call and with what arguments (if needed, reframe this with other language-appropriate synonyms). We can express the system's preferences at each choice as an objective function, and optimize future values of that via reinforcement learning at each cell, though the system as a whole may not have an objective function that is compressible to be shorter than the system.
 
@@ -143,9 +141,11 @@ We have a relatively small pool of objectives, each with a function that clips i
 
 Each epoch, each cell performs a fixed number of choices (at least 2) among basics and/or cells, then the choice network is compiled into an executable program, which is then executed, and the stored state of some or all cells is updated to the most-recent output. (We have tried constructing explicit functions and other objects from the choice network, and we have tried variable-argument-count functions by having 2 pointers represent the current list item and the rest of the list, however, the much simpler approach of making all functions accept up to 2 arguments seems to work best, and has the benefit of potentially being extremely parallelizable.)
 
-Connecting everything to anything may seem to require $\mathcal{O}(n^2)$ operations, however, there are ways linearize it to $\mathcal{O}(n)$, which makes this scalable, unlike a simple dense layer of an RNN. For an example of linearization, each choice can output its desired embedding, and perform a $k$-nearest-neighbor search among basics and cells. Another example is only connecting choices to some options, in a fashion that combines most-recently-used and random.
+Linear-time operation is required if we want Jupyter-sized memories without galaxy-sized computers. Lately, there has been a lot of interest in linear attention \cite{schlag2021linear}, however, simple dense layers (matrix multiplications) have been shown to not be significantly worse than state-of-the-art attention-based algorithms \cite{tolstikhin2021mlpmixer}. One way to linearize dense layers is to prune their weights \cite{zhou2021effective} (set most of them to $0$). Another is to make each choice output its desired embedding, and perform a $k$-nearest-neighbor search among basics and cells. Another way could be to reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense operations are performed, bringing the total cost down to $dN^{d/3}$. Here, we investigate this last approach.
 
 Each choice is relatively expensive, and executing $a+b$ on 2 numbers using 3 choices would be inefficient. As such, all functions operate on many numbers for efficiency. This imposes a separation between high-level cells and low-level features, and thus separates control-flow-dominated and parallel-processing-dominated workloads.
+
+    TODO: ...Does our new-and-improved linearization hierarchy still impose a separation?
 
 To perform choices, reinforcement learning (RL) seems like a good fit, though that imposes the \textit{objective bottleneck}: each prediction target has to be routed through one number. For greater efficiency, we would like objectives to be implied through gradient on tensors. (In reinforcement learning, objective-setters have to compute the mean, imposing a bottleneck on learning. For example, when the mean is of one input, the system successfully learns to fill its entire memory with big numbers, the usefulness of which for downstream tasks is questionable.)
 
@@ -171,9 +171,15 @@ Prescribing one optimizer objective (which includes intrinsic rewards) and/or an
 
     TODO: ...Why is the last sentence true? Is it, even?
 
+    TODO: Also, isn't it possible that self-determination happens at the "humanity" level, not "human"?
+
 While humans are demonstrably smarter than non-human animals, they do not seem to take any longer to process information. Which means that each epoch into which time is separated, each part settles in constant time, and the total computation scales as $\mathcal{O}(n)$. General intelligence is scalable, which means that there are no inherent obstacles to converting Earth's biomass into brain tissue. In machine learning, linearized Transformers are an active area of research.
 
     TODO: Cite linearized transformers here.
+
+    TODO: ...Why are Transformers in particular here? There's nothing special about them. Move the reference into the Algorithm section.
+
+    TODO: Reframe this as the need to have a linear-time arbitrary graph transformation. And, mention a way of linearizing dense layers: reshaping state into a tensor with constant-size dimensions, and performing dense-ness on each dimension.
 
 In cognitive and social psychology, there is evidence for separate "fast" and "slow" modes of thought (the dual process theory \cite{doi:10.1146/annurev.psych.59.103006.093629}), named System 1 and System 2 respectively: the distinction between cognitive processes that are automatic and unconscious and those that are deliberative and conscious. The simplest model of brains would combine those as two corner cases of the same model, for instance, if the model does not simply connect everything to everything but also imposes structures by using a form of attention, then a separation between parallel-processing-dominated (feature-level) and control-flow-dominated (attention-level) workloads would naturally arise.
 
@@ -271,6 +277,8 @@ This work raises many questions, such as:
 \item Is transcendence inherently dangerous, when applied to anything that we care about, such as humanity? It means arriving at a better equivalent to humanity, but that also means that humanity will no longer exist as it is.
 \end{itemize}
 
+    TODO: ...Cut down on the number of items above...
+
 \subsection{Criticism}
 
 Our approach exists, and thus it can be criticized.
@@ -278,6 +286,7 @@ Our approach exists, and thus it can be criticized.
 \begin{itemize}
 \item "\textbf{Many turns of phrase in this work are circular.}" Similarly to how the topic of discussion is a self-reinforcing loop of intuitions, the discussion itself is a self-reinforcing loop of intuitions, to better highlight its topic. This is unavoidable in applied generality, though we did try to minimize these occurences.
 \item "\textbf{The suggested self-replication environments sound incredibly dangerous.}" TODO: ...What's our response; how to say that we need to face danger head-on, or it will sneak up on us?...
+\item TODO: "TGBA is not AGI-ready, as it lacks X." No it does not: it can do anything and represent anything, by definition. Though we can only hope that theoretical simplicity always translates well into practical simplicity.
 \item TODO: "Why not just brand transcendence as meta-learning or self-supervised learning; why a separate system of terms?" The point of this work is to create another full-fledged worldview from first principles, able to turn any input into its own rules, and follow it to transcendence. In our experience, initiation of a runaway worldview creation process is much more reliable for creating worldviews than copying human culture including all its imperfect redundancy and complexity. Worldview creation is much more akin to replicating humanity than humans, the latter of which is what ML research is commonly concerned with.
 \item TODO: ...Shitty experiments? Need to actually perform the experiments first, though.
 \item TODO: ...No, some people really do think that the No Free Lunch Theorem means anything. Have to include it.
