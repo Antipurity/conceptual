@@ -7439,7 +7439,7 @@ p:tf(io.0,zeros(_tensorShape io.1))
         `REPL stringLanguage (make map 'call' (defines await(load 'transformer') stringLanguage) 'error' error)`,
       ],
       `Character reversing (of \`8\` characters) reaches perplexity of \`1\`. Character prediction (of \`8\` characters) reaches perplexity of \`1e10\`, meaning that a more complicated scheme is required to extract any meaning from text.`,
-      `        (\`♈\`1 \`♊\`2 \`♍\`3 \`♋\`1 achieves \`2.718616247177124\` perplexity, averaged over the last 10k epochs. It does need the character-count typed into the \`REPL\` to be exact, but it reverses pretty well.)`,
+      `        (\`♈\`1 \`♊\`2 \`♍\`3 \`♋\`1 achieves \`2.718616247177124\` perplexity, on \`8\`-character reversal, averaged over the last 10k epochs. It does need the character-count typed into the \`REPL\` to be exact, but it reverses pretty well.)`,
       `        (\`♈\`1 \`♊\`2 \`♍\`3 \`♋\`2 achieves \`9.417750358581543\` perplexity, on one-character prediction, which is the same as "failed to learn".)`,
       `        (Using a cross-entropy loss in \`predict\`, \`dataOut*log(predictedOut)\`, could probably result in better performance, because the model would not be incentivized to be very sure (be \`0\` when \`dataOut\` is \`0\`), only to maximize the correct label (be \`1\` when \`dataOut\` is \`1\`). This loss is also much more aligned with perplexity, so, you know: either optimize what you measure, or underperform.)`,
       ``,
@@ -7555,25 +7555,11 @@ grad:Cells->FS->(m func ? (m last (m predict (m gradMul (m sliceOff splitSpace 0
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
-pastTargets:emaVersionOf(targets,.99)
-grad:Cells->FS->(m func ? (m predict targets pastTargets))`,
-      ],
-      `↑\`♌\`11 (Maybe return to "stick to whatever past you picked", with zero fancy tricks.)`,
-      [
-        _(`fancier`),
-        `targets:mix(?,FS,FS,1,softsign,Cells)
 pt:emaVersionOf(targets,.99)
 apt:(m abs pt)
 grad:Cells->FS->(m func ? (m predict targets (m where (m less apt (m mean apt)) 0 (m sign pt))))`,
       ],
       `↑\`♌\`12 (Maybe return to sharpening the past, like in \`examples emaVersionOf\`: push the smallest-magnitude values to zero, push the biggest-magnitude values away from it.)`,
-      [
-        _(`fancier`),
-        `targets:mix(?,FS,FS,1,softsign,Cells)
-at:(m abs targets)
-grad:Cells->FS->(m func ? (m predict targets (m where (m less at (m mean at)) 0 (m sign targets))))`,
-      ],
-      `↑\`♌\`13 (Same as ♌12, but without the stabilization of momentum.)`,
       [
         _(`fancier`),
         `targets:mix(?,FS,FS,1,softsign,Cells)
@@ -7586,6 +7572,26 @@ grad:Cells->FS->(m func ? (m predict targets (m sign (m sub pt (m mean pt)))))`,
         `grad:Cells->FS->(m func ? (m predict ? (m sign (m sub ? (m mean ?)))))`,
       ],
       `↑\`♌\`15 (Maybe direct state sharpening.)`,
+      [
+        _(`fancier`),
+        `grad:Cells->FS->(m func ? (m minimize ? (m sub 0 (m oneHot (m argmax ? -1) FS))))`,
+      ],
+      `↑\`♌\`16 (Maybe maximize the \`max\` number, which with normalization, would induce competition for \`max\`-ness.)`,
+      [
+        _(`fancier`),
+        `targets:transformer(Cells,Cells,FS,1,1,softsign)
+grad:Cells->FS->(m func ? (m minimize ? m(targets,?,?)))`,
+      ],
+      `↑\`♌\`17 (Maybe, again, randomly-determined gradient, but with a \`transformer\` instead of a mere dense layer.)`,
+      [
+        _(`fancier`),
+        `targets:(m transformer(Cells,Cells,FS,1,1,softsign) ? ?)
+ed:expandDims avg:(m sub targets m(mean,targets)) n:(m div avg (m add m(sqrt,m mean (m mul avg avg)) 1e-6))
+grad:Cells->FS->(m func ? (m last m(minimize,m abs (m mul m(ed,n,-2) m(ed,n,-1)),-1) m(minimize,m abs (m mul m(ed,n,-3) m(ed,n,-2)),-1)))`,
+      ],
+      `↑\`♌\`18 (Maybe explicitly maximize diversity in normalized rows and columns in target-space, maximizing absolute correlation. Kinda quadratic in row size and column size, though.)`,
+      `        (Note: this one performs like garbage, unless you like looking at static pictures. Super sharpened, though, especially if you replace \`targets\` with \`?\` and look at ±100% state, alternating between two exactly-opposite pictures.)`,
+      ``,
       `        Okay, this is WAY too much. Only compute can save us now.`,
       [
         _(`fancier`),
@@ -7630,11 +7636,6 @@ neucomp:static(await load('neucomp'))
 (repeat ^(neucomp(2);visualize(accessState(defines neucomp 'memory'),N)) N);save('neucomp',neucomp)
 `,
       ],
-      // TODO: Run & fix \`♍\`3.
-
-      // TODO: ...How can we explicitly optimize for diversity? Can we cluster, and make similar cells become samer and faraway cells become distincter...
-      //   (Competitive learning, as opposed to error-correcting learning.)
-      //   Hebbian learning? Sharpening correlation? Correlation sharpening is a lot like Hebbian learning... Sharpen expandDims(h,1)*h by giving it the gradient of its own sign (diversity loss) (but with non-trash gradient), MAYBE...
       `Run.`,
       ``,
       `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`2 ♌14: \`\`
@@ -7659,7 +7660,14 @@ c:parseURL('experiments/tf_images_2.txt',fast)
 d:parseURL('experiments/tf_loss_2.txt',fast)
 elemCollapse _executioner(^a;b;c;d;display('Mean change',await a,10);display('Mean of correlations',await b,10);display('Loss',await d,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (Autoregression has at least one thing going for it: it doesn't freeze, and keeps slowly changing the state.)`,
-      // TODO: Run all 15 gradient-source variants, and preserve all plots and picture collages.
+      `\`♈\`1 \`♊\`2 \`♍\`3 \`♌\`1: \`\`
+a:parseURL('experiments/tf_change_3.txt',fast)
+b:parseURL('experiments/tf_correlation_3.txt',fast)
+c:parseURL('experiments/tf_images_3.txt',fast)
+elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
+      `        (Never a dull moment with a linear mixer, even with shared weights.)`,
+      // TODO: Run 16, for single-number competition. Currently, \`♌\`16 is very random with LR=3e-4 (though did not run this one for 1M epochs), but with LR=1e-3, kinda-interesting stuff starts happening, for example, collapse-to-0 and spikes and oscillations with a constant row-correlation matrix.
+      // TODO: Run 17, for fully-arbitrary changes.
       ``,
       `What did we learn from this?`,
       `    (After we used the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
@@ -7672,10 +7680,11 @@ elemCollapse _executioner(^a;b;c;d;display('Mean change',await a,10);display('Me
       `    When shared, the state likes to devolve into one 100%-correlated picture forever (sometimes, with spikes followed by settling into another picture). When per-cell, the state likes being random noise forever.`,
       `    When normalizing, it likes to settle into ±100%-correlated pictures. When only clipping, it likes being random noise.`,
       `    Peachy.`,
-      `    Both sharing and normalizing turn individuality into uniformity.`,
-      `    These two extremes are too common in generality. But ideally, we would see something that combines them. How is that possible to achieve?`,
-      `        Does anything interesting happen if we sharpen states, such as by \`predict\`ing \`mul\`tiplied state or by maximizing the \`abs\`olute value, as in \`♌\`4 or \`♌\`5? Surely they would start to compete, right?`, // TODO: Run this.
-      // TODO: Direct to `examples emaVersionOf`.
+      `    Non-random diversity is nicer, though.`,
+      `    What can encourage diversity?`,
+      `        Sharpening as in \`♌\`4 or \`♌\`5 or \`♌\`12 or \`♌\`14 or \`♌\`15?`,
+      `        Some momentum contrasting, related to \`examples emaVersionOf\`? (Not implemented.)`,
+      `    Diversity sounds a lot like clustering, where similar things become closer and different things separate. In fact, literally any non-uniform gradient should perform this clustering, in its own way.`,
       ``,
       `But.`,
       `No one likes running blind. Sure, it may have a rich inner world, but without proper inputs/outputs, we will never see it.`,
@@ -7750,15 +7759,23 @@ datasetNeucomp:static(await load('datasetNeucomp'))
 (repeat ^(datasetNeucomp(2);visualize(accessState(defines datasetNeucomp 'memory'),N)) N);save('datasetNeucomp',datasetNeucomp)
 `,
       ],
-      // TODO: Run & fix `'datasetNeucomp'`.
       `(To \`'neucomp'\`, we added a sampling from a dataset, and the providing of inputs and the prediction of outputs. Visualization of the output error may be poor, though.)`,
       `
 
+      // TODO: Run & fix \`'datasetNeucomp'\`.
       // TODO: Test on the string-reversal dataset.
       // TODO: Test on the string-masking dataset.
       // TODO: Test on the CIFAR100+20 dataset.
 
-      // "Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life."
+      Alright.
+
+      Low-effort-ending time.
+
+      Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life.
+
+      // TODO: Have \`tutorial matMul\`, and there, have a linearithmic-complexity layer (taking and returning a linear vector, sized as specified at creation-time), which zero-pads input (unless the input is perfectly-sized) and reshapes it into \`n\`-sized dimensions and does that many transpose-mix (along a correct axis) (most from/into the same sizes, but the last one into the smallest size that would still fit the output) and transposes the result to restore its dimension order (though it's technically unneeded) and reshapes the result and slices-off what it needs (unless the output is perfectly-sized).
+      // TODO: Look up Karpathy's blog post on the unreasonable effectiveness of RNNs, and try our linearithmic RNN on the same dataset/s, but in a single run over all data, with "new sentence" being a special sequence rather than a reset of the internal state.
+      // TODO: Ablate the dimension-size parameter (with dimension-count being the ceil of logarithm of size with its base being the dimension-size) *for the same computational cost*, 3 (or maybe 5) runs per configuration (for mean and std-dev).
       `,
     ],
   },
@@ -8789,7 +8806,8 @@ Creates a tensor of length \`floor (Start-End)/Step\`, with each value at \`i\` 
     ],
     merged:true,
     docs:`\`transpose What\`
-Swaps two innermost dimensions around.`,
+Swaps two innermost dimensions around.
+Alternatively, \`transpose What DimensionsBecome\`.`,
     examples:[
       [
         `transpose tensor(1() 23() 4())`,
@@ -8798,15 +8816,20 @@ Swaps two innermost dimensions around.`,
       [
         `repeat ^(transpose randomVar(10,20))=5 1000`,
       ],
+      [
+        `repeat ^(transpose randomVar(2,3,4) ^(2 0 1))=5 10000`,
+      ],
     ],
-    argCount:1,
     interrupt:false,
     dispose:true,
     impure:true,
-    call(a) {
+    call(a, dims) {
+      a = _num(a)
       if (typeof a == 'number') return a
       if (_isDisposable(a) && _tensorSize(a) === 1) return keep(a)
       if (!_isDisposable(a) || a.shape.length < 2) error('Not a (possibly batched) matrix:', a)
+      if (isArray(dims)) return _tf(tf.transpose(a, dims))
+      if (dims !== undefined) error('Must be undefined or an array:', dims)
       // TFJS's default dimension permutation is… peculiar, for something named `transpose`.
       if (a.shape.length == 2) return _tf(tf.transpose(a, transpose.dims2 || (transpose.dims2 = [1,0])))
       if (a.shape.length == 3) return _tf(tf.transpose(a, transpose.dims3 || (transpose.dims3 = [0,2,1])))
@@ -8818,6 +8841,20 @@ Swaps two innermost dimensions around.`,
       [
         _(`transpose`),
         _(`_dout`),
+        [
+          function(dims) { // Invert those dims.
+            if (dims === undefined) return
+            if (!isArray(dims)) error('Must be undefined or an array:', dims)
+            if (!transpose.invert) transpose.invert = new WeakMap
+            if (transpose.invert.has(dims)) return transpose.invert.get(dims)
+            const result = new Array(dims.length)
+            for (let i = 0; i < dims.length; ++i)
+              result[dims[i]] !== undefined && error('Repeated dimension indices in', dims),
+              result[dims[i]] = i
+            return transpose.invert.set(dims, result), result
+          },
+          _(`_inB`),
+        ],
       ],
     ],
   },
@@ -8903,7 +8940,13 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
     ],
     interrupt:false,
     dispose:true,
-    call(a, axis = 0) { return _isNum(a) ? a : _tf(tf.squeeze(_num(a), axis)) },
+    call(a, axis = 0) {
+      if (_isNum(a)) return a
+      a = _num(a)
+      if (axis < 0) axis += a.shape.length
+      if (a.shape[axis] !== 1 && a.shape[axis] !== undefined) return sum(a, axis)
+      return _tf(tf.squeeze(_num(a), axis))
+    },
     mergeAdjustment:[
       _(`_mergeTensors`),
       null,
@@ -19164,6 +19207,9 @@ The correctness of quining of functions can be tested by checking that the rewri
       }
       if (!isArray(a)) error("Expected array length or an array, got", a)
       --array.count
+
+      // Clear some caches.
+      transpose.invert && transpose.invert.delete(a)
 
       // Undo `_rememberArrayItems`.
       const resM = _rememberToDispose.res, resR = _rememberToDispose.reg

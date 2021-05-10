@@ -54,6 +54,8 @@ The field of meta-learning studies learning-to-learn: improvement of an inner op
 
 Data analysis of recordings of biological brains supports attractor neural networks \cite{AMIT1990111}, where strong feedback causes the evolution of a recurrent network to settle into different attractor patterns. This indicates the biological plausibility of memory-augmented neural networks \cite{santoro2016oneshot}.
 
+To improve scalability of neural operations, lately, there has been a lot of interest in linear attention \cite{schlag2021linear}, however, simple dense layers (matrix multiplications) have been shown to not perform significantly worse than state-of-the-art attention-based algorithms \cite{tolstikhin2021mlpmixer}. One way to linearize dense layers is to prune their weights \cite{zhou2021effective} (set most of them to $0$). Another is to make each choice output its desired embedding, and perform a $k$-nearest-neighbor search among discrete actions \cite{DBLP:journals/corr/Dulac-ArnoldESC15}.
+
     TODO: Novelty search?
 
     TODO: Do we want to mention program synthesis?
@@ -88,11 +90,11 @@ In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any alg
 \item Runs by itself, without relying on the environment to provide any of the above. Otherwise, any algorithm would technically count.
 \end{itemize}
 
-Such algorithms are AGI-ready, able to represent everything in the world usefully.
+Such algorithms are \textbf{AGI-ready}, able to represent everything in the world usefully.
 
     TODO: ...Should we include competitive learning (vs error-correcting learning)? In particular, should we replace "self-determined" with "competitive" in text?
 
-In particular, this definition suggests simple implementations, the simplest of which is perhaps an \textbf{RNN with millions of units in state}, with a form of self-determined gradient for internal interaction and error-correction for external interaction.
+In particular, this definition suggests simple implementations, the simplest of which is perhaps a \textbf{big RNN} with millions of units in state, with a form of self-determined gradient for internal interaction and error-correction for external interaction.
 
     TODO: Find wherever we talk about self-determined gradient, and better acknowledge that this is self-supervised learning, not some particular thing.
 
@@ -141,15 +143,17 @@ We have a relatively small pool of objectives, each with a function that clips i
 
 Each epoch, each cell performs a fixed number of choices (at least 2) among basics and/or cells, then the choice network is compiled into an executable program, which is then executed, and the stored state of some or all cells is updated to the most-recent output. (We have tried constructing explicit functions and other objects from the choice network, and we have tried variable-argument-count functions by having 2 pointers represent the current list item and the rest of the list, however, the much simpler approach of making all functions accept up to 2 arguments seems to work best, and has the benefit of potentially being extremely parallelizable.)
 
-Linear-time operation is required if we want Jupyter-sized memories without galaxy-sized computers. Lately, there has been a lot of interest in linear attention \cite{schlag2021linear}, however, simple dense layers (matrix multiplications) have been shown to not be significantly worse than state-of-the-art attention-based algorithms \cite{tolstikhin2021mlpmixer}. One way to linearize dense layers is to prune their weights \cite{zhou2021effective} (set most of them to $0$). Another is to make each choice output its desired embedding, and perform a $k$-nearest-neighbor search among basics and cells. Another way could be to reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense operations are performed, bringing the total cost down to $dN^{d/3}$. Here, we investigate this last approach.
+    TODO: ...But now, we only have a super-simple linearithmic dense layer... Do we tear down our ancient foundations, of RL and choices?...
 
-Each choice is relatively expensive, and executing $a+b$ on 2 numbers using 3 choices would be inefficient. As such, all functions operate on many numbers for efficiency. This imposes a separation between high-level cells and low-level features, and thus separates control-flow-dominated and parallel-processing-dominated workloads.
-
-    TODO: ...Does our new-and-improved linearization hierarchy still impose a separation?
+Close-to-linear-time operation is required if we want Jupyter-sized memories without galaxy-sized computers. We propose \textit{linearithmic dense layers}: reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense-layer operations are performed, bringing the total cost down to $C=dn^{d+1}=d N^{1+1/d}$ (assuming that multiplication of two $n \times n$ matrices costs $n^3$ operations). $d=\log{N}$ minimizes this cost, making it $C=\mathcal{O}(N \log{N})$, with $n={\rm e}$. Alternatively, we can fix $n$ to be $2$ or $3$ or $4$ for the near-minimal cost of $C=\frac{n}{\log{n}} N \log{N}$.
 
 To perform choices, reinforcement learning (RL) seems like a good fit, though that imposes the \textit{objective bottleneck}: each prediction target has to be routed through one number. For greater efficiency, we would like objectives to be implied through gradient on tensors. (In reinforcement learning, objective-setters have to compute the mean, imposing a bottleneck on learning. For example, when the mean is of one input, the system successfully learns to fill its entire memory with big numbers, the usefulness of which for downstream tasks is questionable.)
 
+    TODO: Do we still want to use choices as our explanation? Or do we simply say that we'd use stochastic gradient descent?
+
 We have investigated what is the best base to construct choices from. An obvious choice here is a simple Turing-complete programming language, for example, as function to call with arguments. It is sufficient to expose only numeric operations: not only is that Turing-complete, but also, neural networks are easily implementable on top of that. Fixed argument count per cell works best here, though it is still extremely difficult to train. Sharing weights or not does not seem to matter.
+
+    TODO: ...This seems to drag on... Can we shorten this, maybe to one sentence like "yeah, we tried program generation, and it kinda sucked"?
 
 However, instead of choosing many simple operations, so that generality can only arise in combinations of cells, it may be more efficient to have one big operation, as a general interpreter. It may also be efficient to make this operation differentiable and learnable. In fact, with this consideration, we arrive at the Transformer architecture \cite{vaswani2017attention} as the bulk of our algorithm, which applies multi-head attention to match queries (computed per choice) to values by keys (both computed per option) then applies an operation (a dense layer). A reader may be forgiven for getting the impression that this work concerns a reinforcement learning. We investigate several methods of self-determining the gradient.
 
@@ -181,8 +185,6 @@ While humans are demonstrably smarter than non-human animals, they do not seem t
 
     TODO: Reframe this as the need to have a linear-time arbitrary graph transformation. And, mention a way of linearizing dense layers: reshaping state into a tensor with constant-size dimensions, and performing dense-ness on each dimension.
 
-In cognitive and social psychology, there is evidence for separate "fast" and "slow" modes of thought (the dual process theory \cite{doi:10.1146/annurev.psych.59.103006.093629}), named System 1 and System 2 respectively: the distinction between cognitive processes that are automatic and unconscious and those that are deliberative and conscious. The simplest model of brains would combine those as two corner cases of the same model, for instance, if the model does not simply connect everything to everything but also imposes structures by using a form of attention, then a separation between parallel-processing-dominated (feature-level) and control-flow-dominated (attention-level) workloads would naturally arise.
-
 The RL framework can be used to explain objectives. If we view the brain as a system that naturally developed in the physical universe rather than one that spontaneously popped into existence, then we can outline a progression of stepping stones that lead to the development of human-level intelligence: reinforcement learners get evolved (likely, to maximize reproduction and resource gathering rates), then get repeated across the brain, and get re-used for more and more internal regulation until they can indirectly encode a mind, and then the brain gets optimized and refined into uniform simplicity. The only surprising fact about this is that it can take billions of years to complete this simple process, as we ourselves have arrived at Transformers through program generation much faster than that. Nonetheless, this suggests at least some biological plausibility of TGBA, for all creatures that behave as humans.
 
 We posit that \textit{all} learning algorithms eventually converge to a fixed point during their development, called general intelligence: the best way to learn is to have infinite diversity, and the best way to deal with infinite diversity is to have generality. If we view the brain as a system that naturally developed in the physical universe (by a process that we call evolution here) rather than one that spontaneously popped into existence, then it is natural that some of the most recent animals have general intelligence. The only surprising fact about this is that it can take billions of years to complete this simple process: we ourselves have arrived at Transformers through program generation much faster than that.
@@ -190,6 +192,8 @@ We posit that \textit{all} learning algorithms eventually converge to a fixed po
 RL is not sufficient to explain brains, as RL is too sample-inefficient and has challenges with safe exploration. A Transformer-like model, some of which may be used to maximize instictual objectives through actions, is likely to be a better explanation.
 
     TODO: Look out for any papers that we can cite here.
+
+    TODO: ...But what about a dense layer instead of a Transformer? Isn't it more natural?
 
 Humans seem to only be able to hold $7\pm2$ objects in their working memory. This could be a consequence of $7\pm2$ train-time prediction targets separating brain cells into $7\pm2$ distinct run-time clusters. Self-determination could explain both the need for these targets and why there are so few, as each target adds diversity, but allocating more cells to predicting a target makes the prediction more precise, and gives more surface for distributed-representation program search, improving performance.
 
