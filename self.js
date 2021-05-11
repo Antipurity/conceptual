@@ -7771,6 +7771,8 @@ datasetNeucomp:static(await load('datasetNeucomp'))
 
       Low-effort-ending time.
 
+      Yeah, there's no more prettiness in these tutorials, only code. What did you expect? Once you know everything, there is no more life to be had.
+
       Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life.
 
       // TODO: Have \`tutorial matMul\`, and there, have a linearithmic-complexity layer (taking and returning a linear vector, sized as specified at creation-time), which zero-pads input (unless the input is perfectly-sized) and reshapes it into \`n\`-sized dimensions and does that many transpose-mix (along a correct axis) (most from/into the same sizes, but the last one into the smallest size that would still fit the output) and transposes the result to restore its dimension order (though it's technically unneeded) and reshapes the result and slices-off what it needs (unless the output is perfectly-sized).
@@ -8819,6 +8821,10 @@ Alternatively, \`transpose What DimensionsBecome\`.`,
       [
         `repeat ^(transpose randomVar(2,3,4) ^(2 0 1))=5 10000`,
       ],
+      `Can also broadcast along batch dimension/s:`,
+      [
+        `repeat ^(transpose randomVar(1,2,3,4) ^(1 2 0))=5 10000`,
+      ],
     ],
     interrupt:false,
     dispose:true,
@@ -8828,12 +8834,14 @@ Alternatively, \`transpose What DimensionsBecome\`.`,
       if (typeof a == 'number') return a
       if (_isDisposable(a) && _tensorSize(a) === 1) return keep(a)
       if (!_isDisposable(a) || a.shape.length < 2) error('Not a (possibly batched) matrix:', a)
-      if (isArray(dims)) return _tf(tf.transpose(a, dims))
-      if (dims !== undefined) error('Must be undefined or an array:', dims)
-      // TFJS's default dimension permutation is… peculiar, for something named `transpose`.
-      if (a.shape.length == 2) return _tf(tf.transpose(a, transpose.dims2 || (transpose.dims2 = [1,0])))
-      if (a.shape.length == 3) return _tf(tf.transpose(a, transpose.dims3 || (transpose.dims3 = [0,2,1])))
-      return _tf(tf.transpose(a, [...new Array(a.shape.length-2).fill().map((_,i) => i), a.shape.length-1, a.shape.length-2]))
+      // TFJS's default dimension permutation is… peculiar, for something named `transpose`. So we provide the default case ourselves.
+      if (dims === undefined) dims = transpose.dims2 || (transpose.dims2 = [1,0])
+      if (!isArray(dims)) error('Must be undefined or an array:', dims)
+
+      if (dims.length < a.shape.length) {
+        const d2 = _padTransposeDims(dims, a)
+        try { return _tf(tf.transpose(a, d2)) } finally { _allocArray(d2) }
+      } else return _tf(tf.transpose(a, dims))
     },
     mergeAdjustment:_(`_mergeTensors`),
     adjust:[
@@ -8842,21 +8850,32 @@ Alternatively, \`transpose What DimensionsBecome\`.`,
         _(`transpose`),
         _(`_dout`),
         [
-          function(dims) { // Invert those dims.
+          function(dims, dout) { // Invert those dims.
+            // (This implementation creates a lot of memory pressure, though, with all the temporary arrays from `_padTransposeDims` that are not re-used.)
             if (dims === undefined) return
             if (!isArray(dims)) error('Must be undefined or an array:', dims)
             if (!transpose.invert) transpose.invert = new WeakMap
-            if (transpose.invert.has(dims)) return transpose.invert.get(dims)
+            if (transpose.invert.has(dims)) return _padTransposeDims(transpose.invert.get(dims), dout)
             const result = new Array(dims.length)
             for (let i = 0; i < dims.length; ++i)
               result[dims[i]] !== undefined && error('Repeated dimension indices in', dims),
               result[dims[i]] = i
-            return transpose.invert.set(dims, result), result
+            return transpose.invert.set(dims, result), _padTransposeDims(result, dout)
           },
           _(`_inB`),
+          _(`_dout`),
         ],
       ],
     ],
+  },
+
+  _padTransposeDims(dims, shape) {
+    if (_isDisposable(shape)) shape = shape.shape
+    if (shape.length <= dims.length) return dims
+    const d2 = _allocArray(shape.length), d = shape.length - dims.length
+    for (let i=0; i < d; ++i) d2[i] = i
+    for (let i=0; i < dims.length; ++i) d2[d + i] = d + dims[i]
+    return d2
   },
 
   expandDims:{

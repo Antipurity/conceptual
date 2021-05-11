@@ -85,7 +85,7 @@ In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any alg
 \begin{itemize}
 \item Indirectly encodes a model that is as general as itself. In machine learning (ML), this implies meta-learning (learning a learner), or more generally, Turing-completeness.
 \item Has state: creates an internal graph, by combining many simple cells into arbitrary structures (connections might be implied rather than stored explicitly, as in recurrent neural networks (RNNs) in ML).
-\item Does scalable operations on state: makes these emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them \cite{tolstikhin2021mlpmixer} \cite{schlag2021linear}, covered in Subsection \ref{Algorithm} here.
+\item Does scalable operations on state: makes these emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them \cite{tolstikhin2021mlpmixer} \cite{schlag2021linear}, covered in Subsection \ref{Algorithm} here. (Crucially, linearity allows the learned model to be as big as its optimizer, for learned meta-circularity.)
 \item Is designed to run forever by modeling time. For example, using backpropagation-through-time and/or synthetic gradients for machine learning, or more generally, an infinite interpreter loop.
 \item Runs by itself, without relying on the environment to provide any of the above. Otherwise, any algorithm would technically count.
 \end{itemize}
@@ -100,7 +100,7 @@ In particular, this definition suggests simple implementations, the simplest of 
 
     TODO: ...Do we really still want attention? Will factorized dense-ness turn out ok?
 
-Now, to justify "what", we outline "why".
+Now, to justify the "what", we outline the "why".
 
 To implement articial general intelligence, we want to do anything, in one general model: a \textit{worldview}. All general models are equivalent to one another, and as such, every single concept that we introduce into our mental models must be subvertable: the system must be able to evolve into a state where it behaves exactly as if it was implemented using another model. This is achievable via:
 
