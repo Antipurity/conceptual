@@ -52,7 +52,7 @@ DeepMind's \textit{Perceiver} \cite{DBLP:journals/corr/abs-2103-03206} alternate
 
 The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality. Mesa-optimization \cite{hubinger2019risks} refers to a situation where a learned model is itself an optimizer, which requires augmenting the model with memory for scaling learned optimization to practical episode lengths. (Mesa-optimization and meta-learning can be argued to be exactly the same, only framed differently.)
 
-Data analysis of recordings of biological brains supports attractor neural networks \cite{AMIT1990111}, where strong feedback causes the evolution of a recurrent network to settle into different attractor patterns. This indicates the biological plausibility of memory-augmented neural networks \cite{santoro2016oneshot}.
+Data analysis of recordings of biological brains supports attractor neural networks \cite{AMIT1990111}, where strong feedback causes the evolution of a recurrent network to settle into different attractor patterns. This indicates the biological plausibility of memory-augmented neural networks (MANNs) \cite{santoro2016oneshot}.
 
 To improve scalability of neural operations, lately, there has been a lot of interest in linear attention \cite{schlag2021linear}, however, simple dense layers (matrix multiplications) have been shown to not perform significantly worse than state-of-the-art attention-based algorithms \cite{tolstikhin2021mlpmixer}. One way to linearize dense layers is to prune their weights \cite{zhou2021effective} (set most of them to $0$). Another is to make each choice output its desired embedding, and perform a $k$-nearest-neighbor search among discrete actions \cite{DBLP:journals/corr/Dulac-ArnoldESC15}.
 
@@ -83,10 +83,10 @@ Wolfram models generalize cellular automata to memory with arbitrary connections
 In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any algorithm that:
 
 \begin{itemize}
-\item Indirectly encodes a model that is as general as itself. In machine learning (ML), this implies meta-learning (learning a learner), or more generally, Turing-completeness.
-\item Has state: creates an internal graph, by combining many simple cells into arbitrary structures (connections might be implied rather than stored explicitly, as in recurrent neural networks (RNNs) in ML).
+\item Able to indirectly encode a model that is as general and intelligent as itself. In machine learning (ML), this implies meta-learning (learning a learner) and efficiency, or more generally, Turing-completeness and linear-time operations.
+\item Has state: creates an internal graph, by combining many simple cells into arbitrary structures. Connections might be implied rather than stored explicitly, as in recurrent neural networks (RNNs) in ML.
 \item Does scalable operations on state: makes these emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them \cite{tolstikhin2021mlpmixer} \cite{schlag2021linear}, covered in Subsection \ref{Algorithm} here. (Crucially, linearity allows the learned model to be as big as its optimizer, for learned meta-circularity.)
-\item Is designed to run forever by modeling time. For example, using backpropagation-through-time and/or synthetic gradients for machine learning, or more generally, an infinite interpreter loop.
+\item Is designed to run forever by modeling time. For example, using backpropagation-through-time and/or synthetic gradients for machine learning (even when learning to simply fit input-output pairs, as in MANNs \cite{santoro2016oneshot}), or more generally, an infinite interpreter loop.
 \item Runs by itself, without relying on the environment to provide any of the above. Otherwise, any algorithm would technically count.
 \end{itemize}
 
@@ -145,11 +145,13 @@ Each epoch, each cell performs a fixed number of choices (at least 2) among basi
 
     TODO: ...But now, we only have a super-simple linearithmic dense layer... Do we tear down our ancient foundations, of RL and choices?...
 
-Close-to-linear-time operation is required if we want Jupyter-sized memories without galaxy-sized computers. We propose \textit{linearithmic dense layers}: reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense-layer operations are performed, bringing the total cost down to $C=dn^{d+1}=d N^{1+1/d}$ (assuming that multiplication of two $n \times n$ matrices costs $n^3$ operations). $d=\log{N}$ minimizes this cost, making it $C=\mathcal{O}(N \log{N})$, with $n={\rm e}$. Alternatively, we can fix $n$ to be $2$ or $3$ or $4$ for the near-minimal cost of $C=\frac{n}{\log{n}} N \log{N}$.
+Close-to-linear-time operation is required if we want Jupyter-sized memories without galaxy-sized computers. We propose \textit{linearithmic dense layers}: reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense-layer operations are performed, bringing the total cost down to $C=dn^{d+1}=d N^{1+1/d}$ (assuming that multiplication of two $n \times n$ matrices costs $n^3$ operations). $d=\log{N}$ minimizes this cost, making it $C=\mathcal{O}(N \log{N})$, with $n={\rm e}$. Alternatively, we can fix $n$ to be $2$ or $3$ or $4$ for the near-minimal cost of $C=\frac{n}{\log{n}} N \log{N}$. Effectively, instead of mixing each index with every other, we mix each digit of each index.
 
 To perform choices, reinforcement learning (RL) seems like a good fit, though that imposes the \textit{objective bottleneck}: each prediction target has to be routed through one number. For greater efficiency, we would like objectives to be implied through gradient on tensors. (In reinforcement learning, objective-setters have to compute the mean, imposing a bottleneck on learning. For example, when the mean is of one input, the system successfully learns to fill its entire memory with big numbers, the usefulness of which for downstream tasks is questionable.)
 
     TODO: Do we still want to use choices as our explanation? Or do we simply say that we'd use stochastic gradient descent?
+
+    TODO: Maybe, say that internal RL and self-supervised learning are essentially the same? But how to justify this?
 
 We have investigated what is the best base to construct choices from. An obvious choice here is a simple Turing-complete programming language, for example, as function to call with arguments. It is sufficient to expose only numeric operations: not only is that Turing-complete, but also, neural networks are easily implementable on top of that. Fixed argument count per cell works best here, though it is still extremely difficult to train. Sharing weights or not does not seem to matter.
 
@@ -162,6 +164,8 @@ The algorithm here is a Transformer with memory and self-determined gradients. T
 This allows us to do anything in any way forever. Cells combine into distributed approximations of all programs, which interact via gradient of future objective prediction. The indirectly-encoded program has no concept of gradient except as learned. Gradient sources interact in non-random arbitrary ways, which allows evolution. A Transformer with memory and self-determined gradients is Turing-complete but is a Turing tar-pit \cite{10.1145/947955.1083808} in which everything is possible but nothing is easy; we investigate what can make it do interesting things, without external data forcing it to.
 
 \subsection{Brain}
+
+    TODO: Which parts will now be obsolete?
 
 (Each paragraph in this section reflects its respective paragraph in section \ref{Algorithm}. This is intended to suggest that we talk about the same structure in different terms, and from a different starting viewpoint.)
 
@@ -177,13 +181,7 @@ Prescribing one optimizer objective (which includes intrinsic rewards) and/or an
 
     TODO: Also, isn't it possible that self-determination happens at the "humanity" level, not "human"?
 
-While humans are demonstrably smarter than non-human animals, they do not seem to take any longer to process information. Which means that each epoch into which time is separated, each part settles in constant time, and the total computation scales as $\mathcal{O}(n)$. General intelligence is scalable, which means that there are no inherent obstacles to converting Earth's biomass into brain tissue. In machine learning, linearized Transformers are an active area of research.
-
-    TODO: Cite linearized transformers here.
-
-    TODO: ...Why are Transformers in particular here? There's nothing special about them. Move the reference into the Algorithm section.
-
-    TODO: Reframe this as the need to have a linear-time arbitrary graph transformation. And, mention a way of linearizing dense layers: reshaping state into a tensor with constant-size dimensions, and performing dense-ness on each dimension.
+While humans are demonstrably smarter than non-human animals, they do not seem to take any longer to process information. Which means that each epoch into which time is separated, each part settles in constant time, and the total computation scales as $\mathcal{O}(n)$. General intelligence is scalable, which means that there are no inherent obstacles to converting Earth's biomass into brain tissue.
 
 The RL framework can be used to explain objectives. If we view the brain as a system that naturally developed in the physical universe rather than one that spontaneously popped into existence, then we can outline a progression of stepping stones that lead to the development of human-level intelligence: reinforcement learners get evolved (likely, to maximize reproduction and resource gathering rates), then get repeated across the brain, and get re-used for more and more internal regulation until they can indirectly encode a mind, and then the brain gets optimized and refined into uniform simplicity. The only surprising fact about this is that it can take billions of years to complete this simple process, as we ourselves have arrived at Transformers through program generation much faster than that. Nonetheless, this suggests at least some biological plausibility of TGBA, for all creatures that behave as humans.
 
@@ -227,11 +225,9 @@ Essentially all general algorithms have to face two very distinct types of probl
 
 Transcendence requires indirect learned encoding of self and generality with diversity (in other words, infinite possibilities of data and code), followed by a lot of computation, which would unite self-reference and indirect encoding. Keeping its possibility in mind is why TGBAs have an infinite loop that modifies a memory cell: this theoretically allows indirectly encoding behaviors such as the training of a neural net. (Making the system able to modify its own hyperparameters within reason is not required but may improve performance, as long as the system has not yet been trained to transcendence, whereupon the base optimizer's loss becomes zero as it is made irrelevant by the mesa-optimizer.)
 
-Transcendence is a qualitatively different regime for algorithms to operate in. Arguably, it is the final frontier of general intelligence, beyond even good human imitation, because once humans either die or can instantly achieve anything that they can ever want, they will either get reduced to randomness or transcend. We do not know what facilitates transcendence, apart from a lot of computation by a generally-intelligent algorithm, as we have never seen it in an algorithm.
+Transcendence is a qualitatively different regime for algorithms to operate in. Arguably, it is the final frontier of general intelligence, beyond even good human imitation, because once humans can instantly achieve anything that they can ever want, they will either get reduced to randomness or transcend. An important question is, what facilitates transcendence.
 
-    TODO: ...Well, if we conjecture just below, then we kinda know what facilitates transcendence? So, remove the sentence just above.
-
-We conjecture that transcendence can naturally arise in environments where self-replication is important and rewarding. Examples include creatures competing for survival, people teaching other people, designing an efficient production process, programming a computer. These would encourage simplicity, generality, and usefulness (AGI), which facilitate the runaway worldview creation process that is transcendence. We conjecture that all acceleration of progress of life (compared to non-life) and humanity has been intrinsically linked to the creation of such environments. As such, creating a similar environment for programs will likely lead to AGI. We can suggest more concrete paths: increasing the available computational power; making perfect generality the cultural default in AI algorithms; refining and scaling up AI programs to make them more popular and trusted \cite{NEURIPS2020_1457c0d6}; making AI programs as trusted and capable as humans (via useful automation of tasks important to humans), for their integration into human-oriented self-replication environments; population simulations where good group-survival strategies are rare but shareable; full automation of mining and semiconductor device fabrication, which could enable mutually unwinnable wars. (Theoretical advances will not lead to AGI, as they have all essentially been discovered already, and only need better reformulations.)
+We conjecture that transcendence can naturally arise in environments where self-replication is important and rewarding, assuming that the agent fits the basic definition of TGBA. Examples include creatures competing for survival, people teaching other people, designing an efficient production process, programming a computer. These would encourage simplicity, generality, and usefulness (AGI), which facilitate the runaway worldview creation process that is transcendence. We conjecture that all acceleration of progress of life (compared to non-life) and humanity has been intrinsically linked to the creation of such environments. As such, creating a similar environment for programs will likely lead to AGI. We can suggest more concrete paths: increasing the available computational power; making perfect generality the cultural default in AI algorithms; refining and scaling up AI programs to make them more popular and trusted \cite{NEURIPS2020_1457c0d6}; making AI programs as trusted and capable as humans (via useful automation of tasks important to humans), for their integration into human-oriented self-replication environments; population simulations where good group-survival strategies are rare but shareable; full automation of mining and semiconductor device fabrication, which could enable mutually unwinnable wars. (Theoretical advances will not lead to AGI, as they have all essentially been discovered already, and only need better reformulations.)
 
     TODO: Does any paper advocate for a bottleneck of DNA and such? Can we cite it?
 
@@ -285,13 +281,14 @@ This work raises many questions, such as:
 
 \subsection{Criticism}
 
-Our approach exists, and thus it can be criticized.
+Our approach exists, and thus it can be criticized, and in doing so changed.
 
 \begin{itemize}
-\item "\textbf{Many turns of phrase in this work are circular.}" Similarly to how the topic of discussion is a self-reinforcing loop of intuitions, the discussion itself is a self-reinforcing loop of intuitions, to better highlight its topic. This is unavoidable in applied generality, though we did try to minimize these occurences.
-\item "\textbf{The suggested self-replication environments sound incredibly dangerous.}" TODO: ...What's our response; how to say that we need to face danger head-on, or it will sneak up on us?...
-\item TODO: "TGBA is not AGI-ready, as it lacks X." No it does not: it can do anything and represent anything, by definition. Though we can only hope that theoretical simplicity always translates well into practical simplicity.
-\item TODO: "Why not just brand transcendence as meta-learning or self-supervised learning; why a separate system of terms?" The point of this work is to create another full-fledged worldview from first principles, able to turn any input into its own rules, and follow it to transcendence. In our experience, initiation of a runaway worldview creation process is much more reliable for creating worldviews than copying human culture including all its imperfect redundancy and complexity. Worldview creation is much more akin to replicating humanity than humans, the latter of which is what ML research is commonly concerned with.
+\item \textbf{Many turns of phrase in this work are circular.} Similarly to how the topic of discussion is a self-reinforcing loop of intuitions, the discussion itself is a self-reinforcing loop of intuitions, to better highlight its topic. This is unavoidable in applied generality, though we did try to minimize these occurences.
+\item \textbf{Too much fun.} Consider this: if one only pays attention to the manner of presentation rather than what is presented, then can that one truly be called a scientist? We have already neutered the humor to near non-existence.
+\item \textbf{The suggested self-replication environments sound incredibly dangerous.} Though, much less dangerous than completely ignoring any possibilities of them arising in unforeseen circumstances, similarly to how a cleaning robot would put a bucket over its sensors to "remove" the mess. Knowledge is dangerous, but as a civilization, is it more dangerous to not have knowledge.
+\item \textbf{TGBA is not AGI-ready, as it lacks X.} It does not: they can do anything and represent anything, by definition. Though we can only hope that theoretical simplicity always translates well into practical simplicity.
+\item TODO: "Why not simply brand transcendence as meta-learning or self-supervised learning; why a separate system of terms?" The point of this work is to create another full-fledged worldview from first principles, able to turn any input into its own rules, and follow it to transcendence. In our experience, initiation of a runaway worldview creation process is much more reliable for creating worldviews than copying human culture including all its imperfect redundancy and complexity. Worldview creation is much more akin to replicating humanity than humans, the latter of which is what ML research is commonly concerned with. ...These arguments sound quite murky.
 \item TODO: ...Shitty experiments? Need to actually perform the experiments first, though.
 \item TODO: ...No, some people really do think that the No Free Lunch Theorem means anything. Have to include it.
 \item TODO: Many turns of phrase here are circular. (Generality necessitates this.)
@@ -305,7 +302,13 @@ Envision a future where every system has an additional interface with numeric in
 
     TODO: "This work is unlikely to cause any impact, because humanity has a history of completely ignoring worldviews that prefer simple and self-consistent generality to humanity's specific ways, only awarding recognition in rare cases. This leaves us free to plot against it." ...No, underexaggeration of impact is non-scientific; should throw away doubts, and say well-grounded words that sound like lies, if there are any.
 
-    TODO: Yep, paste the funny thing into here. ...Maybe. It \textit{does} sound evil.
+    TODO: Yep, paste the funny thing into here. ...Maybe. It \textit{does} sound evil. Maybe should be more serious.
+
+The broader field that this work belongs to, AGI, has the potential to TODO: What's good about it?
+
+The ability to reliably plug a new initialization of a generally-intelligent algorithm into anything completely devalues all individuality and lays the groudwork for phasing out everything about humans.
+
+    TODO: What's biased about AGI? The fact that it may learn to do nothing but satisfy human desires forever and in doing so turn the human civilization into a lifeless rock hurling through the cosmos, to be destroyed by the first collision?
 
 \printbibliography
 

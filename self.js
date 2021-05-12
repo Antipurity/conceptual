@@ -7611,7 +7611,7 @@ save('neucomp',m concept 'outs' Outputs call (creator 0 Cells Outputs FS null Po
         _(`fancier`),
         `as:accessState
 shouldDisplay:^(settings true 'Should we update the pretty pictures, or should we conserve computation for those who compute?
-(A warning is that this visualization can cause rapid uncollected memory consumption in some browsers, such as Firefox.)')
+(A warning is that this visualization can cause rapid uncollected memory consumption in some browsers, such as Firefox. Watch it.)')
 doDisplay:result->c->displayOne(State,result);displayOne(Correlation,c);displayOne(AvgCorrelation,correlation avg)
 prev:stateCell(0)
 avg:stateCell(0) avgChangeSpeed:.001
@@ -7666,6 +7666,12 @@ b:parseURL('experiments/tf_correlation_3.txt',fast)
 c:parseURL('experiments/tf_images_3.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (Never a dull moment with a linear mixer, even with shared weights.)`,
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`16, \`settings ^_learningRate\` being \`1e-3\`: \`\`
+a:parseURL('experiments/tf_change_4.txt',fast)
+b:parseURL('experiments/tf_correlation_4.txt',fast)
+c:parseURL('experiments/tf_images_4.txt',fast)
+elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
+      `        (Settles into periodic blinking patterns that nonetheless change with time. Probably the most interesting one yet, maybe, conceivably.)`,
       // TODO: Run 16, for single-number competition. Currently, \`♌\`16 is very random with LR=3e-4 (though did not run this one for 1M epochs), but with LR=1e-3, kinda-interesting stuff starts happening, for example, collapse-to-0 and spikes and oscillations with a constant row-correlation matrix.
       // TODO: Run 17, for fully-arbitrary changes.
       ``,
@@ -7771,7 +7777,7 @@ datasetNeucomp:static(await load('datasetNeucomp'))
 
       Low-effort-ending time.
 
-      Yeah, there's no more prettiness in these tutorials, only code. What did you expect? Once you know everything, there is no more life to be had.
+      Yeah, there's no more prettiness in these tutorials, only code. What did you expect? Once you know everything, there is no more life to be had, as with this tutorial, I have determined how to make AGI. See \`tutorial matMul\` for details.
 
       Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life.
 
@@ -8193,6 +8199,7 @@ repeat ^(lm fn hiddenMem N+1) 10000
       `I tire of this exercise.`,
       `I can do all of it in a day (except for the compute), sure, but what's the point? Especially since simple RNNs somehow came out on top, and results from {https://arxiv.org/abs/2006.05252} were not reproduced.`,
       `One might even say that this tutorial is pointless, and should not exist. But this tutorial doesn't care what one thinks.`,
+      `Why are we doing this? What is our purpose here? What is any of this?`,
     ],
     stack:true,
     examples:[
@@ -9442,13 +9449,10 @@ Reverse of \`stack\`.`,
     merged:true,
     docs:`Matrix multiplication of \`A\` by \`B\`.
 Like a cross-sectional dot product: each element of the output is the sum of every element in a row in \`A\` \`mul\`tiplied by its corresponding element in a column in \`B\`. (So, if input shapes are N×M and M×K, then output is shaped as N×K.)
-Can also handle "\`A\` is a vector" (the operation is then called a non-batched \`_denseLayer\`; resulting in a vector) and "\`A\` or \`B\` is a number" cases, by padding the missing outer dimensions with \`1\` then un-padding.`,
+Can also handle "\`A\` is a vector" (the operation is then called a non-batched dense layer; resulting in a vector) and "\`A\` or \`B\` is a number" cases, by padding the missing outer dimensions with \`1\` then un-padding.`,
     argCount:2,
     dispose:true,
     interrupt:false,
-    readAt:{
-      _denseLayer:_(`_denseLayer`),
-    },
     call(a,b) { return _matMul(_num(a), _num(b)) },
     adjust:[
       _(`array`),
@@ -9468,32 +9472,63 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
+    tutorial:[
+      `Wwwwwwwwwwwwwwwwwwww
 
-  _denseLayer:_([
-    _(`concept`),
-    _(`call`),
-    _(`matMul`),
-    _(`type`),
-    [
-      _(`funcType`),
+A common problem in machine learning is the tension between generality and efficiency.
+Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a matrix: it connects every output to every input which is perfectly general, but, the cost of this is quadratic.
+    This is a bummer for those folks who want to routinely process Jupyter-sized arrays of information, but finding themselves bottlenecked by the observable universe not containing enough matter to build an efficient enough computer for that: a classic problem that I'm sure many of us can relate to.
+
+Can we fix dense layers?`,
+      ``, // TODO: Well, talk about the linearithmic-azation. (and possibly how it's essential for transcendence.)
       [
-        _(`tensorType`),
-        `A`,
+        _(`fancier`),
+        `
+`,
       ],
-      [
-        _(`tensorType`),
-        `A`,
-        `B`,
-      ],
-      [
-        _(`tensorType`),
-        `B`,
-      ],
+      // TODO: Have \`denseLayer(x,Outputs,VarData,Optimizer,Initializer)\`, which lazily creates weights (with second-last dimension becoming the last, and the last becoming \`Outputs\`), or if they already exist.
+
+      // TODO: Write down the exact sequence/tree of steps.
+      // TODO: Have the concept `mixer`, which can be called with input-node and input-size and output-size to produce a linearithmic dense layer.
+      //   TODO: The param \`n\`, which is how big each dimension should be.
+      //   TODO: Make it define 'in' and 'mix' and 'out', which:
+      //     TODO: Define 'in':
+      //       TODO: Take \`node\` and \`inputs\`, to make a node.
+      //       TODO: Determine dimension count \`d:floor(log(inputs)/log(n))\`;
+      //       TODO: Determine the outer input dimension \`inDim:1+floor((inputs-1)/n**(d-1))\` (the rest will be exactly \`n\`, but the outer dimension is the smallest number such that total size is no less than the input size);
+      //       TODO: \`paddedIns:inDim*n**(d-1)\`;
+      //       TODO: If needed, zero-pad input, with \`paddedIns-inputs\` zeros (\`zeros\` and \`concat2\`);
+      //       TODO: Reshape input to consist only of those micro-dimensions (the shape is determined by prepending the outer dimension to arrayFilledWith(n,d-1), via \`arrayCons\`).
+      //       TODO: \`expandDims\` along \`-2\`.
+      //     TODO: Define 'mix':
+      //       TODO: Take \`node\` and \`inputs\` and \`outputs\`, to make a node.
+      //       TODO: \`reduce\` the node, to mix each digit in each index:
+      //         TODO: Construct the transpose-\`i\` dims via \`w:where merged(transform d i->d->w(i<d-3,i+1,w i<d-2 i+2 w(i<d-1,i,0)) d)\`. (The dimension size is \`where(equal i 0,inDim,n)\` and \`where(equal i 0,outDim,n)\` for input/output respectively.)
+      //         TODO: \`transpose\` the node.
+      //         TODO: \`denseLayer\` the node, to have either \`outDim\` outputs or \`n\`, depending on whether it's the first one.
+      //     TODO: Define 'out':
+      //       TODO: Take \`node\` and \`inputs\` and \`outputs\` as args, to make a node.
+      //       TODO: \`outDim:1+floor((outputs-1)/n**(d-1))\`;
+      //       TODO: \`paddedOuts:outDim*n**(d-1)\`
+      //       TODO: m(reshape,node,m quote m(paddedOuts))
+      //       TODO: m(slice,that,0,outputs)
+      //     TODO: Define \`call\`:
+      //       TODO: Using 'in'(node,inputs), reshape the input vector into a proper shape.
+      //       TODO: Using 'mix'(node,inputs,outputs), go to outputs-size.
+      //       TODO: Reduce that node (passing in the non-linearity and outputs, Layers-1 times):
+      //         TODO: Attach the non-linearity.
+      //         TODO: Use 'mix'(node,outputs,outputs).
+      //       TODO: Using 'out'(node,inputs,outputs), reshape into a vector.
+
+
+
+
+
+
+
+      // ...(Then, have a test that this thing converges, on CIFAR100 to not be lazy, then combine it with 'learnedMemory' to learn CIFAR100 in a MANN fashion...)
     ],
-    _(`docs`),
-    `A differently-\`type\`d \`matMul\`.`,
-  ]),
+  },
 
   _matMul:{
     merged:true,
