@@ -9413,6 +9413,62 @@ Reverse of \`stack\`.`,
     mergeAdjustment:_(`_mergeTensors`),
   },
 
+  denseLayer:{
+    docs:`\`denseLayer Input VarData OutputCount ShareWeights Optimizer Initializer\`, for example, \`->denseLayer(randomVar(20),^0(),15)\`
+This is \`matMul\`, but lazily creates weights, for convenience.
+
+By default, \`ShareWeights\` is \`true\`; \`Optimizer\` is \`varAdam\`; \`Initializer\` is \`truncatedNormal\`.
+
+A dense layer would change the last dimension of \`Input\` to be \`OutputCount\`, by linearly mixing every input into every output.
+
+When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner-most dimension will still be broadcasted to (not shared), unless you manually do \`expandDims(input,-2)\` to ensure that it's \`1\`. (Because \`matMul\` is technically a batched dense layer, not a dense layer.)`,
+    examples:[
+      [
+        `repeat ^(denseLayer(randomVar(20),^0(),15)=5) 10000`,
+      ],
+      [
+        `repeat ^(denseLayer(randomVar(2,2,2,1,2),^0(),15,false)=5) 10000`,
+      ],
+    ],
+    interrupt:false,
+    dispose:true,
+    call(x, Var, Outs, Share = true, Optim = varAdam, Init = truncatedNormal) {
+      if (!_isDisposable(x)) error('Not a tensor:', x)
+      if (!x.shape.length) error('A scalar is too small, give at least a vector, chuckleface:', x)
+      if (!isArray(Var)) error('Not an array (for varData):', Var)
+      if (!Var[0]) {
+        if (!_isNum(Outs) || Outs !== Outs>>>0) error('Not an index:', Outs)
+        if (_isDisposable(Var[1]) || _isDisposable(Var[2])) error('Var data is already filled:', Var)
+        const sh = _allocArray(Math.max(x.shape.length, 2)).fill(1)
+        if (!Share) for (let i=0; i < sh.length-2; ++i) sh[i] = x.shape[i]
+        sh[sh.length-2] = x.shape[x.shape.length-1]
+        sh[sh.length-1] = Outs
+        Var[0] = Init(merged(sh)), Var[1] = Var[2] = 0
+        _rememberToDispose(Var)
+        _willCommit(Var)
+        _allocArray(sh)
+      }
+      const that = Optim(Var)
+      try { return matMul(x, that) }
+      finally { dispose(that) } // We do not preserve that, because it's expensive, so in `adjust`, we just assume that it is `Var[0]`. Good enough for us.
+    },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      call(ins, out, dout) { // Route `matMul`'s gradient to input and optimizer as needed.
+        const [x, Var, Outs, Shared = true, Optim = varAdam, Init = truncatedNormal] = ins
+        const dThat = _matMul(x, dout, true, false)
+        const a = _allocArray(1);  a[0] = Var
+        try { _disposeEachAndDealloc(adjust(Optim, a, null, dThat)) }
+        finally { _allocArray(a), dispose(dThat) }
+        const r = _matMul(dout, Var[0], false, true)
+        const b = _allocArray(1);  b[0] = r;  return b
+      },
+    },
+  },
+
   matMul:{
     stack:true,
     use:true,
@@ -9486,8 +9542,6 @@ Can we fix dense layers?`,
         `
 `,
       ],
-      // TODO: Have \`denseLayer(x,Outputs,VarData,Optimizer,Initializer)\`, which lazily creates weights (with second-last dimension becoming the last, and the last becoming \`Outputs\`), or if they already exist.
-
       // TODO: Write down the exact sequence/tree of steps.
       // TODO: Have the concept `mixer`, which can be called with input-node and input-size and output-size to produce a linearithmic dense layer.
       //   TODO: The param \`n\`, which is how big each dimension should be.
@@ -12472,6 +12526,7 @@ Second lead:
 `,
     ],
     readAt:{
+      denseLayer:_(`denseLayer`),
       relu:_(`relu`),
       selu:_(`selu`),
       dataset:_(`dataset`),
