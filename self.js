@@ -7447,7 +7447,7 @@ p:tf(io.0,zeros(_tensorShape io.1))
       `The capabilities of an everything-to-anything transformer are not exactly perfectly general.`,
       `    (An example of a perfectly general thing is a programming language, in which the Transformer is implemented.)`,
       `    "General" really does mean "everything".`,
-      `        For example, can it train a neural net in its weights, at runtime? Unless it's a Jupyter-sized billions-of-layers-deep Transformer, \`\`elem 'b' (elem 'text' 'no')\`\`.`,
+      `        For example, can it train a neural net in its weights, at runtime? Unless it's a Jupiter-sized billions-of-layers-deep Transformer, \`\`elem 'b' (elem 'text' 'no')\`\`.`,
       `            (To be clear: "compile-time" for neural nets is training with \`callAdjust\`, "runtime" is running with \`call\`.)`,
       `We very much need a memory for these things to play with.`,
       ``,
@@ -7671,9 +7671,14 @@ a:parseURL('experiments/tf_change_4.txt',fast)
 b:parseURL('experiments/tf_correlation_4.txt',fast)
 c:parseURL('experiments/tf_images_4.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
-      `        (Settles into periodic blinking patterns that nonetheless change with time. Probably the most interesting one yet, maybe, conceivably.)`,
-      // TODO: Run 16, for single-number competition. Currently, \`♌\`16 is very random with LR=3e-4 (though did not run this one for 1M epochs), but with LR=1e-3, kinda-interesting stuff starts happening, for example, collapse-to-0 and spikes and oscillations with a constant row-correlation matrix.
-      // TODO: Run 17, for fully-arbitrary changes.
+      `        (Settles into periodic blinking patterns that nonetheless change with time. Probably the most interesting one yet, maybe, conceivably, potentially.)`,
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`16, \`settings ^_learningRate\` being \`3e-4\` as usual: \`\`
+a:parseURL('experiments/tf_change_5.txt',fast)
+b:parseURL('experiments/tf_correlation_5.txt',fast)
+c:parseURL('experiments/tf_images_5.txt',fast)
+elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
+      `        (Same thing. Disregard the seemingly-not-near-zero activity in \`'Average correlations'\`: state averaging averaged the blinking states into anti/correlated moving averages, correlations of the state itself are quite boring and static.)`,
+      // TODO: Run 17, for fully-arbitrary changes. ...Randomness, then eternal stillness.
       ``,
       `What did we learn from this?`,
       `    (After we used the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
@@ -7777,13 +7782,9 @@ datasetNeucomp:static(await load('datasetNeucomp'))
 
       Low-effort-ending time.
 
-      Yeah, there's no more prettiness in these tutorials, only code. What did you expect? Once you know everything, there is no more life to be had, as with this tutorial, I have determined how to make AGI. See \`tutorial matMul\` for details.
+      When we sensed a disturbance, to reach its source, we used every tool that we had until it broke and beyond, on a journey through words and code. Now, we have just about determined how to make AGI. See \`tutorial matMul\` for details.
 
-      Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life.
-
-      // TODO: Have \`tutorial matMul\`, and there, have a linearithmic-complexity layer (taking and returning a linear vector, sized as specified at creation-time), which zero-pads input (unless the input is perfectly-sized) and reshapes it into \`n\`-sized dimensions and does that many transpose-mix (along a correct axis) (most from/into the same sizes, but the last one into the smallest size that would still fit the output) and transposes the result to restore its dimension order (though it's technically unneeded) and reshapes the result and slices-off what it needs (unless the output is perfectly-sized).
-      // TODO: Look up Karpathy's blog post on the unreasonable effectiveness of RNNs, and try our linearithmic RNN on the same dataset/s, but in a single run over all data, with "new sentence" being a special sequence rather than a reset of the internal state.
-      // TODO: Ablate the dimension-size parameter (with dimension-count being the ceil of logarithm of size with its base being the dimension-size) *for the same computational cost*, 3 (or maybe 5) runs per configuration (for mean and std-dev).
+      Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life. Allegedly.
       `,
     ],
   },
@@ -9531,56 +9532,85 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
     tutorial:[
       `Wwwwwwwwwwwwwwwwwwww
 
-A common problem in machine learning is the tension between generality and efficiency.
-Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a matrix: it connects every output to every input which is perfectly general, but, the cost of this is quadratic.
-    This is a bummer for those folks who want to routinely process Jupyter-sized arrays of information, but finding themselves bottlenecked by the observable universe not containing enough matter to build an efficient enough computer for that: a classic problem that I'm sure many of us can relate to.
+A common problem in machine learning (ML) is the tension between generality and efficiency.
+Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a matrix: it connects every output to every input which is perfectly general, but, the cost of this is quadratic (both in time and memory).
+
+    This is a bummer for those folks who want to routinely process Jupiter-sized arrays of information, but finding themselves bottlenecked by the observable universe not containing enough matter to build an efficient enough computer for that: a classic problem that I'm sure many of us can relate to.
+
+    (This problem in ML is so much worse than in programming languages (PLs). There, a PL can be implemented in another PL, introducing little or no inefficiency, so this can go on for many layers, say, machine code then assembly then C (in parallel with a bunch of other system PLs) then JS then the Conceptual cluster. In ML, even one such layer is a challenge beyond modern capabilities, because each of them has the quadratic bottleneck.)
 
 Can we fix dense layers?`,
-      ``, // TODO: Well, talk about the linearithmic-azation. (and possibly how it's essential for transcendence.)
       [
         _(`fancier`),
-        `
+        `rv:randomVar repeat ^(rv(10)@rv(10,20)=rv(20)) 1000`,
+        function() { return true },
+      ],
+      `To do that, we obviously have to connect some or most input-output pairs indirectly.
+      It may be helpful to split the problem into multiple sub-parts, as is common in algorithms (such as sorting).
+      In fact, if we \`reshape\` the input (1D) vector to have multiple dimensions, then we can mix along each dimension separately. Yes, that should be good.
+            (\`transpose\` to make this dimension inner-most, then \`denseLayer\` to mix along the inner-most dimension.)
+
+      What would be a good size for those \`d\` dimensions, though: \`n\`?
+      Okay, trivial math time.
+
+      If we have \`N\` inputs.
+            (\`N\` is \`n**d\`, so \`d\` is \`log(N)/log(n)\` and \`n\` is \`N**(1/d)\`.)
+      What's the cost of these operations?
+      \`denseLayer\` dominates the operations. It is broadcasted along \`d-1\` dimensions sized \`n\` (assuming that weights are individual, not shared), and for each, performs \`n·n\` one-number operations; this happens \`d\` times. So, assuming that numbers have a constant size, \`O(d·n**(d+1))\`.
+      So, \`O(d·N·N**(1/d))\`.
+      The derivative of this is \`0\` when \`d\` is \`log N\` {https://www.wolframalpha.com/input/?i=derivative+of+x*n*n%5E%281%2Fx%29}.
+      Meaning that the best integer \`n\` is \`3\`, or \`2\` or \`4\` to be in-line with binary-ness of numbers used in computers.
+      The cost would be \`O(n/log(n)·N·log(N))\`, or \`O(N·log(N))\`: linearithmic.
+
+            (Not quite as good as linear \`O(N)\`, but much better than \`O(N·N)\`.)
+                  (For example, if the input vector is encoded in Jupiter-mass via a 1kg-per-number encoding (so, \`2e27\` numbers {https://en.wikipedia.org/wiki/Jupiter}), then \`N·N\` is \`4e54\`, whereas \`N·log(N)\` is \`1e29\`, with generous rounding. For reference, the observable universe contains about \`2e53\` kg of visible matter, so, not enough storage there for the weight matrix with \`O(N·N)\`. All computed very loosely, of course.)
+
+            (Do not mix along the index. Mix along each digit of indices. This still mixes each with each.)
+
+      The only thing left is to implement transpose-then-mix linearithmic dense layers (LDL).
+              (And quite a few un-mentioned details, of the sort that you could figure out anyway by trying to implement it. Such as un/padding \`'out'\`puts / \`'in'\`puts. See if you can figure the details out from this implementation.)`,
+      [
+        _(`fancier`),
+        `n:2
+d:floor(log(inputs)/log(n))
+inDim:1+floor((inputs-1)/n**(d-1))
+outDim:1+floor((outputs-1)/n**(d-1))
+paddedIns:inDim*n**(d-1)
+paddedOuts:outDim*n**(d-1)
+m:make
+w:where
+paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,zeros m(quote,m paddedIns-inputs),0))
+inDef:node->inputs->m(expandDims,m(reshape,paddedInput,m quote arrayCons(inDim,arrayFilledWith d-1 n)),-2)
+transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)
+mixDef:node->inputs->outputs->reduce(arrayFilledWith d transposeDims,td->node->(m denseLayer (m transpose node td) (m quote m()) n false),m denseLayer (m transpose node transposeDims) (m quote m()) outDim false)
+reshapedOut:m(reshape,node,m quote m(paddedOuts))
+outDef:node->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs))
+save('mixer',
+  m concept
+    docs '\`mixer Node InputCount OutputCount LayerCount Nonlinearity\`
+A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputCount\` to produce a vector of length \`OutputCount\`, \`LayerCount+1\` times, with \`Nonlinearity\` in between linear transformations, and with skip-connections (\`add\`) for better gradient flow.
+
+An example non-linearity: \`m:x-mean(x) x->relu(m/(sqrt(mean m*m)+1e-6))\`.
+
+This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one linearithmic dense layer), \`'out'\` (internal-to-vector), which are used in the \`call\`.'
+    call node->inputs->outputs->layers->nonlinearity->outDef(
+      reduce(arrayFilledWith Layers m(nonlinearity,outputs),a->node->(m add node mixDef(m a.0 node,a.1,a.1)),m add node mixDef(inDef(node,inputs),inputs,outputs))
+      ,inputs
+      ,outputs
+    )
+    'in' inDef
+    'mix' mixDef
+    'out' outDef
+)
 `,
       ],
-      // TODO: Write down the exact sequence/tree of steps.
-      // TODO: Have the concept `mixer`, which can be called with input-node and input-size and output-size to produce a linearithmic dense layer.
-      //   TODO: The param \`n\`, which is how big each dimension should be.
-      //   TODO: Make it define 'in' and 'mix' and 'out', which:
-      //     TODO: Define 'in':
-      //       TODO: Take \`node\` and \`inputs\`, to make a node.
-      //       TODO: Determine dimension count \`d:floor(log(inputs)/log(n))\`;
-      //       TODO: Determine the outer input dimension \`inDim:1+floor((inputs-1)/n**(d-1))\` (the rest will be exactly \`n\`, but the outer dimension is the smallest number such that total size is no less than the input size);
-      //       TODO: \`paddedIns:inDim*n**(d-1)\`;
-      //       TODO: If needed, zero-pad input, with \`paddedIns-inputs\` zeros (\`zeros\` and \`concat2\`);
-      //       TODO: Reshape input to consist only of those micro-dimensions (the shape is determined by prepending the outer dimension to arrayFilledWith(n,d-1), via \`arrayCons\`).
-      //       TODO: \`expandDims\` along \`-2\`.
-      //     TODO: Define 'mix':
-      //       TODO: Take \`node\` and \`inputs\` and \`outputs\`, to make a node.
-      //       TODO: \`reduce\` the node, to mix each digit in each index:
-      //         TODO: Construct the transpose-\`i\` dims via \`w:where merged(transform d i->d->w(i<d-3,i+1,w i<d-2 i+2 w(i<d-1,i,0)) d)\`. (The dimension size is \`where(equal i 0,inDim,n)\` and \`where(equal i 0,outDim,n)\` for input/output respectively.)
-      //         TODO: \`transpose\` the node.
-      //         TODO: \`denseLayer\` the node, to have either \`outDim\` outputs or \`n\`, depending on whether it's the first one.
-      //     TODO: Define 'out':
-      //       TODO: Take \`node\` and \`inputs\` and \`outputs\` as args, to make a node.
-      //       TODO: \`outDim:1+floor((outputs-1)/n**(d-1))\`;
-      //       TODO: \`paddedOuts:outDim*n**(d-1)\`
-      //       TODO: m(reshape,node,m quote m(paddedOuts))
-      //       TODO: m(slice,that,0,outputs)
-      //     TODO: Define \`call\`:
-      //       TODO: Using 'in'(node,inputs), reshape the input vector into a proper shape.
-      //       TODO: Using 'mix'(node,inputs,outputs), go to outputs-size.
-      //       TODO: Reduce that node (passing in the non-linearity and outputs, Layers-1 times):
-      //         TODO: Attach the non-linearity.
-      //         TODO: Use 'mix'(node,outputs,outputs).
-      //       TODO: Using 'out'(node,inputs,outputs), reshape into a vector.
-
-
-
-
-
-
-
-      // ...(Then, have a test that this thing converges, on CIFAR100 to not be lazy, then combine it with 'learnedMemory' to learn CIFAR100 in a MANN fashion...)
+      `
+      // TODO: Test that \`'mixer'\` can overfit a super-small random \`dataset\`.
+      // TODO: Have a test that \`'mixer'\` does not diverge, on CIFAR100 (to not be lazy).
+      // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` on CIFAR100 to learn it in a MANN fashion.
+      // TODO: Look up Karpathy's blog post on the unreasonable effectiveness of RNNs, and try our linearithmic RNN on the same dataset/s, but in a single run over all data, with "new sentence" being a special sequence rather than a reset of the internal state.
+      // TODO: Ablate the dimension-size parameter (with dimension-count being the ceil of logarithm of size with its base being the dimension-size) *for the same computational cost*, 3 (or maybe 5) runs per configuration (for mean and std-dev).
+`,
     ],
   },
 
