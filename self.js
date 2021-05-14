@@ -7591,6 +7591,14 @@ grad:Cells->FS->(m func ? (m last m(minimize,m abs (m mul m(ed,n,-2) m(ed,n,-1))
       ],
       `↑\`♌\`18 (Maybe explicitly maximize diversity in normalized rows and columns in target-space, maximizing absolute correlation. Kinda quadratic in row size and column size, though.)`,
       `        (Note: this one performs like garbage, unless you like looking at static pictures. Super sharpened, though, especially if you replace \`targets\` with \`?\` and look at ±100% state, alternating between two exactly-opposite pictures.)`,
+      [
+        _(`fancier`),
+        `targets:transformer(Cells,Cells,FS,1,1,softsign)
+diff:(m sub ? m(targets,?,?))
+grad:Cells->FS->(m func ? (m minimize (m div (m mul diff diff) 2)))`,
+      ],
+      `↑\`♌\`19 (Tomfoolery: optimize predictions and targets jointly.)`,
+      `       (This approximates the only other gradient source that I can think of, which I was too lazy to implement properly: back-propagating through back-propagation on \`♌\`17 or \`♌\`9 or \`♌\`6, to give the difference of prediction and target its proper gradient. See \`examples matMul\`, probably via a \`contextMenu\` \`REPL\`.)`,
       ``,
       `        Okay, this is WAY too much. Only compute can save us now.`,
       [
@@ -7666,19 +7674,20 @@ b:parseURL('experiments/tf_correlation_3.txt',fast)
 c:parseURL('experiments/tf_images_3.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (Never a dull moment with a linear mixer, even with shared weights.)`,
-      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`16, \`settings ^_learningRate\` being \`1e-3\`: \`\`
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`16, \`\`settings ^_learningRate\`\` being \`1e-3\`: \`\`
 a:parseURL('experiments/tf_change_4.txt',fast)
 b:parseURL('experiments/tf_correlation_4.txt',fast)
 c:parseURL('experiments/tf_images_4.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (Settles into periodic blinking patterns that nonetheless change with time. Probably the most interesting one yet, maybe, conceivably, potentially.)`,
-      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`16, \`settings ^_learningRate\` being \`3e-4\` as usual: \`\`
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`16, \`\`settings ^_learningRate\`\` being \`3e-4\` as usual: \`\`
 a:parseURL('experiments/tf_change_5.txt',fast)
 b:parseURL('experiments/tf_correlation_5.txt',fast)
 c:parseURL('experiments/tf_images_5.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (Same thing. Disregard the seemingly-not-near-zero activity in \`'Average correlations'\`: state averaging averaged the blinking states into anti/correlated moving averages, correlations of the state itself are quite boring and static.)`,
-      // TODO: Run 17, for fully-arbitrary changes. ...Randomness, then eternal stillness.
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`17: randomness for 7k epochs, then eternal stillness.`,
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`19: randomness.`,
       ``,
       `What did we learn from this?`,
       `    (After we used the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
@@ -7780,7 +7789,7 @@ datasetNeucomp:static(await load('datasetNeucomp'))
 
       Alright.
 
-      Low-effort-ending time.
+      Low-effort-ending time, for the slow death that this has been.
 
       When we sensed a disturbance, to reach its source, we used every tool that we had until it broke and beyond, on a journey through words and code. Now, we have just about determined how to make AGI. See \`tutorial matMul\` for details.
 
@@ -9529,6 +9538,26 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      `You know what? This is a good place to explore direct feedback alignment (DFA {https://arxiv.org/abs/1609.01596} {https://arxiv.org/abs/2006.12878}), where we replace \`adjust\` with simply multiplying the target misprediction by a random matrix (which works).`,
+      `    (If \`adjust\` and \`predict\` used that instead of gradient descent, then we could have simply counted up all the variables into a big mutable vector (from which each variable \`slice\`s) and calculated a direct feedback vector in one operation, super-parallelizable, though quadratic if using a naive \`matMul\`.)`,
+      ``,
+      `Let's see if we can make this work.`,
+      `\`\`settings ^_learningRate\`\` \`\`settings ^_msBeforeInterrupt\`\``,
+      `Gradient:`,
+      [
+        `Examples:10 Ins:static(truncatedNormal ^(Examples 10)) Outs:static(truncatedNormal ^(Examples 5)) Index:randomNat(Examples) t0:sliceOff(zeroGrad Ins,Index)@randomVar(10,20) t1:relu(t0)@randomVar(20,15) t2:relu(t1)@randomVar(15,5) out:t2 target:sliceOff(zeroGrad Outs,Index) repeat ^(out=target) 10000`,
+      ],
+      `DFA:`,
+      [
+        `Examples:10 Ins:static(truncatedNormal ^(Examples 10)) Outs:static(truncatedNormal ^(Examples 5)) Index:randomNat(Examples) t0:relu(sliceOff(zeroGrad Ins,Index)@randomVar(10,20)) t1:relu(zeroGrad(t0)@randomVar(20,15)) t2:zeroGrad(t1)@randomVar(15,5) out:t2 target:sliceOff(zeroGrad Outs,Index) diff:out-target repeat ^(minimize(t0,diff@randomVar(5,20));minimize(t1,diff@randomVar(5,15));minimize(t2,diff);display('Loss',loss2(out,target));out) 10000`,
+      ],
+      `I mean. It does work.`,
+      `About as fast as gradient backprop.`,
+      `But the original intention was to use it for learning prediction targets that better satisfy themselves (in an RNN, so, \`'learnedMemory'\` of \`examples stateCell\`), without any effort on gradients-of-gradients and gradients-of-post-update systems (just project the future error randomly into a previous update). But there is no way around those systems for self-meta-learning,  because we'd need to either hold prior adjustments until after the future has come (which prevents updating weights) or learn from the same epoch (which would just shift targets toward their predictions).`,
+      ``,
+      `Pointless.`,
+    ],
     tutorial:[
       `Wwwwwwwwwwwwwwwwwwww
 
@@ -9605,11 +9634,13 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
 `,
       ],
       `
-      // TODO: Test that \`'mixer'\` can overfit a super-small random \`dataset\`.
-      // TODO: Have a test that \`'mixer'\` does not diverge, on CIFAR100 (to not be lazy).
+      // TODO: Test that \`'mixer'\` can overfit a small random \`dataset\`.
+      //   TODO: Ablate the dimension-size parameter 1234 *for the same param count* (keeping dataset in/out size the same, only changing the hidden-layer size), 5 runs per configuration (for mean and std-dev), remembering only the final loss.
+
+      // TODO: Have a test that \`'mixer'\` converges on CIFAR100 (to not be lazy).
       // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` on CIFAR100 to learn it in a MANN fashion.
       // TODO: Look up Karpathy's blog post on the unreasonable effectiveness of RNNs, and try our linearithmic RNN on the same dataset/s, but in a single run over all data, with "new sentence" being a special sequence rather than a reset of the internal state.
-      // TODO: Ablate the dimension-size parameter (with dimension-count being the ceil of logarithm of size with its base being the dimension-size) *for the same computational cost*, 3 (or maybe 5) runs per configuration (for mean and std-dev).
+      //   TODO: Ablate the dimension-size parameter *for the same param count*, 5 runs per configuration (for mean and std-dev).
 `,
     ],
   },
@@ -10278,7 +10309,6 @@ Click a plot to update it.`,
   _updatePlots() {
     // Performs scheduled updates of plots.
     _updatePlots.cells.forEach(update)
-    return new Promise(then => setTimeout(then, 0))
 
     function update(cell) {
       _updatePlots.cells.delete(cell)
@@ -11148,6 +11178,34 @@ Consumes \`Initial\`, so \`keep\` it.`,
     return mul(LR, grad)
   },
 
+  parametersInVars:{
+    docs:`\`parametersInVars Graph\`
+Counts up how many numbers are stored in \`varSGD\`s and similar (weight matrices, most likely).`,
+    examples:[
+      [
+        `f:x->x@randomVar(1,15) parametersInVars(x->f(x)@f(x)@randomVar(15,1))`,
+        `30`,
+      ],
+    ],
+    call(x) {
+      const backctx = _invertBindingContext(_bindingsAt())
+      const env = new Set
+      let n = 0
+      walk(x)
+      env.clear()
+      return n
+      function walk(x) {
+        if (backctx.has(x)) return
+        if (!isArray(x) && defines(x, deconstruct)) x = defines(x, deconstruct)
+        if (env.has(x)) return; else env.add(x)
+        if (!isArray(x)) return
+        if (x[0] === quote) return
+        if (defines(x, varSGD) === true && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1])) return void (n += _tensorSize(x[1][1][0]))
+        x.forEach(walk)
+      }
+    },
+  },
+
   varSGD:{
     varSGD:true,
     use:2,
@@ -11543,6 +11601,7 @@ Note that for generalization, small batches are better than large ones, disregar
 Was that generalization too general and unexpected, quickly disappearing without its precise cause like a cookie? Maybe. Was it wrong in any way? I don't think so.`,
     Initialize() { commit.arrs = new Set },
     readAt:{
+      parametersInVars:_(`parametersInVars`),
       varSGD:_(`varSGD`),
       varMomentum:_(`varMomentum`),
       varRMSProp:_(`varRMSProp`),
@@ -12625,8 +12684,6 @@ A nice non-linearity.`,
       _(5696),
     ],
   ]),
-
-
 
   dataset:{
     docs:`\`dataset Options\`: a \`construct\` that can be called with a connection-creating function (that takes input and output sizes) to train a connection, returning the final loss (the loss should go down during training).
