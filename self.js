@@ -9457,7 +9457,7 @@ Reverse of \`stack\`.`,
   },
 
   denseLayer:{
-    docs:`\`denseLayer Input VarData OutputCount ShareWeights Optimizer Initializer\`, for example, \`->denseLayer(randomVar(20),^0(),15)\`
+    docs:`\`denseLayer Input VarData OutputCount DimCount ShareWeights Optimizer Initializer\`, for example, \`->denseLayer(randomVar(20),^0(),15)\`
 This is \`matMul\`, but lazily creates weights, for convenience.
 
 By default, \`ShareWeights\` is \`true\`; \`Optimizer\` is \`varAdam\`; \`Initializer\` is \`truncatedNormal\`.
@@ -9472,20 +9472,26 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
         `repeat ^(denseLayer(randomVar(20),^0(),15)=5) 10000`,
       ],
       [
-        `repeat ^(denseLayer(randomVar(2,2,2,1,2),^0(),15,false)=5) 10000`,
+        `repeat ^(denseLayer(randomVar(2,2,2,1,2),^0(),15,5,false)=5) 10000`,
+      ],
+      `Batchable too:`,
+      [
+        `repeat ^(denseLayer(randomVar(64,2,2,1,2),^0(),15,4,false)=5) 10000`,
       ],
     ],
     interrupt:false,
     dispose:true,
-    call(x, Var, Outs, Share = true, Optim = varAdam, Init = truncatedNormal, Mean = 0, Stddev = 1 / Math.sqrt(Outs)) {
+    call(x, Var, Outs, Dims, Share = true, Optim = varAdam, Init = truncatedNormal, Mean = 0, Stddev = 1 / Math.sqrt(Outs)) {
       if (!_isDisposable(x)) error('Not a tensor:', x)
       if (!x.shape.length) error('A scalar is too small, give at least a vector, chuckleface:', x)
+      if (x.shape.length < Dims) error('Too small:', x.shape, 'shorter than even', Dims)
       if (!isArray(Var)) error('Not an array (for varData):', Var)
       if (!Var[0]) {
         if (!_isNum(Outs) || Outs !== Outs>>>0) error('Not an index:', Outs)
         if (_isDisposable(Var[1]) || _isDisposable(Var[2])) error('Var data is already filled:', Var)
-        const sh = _allocArray(Math.max(x.shape.length, 2)).fill(1)
-        if (!Share) for (let i=0; i < sh.length-2; ++i) sh[i] = x.shape[i]
+        if (Dims === undefined) Dims = x.shape.length
+        const Skip = x.shape.length - Dims, sh = _allocArray(Math.max(Dims, 2)).fill(1)
+        if (!Share) for (let i=0; i < sh.length-2; ++i) sh[i] = x.shape[i + Skip]
         sh[sh.length-2] = x.shape[x.shape.length-1]
         sh[sh.length-1] = Outs
         Var[0] = Init(merged(sh), Mean, Stddev), Var[1] = Var[2] = 0
@@ -9503,7 +9509,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
     adjust:{
       dispose:_(`_disposeEachAndDealloc`),
       call(ins, out, dout) { // Route `matMul`'s gradient to input and optimizer as needed.
-        const [x, Var, Outs, Shared = true, Optim = varAdam, Init = truncatedNormal] = ins
+        const [x, Var, Outs, Dims, Shared = true, Optim = varAdam, Init = truncatedNormal] = ins
         const dThat = _matMul(x, dout, true, false)
         const a = _allocArray(1);  a[0] = Var
         try { _disposeEachAndDealloc(adjust(Optim, a, null, dThat)) }
@@ -9646,7 +9652,7 @@ w:where
 paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,zeros m(quote,m paddedIns-inputs),0))
 inDef:node->inputs->m(expandDims,m(reshape,paddedInput,m quote arrayCons(inDim,arrayFilledWith d-1 n)),-2)
 transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)
-mixDef:node->inputs->outputs->reduce(arrayFilledWith d transposeDims,td->node->(m denseLayer (m transpose node (m quote td)) (m quote m()) n false),m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim false)
+mixDef:node->inputs->outputs->reduce(arrayFilledWith d (m d+1 transposeDims),td->node->(m denseLayer (m transpose node (m quote td.1)) (m quote m()) n td.0 false),m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim d+1 false)
 reshapedOut:m(reshape,node,m quote m(paddedOuts))
 outDef:node->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs))
 save('mixer',
@@ -9668,7 +9674,6 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
     'out' outDef
 )`,
       ],
-      // TODO: ...Wait, `dataset` batches, so `denseLayer` must be able to batch too... How? Passing in the expected dimension length or `undefined`?
       `Now, we can answer the most important question: does this work at all? (And by "we" we mean "the computer".)`,
       [
         _(`fancier`),
@@ -11448,11 +11453,10 @@ This combines \`varMomentum\` (first moment smoothing) and \`varRMSProp\` (secon
         const t11 = sqrt(nextM2), t12 = add(t11, 1e-8)
         const t13 = div(t10, t12);  dispose(t11), dispose(t12)
 
-        //console.log(Math.sqrt(((appSMA - 4)*(appSMA - 2)*maxSMA) / ((maxSMA - 4)*(maxSMA - 2)*appSMA))) // ###########################################################
         const t14 = mul(t13, Math.sqrt(((appSMA - 4)*(appSMA - 2)*maxSMA) / ((maxSMA - 4)*(maxSMA - 2)*appSMA)))
         return mul(LR, t14)
       } else
-        return mul(LR, t10) // #######################################
+        return mul(LR, t10)
     } finally { dispose(nextM1), dispose(nextM2), dispose(t10) }
   },
 
