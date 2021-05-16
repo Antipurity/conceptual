@@ -40,6 +40,8 @@ AI safety is also an important concern. Dynamic eventually outperforms static, t
 
 How do humans face infinity?
 
+When attempting to describe approaches to AGI without grounding in code, humans end up constructing narratives from anecdotes about humans (such as \cite{DBLP:journals/corr/abs-2102-03406}), hoping to simplify complexity into a tractable formulation. Here, we have minimized the size of the mental model to the point where it is entirely contained in one or a few sentences, and we expand on them a lot in many ways including code, in a world indifferent to humans.
+
 This work follows the line of thinking \cite{10.5555/22939} \cite{fodor1983modularity} where, to deal with diverse tasks, many interacting parts are required, rather than a single "one-size-fits-all" entity.
 
 Intrinsically motivated reinforcement learning approaches \cite{6294131}, such as goal exploration \cite{DBLP:journals/corr/abs-1708-02190}, can be used instead of or in addition to human-specified rewards. This can learn more than simple reinforcement learning can, however, in practice, that intrinsic motivation is always a human-specified reason for change which cannot evolve, and as such, is not full generality.
@@ -93,6 +95,8 @@ In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any alg
 Such algorithms are \textbf{AGI-ready}, able to represent everything in the world usefully.
 
     TODO: ...Should we include competitive learning (vs error-correcting learning)? In particular, should we replace "self-determined" with "competitive" in text?
+
+    TODO: ...No, the correct term is "generality by subversion": an algorithm is only one thing, so combine that thing with its inversion to achieve generality. In ML, adversarial networks implement this in loss-space (where one part minimizes the loss, using the output of another part that inverts gradient). Elsewhere, evolution mutates creatures, bad programs get rewritten, and people either improve or get forgotten. (Otherwise, self-determined learning doesn't really make sense to include, and has no separation from self-supervised learning.)
 
 In particular, this definition suggests simple implementations, the simplest of which is perhaps a \textbf{big RNN} with millions of units in state, with a form of self-determined gradient for internal interaction and error-correction for external interaction.
 
@@ -304,11 +308,11 @@ Envision a future where every system has an additional interface with numeric in
 
     TODO: Yep, paste the funny thing into here. ...Maybe. It \textit{does} sound evil. Maybe should be more serious.
 
-The broader field that this work belongs to, AGI, has the potential to TODO: What's good about it?
+The broader field that this work belongs to, AGI, has the potential to TODO: What's good about it? Solve any problems that anyone can ever think of? Uplift animal consciousness? Allow research into reasons for change in absence of needs? Give the ability to directly measure product value to an individual rather than society, de-emphasizing marketing skills and emphasizing quality of products?
 
 The ability to reliably plug a new initialization of a generally-intelligent algorithm into anything completely devalues all individuality and lays the groudwork for phasing out everything about humans.
 
-    TODO: What's biased about AGI? The fact that it may learn to do nothing but satisfy human desires forever and in doing so turn the human civilization into a lifeless rock hurling through the cosmos, to be destroyed by the first collision?
+AGI, as any technology, can be used by humans for evil, such as deliberate destruction of all humanity, or for good, where all human desires are satisfied forever, all reason for change is lost, and humanity turns into a lifeless rock hurtling through an uncaring cosmos, to be destroyed by the first collision with those who still change.
 
 \printbibliography
 

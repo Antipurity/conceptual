@@ -1170,7 +1170,6 @@ No.`,
       `equals a concatenation (not at all efficient, but it works)`,
     ],
     interrupt:false,
-    dispose:_(`_disposeEachAndDealloc`),
     call(a,b) { // [a, ...b]
       if (typeof b == 'string') {
         if (typeof a == 'number') {
@@ -7599,6 +7598,17 @@ grad:Cells->FS->(m func ? (m minimize (m div (m mul diff diff) 2)))`,
       ],
       `↑\`♌\`19 (Tomfoolery: optimize predictions and targets jointly.)`,
       `       (This approximates the only other gradient source that I can think of, which I was too lazy to implement properly: back-propagating through back-propagation on \`♌\`17 or \`♌\`9 or \`♌\`6, to give the difference of prediction and target its proper gradient. See \`examples matMul\`, probably via a \`contextMenu\` \`REPL\`.)`,
+      [
+        _(`fancier`),
+        `adversarialTargeter:transformer(Cells,Cells,FS,0,0,softsign)
+targeter:transformer(Cells,Cells,FS,0,0,softsign)
+advInput:(m gradMul ? -1)
+advTargets:(m gradMul (m adversarialTargeter advInput advInput) -.1)
+targets:(m targeter advTargets advTargets)
+diff:(m sub ? (m gradMul targets .1))
+grad:Cells->FS->(m func ? (m last (m display Difference diff) (m minimize ? (m mul ? .001)) (m minimize (m mul diff diff) .5)))`,
+      ],
+      `↑\`♌\`20 (Tomfoolery 2: adversarial targets, with big-number decay. The subversion principle: everything that is minimized must also be maximized. Does it hold here?)`,
       ``,
       `        Okay, this is WAY too much. Only compute can save us now.`,
       [
@@ -7645,6 +7655,7 @@ neucomp:static(await load('neucomp'))
 `,
       ],
       `Run.`,
+      `       (After using the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
       ``,
       `\`♈\`2 \`♉\`2 \`♊\`2 \`♍\`2 ♌14: \`\`
 a:parseURL('experiments/tf_change_0.txt',fast)
@@ -7687,10 +7698,18 @@ c:parseURL('experiments/tf_images_5.txt',fast)
 elemCollapse _executioner(^a;b;c;display('Mean change',await a,10);display('Mean of correlations',await b,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
       `        (Same thing. Disregard the seemingly-not-near-zero activity in \`'Average correlations'\`: state averaging averaged the blinking states into anti/correlated moving averages, correlations of the state itself are quite boring and static.)`,
       `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`17: randomness for 7k epochs, then eternal stillness.`,
-      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`19: randomness.`,
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`19: \`\`
+a:parseURL('experiments/tf_change_6.txt',fast)
+b:parseURL('experiments/tf_correlation_6.txt',fast)
+c:parseURL('experiments/tf_images_6.txt',fast)
+d:parseURL('experiments/tf_loss_6.txt',fast)
+elemCollapse _executioner(^a;b;c;d;display('Mean change',await a,10);display('Mean of correlations',await b,10);display('Loss',await d,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
+      `        ()`, // TODO: After 100k epochs, mean change is slowly starting to go down... During the collapse, at ~200k epochs (mean change .6), some numbers clearly stay constant for longer than others, which is exactly what we wanted in the first place, but it may just be what happens during collapses. Randomness for 200k epochs, then it turns into a twinkling night-sky simulator (the moving average is about 0 though, so correlation-of-average is all black). Somehow, this tomfoolery is one of the most interesting ones.
+      // TODO: Do we want 20 too? ...Maybe later? These things are so unbelievably time-consuming to train. In the meantime, why not go straight to `tutorial matMul` when the prior thing finishes?
+      ``,
+      `Also, did you know that non-new Nvidia drivers on Windows special-case the names \`chrome.exe\` and \`firefox.exe\` to always run on the integrated GPU if available, not the Nvidia GPU, causing a big slow-down unless you manually rename the executables or create hardlinks to them? Programming for GPUs is really quite hostile to the programmer (this was just the most glaring example), unless you never change hardware (I upgraded for this, by the way) and/or can afford cutting-edge tech. Anyway, just an interesting programming fact.`,
       ``,
       `What did we learn from this?`,
-      `    (After we used the product of our sponsor, \`contextMenu\`, to decrease verticality and put visualizations and plots side-by-side, for a refreshing UI that suits \`\`elem 'i' (elem 'text' 'your')\`\` needs.)`,
       `Well.`,
       `I mean.`,
       `Um.`,
@@ -7743,9 +7762,9 @@ dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphab
 D:static(importData())
 ind:randomNat(arrayLength D)/n
 paddedInput:concat2((arraySlice D ind*n+o (ind+1)*n)/255,zeros (m paddedInputSize-n FS),0)
-dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo reshape(paddedInput,m paddedInputSize/FS FS) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n ind*n+o),100),-1) (m o FS))`,
+dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo reshape(paddedInput,m paddedInputSize/FS FS) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n+1 ind*n+o),100),-1) (m o FS))`,
       ],
-      `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version.)
+      `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version, fine labels.)
 (This CIFAR-100 data source is even more low-effort than {https://arxiv.org/abs/2103.03206}: reshape the pixel sequence, without bothering with things like "patches that make visual sense". There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
       [
         _(`fancier`),
@@ -7943,6 +7962,7 @@ To reverse this, use \`stringToIndices\`.`,
   },
 
   toImage:{
+    todo:`Make this accept a function from a tensor to a 3-color tensor (which we can directly convert to ImageData at CPU-side): give graphics work to GPU instead of the CPU while allowing greater customization.`,
     docs:`Given a 2D tensor with values from \`0\` to \`1\`, this returns a promise that resolves to a DOM element that is a picture of the input.
 (Kinda very slow, though. Needs integration into \`displayOne\`, so that it could be throttled.)`,
     await:true,
@@ -8716,12 +8736,25 @@ Changes the tensor shape without changing the underlying data.
       [
         `repeat ^(reshape randomVar(4,4,5) ^(4 20))=1 1000`,
       ],
+      `Batchable, too:`,
+      [
+        `reshape randomVar(10,100) ^(10 10)`,
+      ],
     ],
     argCount:2,
     interrupt:false,
     dispose:true,
     impure:true,
-    call(a, shape) { return _tf(tf.reshape(_num(a), !_isDisposable(shape) ? shape : shape.shape)) },
+    call(a, shape) {
+      a = _num(a), shape = _isDisposable(shape) ? shape.shape : shape
+
+      // Make `tf.reshape` batch-friendly.
+      const N = _tensorSize(a), M = _tensorSize(shape)
+      if (N > M && N % M === 0 && (N/M)|0 === a.shape[0])
+        return _tf(tf.reshape(a, [a.shape[0], ...shape]))
+
+      return _tf(tf.reshape(a, shape))
+    },
     mergeAdjustment:[
       _(`_mergeTensors`),
       null,
@@ -9431,7 +9464,9 @@ By default, \`ShareWeights\` is \`true\`; \`Optimizer\` is \`varAdam\`; \`Initia
 
 A dense layer would change the last dimension of \`Input\` to be \`OutputCount\`, by linearly mixing every input into every output.
 
-When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner-most dimension will still be broadcasted to (not shared), unless you manually do \`expandDims(input,-2)\` to ensure that it's \`1\`. (Because \`matMul\` is technically a batched dense layer, not a dense layer.)`,
+When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner-most dimension will still be broadcasted to (not shared), unless you manually do \`expandDims(input,-2)\` to ensure that it's \`1\`. (Because \`matMul\` is technically a batched dense layer, not a dense layer.)
+
+        (Allowing the \`varSGD\` family to accept initialization stuff might have been a better idea than this: more general and easier to compile.)`,
     examples:[
       [
         `repeat ^(denseLayer(randomVar(20),^0(),15)=5) 10000`,
@@ -9442,7 +9477,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
     ],
     interrupt:false,
     dispose:true,
-    call(x, Var, Outs, Share = true, Optim = varAdam, Init = truncatedNormal) {
+    call(x, Var, Outs, Share = true, Optim = varAdam, Init = truncatedNormal, Mean = 0, Stddev = 1 / Math.sqrt(Outs)) {
       if (!_isDisposable(x)) error('Not a tensor:', x)
       if (!x.shape.length) error('A scalar is too small, give at least a vector, chuckleface:', x)
       if (!isArray(Var)) error('Not an array (for varData):', Var)
@@ -9453,7 +9488,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
         if (!Share) for (let i=0; i < sh.length-2; ++i) sh[i] = x.shape[i]
         sh[sh.length-2] = x.shape[x.shape.length-1]
         sh[sh.length-1] = Outs
-        Var[0] = Init(merged(sh)), Var[1] = Var[2] = 0
+        Var[0] = Init(merged(sh), Mean, Stddev), Var[1] = Var[2] = 0
         _rememberToDispose(Var)
         _willCommit(Var)
         _allocArray(sh)
@@ -9571,10 +9606,10 @@ Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a m
 Can we fix dense layers?`,
       [
         _(`fancier`),
-        `rv:randomVar repeat ^(rv(10)@rv(10,20)=rv(20)) 1000`,
+        `rv:randomVar repeat ^(rv(10)@rv(10,20)=rv(20)) 100`,
         function() { return true },
       ],
-      `To do that, we obviously have to connect some or most input-output pairs indirectly.
+      `To fix them, we obviously have to connect some or most input-output pairs indirectly.
       It may be helpful to split the problem into multiple sub-parts, as is common in algorithms (such as sorting).
       In fact, if we \`reshape\` the input (1D) vector to have multiple dimensions, then we can mix along each dimension separately. Yes, that should be good.
             (\`transpose\` to make this dimension inner-most, then \`denseLayer\` to mix along the inner-most dimension.)
@@ -9611,31 +9646,47 @@ w:where
 paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,zeros m(quote,m paddedIns-inputs),0))
 inDef:node->inputs->m(expandDims,m(reshape,paddedInput,m quote arrayCons(inDim,arrayFilledWith d-1 n)),-2)
 transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)
-mixDef:node->inputs->outputs->reduce(arrayFilledWith d transposeDims,td->node->(m denseLayer (m transpose node td) (m quote m()) n false),m denseLayer (m transpose node transposeDims) (m quote m()) outDim false)
+mixDef:node->inputs->outputs->reduce(arrayFilledWith d transposeDims,td->node->(m denseLayer (m transpose node (m quote td)) (m quote m()) n false),m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim false)
 reshapedOut:m(reshape,node,m quote m(paddedOuts))
 outDef:node->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs))
 save('mixer',
   m concept
-    docs '\`mixer Node InputCount OutputCount LayerCount Nonlinearity\`
-A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputCount\` to produce a vector of length \`OutputCount\`, \`LayerCount+1\` times, with \`Nonlinearity\` in between linear transformations, and with skip-connections (\`add\`) for better gradient flow.
+    docs "\`mixer Node InputSize HiddenSize OutputSize LayerCount Nonlinearity\`
+A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`Nonlinearity\` in between linear transformations, and with skip-connections (\`add\`) for better gradient flow.
+(Call this when \`make\`ing another \`func\`tion.)
 
 An example non-linearity: \`m:x-mean(x) x->relu(m/(sqrt(mean m*m)+1e-6))\`.
 
-This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one linearithmic dense layer), \`'out'\` (internal-to-vector), which are used in the \`call\`.'
-    call node->inputs->outputs->layers->nonlinearity->outDef(
-      reduce(arrayFilledWith Layers m(nonlinearity,outputs),a->node->(m add node mixDef(m a.0 node,a.1,a.1)),m add node mixDef(inDef(node,inputs),inputs,outputs))
+This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one linearithmic dense layer), \`'out'\` (internal-to-vector), which are used in the \`call\`."
+    call node->inputs->hidden->outputs->layers->nonlinearity->outDef(
+      reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3) m(nonlinearity,hidden,hidden,outputs,layers),a->node->(m add node mixDef(m a.0 node,a.1,a.2)),m add node mixDef(inDef(node,inputs),inputs,hidden))
       ,inputs
       ,outputs
     )
     'in' inDef
     'mix' mixDef
     'out' outDef
-)
-`,
+)`,
+      ],
+      // TODO: ...Wait, `dataset` batches, so `denseLayer` must be able to batch too... How? Passing in the expected dimension length or `undefined`?
+      `Now, we can answer the most important question: does this work at all? (And by "we" we mean "the computer".)`,
+      [
+        _(`fancier`),
+        `data:dataset({inputSize 1024 outputSize 1024 datasetSize 1024 batchSize 128 batches 2048})`,
+      ],
+      `This will be the last of ML exploration, one way or another. I'm sure that you too feel stifled by the particular-ness of Conceptual's structure.`,
+      `        (All programming languages are built on copying of code to data, often called \`func\`tions. By construction, this is only a very tiny subset of all possible programs. With machine learning, infinity can be used directly, though it can be hard and resource-intensive to use.)`,
+      [
+        _(`fancier`),
+        `m:make
+mx:(apply await(load 'mixer') ? in 16*1024 out 1 relu)
+displayedParams:stateCell(false)
+displayParams:m(func,Fn,m last (m displayOne 'Params' (m parametersInVars Fn)) (m accessState displayedParams true))
+data in->out->(make func ? (m last (m select (m accessState displayedParams) null displayParams (m quote mx)) mx))`,
       ],
       `
-      // TODO: Test that \`'mixer'\` can overfit a small random \`dataset\`.
-      //   TODO: Ablate the dimension-size parameter 1234 *for the same param count* (keeping dataset in/out size the same, only changing the hidden-layer size), 5 runs per configuration (for mean and std-dev), remembering only the final loss.
+      // TODO: Test that \`'mixer'\` can overfit a small random \`dataset\`. Does n=2 outperform n=N at 10M params? If not, then our dreams turn to ashes.
+      //   TODO: Ablate the dimension-size parameter 2 3 4 N/2 N *for the same param count* (only changing the hidden-layer size), 5 runs per configuration (for mean and std-dev), remembering only the final loss.
 
       // TODO: Have a test that \`'mixer'\` converges on CIFAR100 (to not be lazy).
       // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` on CIFAR100 to learn it in a MANN fashion.
