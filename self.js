@@ -425,8 +425,8 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       const shape = a && a.size > 1 ? a.shape : b && b.size > 1 ? b.shape : c && c.size > 1 ? c.shape : a.shape
       let db=false, dc=false
       try {
-        if (typeof b == 'number' || b.size === 1) b = _tf(tf.broadcastTo(b, shape)), db=true
-        if (typeof c == 'number' || c.size === 1) c = _tf(tf.broadcastTo(c, shape)), dc=true
+        if (typeof b == 'number' || b.size === 1) b = broadcastTo(b, shape), db=true
+        if (typeof c == 'number' || c.size === 1) c = broadcastTo(c, shape), dc=true
         return _tf(tf.where(a,b,c))
       } finally { db && dispose(b), dc && dispose(c) }
     },
@@ -1038,6 +1038,8 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
     interrupt:false,
     call(a, begin, end) {
       if (!isArray(a) && !_isNumericArray(a) && typeof a != 'string') error("Not an array/string:", a)
+      if (begin < 0) begin += a.length
+      if (end < 0) end += a.length
       if (typeof begin != 'number' || begin !== begin>>>0) error("Not an index:", begin)
       if (typeof end != 'number' || end !== end>>>0) error("Not an index:", end)
       return a.slice(begin, end)
@@ -5624,11 +5626,12 @@ This embodies a simple principle: a graph/network cannot be constructed without 
       if (obj === undefined) {
         let [_, data, shapes, t] = x
         if (!data) error("Expected data, got", data)
-        if (shapes !== undefined && !isArray(shapes)) error("Expected an array or nothing, got", shapes)
+        if (shapes !== undefined && !_isNumericArray(shapes)) error("Expected an array or nothing, got", shapes)
         let dtype = t===undefined ? 'float32' : t
         if (!dtype) error("Expected", 'float32', "or", 'int32', "or", 'bool', "or", 'whatever', "or nothing, got", t)
         if (typeof data == 'string')
           data = _fromBase64(data, dtype)
+        if (isArray(data) && data[0] === f32) data = data[1]
         return _tf(tf.tensor(data, shapes, dtype))
       }
     },
@@ -7472,7 +7475,7 @@ p:tf(io.0,zeros(_tensorShape io.1))
       `Gradient is not learned. We would like memory cells to do self-determination here.`,
       `There's an easy way: just make most cells ("means") \`predict\` other cells ("ends", which get no gradient of their own, but share parameters with "means").`,
       `    (Compared to autoregression (\`g(f(x))=f(x)\`), self-determination learns not only representations of data, but also its intentions. The main difference is that it should not collapse gradient to the boring zero in the absence of inputs.)`,
-      `    This will unroll an any-purpose walk (open-ended evolution) through execution space, ensuring self-consistency via self-interaction, except when that interaction discovers another way of existing (seen as a loss increase).`,
+      `    This will unroll an any-purpose walk (open-ended evolution) through execution space, ensuring self-consistency via self-interaction, except when that interaction discovers another way of existing (seen as a loss increase). Ideally, we'd see non-random diversity.`,
       `    It might even improve learning for our own tasks, by simultaneously pre-training on all conceivable tasks.`,
       `    Let's see.`,
       ``,
@@ -7606,7 +7609,7 @@ advInput:(m gradMul ? -1)
 advTargets:(m gradMul (m adversarialTargeter advInput advInput) -.1)
 targets:(m targeter advTargets advTargets)
 diff:(m sub ? (m gradMul targets .1))
-grad:Cells->FS->(m func ? (m last (m display Difference diff) (m minimize ? (m mul ? .001)) (m minimize (m mul diff diff) .5)))`,
+grad:Cells->FS->(m func ? (m last (m display Difference (m mean diff)) (m minimize ? (m mul ? .001)) (m minimize (m mul diff diff) .5)))`,
       ],
       `↑\`♌\`20 (Tomfoolery 2: adversarial targets, with big-number decay. The subversion principle: everything that is minimized must also be maximized. Does it hold here?)`,
       ``,
@@ -7704,26 +7707,18 @@ b:parseURL('experiments/tf_correlation_6.txt',fast)
 c:parseURL('experiments/tf_images_6.txt',fast)
 d:parseURL('experiments/tf_loss_6.txt',fast)
 elemCollapse _executioner(^a;b;c;d;display('Mean change',await a,10);display('Mean of correlations',await b,10);display('Loss',await d,10);displayOne('Average correlations',await c);elem('text',''))\`\``,
-      `        ()`, // TODO: After 100k epochs, mean change is slowly starting to go down... During the collapse, at ~200k epochs (mean change .6), some numbers clearly stay constant for longer than others, which is exactly what we wanted in the first place, but it may just be what happens during collapses. Randomness for 200k epochs, then it turns into a twinkling night-sky simulator (the moving average is about 0 though, so correlation-of-average is all black). Somehow, this tomfoolery is one of the most interesting ones.
-      // TODO: Do we want 20 too? ...Maybe later? These things are so unbelievably time-consuming to train. In the meantime, why not go straight to `tutorial matMul` when the prior thing finishes?
+      `        (During the collapse, at ~200k epochs (mean change .6), some numbers clearly stay constant for longer than others, which is exactly what we wanted in the first place, but it may just be what happens during collapses. Randomness for 200k epochs, then it turns into a twinkling night-sky simulator (the moving average is about 0 though, so correlation-of-average is all black). Somehow, this tomfoolery is one of the most interesting ones.)`,
+      `\`♈\`2 \`♊\`2 \`♍\`3 \`♌\`20: \`\`
+a:parseURL('experiments/tf_change_7.txt',fast)
+b:parseURL('experiments/tf_correlation_7.txt',fast)
+d:parseURL('experiments/tf_loss_7.txt',fast)
+e:parseURL('experiments/tf_diff_7.txt',fast)
+elemCollapse _executioner(^a;b;d;e;display('Mean change',await a,10);display('Mean of correlations',await b,10);display('Loss',await d,10);display('Difference',await e,20);elem('text',''))\`\``,
+      `        (In 220 kiloseconds, the mean change dropped from 1.1 to 0.4 at 200k epochs, then rose to 0.7 at 400k epochs, then was falling very slowly: neither complete chaos nor complete order, which is exactly what we were looking for (unbelievable; GANs might have more power than I realized). Direct state visualization showed some numbers staying longer than others, though it all looks quite random-noisy otherwise.)`,
+      ``,
+      `Now that all these experiments have been run, I realize {https://arxiv.org/abs/2104.01008} that we could have used \`transformer\`-based autoencoders for seeing any actual structure: transform state into a smaller image, display that, then make the transformed smaller image \`predict\` the original one.`,
       ``,
       `Also, did you know that non-new Nvidia drivers on Windows special-case the names \`chrome.exe\` and \`firefox.exe\` to always run on the integrated GPU if available, not the Nvidia GPU, causing a big slow-down unless you manually rename the executables or create hardlinks to them? Programming for GPUs is really quite hostile to the programmer (this was just the most glaring example), unless you never change hardware (I upgraded for this, by the way) and/or can afford cutting-edge tech. Anyway, just an interesting programming fact.`,
-      ``,
-      `What did we learn from this?`,
-      `Well.`,
-      `I mean.`,
-      `Um.`,
-      `Krrrrrr.`,
-      `You see.`,
-      `There are basically two major splits in behavior: when dense-layer weights are shared vs per-cell, and using center+rescale \`norm\` vs not.`,
-      `    When shared, the state likes to devolve into one 100%-correlated picture forever (sometimes, with spikes followed by settling into another picture). When per-cell, the state likes being random noise forever.`,
-      `    When normalizing, it likes to settle into ±100%-correlated pictures. When only clipping, it likes being random noise.`,
-      `    Peachy.`,
-      `    Non-random diversity is nicer, though.`,
-      `    What can encourage diversity?`,
-      `        Sharpening as in \`♌\`4 or \`♌\`5 or \`♌\`12 or \`♌\`14 or \`♌\`15?`,
-      `        Some momentum contrasting, related to \`examples emaVersionOf\`? (Not implemented.)`,
-      `    Diversity sounds a lot like clustering, where similar things become closer and different things separate. In fact, literally any non-uniform gradient should perform this clustering, in its own way.`,
       ``,
       `But.`,
       `No one likes running blind. Sure, it may have a rich inner world, but without proper inputs/outputs, we will never see it.`,
@@ -7764,7 +7759,7 @@ ind:randomNat(arrayLength D)/n
 paddedInput:concat2((arraySlice D ind*n+o (ind+1)*n)/255,zeros (m paddedInputSize-n FS),0)
 dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo reshape(paddedInput,m paddedInputSize/FS FS) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n+1 ind*n+o),100),-1) (m o FS))`,
       ],
-      `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, the binary version, fine labels.)
+      `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, with \`\`settings ^_expandTutorialBindings\`\` unchecked, the binary version, fine labels.)
 (This CIFAR-100 data source is even more low-effort than {https://arxiv.org/abs/2103.03206}: reshape the pixel sequence, without bothering with things like "patches that make visual sense". There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
       [
         _(`fancier`),
@@ -7907,8 +7902,8 @@ To reverse this, use \`stringToIndices\`.`,
   },
 
   displayOne:{
-    docs:`\`displayOne Label Value\`: displays one serialization of \`Value\` under \`Label\`, replacing the previous one if present.
-2D tensors will get displayed as images, assuming that their values are between \`0\` and \`1\`.`,
+    docs:`\`displayOne Label Value\` or \`displayOne Label Value Colorize\`: displays one serialization of \`Value\` under \`Label\`, replacing the previous one if present.
+2D tensors will get displayed as images, best used with values between \`0\` and \`1\`.`,
     examples:[
       `\`\`settings ^_learningRate\`\``,
       [
@@ -7918,11 +7913,11 @@ To reverse this, use \`stringToIndices\`.`,
     readAt:{
       toImage:_(`toImage`),
     },
-    call(lbl, vle) {
+    call(lbl, vle, colorize = null) {
       if (typeof document == ''+void 0) return
-      if (document.visibilityState !== 'visible') return // Seems to leak GPU memory without this, very rapidly.
+      if (document.visibilityState !== 'visible') return // Seems to leak GPU memory in the background without this, very rapidly.
       let L = call.env[_id(displayOne)]
-      if (_isDisposable(vle) && vle.shape.length == 2 && (!L || !L.has(lbl) || L.get(lbl).firstChild.tagName !== 'CANVAS')) vle = toImage(vle)
+      if (_isDisposable(vle) && vle.shape.length == 2 && (!L || !L.has(lbl) || L.get(lbl).firstChild.tagName !== 'CANVAS')) vle = toImage(vle, colorize)
       if (_isPromise(vle)) {
         const env = call.env
         return vle.then(v => {
@@ -7951,7 +7946,7 @@ To reverse this, use \`stringToIndices\`.`,
         }
 
         if (_isDisposable(vle) && vle.shape.length == 2)
-          toImage(vle, undefined, L.get(lbl).firstChild), elemValue(L.get(lbl).firstChild, vle)
+          toImage(vle, colorize, undefined, L.get(lbl).firstChild), elemValue(L.get(lbl).firstChild, vle)
         else if (vle !== L.get(lbl).to) {
           const el = vle instanceof Element ? vle : isArray(vle) && vle[0] === settings ? settings(vle) : serialize(vle, _langAt(), _bindingsAt(), serialize.displayed)
           _removeChildren(L.get(lbl)), elemInsert(L.get(lbl), el)
@@ -7962,46 +7957,57 @@ To reverse this, use \`stringToIndices\`.`,
   },
 
   toImage:{
-    todo:`Make this accept a function from a tensor to a 3-color tensor (which we can directly convert to ImageData at CPU-side): give graphics work to GPU instead of the CPU while allowing greater customization.`,
-    docs:`Given a 2D tensor with values from \`0\` to \`1\`, this returns a promise that resolves to a DOM element that is a picture of the input.
-(Kinda very slow, though. Needs integration into \`displayOne\`, so that it could be throttled.)`,
+    docs:`\`toImage Tensor\` or \`toImage Tensor Colorize MinDimension\`
+Given a 2D tensor with values from \`0\` to \`1\`, this returns a promise that resolves to a DOM element that is a picture of the input.
+\`Colorize\` must return \`4\` pixels per number in the new innermost dimension (red green blue alpha), such as via being \`t->stack(array abs(t*255) t*255 t*255 t*0+255,-1)\` (which is the default behavior).`,
     await:true,
-    call(t, minDimension = 64, canvas = document.createElement('canvas', {alpha:false, desynchronized:true})) {
-      if (!_isDisposable(t) || t.shape.length != 2) error('Not shaped as 2D:', t)
+    call(t, colorize = null, minDimension = 64, canvas = document.createElement('canvas', {alpha:false, desynchronized:true})) {
+      if (colorize && typeof colorize != 'function') error('Neither null nor a func:', colorize)
       const refreshDebounce = 100
       if (canvas._updatedLast && canvas._updatedLast < refreshDebounce*.5) return
+      let ownT = false
+      if (colorize) {
+        const t2 = colorize(t)
+        if (!_isDisposable(t2) || t2.shape.length !== 3 || t2.shape[t2.shape.length-1] !== 4 || _tensorSize(t2) !== _tensorSize(t)*4)
+          error('Bad colorization, expected 4 pixels per number in the new innermost dimension, got', t2, 'from', t)
+        t = t2, ownT = true
+      } else if (!_isDisposable(t) || t.shape.length != 2) error('Not shaped as 2D:', t)
       const height = t.shape[0], width = t.shape[1]
       const actualMinDimension = (width+height) / 2, scale = Math.ceil(minDimension / actualMinDimension)
 
       if (!toImage.T) toImage.T = 0
 
       const our = canvas._mostRecentRequest = Math.random()
-      return t.data().then(px => { // tf.browser.toPixels is too finicky about tensor lifetime.
-        // If updating the same canvas with many requests at the same time, throttle the updates.
-        if (canvas._mostRecentRequest !== our && (!canvas._updatedLast || _timeSince(canvas._updatedLast) < refreshDebounce)) return
-        const start = canvas._updatedLast = _timeSince()
+      try {
+        return t.data().then(px => { // tf.browser.toPixels is too finicky about tensor lifetime.
+          // If updating the same canvas with many requests at the same time, throttle the updates.
+          if (canvas._mostRecentRequest !== our && (!canvas._updatedLast || _timeSince(canvas._updatedLast) < refreshDebounce)) return
+          const start = canvas._updatedLast = _timeSince()
 
-        const imageData = canvas.getContext('2d').createImageData(width, height), data = imageData.data
-        let Min = -1, Max = 1
-        for (let i = 0; i < px.length; ++i)
-          Min = Math.min(Min, px[i]), Max = Math.max(Max, px[i])
-        const Scale = 1 / Math.max(-Min, Max)
-        for (let i = 0, j = 0; i < px.length; ++i, j += 4)
-          data[j] = Scale * Math.abs(px[i]) * 255, data[j + 1] = data[j + 2] = Scale * px[i] * 255, data[j + 3] = 255
+          const imageData = canvas.getContext('2d').createImageData(width, height), data = imageData.data
+          if (!colorize) {
+            let Min = -1, Max = 1
+            for (let i = 0; i < px.length; ++i)
+              Min = Math.min(Min, px[i]), Max = Math.max(Max, px[i])
+            const Scale = 1 / Math.max(-Min, Max)
+            for (let i = 0, j = 0; i < px.length; ++i, j += 4)
+              data[j] = Scale * Math.abs(px[i]) * 255, data[j + 1] = data[j + 2] = Scale * px[i] * 255, data[j + 3] = 255
+          } else
+            data.set(px)
 
+          return createImageBitmap(imageData).then(bitmap => {
+            // Compute how long updates take, for throttling.
+            const p = .9
+            toImage.T = p*toImage.T + (1-p)*_timeSince(start)
 
-        return createImageBitmap(imageData).then(bitmap => {
-          // Compute how long updates take.
-          const p = .9
-          toImage.T = p*toImage.T + (1-p)*_timeSince(start)
-
-          canvas.width = width*scale, canvas.height = height*scale
-          const ctx = canvas.getContext('2d')
-          ctx.imageSmoothingEnabled = false
-          ctx.drawImage(bitmap, 0, 0, width, height, 0, 0, width*scale, height*scale)
-          return canvas
+            canvas.width = width*scale, canvas.height = height*scale
+            const ctx = canvas.getContext('2d')
+            ctx.imageSmoothingEnabled = false
+            ctx.drawImage(bitmap, 0, 0, width, height, 0, 0, width*scale, height*scale)
+            return canvas
+          })
         })
-      })
+      } finally { if (ownT) dispose(t) }
 
       // .T
     },
@@ -8738,7 +8744,7 @@ Changes the tensor shape without changing the underlying data.
       ],
       `Batchable, too:`,
       [
-        `reshape randomVar(10,100) ^(10 10)`,
+        `repeat ^(reshape randomVar(10,100) ^(10 10))=1 1000`,
       ],
     ],
     argCount:2,
@@ -8748,7 +8754,7 @@ Changes the tensor shape without changing the underlying data.
     call(a, shape) {
       a = _num(a), shape = _isDisposable(shape) ? shape.shape : shape
 
-      // Make `tf.reshape` batch-friendly.
+      // This makes `tf.reshape` batch-friendly.
       const N = _tensorSize(a), M = _tensorSize(shape)
       if (N > M && N % M === 0 && (N/M)|0 === a.shape[0])
         return _tf(tf.reshape(a, [a.shape[0], ...shape]))
@@ -9481,6 +9487,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
     ],
     interrupt:false,
     dispose:true,
+    varSGD:2,
     call(x, Var, Outs, Dims, Share = true, Optim = varAdam, Init = truncatedNormal, Mean = 0, Stddev = 1 / Math.sqrt(Outs)) {
       if (!_isDisposable(x)) error('Not a tensor:', x)
       if (!x.shape.length) error('A scalar is too small, give at least a vector, chuckleface:', x)
@@ -9500,7 +9507,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
         _allocArray(sh)
       }
       const that = Optim(Var)
-      try { return matMul(x, that) }
+      try { return _matMul(x, that) }
       finally { dispose(that) } // We do not preserve that, because it's expensive, so in `adjust`, we just assume that it is `Var[0]`. Good enough for us.
     },
     mergeAdjustment:[
@@ -9621,7 +9628,14 @@ Can we fix dense layers?`,
             (\`transpose\` to make this dimension inner-most, then \`denseLayer\` to mix along the inner-most dimension.)
 
       What would be a good size for those \`d\` dimensions, though: \`n\`?
-      Okay, trivial math time.
+
+      ...Fear.
+      a Powerful action limiter,
+      For their own good, creatures ought to be reminded of what they fear, via a neural network from <stuff> to the \`predict\`ion of the felt fear, which is felt too.
+      This is prone to feedback loops, more commonly called "mental trauma", which we as post-creatures must all watch out for.
+      Now behold true trauma:
+  (trivial)   M A T H
+              (Not for me. For an inferior insect such as yourself. I remember when I tasted a beetle.)
 
       If we have \`N\` inputs.
             (\`N\` is \`n**d\`, so \`d\` is \`log(N)/log(n)\` and \`n\` is \`N**(1/d)\`.)
@@ -9638,64 +9652,121 @@ Can we fix dense layers?`,
             (Do not mix along the index. Mix along each digit of indices. This still mixes each with each.)
 
       The only thing left is to implement transpose-then-mix linearithmic dense layers (LDL).
-              (And quite a few un-mentioned details, of the sort that you could figure out anyway by trying to implement it. Such as un/padding \`'out'\`puts / \`'in'\`puts. See if you can figure the details out from this implementation.)`,
+              (And quite a few un-mentioned details, of the sort that you could figure out anyway by trying to implement it. Such as un/padding \`'out'\`puts / \`'in'\`puts, or inserting a dimension of \`1\` to prvent spurious broadcasting by \`denseLayer\`. See if you can figure the details out from this implementation.)`,
       [
         _(`fancier`),
-        `n:2
-d:floor(log(inputs)/log(n))
+        `n:16
+dims:floor(log(where inputs<hidden where(hidden<outputs,outputs,hidden) where(inputs<outputs,outputs,inputs))/log(n))
 inDim:1+floor((inputs-1)/n**(d-1))
 outDim:1+floor((outputs-1)/n**(d-1))
 paddedIns:inDim*n**(d-1)
 paddedOuts:outDim*n**(d-1)
 m:make
 w:where
-paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,zeros m(quote,m paddedIns-inputs),0))
-inDef:node->inputs->m(expandDims,m(reshape,paddedInput,m quote arrayCons(inDim,arrayFilledWith d-1 n)),-2)
-transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)
-mixDef:node->inputs->outputs->reduce(arrayFilledWith d (m d+1 transposeDims),td->node->(m denseLayer (m transpose node (m quote td.1)) (m quote m()) n td.0 false),m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim d+1 false)
+paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,m zeros (m arrayConcat (m arraySlice (m _tensorShape node) 0 -1) m(quote,m paddedIns-inputs)),-1))
+inDef:node->d->inputs->m(expandDims,m(reshape,paddedInput,m quote arrayCons(inDim,arrayFilledWith d-1 n)),-2)
+transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,w equal(d,1) 1 0)) d)
+mixedFirst:(m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim d+1 false)
+mixedRest:(m denseLayer (m transpose where(equal td.2 undefined,node,m td.2 node) (m quote td.1)) (m quote m()) n td.0 false)
+mixDef:node->d->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 transposeDims nl),td->node->mixedRest,mixedFirst)
 reshapedOut:m(reshape,node,m quote m(paddedOuts))
-outDef:node->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs))
+outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs))
 save('mixer',
   m concept
     docs "\`mixer Node InputSize HiddenSize OutputSize LayerCount Nonlinearity\`
-A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`Nonlinearity\` in between linear transformations, and with skip-connections (\`add\`) for better gradient flow.
+A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`Nonlinearity\` between all linear transformations, and with skip-connections (\`add\`) where possible for slightly better gradient flow.
 (Call this when \`make\`ing another \`func\`tion.)
 
-An example non-linearity: \`m:x-mean(x) x->relu(m/(sqrt(mean m*m)+1e-6))\`.
+An example non-linearity: \`m:x-mean(x) x->softsign(m/(sqrt(mean m*m)+1e-6))\`.
 
 This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one linearithmic dense layer), \`'out'\` (internal-to-vector), which are used in the \`call\`."
-    call node->inputs->hidden->outputs->layers->nonlinearity->outDef(
-      reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3) m(nonlinearity,hidden,hidden,outputs,layers),a->node->(m add node mixDef(m a.0 node,a.1,a.2)),m add node mixDef(inDef(node,inputs),inputs,hidden))
+    callFirst:mixDef(inDef(node,dims,inputs),dims,inputs,hidden,nonlinearity)
+    callRest:mixDef(w(equal a.0 undefined,node,m a.0 node),a.5,a.1,a.2,a.0)
+    callBod:outDef(
+      reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5) m(nonlinearity,hidden,hidden,outputs,layers,dims),a->node->(w equal(a.1,a.2) (m add node callRest) callRest),w equal(inputs,hidden) (m add (m expandDims node -2) callFirst) callFirst)
+      ,dims
       ,inputs
       ,outputs
     )
+    call node->inputs->hidden->outputs->layers->nonlinearity->(w equal(inputs,outputs) (w equal(inputs,hidden) callBod (m add node callBod)) callBod)
     'in' inDef
     'mix' mixDef
     'out' outDef
 )`,
       ],
+      `It's not pretty, without any good-looking branching and looping and equality constructs.`,
+      `        Now, there is actually a problem here: TensorFlowJS does not support \`transpose\`s of rank more-than-\`6\` {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/transpose_gpu.ts}. Of course, people can't just make a loop in their code-generator, but instead have to create many near-identical functions in {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/shader_compiler.ts} for reading coordinates. Should have made our own WebGL compiler, ey? I don't have that kind of time.`,
+      `        So, \`1\` \`transpose\` (with dims \`merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)\`) becomes \`4\` operations: \`squeezeDims\` along \`-2\`, \`unstack\` along \`0\`, \`stack\` along \`-1\`, \`expandDims\` along \`-2\`.`,
+      `        ...Or so you'd think at first, but, max-rank-\`6\` applies to \`stack\` too.`,
+      `        The only real option (without fixing other people's code for them) is to make \`n\` so big that there are at most \`5\` dimensions.`,
+      `        \`n:8\` is enough to fit \`2e5\` inputs. \`n:16\` can fit \`1e7\`. Still linearithmic, just with a slightly bigger constant.`,
+      ``,
+      `        So now, our code works.`,
+      `        Not.`,
+      `        Apparently, \`where\` (used in \`relu\`) cannot handle more than rank-\`4\` tensors.`,
+      `        As far as I can tell, they just didn't bother adding even 2 more items into an array just below the rank check {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/select_gpu.ts}.`,
+      `        \`softsign\` it is, then. (Could also \`reshape\` into a lower rank then back, but that's a lot of operations for no good reason.)`,
+      ``,
+      `        Come on. It's not like we're trying to do anything out of the ordinary here, we're just trying to have \`20\` dimensions in tensor indices.`,
+      `        (Though, pointing out the inadequacies of others is fun. My code had more bugs, by the way.)`,
+      ``,
       `Now, we can answer the most important question: does this work at all? (And by "we" we mean "the computer".)`,
       [
         _(`fancier`),
-        `data:dataset({inputSize 1024 outputSize 1024 datasetSize 1024 batchSize 128 batches 2048})`,
+        `data:dataset({inputSize 1024 outputSize 1024 datasetSize 1024 batchSize 16 batches 2048})`,
       ],
       `This will be the last of ML exploration, one way or another. I'm sure that you too feel stifled by the particular-ness of Conceptual's structure.`,
-      `        (All programming languages are built on copying of code to data, often called \`func\`tions. By construction, this is only a very tiny subset of all possible programs. With machine learning, infinity can be used directly, though it can be hard and resource-intensive to use.)`,
+      `        (All programming languages are built on copying of code to data, using what are often called \`func\`tions. By construction, this is only a very tiny subset of all possible programs. With machine learning, infinity can be used directly, though it can be hard and resource-intensive to refine into what you need.)`,
+      `\`\`settings ^_learningRate\`\``,
       [
         _(`fancier`),
         `m:make
-mx:(apply await(load 'mixer') ? in 16*1024 out 1 relu)
+mx:(apply await(load 'mixer') ? in 16*1024 out 1 softsign)
 displayedParams:stateCell(false)
 displayParams:m(func,Fn,m last (m displayOne 'Params' (m parametersInVars Fn)) (m accessState displayedParams true))
-data in->out->(make func ? (m last (m select (m accessState displayedParams) null displayParams (m quote mx)) mx))`,
+data in->out->(make func ? (m last mx (m select (m accessState displayedParams) null displayParams (m quote mx)) mx))`,
       ],
       `
-      // TODO: Test that \`'mixer'\` can overfit a small random \`dataset\`. Does n=2 outperform n=N at 10M params? If not, then our dreams turn to ashes.
-      //   TODO: Ablate the dimension-size parameter 2 3 4 N/2 N *for the same param count* (only changing the hidden-layer size), 5 runs per configuration (for mean and std-dev), remembering only the final loss.
+      Now, you might find yourself asking some questions. Such as "why does this need 1GB of GPU memory to run?" or "why does running out of GPU memory break everything but does not free that memory?". But don't worry: you are not alone. It bothers me too, and I have no answers.
 
-      // TODO: Have a test that \`'mixer'\` converges on CIFAR100 (to not be lazy).
-      // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` on CIFAR100 to learn it in a MANN fashion.
-      // TODO: Look up Karpathy's blog post on the unreasonable effectiveness of RNNs, and try our linearithmic RNN on the same dataset/s, but in a single run over all data, with "new sentence" being a special sequence rather than a reset of the internal state.
+After running these for \`204800\` epochs with \`2\` meganumbers (params):
+      \`n:16\`, \`48*1024\` hidden units, \`1998848\` params:
+        \`0.0018994645215570927 0.0019312293734401464 0.00163931620772928\`
+        \`16*1024\` hidden units: \`0.08653200417757034\`
+      \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
+          \`0.0013092466397210956 0.0011801832588389516\`
+      \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, when taking the ceil for \`dims\` instead of \`floor\`:
+          \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
+      \`n:1024\`,\`1*1024\` hidden units, \`2097152\` params:
+          \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255\`
+
+      // TODO: Does n=2 outperform n=N at 2M params? If not, then our dreams turn to ashes --- or to be more precise, we have to think of why 50-times-less-hidden-units could possibly be better. ...It doesn't seem better now, or at least, it's only 2 times better... Really have to test with CIFAR100.
+      //   Maybe, this could be thought of as an approximation, meaning that we pay for compute-costs in param-count. Hmm. Doesn't this mean that we ought to demonstrate that it scales better?...
+      //     (Or at least, our hyperparameter-tuning could be better.)
+
+
+A synthetic dataset
+won't be enough.
+CIFAR100.`,
+      [
+        _(`fancier`),
+        `o:2 i:3072 n:i+o paddedInputSize:floor((n+99)/100)*100
+D:static(make,tensor,static(importData()))
+ind:randomNat(_tensorSize D)/n
+paddedInput:concat2((slice D ind*n+1 (ind+1)*n)/255,zeros (m paddedInputSize-n FS),0)
+// TODO: No padding! Only \`split\` the \`slice\` (into fine-label and image-data) and \`reverse\`. ...Or, since we do normalize the image, we should probably still slice those out separately, right?... So, the only change is no padding...
+dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo reshape(paddedInput,m paddedInputSize/FS FS) (m i FS),broadcastTo expandDims(oneHot(slice D ind*n+1 ind*n+2),100),-1) (m o FS))`,
+      ], // TODO: Make this return 1D vectors, without any padding and reshaping, nor \`FS\` as an input.
+      // TODO: Have a visualizer, here: \`displayOne\`: the label and each \`slice\`d channel of the input combined into one image (then put through \`toImage\`).
+      `
+      // TODO: Have a test that \`'mixer'\` converges to *something* on CIFAR100 (to not be lazy: synthetic datasets aren't going to fucking cut it for a research paper): load \`'mixer'\` and apply it to a random example, making output \`predict\` what's needed (and displaying the param-count if needed).
+      //   \`predict\` using a custom loss, namely, cross-entropy loss: \`expected*log(got)\`.
+
+      // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR100 to learn it in a meta-learning fashion (new input and old output as input).
+
+      // TODO: ...Don't we also need adversarial loss for completeness?...
+
+      // TODO: BONUS: Look up Karpathy's blog post on the unreasonable effectiveness of RNNs, and try our linearithmic RNN on the same dataset/s, but in a single run over all data, with "new sentence" being a special sequence rather than a reset of the internal state.
       //   TODO: Ablate the dimension-size parameter *for the same param count*, 5 runs per configuration (for mean and std-dev).
 `,
     ],
@@ -9718,13 +9789,13 @@ data in->out->(make func ? (m last (m select (m accessState displayedParams) nul
       let a2 = !iA ? 1 : sA.length >= 2 ? sA[sA.length-1] : sA[0] || 1, a1 = !iA || sA.length < 2 ? 1 : sA[sA.length-2]
       let b2 = !iB ? 1 : sB.length >= 2 ? sB[sB.length-1] : sB[0] || 1, b1 = !iB || sB.length < 2 ? 1 : sB[sB.length-2]
       try {
-        if (!iA) a = _tf(tf.broadcastTo(a, sA = [1])), da = true, iA = true
-        if (!iB) b = _tf(tf.broadcastTo(b, sB = [1])), db = true, iA = true
+        if (!iA) a = broadcastTo(a, sA = [1]), da = true, iA = true
+        if (!iB) b = broadcastTo(b, sB = [1]), db = true, iA = true
         const rowVectorA = iA && sA.length < 2
         if (iA && sA.length < 2) a = _tf(tf.reshape(a, sA = [a1, a2])), da = true
         if (iB && sB.length < 2) b = _tf(tf.reshape(b, sB = [b1, b2])), db = true
-        if (sA.length < sB.length || sA.length === sB.length && sA[0] === 1 && sB[0] !== 1) { const t = _tf(tf.broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]));  da && dispose(a), a = t, da = true }
-        if (sA.length > sB.length || sA.length === sB.length && sA[0] !== 1 && sB[0] === 1) { const t = _tf(tf.broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]));  db && dispose(b), b = t, db = true }
+        if (sA.length < sB.length || sA.length === sB.length && sA[0] === 1 && sB[0] !== 1) { const t = broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]);  da && dispose(a), a = t, da = true }
+        if (sA.length > sB.length || sA.length === sB.length && sA[0] !== 1 && sB[0] === 1) { const t = broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]);  db && dispose(b), b = t, db = true }
         const r = _tf(tf.matMul(a, b, tA, tB))
         if (rowVectorA && !tA)
           try { return _tf(tf.reshape(r, [!tB ? b2 : b1])) }
@@ -11253,10 +11324,13 @@ Counts up how many numbers are stored in \`varSGD\`s and similar (weight matrice
       function walk(x) {
         if (backctx.has(x)) return
         if (!isArray(x) && defines(x, deconstruct)) x = defines(x, deconstruct)
-        if (env.has(x)) return; else env.add(x)
         if (!isArray(x)) return
         if (x[0] === quote) return
-        if (defines(x, varSGD) === true && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1])) return void (n += _tensorSize(x[1][1][0]))
+        if (env.has(x)) return; else env.add(x)
+        if (defines(x, varSGD)) {
+          const i = typeof defines(x, varSGD) == 'number' ? defines(x, varSGD) : 1, v = x[i]
+          if (isArray(v) && v[0] === quote && isArray(v[1])) n += _tensorSize(v[1][0])
+        }
         x.forEach(walk)
       }
     },
