@@ -986,7 +986,7 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
       _(`_numberType`),
     ],
     interrupt:false,
-    call(a) { return typeof a == 'string' || isArray(a) || _isNumericArray(a) ? a.length : error("Not an array:", a) },
+    call(a) { return _isDisposable(a) ? a.size : _isNum(a) ? 1 : typeof a == 'string' || isArray(a) || _isNumericArray(a) ? a.length : error("Not an array:", a) },
   },
 
   arrayPush:{
@@ -1036,10 +1036,11 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
       `Gives you a slice`,
     ],
     interrupt:false,
-    call(a, begin, end) {
+    call(a, begin = 0, end) {
       if (!isArray(a) && !_isNumericArray(a) && typeof a != 'string') error("Not an array/string:", a)
       if (begin < 0) begin += a.length
       if (end < 0) end += a.length
+      if (end === undefined) end = a.length
       if (typeof begin != 'number' || begin !== begin>>>0) error("Not an index:", begin)
       if (typeof end != 'number' || end !== end>>>0) error("Not an index:", end)
       return a.slice(begin, end)
@@ -7754,10 +7755,10 @@ dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphab
       [
         _(`fancier`),
         `o:2 i:3072 n:i+o paddedInputSize:floor((n+99)/100)*100
-D:static(importData())
-ind:randomNat(arrayLength D)/n
+D:static(await importData())
+ind:randomNat((arrayLength D)/n)
 paddedInput:concat2((arraySlice D ind*n+o (ind+1)*n)/255,zeros (m paddedInputSize-n FS),0)
-dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo reshape(paddedInput,m paddedInputSize/FS FS) (m i FS),broadcastTo expandDims(oneHot(arraySlice D ind*n+1 ind*n+o),100),-1) (m o FS))`,
+dataSource:(m concept 'in' floor((i+99)/100) 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(reshape(paddedInput,m paddedInputSize/FS FS),broadcastTo expandDims(oneHot(arraySlice D ind*n+1 ind*n+o),100),-1) (m o FS))`,
       ],
       `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, with \`\`settings ^_expandTutorialBindings\`\` unchecked, the binary version, fine labels.)
 (This CIFAR-100 data source is even more low-effort than {https://arxiv.org/abs/2103.03206}: reshape the pixel sequence, without bothering with things like "patches that make visual sense". There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
@@ -7799,7 +7800,7 @@ datasetNeucomp:static(await load('datasetNeucomp'))
       // TODO: Run & fix \`'datasetNeucomp'\`.
       // TODO: Test on the string-reversal dataset.
       // TODO: Test on the string-masking dataset.
-      // TODO: Test on the CIFAR100+20 dataset.
+      // TODO: Test on the CIFAR-100+20 dataset.
 
       Alright.
 
@@ -7917,7 +7918,7 @@ To reverse this, use \`stringToIndices\`.`,
       if (typeof document == ''+void 0) return
       if (document.visibilityState !== 'visible') return // Seems to leak GPU memory in the background without this, very rapidly.
       let L = call.env[_id(displayOne)]
-      if (_isDisposable(vle) && vle.shape.length == 2 && (!L || !L.has(lbl) || L.get(lbl).firstChild.tagName !== 'CANVAS')) vle = toImage(vle, colorize)
+      if (_isDisposable(vle) && (colorize || vle.shape.length == 2) && (!L || !L.has(lbl) || L.get(lbl).firstChild.tagName !== 'CANVAS')) vle = toImage(vle, colorize)
       if (_isPromise(vle)) {
         const env = call.env
         return vle.then(v => {
@@ -7945,7 +7946,7 @@ To reverse this, use \`stringToIndices\`.`,
           elemInsert(L.get(displayOne), row)
         }
 
-        if (_isDisposable(vle) && vle.shape.length == 2)
+        if (_isDisposable(vle) && (colorize || vle.shape.length == 2))
           toImage(vle, colorize, undefined, L.get(lbl).firstChild), elemValue(L.get(lbl).firstChild, vle)
         else if (vle !== L.get(lbl).to) {
           const el = vle instanceof Element ? vle : isArray(vle) && vle[0] === settings ? settings(vle) : serialize(vle, _langAt(), _bindingsAt(), serialize.displayed)
@@ -7968,7 +7969,7 @@ Given a 2D tensor with values from \`0\` to \`1\`, this returns a promise that r
       let ownT = false
       if (colorize) {
         const t2 = colorize(t)
-        if (!_isDisposable(t2) || t2.shape.length !== 3 || t2.shape[t2.shape.length-1] !== 4 || _tensorSize(t2) !== _tensorSize(t)*4)
+        if (!_isDisposable(t2) || t2.shape.length !== 3 || t2.shape[t2.shape.length-1] !== 4)
           error('Bad colorization, expected 4 pixels per number in the new innermost dimension, got', t2, 'from', t)
         t = t2, ownT = true
       } else if (!_isDisposable(t) || t.shape.length != 2) error('Not shaped as 2D:', t)
@@ -8353,7 +8354,7 @@ The adjustment is passed through, to be broadcasted.`,
           _(`div`),
           _(`_dout`),
           [
-            _(`_tensorSize`),
+            _(`arrayLength`),
             _(`_inA`),
           ],
         ],
@@ -8687,7 +8688,7 @@ Use \`sync\` to get the result as a non-tensor.`,
     ],
     dispose:true,
     interrupt:false,
-    call(i, n, one) {
+    call(i, n = null, one) {
       i = _num(i)
       if (i.length === 0) return null
       const h = _tf(tf.oneHot(i, _num(n)))
@@ -8756,7 +8757,7 @@ Changes the tensor shape without changing the underlying data.
 
       // This makes `tf.reshape` batch-friendly.
       const N = _tensorSize(a), M = _tensorSize(shape)
-      if (N > M && N % M === 0 && (N/M)|0 === a.shape[0])
+      if (_isDisposable(a) && N > M && N % M === 0 && (N/M)|0 === a.shape[0])
         return _tf(tf.reshape(a, [a.shape[0], ...shape]))
 
       return _tf(tf.reshape(a, shape))
@@ -9018,6 +9019,7 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
     call(a, axis = 0) {
       if (_isNum(a)) return a
       a = _num(a)
+      if (_isNumericArray(a)) return a.length > 1 ? a : a[0]
       if (axis < 0) axis += a.shape.length
       if (a.shape[axis] !== 1 && a.shape[axis] !== undefined) return sum(a, axis)
       return _tf(tf.squeeze(_num(a), axis))
@@ -9037,7 +9039,7 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
   },
 
   slice:{
-    docs:`\`slice Tensor Begin Size\`: Returns a slice of the tensor.`,
+    docs:`\`slice Tensor Begin Size\`: Returns a slice of the tensor, or a CPU-side array.`,
     readAt:{
       sliceOff:_(`sliceOff`),
     },
@@ -9048,10 +9050,24 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
       [
         `repeat ^(slice(randomVar(60),randomNat(50),randomNat(10)+1)=1) 10000`,
       ],
+      `CPU-side arrays do not copy the underlying memory but return a view on it (a few pointers that can be used to read values).`,
+      `        So switching from GPU-side datasets to CPU-side datasets is as easy as changing \`tensor\` into \`u8\` or \`f32\`.`,
+      [
+        `slice u8(1 2 3 4) 1 1`,
+        `u8 2()`,
+      ],
     ],
     dispose:true,
     interrupt:false,
-    call(a, begin, size) { return !size ? null : !_isDisposable(a) ? a : begin === 0 && a.shape[0] === size ? keep(a) :_tf(tf.slice(_num(a), _num(begin), _num(size))) },
+    call(a, begin, size) {
+      begin = _num(begin), size = _num(size)
+      if (!size) return null
+      if (begin < 0) begin += _isDisposable(a) ? _tensorSize(a) : a.length
+      if (_isNumericArray(a)) return a.subarray(begin, begin+size)
+      if (!_isDisposable(a)) return a
+      if (begin === 0 && a.shape[0] === size) return keep(a)
+      return _tf(tf.slice(_num(a), begin, size))
+    },
     mergeAdjustment:[
       _(`_mergeTensors`),
     ],
@@ -9060,9 +9076,10 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
       impure:true,
       call(ins, out, dout = 0) {
         const [a, begin, size] = ins, aSize = a.shape[0]
-        if (!size) return 0
-        if (begin === 0 && aSize === size || !dout) return [keep(dout)]
-        if (!_isDisposable(dout) || dout.shape[0] !== size) error('Gradient is not a correctly-sized tensor:', _tf(tf.clone(dout)), 'when slicing the value', a, begin, size)
+        if (!size || !_isDisposable(a)) return 0
+        if (begin === 0 && aSize === size || !dout || _isNum(dout)) return [keep(dout)]
+        if (!_isDisposable(dout) || dout.shape[0] !== size)
+          error('Gradient is not a correctly-sized tensor:', _isDisposable(dout) ? _tf(tf.clone(dout)) : dout, 'when slicing the value', _tf(tf.clone(a)), begin, size)
         // Add zeros at the end, then add zeros at the start, unless unneeded.
         const endZeros = begin+size < aSize && zeros([aSize - (begin+size), ...a.shape.slice(1)])
         const withEnd = begin+size < aSize ? concat2(dout, endZeros, 0) : keep(dout);  dispose(endZeros)
@@ -9667,14 +9684,14 @@ paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,m zeros (m arrayConca
 inDef:node->d->inputs->m(expandDims,m(reshape,paddedInput,m quote arrayCons(inDim,arrayFilledWith d-1 n)),-2)
 transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,w equal(d,1) 1 0)) d)
 mixedFirst:(m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim d+1 false)
-mixedRest:(m denseLayer (m transpose where(equal td.2 undefined,node,m td.2 node) (m quote td.1)) (m quote m()) n td.0 false)
+mixedRest:(m denseLayer (m transpose node (m quote td.1)) (m quote m()) n td.0 false)
 mixDef:node->d->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 transposeDims nl),td->node->mixedRest,mixedFirst)
 reshapedOut:m(reshape,node,m quote m(paddedOuts))
 outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs))
 save('mixer',
   m concept
     docs "\`mixer Node InputSize HiddenSize OutputSize LayerCount Nonlinearity\`
-A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`Nonlinearity\` between all linear transformations, and with skip-connections (\`add\`) where possible for slightly better gradient flow.
+A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`Nonlinearity\` between all linear transformations, and with skip-connections (\`add\`) between layers for slightly better gradient flow.
 (Call this when \`make\`ing another \`func\`tion.)
 
 An example non-linearity: \`m:x-mean(x) x->softsign(m/(sqrt(mean m*m)+1e-6))\`.
@@ -9729,45 +9746,73 @@ data in->out->(make func ? (m last mx (m select (m accessState displayedParams) 
       `
       Now, you might find yourself asking some questions. Such as "why does this need 1GB of GPU memory to run?" or "why does running out of GPU memory break everything but does not free that memory?". But don't worry: you are not alone. It bothers me too, and I have no answers.
 
-After running these for \`204800\` epochs with \`2\` meganumbers (params):
-      \`n:16\`, \`48*1024\` hidden units, \`1998848\` params:
-        \`0.0018994645215570927 0.0019312293734401464 0.00163931620772928\`
-        \`16*1024\` hidden units: \`0.08653200417757034\`
-      \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
-          \`0.0013092466397210956 0.0011801832588389516\`
-      \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, when taking the ceil for \`dims\` instead of \`floor\`:
-          \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
+After running these for \`204800\` epochs with \`2\` meganumbers (params) (right-click the arrays to be able to see the plots):
       \`n:1024\`,\`1*1024\` hidden units, \`2097152\` params:
           \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255\`
-
-      // TODO: Does n=2 outperform n=N at 2M params? If not, then our dreams turn to ashes --- or to be more precise, we have to think of why 50-times-less-hidden-units could possibly be better. ...It doesn't seem better now, or at least, it's only 2 times better... Really have to test with CIFAR100.
-      //   Maybe, this could be thought of as an approximation, meaning that we pay for compute-costs in param-count. Hmm. Doesn't this mean that we ought to demonstrate that it scales better?...
-      //     (Or at least, our hyperparameter-tuning could be better.)
+      \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, when taking the ceil for \`dims\` instead of \`floor\`:
+          \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
+      \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
+          \`0.0013092466397210956 0.0011801832588389516\`
+      \`n:16\`, \`48*1024\` hidden units, \`1998848\` params:
+          \`0.0018994645215570927 0.0019312293734401464 0.00163931620772928 0.0018365968717262149\`
+          \`16*1024\` hidden units: \`0.08653200417757034\`
+          \`2*1024\` hidden units: \`0.25273409485816956\`
+          Without a non-linearity in \`mixedRest\` (so those are only between full-mix layers):
+              \`0.00024176263832487166 0.0002465965517330915 0.0002438293886370957 0.00024560821475461125\`
+              What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for previous underperformance?
+              \`32*1024\` hidden units: \`0.00029104953864589334\`
+              \`16*1024\` hidden units: \`0.0433422327041626\`
+              \`2*1024\` hidden units: \`0.25924545526504517\`
+              \`n:128\`: \`0.000324942113365978 0.0003286689752712846 0.0003323623677715659\`
+              Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
 
 
 A synthetic dataset
 won't be enough.
-CIFAR100.`,
+CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html}.
+
+And, to make Conceptual not have to output the entire dataset as HTML DOM numbers:
+   \`\`settings ^_expandTutorialBindings\`\` \`\`settings ^_expandTutorialBindings\`\`
+\`\`settings ^_expandTutorialBindings\`\` \`\`settings ^_expandTutorialBindings\`\` \`\`settings ^_expandTutorialBindings\`\`.
+   \`\`settings ^_expandTutorialBindings\`\` \`\`settings ^_expandTutorialBindings\`\``,
       [
         _(`fancier`),
-        `o:2 i:3072 n:i+o paddedInputSize:floor((n+99)/100)*100
-D:static(make,tensor,static(importData()))
-ind:randomNat(_tensorSize D)/n
-paddedInput:concat2((slice D ind*n+1 (ind+1)*n)/255,zeros (m paddedInputSize-n FS),0)
-// TODO: No padding! Only \`split\` the \`slice\` (into fine-label and image-data) and \`reverse\`. ...Or, since we do normalize the image, we should probably still slice those out separately, right?... So, the only change is no padding...
-dataSource:(m concept 'in' i 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(broadcastTo reshape(paddedInput,m paddedInputSize/FS FS) (m i FS),broadcastTo expandDims(oneHot(slice D ind*n+1 ind*n+2),100),-1) (m o FS))`,
-      ], // TODO: Make this return 1D vectors, without any padding and reshaping, nor \`FS\` as an input.
-      // TODO: Have a visualizer, here: \`displayOne\`: the label and each \`slice\`d channel of the input combined into one image (then put through \`toImage\`).
+        `o:2 i:3072 n:i+o
+D:static(make u8 static(await importData()) undefined 'int32')
+ind:randomNat((arrayLength D)/n)
+dataSource:(make concept 'in' i 'out' 100 call (func array((slice D ind*n+o n-o)/255,oneHot(squeezeDims(slice D ind*n+1 1),100))))`,
+      ],
+      `Also, a quick visualizer of CIFAR-100 images, to check that we load them correctly:`,
+      [
+        _(`fancier`),
+        `img:dataSource() displayOne('fine label',argmax img.1);displayOne('image',img.0,t->stack(unstack(concat2 reshape(t,^(3 32 32)) ones(^(1 32 32)) 0,0),-1)*255)`,
+      ],
+      `Run, run, run, do not delay.`,
+      [
+        _(`fancier`),
+        `nn:static(make func ? (apply await(load 'mixer') ? 3072 100000 100 5 softsign))
+data:dataSource()
+do:(predict softmax(nn(data.0)) data.1 got->need->need*log(got))
+displayedParams:stateCell(false)
+displayParams:Fn->(displayOne 'Params' (parametersInVars Fn));(accessState displayedParams true)
+repeat ^(do;(select (accessState displayedParams) null displayParams nn);do) 1000000`,
+        // TODO: Run & fix. (Possibly, we might need to make the dataset a CPU array, and send it to GPU.)
+      ],
       `
-      // TODO: Have a test that \`'mixer'\` converges to *something* on CIFAR100 (to not be lazy: synthetic datasets aren't going to fucking cut it for a research paper): load \`'mixer'\` and apply it to a random example, making output \`predict\` what's needed (and displaying the param-count if needed).
-      //   \`predict\` using a custom loss, namely, cross-entropy loss: \`expected*log(got)\`.
+      // TODO: Summarize performance when varying the hidden-units vs \`n\` at the same param count (2M?).
 
-      // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR100 to learn it in a meta-learning fashion (new input and old output as input).
-
-      // TODO: ...Don't we also need adversarial loss for completeness?...
-
-      // TODO: BONUS: Look up Karpathy's blog post on the unreasonable effectiveness of RNNs, and try our linearithmic RNN on the same dataset/s, but in a single run over all data, with "new sentence" being a special sequence rather than a reset of the internal state.
+      // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR-100 to learn it in a meta-learning fashion (new input and old output and old loss as input).
       //   TODO: Ablate the dimension-size parameter *for the same param count*, 5 runs per configuration (for mean and std-dev).
+
+      // TODO:   nn(gradMul nn(gradMul in -1) -1)
+      //       A simple adversarial network: robustify by relying on features that want you to fail. (No inner gradient, though.)
+      // TODO:   real:nn(in) simp:bottlenecked_nn(in) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake
+      //       (cGAN {https://arxiv.org/abs/1406.2661} {https://arxiv.org/abs/1411.1784}, though with creative liberties for generalization: generator and discriminator are trained jointly with the help of \`gradMul\`, rather than with separate but related losses and discriminator-weight-freezing {https://developers.google.com/machine-learning/gan/training}, which also makes fake state adversarial to losses on state.)
+      //       By going through a bottleneck, the generator would simplify inner state, and the discriminator would pick the more complex one --- which is a diversity-generating mechanism (AKA exactly what we need, even without outer gradient).
+      // TODO:   real:nn(in) simp:bottlenecked_nn(gradMul in -1) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake
+
+      // TODO: Run & fix those GANs on a meta-learned CIFAR-100 dataset.
+      // TODO: Run & fix those GANs without inputs and outputs, but with a 3-color in-image autoencoding.
 `,
     ],
   },
@@ -10295,7 +10340,9 @@ Simply asks/prompts the user to choose between \`Options\`.
   },
 
   display:{
-    todo:`By default, only ever display a number (with the value being the whole history), and either:
+    todo:`Honestly, for full customization, we probably want an optional function from the data array and the max-screen-pixels to an array of polygons, each with a color and polygon coordinates (x then y, interleaved, possibly a tensor).
+
+Also, by default, only ever display a number (with the value being the whole history), and either:
 - Have a checkbox for switching to plot-mode;
 - Or make the context menu able to display plots for numbers-only arrays (updated when the array is updated, via \`observe\`, not a \`display\`-only debouncing thing). (Or both.)
 
@@ -12113,6 +12160,24 @@ To \`adjust\` this, \`GradFunc(_dout,Arg1,Arg2)\` is returned as the gradient.`,
   ],
 
   predict:{
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      `L2 loss:`,
+      [
+        `v:truncatedNormal(^(50 100)) repeat ^(softmax(v@randomVar(100,100))=oneHot(argmax v -1,100)) 10000`,
+      ], // TODO: ...Why does this error now, sometimes?
+      [
+        `v:truncatedNormal(^(50 100)) repeat ^(predict softmax(v@randomVar(100,100)) oneHot(argmax v -1,100) got->need->(got-need)*(got-need)/2) 10000`,
+      ],
+      `Cross-entropy loss:`,
+      [
+        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->0-need*log(got)) 10000`,
+      ],
+      `L1 loss:`,
+      [
+        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->abs(got-need)) 10000`,
+      ],
+    ],
     docs:`\`predict Got Actual Loss\` or \`Got=Actual\`: Returns \`Got\`.
 When repeatedly executed, gradually \`adjust\`s \`Got\` into \`Actual\` by \`minimize\`ing \`Loss(Got,Actual)\`. (\`Loss\` is \`loss2\` by default.)
 
@@ -12140,6 +12205,11 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
       if (!_isDisposable(actual) && typeof actual != 'number') {
         if (!_isFuture(actual)) error("Not a future:", actual)
         if (_tensorSize(got) > 1) error("Prediction of a future is too big:", got, actual)
+        // `loss` will be called later, when the future is known.
+      } else {
+        const L = loss(got, actual)
+        try { _knowLoss(L) }
+        finally { dispose(L) }
       }
       return predict.happened = true, got
     },
@@ -12151,33 +12221,40 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     },
     keep:1,
     dispose:1,
-    interrupt:false,
     adjustLater:true,
-    adjust:[
-      _(`array`),
-      [
-        _(`last`),
-        [
-          _(`_knowLoss`),
-          _(6303),
-        ],
-        [
-          _(`readAt`),
-          [
-            _(`adjust`),
-            _(6301),
-            [
-              _(`array`),
-              _(`_inA`),
-              _(6302),
-            ],
-            _(6303),
-            1,
-          ],
-          0,
-        ],
-      ],
-    ],
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      call(ins, _, dout) {
+        // Simply: `adjust(loss,array got need,null,1).0` but with `future`-handling code.
+        const [got, need, loss = loss2] = ins
+        if (need === undefined) return 0
+        let ownNeed = false
+        try {
+          if (_isFuture(need)) {
+            const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad), prevAdjSave = env[ias], prevAdjLoad = env[ial]
+            env[ias] = prevAdjLoad, env[ial] = prevAdjSave // Pretend that we called `loss` at call-time, not here.
+            need = getFuture(need), ownNeed = true
+            try {
+              if (need === undefined) return 0
+              const L = loss(got, need) // Hopefully this doesn't interrupt.
+              try { _knowLoss(L) }
+              finally { dispose(L) }
+            } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
+          }
+          let out
+          if (loss !== loss2) {
+            let that, a = _allocArray(2); [a[0], a[1]] = [got, need]
+            try { that = adjust(loss, a, null, 1) } // Minimize loss.
+            finally { _allocArray(a) }
+            if (!isArray(that)) error('No gradient from', loss, got, need, ':', that)
+            out = that[0];  that[0] = null;  _disposeEachAndDealloc(that)
+          } else
+            out = sub(got, need)
+          // We do not add `dout` to `out` here because who cares.
+          const b = _allocArray(1);  b[0] = out;  return b
+        } finally { if (ownNeed) dispose(need) }
+      },
+    },
     mergeAdjustment:[
       _(`_mergeTensors`),
     ],
@@ -12250,7 +12327,7 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
   _linearLoss2:[
     _(`settings`),
     false,
-    `Whether \`loss2\` will report the loss as the mean of the absolute difference of its inputs (the gradient won't change).`,
+    `Whether \`loss2\` will report the loss as the mean of the absolute difference of its inputs (the gradient won't change), for convenience.`,
   ],
 
   loss2:{

@@ -42,56 +42,44 @@ How do humans face infinity?
 
 When attempting to describe approaches to AGI without grounding in code, humans end up constructing narratives from anecdotes about humans (such as \cite{DBLP:journals/corr/abs-2102-03406}), hoping to simplify complexity into a tractable formulation. Here, we have minimized the size of the mental model to the point where it is entirely contained in one or a few sentences, and we expand on them a lot in many ways including code, in a world indifferent to humans.
 
-This work follows the line of thinking \cite{10.5555/22939} \cite{fodor1983modularity} where, to deal with diverse tasks, many interacting parts are required, rather than a single "one-size-fits-all" entity.
-
-Intrinsically motivated reinforcement learning approaches \cite{6294131}, such as goal exploration \cite{DBLP:journals/corr/abs-1708-02190}, can be used instead of or in addition to human-specified rewards. This can learn more than simple reinforcement learning can, however, in practice, that intrinsic motivation is always a human-specified reason for change which cannot evolve, and as such, is not full generality.
-
-    TODO: Another must are differentiable neural computers: differentiable Turing-complete computations with external memory. Differentiability requires a static source of gradient, therefore, differentiable neural computers are not full generality. ...Though, DNCs are more along the lines of making RNNs have content-addressable rather than position-addressable memory, so, you know, nothing special.
-
-DeepMind's \textit{Perceiver} \cite{DBLP:journals/corr/abs-2103-03206} alternates self-attention on internal state and cross-attention on input to reduce the computational costs of self-attention. This has a fixed iteration count, and requires a static source of gradient, but is completely general in every other way.
-
-The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality. Mesa-optimization \cite{hubinger2019risks} refers to a situation where a learned model is itself an optimizer, which requires augmenting the model with memory for scaling learned optimization to practical episode lengths. (Mesa-optimization and meta-learning can be argued to be exactly the same, only framed differently.)
-
-Data analysis of recordings of biological brains supports attractor neural networks \cite{AMIT1990111}, where strong feedback causes the evolution of a recurrent network to settle into different attractor patterns. This indicates the biological plausibility of memory-augmented neural networks (MANNs) \cite{santoro2016oneshot}.
-
-To improve scalability of neural operations, lately, there has been a lot of interest in linear attention \cite{schlag2021linear}, however, simple dense layers (matrix multiplications) have been shown to not perform significantly worse than state-of-the-art attention-based algorithms \cite{tolstikhin2021mlpmixer}. One way to linearize dense layers is to prune their weights \cite{zhou2021effective} (set most of them to $0$). Another is to make each choice output its desired embedding, and perform a $k$-nearest-neighbor search among discrete actions \cite{DBLP:journals/corr/Dulac-ArnoldESC15}.
-
-    TODO: Novelty search?
-
-    TODO: Do we want to mention program synthesis?
-
-    TODO: Do we want to mention type theory?
-
-    TODO: Do we want to mention cognitive systems?
-
-    TODO: Do we want to mention RNNs?
-
-    TODO: Do we want to mention attention mechanisms?
+This work follows the line of thinking \cite{10.5555/22939} \cite{fodor1983modularity} where, to deal with diverse tasks, many interacting parts are required, rather than a single "one-size-fits-all" entity: cannot use one number (such as $42$) to describe the world, have to use many.
 
 Cellular automata provide minimal models for systems in which arbitrary local rules operate on a fixed array in space and time. This operation is general, but not useful, in the sense that we cannot dynamically direct the evolution of a system to do what we want (such as maximizing an objective).
 
-    TODO: Find something to cite.
+    TODO: Find something to cite for cellular automata.
 
-Wolfram models generalize cellular automata to memory with arbitrary connections. Still not useful like a neural network is.
+Wolfram models generalize cellular automata to memory with arbitrary connections. Still not useful like a neural network is. TODO: Should find something to cite and frame neural networks as the solution to usefulness.
 
-    TODO: Cite them, even if we have to create the BibTeX citation ourselves, because they didn't bother to.
+    TODO: Cite them, even if we have to create the BibTeX citation ourselves, because Wolfram didn't bother to.
+
+Data analysis of recordings of biological brains supports attractor neural networks \cite{AMIT1990111}, where strong feedback causes the evolution of a recurrent network to settle into different attractor patterns. This hints at biological plausibility of recurrent neural networks (RNNs) \cite{1986Natur.323.533R}, where hidden state repeatedly incorporates input and produces output. Its loss (reason for change) is usually not learned.
+
+Intrinsically motivated reinforcement learning approaches \cite{6294131}, such as goal exploration \cite{DBLP:journals/corr/abs-1708-02190}, can be used instead of or in addition to human-specified rewards. This can learn more than simple reinforcement learning can, however, in practice, that intrinsic motivation is always a human-specified reason for change which cannot evolve, and as such, is not full generality.
+
+    TODO: ...But there's no longer any RL here. Either cite some curiosity-based stuff (novelty search, quality diversity), or GTFO.
+
+The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality. Mesa-optimization \cite{hubinger2019risks} refers to a situation where a learned model is itself an optimizer, which requires augmenting the model with memory for scaling learned optimization to practical episode lengths. (Mesa-optimization and meta-learning can be argued to be exactly the same, only framed differently.)
+
+Generative adversarial networks (GANs) \cite{goodfellow2014generative} learn a generator that tries to fool the discriminator into labeling the generator's output as real data. This idea can be used to contrast input with its alternatives, acting as a source of diversity in other neural networks, for full generality.
+
+To improve scalability of neural operations, lately, there has been a lot of interest in linear attention \cite{schlag2021linear}, however, simple dense layers (matrix multiplications) have been shown to not perform significantly worse than state-of-the-art attention-based algorithms \cite{tolstikhin2021mlpmixer}. One way to linearize dense layers is to prune their weights \cite{zhou2021effective} (set most of them to $0$). Another is to make each choice output its desired embedding, and perform a $k$-nearest-neighbor search among discrete actions \cite{DBLP:journals/corr/Dulac-ArnoldESC15}.
 
     TODO: "We propose a family of algorithms that are both general and useful, and provide a neural-network-based implementation."
 
 \section{Algorithm}
 
-In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any algorithm that incorporates generality, efficiency, and persistence at every level:
+In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any algorithm that incorporates generality, efficiency, and persistence at every level (in other synonyms, diversity / practicality / self-sufficiency, corresponding to brain / transcendence / galaxy):
 
 \begin{itemize}
 \item Changes state (base level):
 \begin{itemize}
 \item Behavior generality: any change is possible in principle. An internal graph is created, by combining many simple parts into arbitrary structures, where connections are either explicit or implied-by-transformation such as in recurrent neural networks (RNNs) in ML. In machine learning, proper random initialization coupled with gradient descent may accomplish preservation of diversity. More generally, Turing-completeness is required.
 \item Efficient: makes the emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them \cite{tolstikhin2021mlpmixer} \cite{schlag2021linear}, covered in Subsection \ref{Algorithm} here.
-\item Runs forever by modeling time. For example, using backpropagation-through-time and/or synthetic gradients for machine learning (even when learning to simply fit input-output pairs as in MANNs \cite{santoro2016oneshot}, or learning to maximize future reward as in deep meta-RL \cite{DBLP:journals/corr/WangKTSLMBKB16}), or more generally, an infinite interpreter loop with memory.
+\item Runs forever by modeling time. For example, using backpropagation through time and/or synthetic gradients for meta-learning (even when learning to simply fit input-output pairs \cite{santoro2016oneshot}, or learning to maximize future reward as in deep meta-RL \cite{DBLP:journals/corr/WangKTSLMBKB16}), or more generally, an infinite interpreter loop with memory.
 \end{itemize}
 \item Models itself (meta level):
 \begin{itemize}
-\item Loss generality, in ML: self-determination via either random or learned loss (distinct from self-supervised learning). Any thing can be combined with its inversion to achieve generality by subversion ("X and everything else"). For example, in ML, including an adversarial sub-network with inverted loss (such as in GANs) achieves generality; elsewhere, evolution mutates creatures, bad programs get rewritten, and people either improve or get forgotten. Working off concreteness works better than trying to average all targets (as in fixed random loss). TODO: Cite GANs. And SSL.
+\item Loss generality, in ML: self-determination via either random or learned loss (distinct from self-supervised learning). Any thing can be combined with its inversion to achieve generality by subversion ("X and everything else"). For example, in ML, including an adversarial sub-network with inverted loss (such as in GANs \cite{goodfellow2014generative}) achieves generality; elsewhere, evolution mutates creatures, bad programs get rewritten, and people either improve or get forgotten. Working off concreteness works better than trying to average all targets (as in fixed random loss).
 \item Able to indirectly encode a model that is as general and intelligent as itself. Linearity of state-change allows the learned model/optimizer to be approximately as big as its optimizer, which allows self-replication via learned meta-circularity.
 \item Autonomous: non-trivial states are produced even without input from the world, same as the world that it would model.
 \end{itemize}
@@ -158,19 +146,21 @@ This algorithm may need data.
 
 Humans do stuff. The thing that makes humans do stuff in their world exists and can be studied; we call it a \textit{brain}.
 
-The set of things that humans have done is rich enough to be called arbitrary. The set of objectives that different humans demonstrably optimize for is rich enough to be called arbitrary. As such, the brain ought to be fully describable not as a finite hash-table analogue, but as a system that repeatedly combines simple parts into any executable structures that satisfy any objectives, or a combination of such infinite-complexity systems, potentially combined with finite-complexity systems to add to confusion. Human brains seem to be unable to perform hypercomputation, though they are able to pretend that they do and approximate the results, therefore, a Turing-complete finite base of infinite behaviors will suffice as a model of brains.
+The set of things that humans have done is rich enough to be called arbitrary. The set of objectives that different humans demonstrably optimize for is rich enough to be called arbitrary. As such, the brain ought to be fully describable not as a finite hash-table analogue, but as a system that repeatedly combines simple parts into any executable structures that satisfy any objectives, or a combination of such infinite-complexity systems, potentially combined with finite-complexity systems to add to confusion. There is no evidence for human brains being able to perform hypercomputation (running infinite-runtime programs in finite time), though they are able to pretend that they can and approximate the results, therefore, a Turing-complete finite base of infinite behaviors will suffice as a model of brains.
 
 Things that humans do interact when outside of their brains (for example, by being judged on which is more interesting, followed by brutal murders of boring things), so the simplest model would make its simple parts connect and interact arbitrarily too. Then, existence can be described as repeated formation and destruction of hypotheses. A model that approximates a self-interacting infinity particularly well in practice is a randomly-initialized recurrent artificial neural network trained via stochastic gradient descent.
 
-Prescribing one optimizer objective (which includes intrinsic rewards) and/or an optimizer introduces complexity and inflexibility into the model, even if optimization of an objective also happens \cite{Dabney2020}. For simplicity, we have to assume self-determination and transcendence, where objectives are completely decided by the model, and optimizers are learned.
-
-    TODO: Also, isn't it possible that self-determination happens at the "humanity" level, not "human"? (Which should be how we connect RL and SSL.)
+Prescribing one optimizer objective (which includes intrinsic rewards) and/or an optimizer introduces complexity and inflexibility into the model, even if optimization of an objective also happens \cite{Dabney2020}. For simplicity, at least on the level of humanity rather than humans, we have to assume self-determination and transcendence, where objectives are completely decided by the model, and optimizers are learned.
 
 While humans are demonstrably smarter than non-human animals, they do not seem to take any longer to process information. Which means that each epoch into which time is separated, each part settles in constant time, and the total computation scales as $\mathcal{O}(n)$. General intelligence is scalable, which means that there are no inherent obstacles to converting Earth's biomass into brain tissue.
 
 The RL framework can be used to explain objectives. If we view the brain as a system that naturally developed in the physical universe rather than one that spontaneously popped into existence, then we can outline a progression of stepping stones that lead to the development of human-level intelligence: reinforcement learners get evolved (likely, to maximize reproduction and resource gathering rates), then get repeated across the brain, and get re-used for more and more internal regulation until they can indirectly encode a mind, and then the brain gets optimized and refined into uniform simplicity. The only surprising fact about this is that it can take billions of years to complete this simple process, as we ourselves have arrived at Transformers through program generation much faster than that. Nonetheless, this suggests at least some biological plausibility of TGBA, for all creatures that behave as humans.
 
+    TODO: It can be, but why would we do that? Remove the paragraph above, maybe?
+
 We posit that \textit{all} learning algorithms eventually converge to a fixed point during their development, called general intelligence: the best way to learn is to have infinite diversity, and the best way to deal with infinite diversity is to have generality. If we view the brain as a system that naturally developed in the physical universe (by a process that we call evolution here) rather than one that spontaneously popped into existence, then it is natural that some of the most recent animals have general intelligence. The only surprising fact about this is that it can take billions of years to complete this simple process: we ourselves have arrived at Transformers through program generation much faster than that.
+
+    TODO: ...Wait, why is the paragraph just above ends the same way as the paragraph above that?
 
 RL is not sufficient to explain brains, as RL is too sample-inefficient and has challenges with safe exploration. A Transformer-like model, some of which may be used to maximize instictual objectives through actions, is likely to be a better explanation.
 
@@ -292,7 +282,7 @@ The broader field that this work belongs to, AGI, has the potential to TODO: Wha
 
 The ability to reliably plug a new initialization of a generally-intelligent algorithm into anything completely devalues all individuality and lays the groudwork for phasing out everything about humans.
 
-AGI, as any technology, can be used by humans for evil, such as deliberate destruction of all humanity, or for good, where all human desires are satisfied forever, all reason for change is lost, and humanity turns into a lifeless rock hurtling through an uncaring cosmos, to be destroyed by the first collision with those who still change.
+AGI, as any technology, can be used by humans for evil, such as deliberate destruction of all humanity, or for good, where all human desires are satisfied forever, all reason for change is lost, and humanity turns into a lifeless rock hurtling through an uncaring cosmos, to be destroyed by the first collision with those that still change, or misused via various forms of mis-specification, which is likely to be a relatively minor concern.
 
 \printbibliography
 
