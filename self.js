@@ -9039,7 +9039,7 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
   },
 
   slice:{
-    docs:`\`slice Tensor Begin Size\`: Returns a slice of the tensor, or a CPU-side array.`,
+    docs:`\`slice Tensor Begin Size\` or \`slice Tensor Begin Size Axis\`: Returns a slice of the tensor, or a CPU-side array.`,
     readAt:{
       sliceOff:_(`sliceOff`),
     },
@@ -9050,6 +9050,9 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
       [
         `repeat ^(slice(randomVar(60),randomNat(50),randomNat(10)+1)=1) 10000`,
       ],
+      [
+        `repeat ^(slice(randomVar(5,60),randomNat(50),randomNat(10)+1,-1)=1) 10000`,
+      ],
       `CPU-side arrays do not copy the underlying memory but return a view on it (a few pointers that can be used to read values).`,
       `        So switching from GPU-side datasets to CPU-side datasets is as easy as changing \`tensor\` into \`u8\` or \`f32\`.`,
       [
@@ -9059,14 +9062,19 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
     ],
     dispose:true,
     interrupt:false,
-    call(a, begin, size) {
+    call(a, begin, size, axis = 0) {
       begin = _num(begin), size = _num(size)
       if (!size) return null
       if (begin < 0) begin += _isDisposable(a) ? _tensorSize(a) : a.length
       if (_isNumericArray(a)) return a.subarray(begin, begin+size)
       if (!_isDisposable(a)) return a
-      if (begin === 0 && a.shape[0] === size) return keep(a)
-      return _tf(tf.slice(_num(a), begin, size))
+      if (axis < 0) axis += a.shape.length
+      if (begin === 0 && a.shape[axis] === size) return keep(a)
+      if (axis === 0) return _tf(tf.slice(a, begin, size))
+      const A = _allocArray(axis+1).fill(0), B = _allocArray(axis+1).fill(-1)
+      A[axis] = begin, B[axis] = size
+      try { return _tf(tf.slice(a, A, B)) }
+      finally { _allocArray(B), _allocArray(A) }
     },
     mergeAdjustment:[
       _(`_mergeTensors`),
@@ -9075,16 +9083,18 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
       dispose:_(`_disposeEachAndDealloc`),
       impure:true,
       call(ins, out, dout = 0) {
-        const [a, begin, size] = ins, aSize = a.shape[0]
+        let [a, begin, size, axis = 0] = ins
         if (!size || !_isDisposable(a)) return 0
+        if (axis < 0) axis += a.shape.length
+        const aSize = a.shape[axis]
         if (begin === 0 && aSize === size || !dout || _isNum(dout)) return [keep(dout)]
-        if (!_isDisposable(dout) || dout.shape[0] !== size)
+        if (!_isDisposable(dout) || dout.shape[axis] !== size)
           error('Gradient is not a correctly-sized tensor:', _isDisposable(dout) ? _tf(tf.clone(dout)) : dout, 'when slicing the value', _tf(tf.clone(a)), begin, size)
         // Add zeros at the end, then add zeros at the start, unless unneeded.
-        const endZeros = begin+size < aSize && zeros([aSize - (begin+size), ...a.shape.slice(1)])
-        const withEnd = begin+size < aSize ? concat2(dout, endZeros, 0) : keep(dout);  dispose(endZeros)
-        const startZeros = begin && zeros([begin, ...a.shape.slice(1)])
-        const withStart = begin ? concat2(startZeros, withEnd, 0) : keep(withEnd);  dispose(startZeros)
+        const endZeros = begin+size < aSize && zeros([...a.shape.slice(0, axis), aSize - (begin+size), ...a.shape.slice(axis+1)])
+        const withEnd = begin+size < aSize ? concat2(dout, endZeros, axis) : keep(dout);  dispose(endZeros)
+        const startZeros = begin && zeros([...a.shape.slice(0, axis), begin, ...a.shape.slice(axis+1)])
+        const withStart = begin ? concat2(startZeros, withEnd, axis) : keep(withEnd);  dispose(startZeros)
         return [withStart]
       },
     },
@@ -9480,10 +9490,10 @@ Reverse of \`stack\`.`,
   },
 
   denseLayer:{
-    docs:`\`denseLayer Input VarData OutputCount DimCount ShareWeights Optimizer Initializer\`, for example, \`->denseLayer(randomVar(20),^0(),15)\`
+    docs:`\`denseLayer Input VarData OutputCount DimCount ShareWeights Optimizer Initializer\`, for example, \`denseLayer(randomVar(20),^0(),15)\`
 This is \`matMul\`, but lazily creates weights, for convenience.
 
-By default, \`ShareWeights\` is \`true\`; \`Optimizer\` is \`varAdam\`; \`Initializer\` is \`truncatedNormal\`.
+By default, \`ShareWeights\` is \`true\`; \`Optimizer\` is \`varRAdam\`; \`Initializer\` is \`truncatedNormal\`.
 
 A dense layer would change the last dimension of \`Input\` to be \`OutputCount\`, by linearly mixing every input into every output.
 
@@ -9505,7 +9515,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
     interrupt:false,
     dispose:true,
     varSGD:2,
-    call(x, Var, Outs, Dims, Share = true, Optim = varAdam, Init = truncatedNormal, Mean = 0, Stddev = 1 / Math.sqrt(Outs)) {
+    call(x, Var, Outs, Dims, Share = true, Optim = varRAdam, Init = truncatedNormal, Mean = 0, Stddev) {
       if (!_isDisposable(x)) error('Not a tensor:', x)
       if (!x.shape.length) error('A scalar is too small, give at least a vector, chuckleface:', x)
       if (x.shape.length < Dims) error('Too small:', x.shape, 'shorter than even', Dims)
@@ -9518,6 +9528,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
         if (!Share) for (let i=0; i < sh.length-2; ++i) sh[i] = x.shape[i + Skip]
         sh[sh.length-2] = x.shape[x.shape.length-1]
         sh[sh.length-1] = Outs
+        if (Stddev === undefined) Stddev = 1 / Math.sqrt(x.shape[x.shape.length-1])
         Var[0] = Init(merged(sh), Mean, Stddev), Var[1] = Var[2] = 0
         _rememberToDispose(Var)
         _willCommit(Var)
@@ -9687,7 +9698,7 @@ mixedFirst:(m denseLayer (m transpose node (m quote transposeDims)) (m quote m()
 mixedRest:(m denseLayer (m transpose node (m quote td.1)) (m quote m()) n td.0 false)
 mixDef:node->d->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 transposeDims nl),td->node->mixedRest,mixedFirst)
 reshapedOut:m(reshape,node,m quote m(paddedOuts))
-outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs))
+outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs,-1))
 save('mixer',
   m concept
     docs "\`mixer Node InputSize HiddenSize OutputSize LayerCount Nonlinearity\`
@@ -9720,9 +9731,8 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
       ``,
       `        So now, our code works.`,
       `        Not.`,
-      `        Apparently, \`where\` (used in \`relu\`) cannot handle more than rank-\`4\` tensors.`,
+      `        Apparently, \`where\` (formerly used in used in \`relu\`) cannot handle more than rank-\`4\` tensors.`,
       `        As far as I can tell, they just didn't bother adding even 2 more items into an array just below the rank check {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/select_gpu.ts}.`,
-      `        \`softsign\` it is, then. (Could also \`reshape\` into a lower rank then back, but that's a lot of operations for no good reason.)`,
       ``,
       `        Come on. It's not like we're trying to do anything out of the ordinary here, we're just trying to have \`20\` dimensions in tensor indices.`,
       `        (Though, pointing out the inadequacies of others is fun. My code had more bugs, by the way.)`,
@@ -9790,13 +9800,19 @@ dataSource:(make concept 'in' i 'out' 100 call (func array((slice D ind*n+o n-o)
       `Run, run, run, do not delay.`,
       [
         _(`fancier`),
-        `nn:static(make func ? (apply await(load 'mixer') ? 3072 100000 100 5 softsign))
+        `mn:x-mean(x)
+nl:x->relu(mn/(sqrt(mean mn*mn)+1e-8))
+nn:static(make func ? (make softmax (make nl (apply await(load 'mixer') ? defines(dataSource,'in') 50000 defines(dataSource,'out') 3 nl))))
 data:dataSource()
-do:(predict softmax(nn(data.0)) data.1 got->need->need*log(got))
+do:(predict nn(data.0) data.1 got->need->0-need*log(got+1e-8))
 displayedParams:stateCell(false)
 displayParams:Fn->(displayOne 'Params' (parametersInVars Fn));(accessState displayedParams true)
-repeat ^(do;(select (accessState displayedParams) null displayParams nn);do) 1000000`,
-        // TODO: Run & fix. (Possibly, we might need to make the dataset a CPU array, and send it to GPU.)
+repeat ^(do;display(Perplexity,zeroGrad exp(sum(0-(data.1)*log(where do<1e-4 1e-4 do))));(select (accessState displayedParams) null displayParams nn);do) 1000000`,
+        // TODO: Run & fix.
+        // TODO: Why does reducing the arg-count seem to induce better learning behaviors?
+        //   Still, why does it *always* prefer to average everything? And, both softmax and cross-entropy loss seem to encourage pre-softmax weights to increase uncontrollably.
+        // Maybe we really should try batching, by making `slice` be able to accept an array, and insert 1s at the beginning if it's too small?
+        //   (None of the other solutions have worked so far.)
       ],
       `
       // TODO: Summarize performance when varying the hidden-units vs \`n\` at the same param count (2M?).
@@ -11213,13 +11229,13 @@ With this, partial evaluation is implementable in \`construct\`s.
       ],
       _(5696),
     ],
-    docs:`\`(randomVar …Sizes)\` or \`randomVar Bias …Sizes\`: A \`construct\` for easy creation of randomly-initialized \`varAdam\`s, with fixed learning rate and momentums.
+    docs:`\`(randomVar …Sizes)\` or \`randomVar Bias …Sizes\`: A \`construct\` for easy creation of randomly-initialized \`varRAdam\`s, with fixed learning rate and momentums.
 \`Bias\` can be \`null\` (same as \`zeros\`) (the default) or \`identity\` or \`ones\`.
 
 (Forgive me, Master "Please don't use \`construct\` for macros".)`,
     construct(x, obj) {
-      if (obj === undefined) return [varAdam, construct([randomVarData, ...x.slice(1)])]
-      else { // Return `(varAdam (quote (RandomTensor 0 0)))`.
+      if (obj === undefined) return [varRAdam, construct([randomVarData, ...x.slice(1)])]
+      else { // Return `(varRAdam (quote (RandomTensor 0 0)))`.
         if (!isArray(obj) || obj.length !== 2) error('oops')
         construct([randomVarData, ...x.slice(1)], obj[1])
       }
@@ -12165,13 +12181,16 @@ To \`adjust\` this, \`GradFunc(_dout,Arg1,Arg2)\` is returned as the gradient.`,
       `L2 loss:`,
       [
         `v:truncatedNormal(^(50 100)) repeat ^(softmax(v@randomVar(100,100))=oneHot(argmax v -1,100)) 10000`,
-      ], // TODO: ...Why does this error now, sometimes?
+      ],
       [
         `v:truncatedNormal(^(50 100)) repeat ^(predict softmax(v@randomVar(100,100)) oneHot(argmax v -1,100) got->need->(got-need)*(got-need)/2) 10000`,
       ],
       `Cross-entropy loss:`,
       [
-        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->0-need*log(got)) 10000`,
+        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->0-need*log(got+1e-6)) 10000`,
+      ],
+      [
+        `v:truncatedNormal(^(50 100)) got:v@randomVar(100,100) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 softmax(got) need));softmax(predict got need softmaxLoss) 100000`,
       ],
       `L1 loss:`,
       [
@@ -12332,6 +12351,7 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
 
   loss2:{
     readAt:{
+      softmaxLoss:_(`softmaxLoss`),
       _linearLoss2:_(`_linearLoss2`),
     },
     use:true,
@@ -12388,7 +12408,6 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
     dispose:true,
     mergeAdjustment:[
       _(`_mergeTensors`),
-      null,
     ],
     adjust:[
       _(`array`),
@@ -12398,6 +12417,33 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
         _(`_dout`),
       ],
     ],
+  },
+
+  softmaxLoss:{
+    docs:`\`got->need->0-need*log(softmax got)\`, but with a more efficient derivative.`,
+    call(got, need) {
+      let t0, t1, t2, t3
+      try {
+        t0 = softmax(got)
+        t1 = add(t0, 1e-6)
+        t2 = log(t1)
+        t3 = mul(need, t2)
+        return sub(0, t3)
+      } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3) }
+    },
+    dispose:true,
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
+    adjust(ins, out, dout) {
+      const [got, need] = ins
+      let t0
+      try {
+        t0 = softmax(got)
+        const t1 = sub(t0, need)
+        const a = _allocArray(1);  a[0] = t1;  return a
+      } finally { dispose(t0) }
+    },
   },
 
   autoWorld:{
@@ -12835,20 +12881,25 @@ Second lead:
       _(`func`),
       _(`input`),
       [
-        _(`where`),
+        _(`mul`),
         [
           _(`less`),
           0,
           _(`input`),
         ],
         _(`input`),
-        0,
       ],
     ]),
     _(`docs`),
-    `\`relu:\\(where 0<? ? 0)\`
+    `\`relu:\\(where 0<? ? 0)\` or \`relu:\\(0<?)*?\`
 A nice non-linearity.`,
   ]),
+
+  3828:[
+    _(`less`),
+    0,
+    _(`input`),
+  ],
 
   selu:_([
     _(`concept`),
@@ -12860,19 +12911,26 @@ A nice non-linearity.`,
         _(`mul`),
         1.0507009873554805,
         [
-          _(`where`),
-          [
-            _(`less`),
-            0,
-            _(`input`),
-          ],
-          _(`input`),
+          _(`add`),
           [
             _(`mul`),
-            1.6732632423543772,
+            _(3828),
+            _(`input`),
+          ],
+          [
+            _(`mul`),
             [
-              _(`expm1`),
-              _(`input`),
+              _(`sub`),
+              1,
+              _(3828),
+            ],
+            [
+              _(`mul`),
+              1.6732632423543772,
+              [
+                _(`expm1`),
+                _(`input`),
+              ],
             ],
           ],
         ],
