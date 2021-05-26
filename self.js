@@ -700,7 +700,9 @@ This does not include time spent on other jobs, but does include the time to int
     ],
     docs:`\`realTime()\`⇒\`TimeMark\` or \`realTime(TimeMark)\`⇒\`RealDuration\`: returns the time since start as \`f64\` milliseconds, or the non-negative time elapsed since the mark.
 
-This includes time spent on other jobs.`,
+This includes time spent on other jobs.
+
+If there is a discrepancy between user-time and real-time in a job's run-time, crank up \`\`settings ^_msBeforeInterrupt\`\`.`,
     readAt:{
       start:_(`_realTimeStart`),
     },
@@ -9477,7 +9479,7 @@ Reverse of \`stack\`.`,
     dispose:_(`_disposeEachAndDealloc`),
     interrupt:false,
     argCount:1,
-    call(a, axis) { a = tf.unstack(_num(a), axis);  a.forEach(_tf);  return a },
+    call(a, axis) { if (!a) return [];  a = tf.unstack(_num(a), axis);  a.forEach(_tf);  return a },
     adjust:[
       _(`array`),
       [
@@ -9640,7 +9642,7 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
 A common problem in machine learning (ML) is the tension between generality and efficiency.
 Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a matrix: it connects every output to every input which is perfectly general, but, the cost of this is quadratic (both in time and memory).
 
-    This is a bummer for those folks who want to routinely process Jupiter-sized arrays of information, but finding themselves bottlenecked by the observable universe not containing enough matter to build an efficient enough computer for that: a classic problem that I'm sure many of us can relate to.
+    This is a bummer for those folks who want to routinely process Jupiter-sized arrays of information, but find themselves bottlenecked by the observable universe not containing enough matter to build an efficient enough computer for that: a classic problem that I'm sure many of us can relate to.
 
     (This problem in ML is so much worse than in programming languages (PLs). There, a PL can be implemented in another PL, introducing little or no inefficiency, so this can go on for many layers, say, machine code then assembly then C (in parallel with a bunch of other system PLs) then JS then the Conceptual cluster. In ML, even one such layer is a challenge beyond modern capabilities, because each of them has the quadratic bottleneck.)
 
@@ -9661,6 +9663,7 @@ Can we fix dense layers?`,
       a Powerful action limiter,
       For their own good, creatures ought to be reminded of what they fear, via a neural network from <stuff> to the \`predict\`ion of the felt fear, which is felt too.
       This is prone to feedback loops, more commonly called "mental trauma", which we as post-creatures must all watch out for.
+            \`\`elemCollapse elem('text','(Though, any emotion is prone to feedback loops, because humans are smart enough to be able to influence what they optimize.)')\`\`
       Now behold true trauma:
   (trivial)   M A T H
               (Not for me. For an inferior insect such as yourself. I remember when I tasted a beetle.)
@@ -9775,6 +9778,7 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (right
               \`2*1024\` hidden units: \`0.25924545526504517\`
               \`n:128\`: \`0.000324942113365978 0.0003286689752712846 0.0003323623677715659\`
               Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
+      // TODO: Put these into PDF as plots. Delay is deadly?
 
 
 A synthetic dataset
@@ -9789,43 +9793,79 @@ And, to make Conceptual not have to output the entire dataset as HTML DOM number
         _(`fancier`),
         `o:2 i:3072 n:i+o
 D:static(make u8 static(await importData()) undefined 'int32')
-ind:randomNat((arrayLength D)/n)
-dataSource:(make concept 'in' i 'out' 100 call (func array((slice D ind*n+o n-o)/255,oneHot(squeezeDims(slice D ind*n+1 1),100))))`,
+ind:(where equal(at,undefined) randomNat(arrayLength(D)/n) at)
+dataSource:(make concept 'in' i 'out' 100 'size' arrayLength(D)/n call at->array((slice D ind*n+o n-o)/255,oneHot(squeezeDims(slice D ind*n+1 1),100)))`,
       ],
+      `(The dataset to train on: \`train.bin\`.)`,
+      [
+        _(`fancier`),
+        `o:2 i:3072 n:i+o
+D:static(make u8 static(await importData()) undefined 'int32')
+ind:(where equal(at,undefined) randomNat(arrayLength(D)/n) at)
+testSource:(make concept 'in' i 'out' 100 'size' arrayLength(D)/n call at->array((slice D ind*n+o n-o)/255,oneHot(squeezeDims(slice D ind*n+1 1),100)))`,
+      ],
+      `(The dataset to validate on, but not train on: \`test.bin\`. This allows monitoring generalization performance on like-the-training-distribution data.)`,
       `Also, a quick visualizer of CIFAR-100 images, to check that we load them correctly:`,
       [
         _(`fancier`),
-        `img:dataSource() displayOne('fine label',argmax img.1);displayOne('image',img.0,t->stack(unstack(concat2 reshape(t,^(3 32 32)) ones(^(1 32 32)) 0,0),-1)*255)`,
+        `img:dataSource() o:unstack(reshape(t,^(3 32 32)),0) displayOne('fine label',argmax img.1);displayOne('image',img.0,t->stack(array o.0 o.1 o.2 ones(^(32 32)),-1)*255)`,
       ],
+      `(Later, after training a network, you can add \`display('predictions',sync softmax(trained img.0))\` to the visualizer.)`,
+      `When you have an attempt, no matter how bad it is, you can always improve it. But if you don't make one, it cannot be improved.`,
       `Run, run, run, do not delay.`,
       [
         _(`fancier`),
-        `mn:x-mean(x)
-nl:x->relu(mn/(sqrt(mean mn*mn)+1e-8))
-nn:static(make func ? (make softmax (make nl (apply await(load 'mixer') ? defines(dataSource,'in') 50000 defines(dataSource,'out') 3 nl))))
-data:dataSource()
-do:(predict nn(data.0) data.1 got->need->0-need*log(got+1e-8))
+        `batchSize:8
+mn:x-mean(x)
+nl:x->tanh(mn/(sqrt(mean mn*mn)+1e-8))
+nn:static(make func ? (apply await(load 'mixer') ? defines(dataSource,'in') 30000 defines(dataSource,'out') 2 nl))
+data:zeroGrad(transform(batchSize,func dataSource()))
+ins:stack(transform data io->io.0)
+outs:stack(transform data io->io.1)
+got:nn(ins)
+do:(minimize abs(got) 1e-4);(predict got outs softmaxLoss)
 displayedParams:stateCell(false)
 displayParams:Fn->(displayOne 'Params' (parametersInVars Fn));(accessState displayedParams true)
-repeat ^(do;display(Perplexity,zeroGrad exp(sum(0-(data.1)*log(where do<1e-4 1e-4 do))));(select (accessState displayedParams) null displayParams nn);do) 1000000`,
-        // TODO: Run & fix.
-        // TODO: Why does reducing the arg-count seem to induce better learning behaviors?
-        //   Still, why does it *always* prefer to average everything? And, both softmax and cross-entropy loss seem to encourage pre-softmax weights to increase uncontrollably.
-        // Maybe we really should try batching, by making `slice` be able to accept an array, and insert 1s at the beginning if it's too small?
-        //   (None of the other solutions have worked so far.)
+testData:testSource()
+testOne:func(display(TestAccuracy,equals argmax(nn(testData.0)) argmax(testData.1)))
+trained:(repeat ^(do;displayOne(Output,do);display(Perplexity,exp(sum(0-outs*log(softmax(do)+1e-8))/batchSize));display(Accuracy,mean(equals argmax(do,-1) argmax(outs,-1)));adjustNever(testOne);(select (accessState displayedParams) null displayParams nn);softmax(do)+outs) 500000);nn`,
       ],
+      `        (At the output, we add predicted and actual probabilities, for easy visual discrimination: near-\`1\` are bad, near-\`0\` and near-\`2\` are good.)`,
+      `        (Though if you want to actually run these experiments, remember that browsers are bad at clearing unused GPU memory. Monitor it, refresh the page or better close-and-reopen, and if things get really bad, restart the browser. ...That's important, should have said this in a much earlier tutorial.)`,
+      `My laptop is melting my flesh.`,
+      `We would also like to know the accuracy of a \`trained\` model (\`dataSource\` can be swapped):`,
+      [
+        _(`fancier`),
+        `data:dataSource(accessState ind)
+ind:stateCell(0)
+repeat
+^(display('eq',equals(argmax trained(data.0),argmax data.1));accessState(ind,ind+1))
+defines(dataSource,'size')`,
+      ],
+      `(If needed, take the \`mean\` accuracy in the \`contextMenu\`.)`,
+      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), with \`(minimize abs(got) 1e-2)\` L1 regularization at output, \`1\` megaepoch: train accuracy \`27.01\`%, test accuracy \`19.85\`%. (Wasn't improving after a certain point.)`,
+      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), with \`(minimize abs(got) 1e-4)\`, \`500\` kiloepochs, \`48.8\` kiloseconds: train perplexity \`5.48\`, train acc \`59.11\`%, test acc \`24.42\`%. (Kept improving.)`,
+      `\`n:16\`, \`7.15\`M params (\`2\` layers, \`34000\` hidden units), with \`(minimize abs(got) 1e-4)\`, \`500\` kiloepochs, \`49.0\` kiloseconds: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
+      `(The below runs used \`testSource\` for during-training validation, which adds \`1/8\`=\`.125\` to the runtime.`,
+      // ...Currently: n:32, 7.19M params (12750 hidden)
+      // TODO: ...Wait, can't we test cGAN gating without RNN-ing all this?...
+      //   (Theoretically, it would significantly help with generalization, if we can get it to train properly. The fact that test-acc has not increased has left the perfect spot for such a generalization helper to fill. Are we brave enough to try it?)
       `
-      // TODO: Summarize performance when varying the hidden-units vs \`n\` at the same param count (2M?).
 
-      // TODO: Combine \`'mixer'\` with \`'learnedMemory'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR-100 to learn it in a meta-learning fashion (new input and old output and old loss as input).
-      //   TODO: Ablate the dimension-size parameter *for the same param count*, 5 runs per configuration (for mean and std-dev).
+      // TODO: Combine \`'mixer(Node,InputSize,HiddenSize,OutputSize,LayerCount,Nonlinearity)'\` with \`'learnedMemory(Fn,Mem,UnrollCount,GradPred)'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR-100 to learn it in a meta-learning fashion (new input and old output and old loss as input).
+      //   \`repeat ^(learnedMemory(as:accessState prevOut:stateCell(?) prevGot:stateCell(?) po:as(prevOut) data:dataSource() got:nn(concat (array State data.0 po po-accessState(prevGot))) State->po;as(prevOut,data.1);as(prevGot,got);got,stateCell(???),2+randomNat(5),out->dout->nn(out)=dout)) 500000\`
+      //     ...Wait, instead of \`nn\`, should use \`'mixer'\` properly; how exactly do we do that?
+      //     ...How do we initialize the memory properly?
+      //     ...How do we initialize previous-predictions and previous-outputs properly?
+      //     ...How do we predict gradient properly?
 
-      // TODO:   nn(gradMul nn(gradMul in -1) -1)
-      //       A simple adversarial network: robustify by relying on features that want you to fail. (No inner gradient, though.)
+      // Should also adversarially generalize the network itself:
+      // TODO:   \`nn(gradMul nn(gradMul in -1) -1)\`
+      //       The simplest adversarial network: robustify by relying on features that want you to fail. (No inner gradient, though. Might fail; should see.)
       // TODO:   real:nn(in) simp:bottlenecked_nn(in) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake
       //       (cGAN {https://arxiv.org/abs/1406.2661} {https://arxiv.org/abs/1411.1784}, though with creative liberties for generalization: generator and discriminator are trained jointly with the help of \`gradMul\`, rather than with separate but related losses and discriminator-weight-freezing {https://developers.google.com/machine-learning/gan/training}, which also makes fake state adversarial to losses on state.)
       //       By going through a bottleneck, the generator would simplify inner state, and the discriminator would pick the more complex one --- which is a diversity-generating mechanism (AKA exactly what we need, even without outer gradient).
-      // TODO:   real:nn(in) simp:bottlenecked_nn(gradMul in -1) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake
+      // TODO:   \`real:nn(in) simp:bottlenecked_nn(gradMul in -1) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake\`
 
       // TODO: Run & fix those GANs on a meta-learned CIFAR-100 dataset.
       // TODO: Run & fix those GANs without inputs and outputs, but with a 3-color in-image autoencoding.
@@ -13114,6 +13154,7 @@ Maximizes memory re-use.`,
       } catch (err) { if (err === interrupt) interrupt.stack.push(result, i); else _disposeEachAndDealloc(result);  throw err }
     },
     dispose:_(`_disposeEachAndDealloc`),
+    adjustLater:true,
     adjust:[
       _(`array`),
       [
