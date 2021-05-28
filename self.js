@@ -7727,82 +7727,14 @@ elemCollapse _executioner(^a;b;d;e;display('Mean change',await a,10);display('Me
       `No one likes running blind. Sure, it may have a rich inner world, but without proper inputs/outputs, we will never see it.`,
       `We can introduce some sort of metric, to measure progress against. Like a dataset.`,
       `Choose one, and only one.`,
-      [
-        _(`fancier`),
-        `
-n:8
-data:static(serialize Self basic {})
-sliceStart:randomNat(arrayLength(data)-n)
-str:arraySlice(data,sliceStart,sliceStart+n)
-dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)),FS);array(oneHot(stringToIndices str alphabet,FS),oneHot(stringToIndices reverse(str) alphabet,FS)))
-`,
-      ],
-      `↑\`♍\`1 (The perfectly legitimate (and synthetic) string reversal dataset. Hopefully, we can actually get it working.)`,
-      [
-        _(`fancier`),
-        `
-n:8
-data:static(serialize Self basic {})
-sliceStart:randomNat(arrayLength(data)-n)
-str:arraySlice(data,sliceStart,sliceStart+n)
-maskStart:1+randomNat(n-1)
-maskEnd:maskStart+1+randomNat(n-maskStart)
-beforeMask:oneHot(stringToIndices (arraySlice str 0 maskStart) alphabet,FS)
-theMask:zeros(m maskEnd-maskStart arrayLength(alphabet))
-afterMask:oneHot(stringToIndices (arraySlice str maskEnd arrayLength(str)) alphabet,FS)
-dataSource:(m concept 'in' n 'out' n call FS->select(equal FS arrayLength(alphabet),null,FS->(error FS 'must be' arrayLength(alphabet)) FS);array(concat2 (concat2 beforeMask theMask 0) afterMask 0,oneHot(stringToIndices str alphabet,FS)))
-`,
-      ],
-      `↑\`♍\`2 (A generalization of "predict the continuation of a string": mask out a portion of the string, and ask to predict the original. Basically, BERT {https://arxiv.org/abs/1810.04805}.)`,
-      [
-        _(`fancier`),
-        `o:2 i:3072 n:i+o paddedInputSize:floor((n+99)/100)*100
-D:static(await importData())
-ind:randomNat((arrayLength D)/n)
-paddedInput:concat2((arraySlice D ind*n+o (ind+1)*n)/255,zeros (m paddedInputSize-n FS),0)
-dataSource:(m concept 'in' floor((i+99)/100) 'out' o call FS->select(equal FS 100,null,FS->(error FS 'must be 100') FS);array(reshape(paddedInput,m paddedInputSize/FS FS),broadcastTo expandDims(oneHot(arraySlice D ind*n+1 ind*n+o),100),-1) (m o FS))`,
-      ],
-      `↑\`♍\`3 (Make sure to import CIFAR-100 {https://www.cs.toronto.edu/~kriz/cifar.html} into this last data source, with \`\`settings ^_expandTutorialBindings\`\` unchecked, the binary version, fine labels.)
-(This CIFAR-100 data source is even more low-effort than {https://arxiv.org/abs/2103.03206}: reshape the pixel sequence, without bothering with things like "patches that make visual sense". There is a slight chance that it will work anyway, or at least, loss will go down a bit.)`,
-      [
-        _(`fancier`),
-        `as:accessState
-Cells:128
-Inputs:(defines dataSource 'in')
-Outputs:(defines dataSource 'out')
-FS:64
-
-Pre:m(func,m concat2 (m as InMem) (m as PrevOutMem) 0)
-hidden:(m clip (m norm State) -2 2)
-dataOut:(m as OutMem)
-Post:m(func,State,Out,m last (m display Perplexity (m zeroGrad (m exp (m sum (m sub 0 (m mul dataOut (m log (m where (m less Out .0001) .0001 Out)))))))) (m predict Out dataOut) (m (grad Cells FS) hidden) hidden)
-
-GradPred:m(func,Out,dOut,m predict mix(Out,FS,FS,1,softsign,Cells) dOut)
-
-InMem:m(stateCell,zeros (m Inputs FS))
-OutMem:stateCell()
-PrevOutMem:m(stateCell,zeros (m Outputs FS))
-datapoint:dataSource(FS)
-cr:(creator Inputs+Outputs Cells Outputs FS Pre Post GradPred)
-crUnroll:(m cr Unrolls)
-save('datasetNeucomp',m concept 'outs' Outputs 'memory' (defines cr 'memory') call (m func Unrolls (m last (m as InMem (m readAt datapoint 0)) (m as OutMem (m readAt datapoint 1)) crUnroll (m as PrevOutMem (m as OutMem)) crUnroll)))`,
-      ],
-      `Here, we provide the previous output as the next input, so that state unrolling can learn predictions even without gradient (gradient, in \`'learnedMemory'\`, would then learn to learn).
-      This approach to meta-learning is known as Memory-Augmented Neural Networks (MANN) {https://arxiv.org/abs/1909.08314} {https://arxiv.org/abs/1605.06065}.`,
-      [
-        _(`fancier`),
-        `N:1000000
-datasetNeucomp:static(await load('datasetNeucomp'))
-(repeat ^(datasetNeucomp(2);visualize(accessState(defines datasetNeucomp 'memory'),N)) N);save('datasetNeucomp',datasetNeucomp)
-`,
-      ],
-      `(To \`'neucomp'\`, we added a sampling from a dataset, and the providing of inputs and the prediction of outputs. Visualization of the output error may be poor, though.)`,
-      `
-
-      // TODO: Run & fix \`'datasetNeucomp'\`.
-      // TODO: Test on the string-reversal dataset.
-      // TODO: Test on the string-masking dataset.
-      // TODO: Test on the CIFAR-100+20 dataset.
+      ``,
+      ``,
+      ``,
+      `[CUT OUT: BORING]                                                                   [see \`tutorial matMul\` for a superior version]`,
+      ``,
+      ``,
+      ``,
+      `Nuge bymceia ooh.
 
       Alright.
 
@@ -9796,7 +9728,7 @@ D:static(make u8 static(await importData()) undefined 'int32')
 ind:(where equal(at,undefined) randomNat(arrayLength(D)/n) at)
 dataSource:(make concept 'in' i 'out' 100 'size' arrayLength(D)/n call at->array((slice D ind*n+o n-o)/255,oneHot(squeezeDims(slice D ind*n+1 1),100)))`,
       ],
-      `(The dataset to train on: \`train.bin\`.)`,
+      `(The dataset to train on: \`train.bin\`. Even more low-effort than {https://arxiv.org/abs/2103.03206}: we simply slice out the vector containing image pixels.)`,
       [
         _(`fancier`),
         `o:2 i:3072 n:i+o
@@ -9838,19 +9770,32 @@ trained:(repeat ^(do;displayOne(Output,do);display(Perplexity,exp(sum(0-outs*log
         _(`fancier`),
         `data:dataSource(accessState ind)
 ind:stateCell(0)
-repeat
-^(display('eq',equals(argmax trained(data.0),argmax data.1));accessState(ind,ind+1))
-defines(dataSource,'size')`,
+repeat ^(display('eq',equals(argmax adjustNever(trained,array data.0),argmax data.1));accessState(ind,ind+1)) defines(dataSource,'size')`,
       ],
       `(If needed, take the \`mean\` accuracy in the \`contextMenu\`.)`,
-      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), with \`(minimize abs(got) 1e-2)\` L1 regularization at output, \`1\` megaepoch: train accuracy \`27.01\`%, test accuracy \`19.85\`%. (Wasn't improving after a certain point.)`,
-      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), with \`(minimize abs(got) 1e-4)\`, \`500\` kiloepochs, \`48.8\` kiloseconds: train perplexity \`5.48\`, train acc \`59.11\`%, test acc \`24.42\`%. (Kept improving.)`,
-      `\`n:16\`, \`7.15\`M params (\`2\` layers, \`34000\` hidden units), with \`(minimize abs(got) 1e-4)\`, \`500\` kiloepochs, \`49.0\` kiloseconds: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
+      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), with \`(minimize abs(got) 1e-2)\` L1 regularization at output, \`1\` megaiteration: train accuracy \`27.01\`%, test accuracy \`19.85\`%. (Wasn't improving after a certain point.)`,
+      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` kiloiters that took \`48.8\` kiloseconds: train perplexity \`5.48\`, train acc \`59.11\`%, test acc \`24.42\`%. (Kept improving.)`,
+      `\`n:3072\`, learning rate \`.001\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`50.8\`Ks: train perplexity \`3.19\`, train acc \`66.99\`%, test acc \`22.61\`%. (With RAdam, learning rate mostly doesn't matter, as was suggested by its paper.)`,
+      `    Continuing the one above for \`500\`K its (\`50.2\`K s) more: train perplexity \`1.42\`, train acc \`85.59\`%, test acc \`22.63\`%.`,
+      // ...Currently: continuing to train the above for 500K more iters...
+      `\`n:16\`, \`7.15\`M params (\`2\` layers, \`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.0\`Ks: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
       `(The below runs used \`testSource\` for during-training validation, which adds \`1/8\`=\`.125\` to the runtime.`,
-      // ...Currently: n:32, 7.19M params (12750 hidden)
+      `\`n:32\`, \`7.19\`M params (\`2\` layers, \`12750\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`46.9\`Ks: train perplexity \`3.53\`, train acc \`69.65\`%, test acc \`22.16\`%. (Test accuracy reached max after 100K iters.)`,
       // TODO: ...Wait, can't we test cGAN gating without RNN-ing all this?...
-      //   (Theoretically, it would significantly help with generalization, if we can get it to train properly. The fact that test-acc has not increased has left the perfect spot for such a generalization helper to fill. Are we brave enough to try it?)
+      //   (Theoretically, it would significantly help with generalization, if we can get it to train properly. The fact that test-acc has not increased has left the perfect spot for such a generalization helper to fill. Are we brave enough to try it? ...We are. Damn. We're setting ourselves up for failure... Are there usable things to learn from that soon-to-be failure? Well, if we fail, then we need to try training GANs in separation, to see whether our GAN impl is shit.)
       `
+
+      // TODO: Bridge to generalization, like "Approximations can be evaluated either by how well they remember the data that they saw (training accuracy), or by how well they recognize data that are similar to what they saw (testing accuracy). It's natural to generate "similar to training data" automatically; for example, GANs can be used."
+
+      // Should also adversarially generalize the network itself, via creating \`'advMixer'\` with cGAN gating:
+      // \`nn:(apply await(load 'mixer') ? defines(dataSource,'in') 30000 defines(dataSource,'out') 2 nl)\`
+      // TODO:   \`nn(gradMul nn(gradMul in -1) -1)\`
+      //       The simplest adversarial network: robustify by relying on features that want you to fail. (No inner gradient, though. Might fail; should see.)
+      // TODO:   real:nn(in) simp:bottlenecked_nn(in) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake
+      //       (cGAN {https://arxiv.org/abs/1406.2661} {https://arxiv.org/abs/1411.1784}, though with creative liberties for generalization: generator and discriminator are trained jointly with the help of \`gradMul\`, rather than with separate but related losses and discriminator-weight-freezing {https://developers.google.com/machine-learning/gan/training}, which also makes fake state adversarial to losses on state.)
+      //       By going through a bottleneck, the generator would simplify inner state, and the discriminator would pick the more complex one --- which is a diversity-generating mechanism (AKA exactly what we need, even without outer gradient).
+      // TODO:   \`real:nn(in) simp:bottlenecked_nn(gradMul in -1) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake\`
+      // (I suppose it's also possible to scale generator/discriminator gradient (in \`minimize\`) based on how well the other thing is doing, freezing the generator when it's indistinguishable and freezing the discriminator when the difference is too big, to prevent either from getting too far ahead.)
 
       // TODO: Combine \`'mixer(Node,InputSize,HiddenSize,OutputSize,LayerCount,Nonlinearity)'\` with \`'learnedMemory(Fn,Mem,UnrollCount,GradPred)'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR-100 to learn it in a meta-learning fashion (new input and old output and old loss as input).
       //   \`repeat ^(learnedMemory(as:accessState prevOut:stateCell(?) prevGot:stateCell(?) po:as(prevOut) data:dataSource() got:nn(concat (array State data.0 po po-accessState(prevGot))) State->po;as(prevOut,data.1);as(prevGot,got);got,stateCell(???),2+randomNat(5),out->dout->nn(out)=dout)) 500000\`
@@ -9859,16 +9804,8 @@ defines(dataSource,'size')`,
       //     ...How do we initialize previous-predictions and previous-outputs properly?
       //     ...How do we predict gradient properly?
 
-      // Should also adversarially generalize the network itself:
-      // TODO:   \`nn(gradMul nn(gradMul in -1) -1)\`
-      //       The simplest adversarial network: robustify by relying on features that want you to fail. (No inner gradient, though. Might fail; should see.)
-      // TODO:   real:nn(in) simp:bottlenecked_nn(in) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake
-      //       (cGAN {https://arxiv.org/abs/1406.2661} {https://arxiv.org/abs/1411.1784}, though with creative liberties for generalization: generator and discriminator are trained jointly with the help of \`gradMul\`, rather than with separate but related losses and discriminator-weight-freezing {https://developers.google.com/machine-learning/gan/training}, which also makes fake state adversarial to losses on state.)
-      //       By going through a bottleneck, the generator would simplify inner state, and the discriminator would pick the more complex one --- which is a diversity-generating mechanism (AKA exactly what we need, even without outer gradient).
-      // TODO:   \`real:nn(in) simp:bottlenecked_nn(gradMul in -1) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake\`
-
-      // TODO: Run & fix those GANs on a meta-learned CIFAR-100 dataset.
-      // TODO: Run & fix those GANs without inputs and outputs, but with a 3-color in-image autoencoding.
+      // TODO: Run & fix that RNN on a meta-learned CIFAR-100 dataset.
+      // TODO: Run & fix that RNN without inputs and outputs, but with a 3-color in-image autoencoding.
 `,
     ],
   },

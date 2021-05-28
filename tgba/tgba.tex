@@ -14,13 +14,11 @@
 
 \begin{abstract}
 
-There is no end to what can be learned and how. However, modern machine learning systems impose a non-general structure on what is learned and how: minimizing a particular loss function with respect to a particular model architecture. We motivate and introduce \textit{Transcendent Galaxy-Brain Algorithms} (TGBA): an evolutionarily-plausible approach to implementing general intelligence, which optimizes anything in any way. Using only a few basic considerations, we highlight the similarities between general minds and universes, and argue that they are the same. We conjecture that for achieving transcendence (AGI), machine learning requires environments that reward self-replication.
+There is no end to what can be learned and how. However, modern machine learning systems impose a non-general structure on what is learned and how: minimizing a particular loss function with respect to a particular model architecture. We motivate and introduce \textit{Transcendent Galaxy-Brain Algorithms} (TGBA): an evolutionarily-plausible approach to implementing general intelligence, which optimizes anything in any way. Using only a few basic considerations, we highlight the similarities between general minds and universes, and argue that they are the same. We introduce linearithmic dense layers (LDL), which may significantly increase the capacity of almost any machine learning model at no cost.
 
     TODO: Codewords...
 
-    TODO: ...For once, look up IEEE standards on articles?
-
-    TODO: The abstract kind of sounds like the paper in miniature: summarized. So, don't just say "we did this", but spoil everything.
+    TODO: ...For once, look up IEEE standards on articles? And read the example.
 
 \end{abstract}
 
@@ -130,11 +128,15 @@ To learn everything that can exist, we impose a model on everything that can exi
 
 We can model arbitrary behavior by maintaining a tensor state which is repeatedly modified by all-mixing operations (a neural network), so that a large number of simple cells combine into arbitrary structures to interact in any way. This is the basic premise of RNNs (ignoring input/output vectors and gradient for now). In fact, anything more complex should only get in the way of perfectly modeling arbitrary behavior.
 
-However, close-to-linear-time all-mixing operations are required if we want Jupiter-sized memories without galaxy-sized computers, or if we want to indirectly encode self-equivalents in RNN weights (exposing all signals as inputs).
+\begin{itemize}
+\item Close-to-linear-time all-mixing operations are required if we want Jupiter-sized memories without universe-sized computers, or if we want to make indirectly encoding self-equivalents in RNN weights efficient enough to be a viable solution (exposing all signals as inputs, to be used or ignored as needed).
 
-We propose \textit{linearithmic dense layers}: reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense-layer operations are performed, bringing the total cost down to $C=dn^{d+1}=d N^{1+1/d}$ (assuming that multiplication of two $n \times n$ matrices costs $n^3$ operations). $d=\log{N}$ minimizes this cost, making it $C=\mathcal{O}(N \log{N})$, with $n={\rm e}$. Alternatively, we can fix $n$ to be $2$ or $3$ or $4$ for the near-minimal cost of $C=\frac{n}{\log{n}} N \log{N}$. Effectively, instead of mixing each index with every other, we mix each digit of each index. (This has the same time complexity as single-filter convolution or linear attention \cite{vaswani2017attention} on small vectors, but has less inductive biases: neither spatial locality nor fixed-size sparsity.)
+We propose \textit{linearithmic dense layers}: reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense-layer operations are performed, bringing the total cost down to $C=dn^{d+1}=d N^{1+1/d}$ (assuming that multiplication of two $n \times n$ matrices costs $n^3$ operations). $d=\log{N}$ minimizes this cost, making it $C=\mathcal{O}(N \log{N})$, with $n={\rm e}$. Alternatively, we can fix $n$ to be $2$ or $3$ or $4$ for the near-minimal cost of $C=\frac{n}{\log{n}} N \log{N}$. Effectively, instead of mixing each index with every other, we mix each digit of each index. (This has a similar time complexity to single-filter convolution and to linear attention \cite{vaswani2017attention} on small vectors, but has less inductive biases: neither spatial locality nor fixed-size sparsity on a secondary representation layer.)
 
-Modern machine learning systems often struggle with diversity: once data is learned, there is no longer a need to change, and gradient becomes $0$. For learned generality of loss, we require not a loss that simply tends to $0$ at $\infty$, but one which can go both up and down, oscillating forever. This suggests adversarial sub-networks, in which gradient is inverted ($g \rightarrow -g$). We propose conditional-GAN \cite{DBLP:journals/corr/IsolaZZE16} gating. Suppose that we have a vector $x$ that we want to augment. The adversarial generator $G(z,c)$ (where $z$ is random noise, and the condition $c$ is $x$ put through a bottleneck layer) tries to fool the discriminator $D(x,c)$ into high loss, and the final vector (replacing $x$) weights real and adversarial states according to $D$. This would drive the output toward complexity which can still be discriminated from random noise, allowing robust diversity and maximizing \textit{useful} information content.
+\item Modern machine learning systems often struggle with diversity: once data is learned, there is no longer a need to change, and gradient becomes $0$. For learned generality of loss, we require not a loss that simply tends to $0$ at $\infty$, but one which can go both up and down, oscillating forever. This suggests adversarial sub-networks, in which gradient is inverted ($g \rightarrow -g$). We propose conditional-GAN \cite{DBLP:journals/corr/IsolaZZE16} gating. Suppose that we have a vector $x$ that we want to augment. The adversarial generator $G(z,c)$ (where $z$ is random noise, and the condition $c$ is $x$ put through a bottleneck layer) tries to fool the discriminator $D(x,c)$ into high loss, and the final vector (replacing $x$) weights real and adversarial states according to $D$. This would drive the output toward complexity which can still be discriminated from random noise, allowing robust diversity and maximizing \textit{useful} information content.
+
+(We formulate cGAN gating using only local transformations such as gradient inversion, without explicitly deriving the generator's loss, so that the idea can be applied in non-trivial settings, such as an RNN.)
+\end{itemize}
 
 This algorithm may need data.
 \begin{itemize}
@@ -196,19 +198,36 @@ Training systems to transcendence, while a good proof of their generality and ge
 
 \section{Experiments}
 
-    TODO: Say something like "The purpose of this section is two-fold: ???, and to demonstrate the superiority of linearithmic all-mixing operations to quadratic ones on simple data."
+    TODO: Say something like "The purpose of this section is two-fold: to demonstrate the superiority of linearithmic all-mixing operations to quadratic ones on simple data, and ???."
+
+\subsection{Linearithmic vs Quadratic Dense Layers}
+
+We compare LDL and DL for the same parameter count (and computation time), with little to no hyperparameter tuning. We find that LDL achieves better performance faster.
+
+More specifically, we simply connect the input vector to the output vector through $1$ hidden layer with batch normalization \cite{ioffe2015batch} and ReLU ($x \rightarrow \max(0,x)$). We use the batch size of $8$ and optimize via the Rectified Adam optimizer \cite{liu2019radam} with $\alpha=0.9$ and $\beta=0.95$. We vary $n$ ($n=N$ is DL) and pick the hidden-layer size to match the parameter count.
+
+We test on two datasets: Random and CIFAR-100 \cite{Krizhevsky09learningmultiple}.
+
+\begin{itemize}
+\item The Random dataset consists of $1024$ input-output pairs, both consisting of $1024$ numbers drawn from a normal distribution with mean $0$ and variance $1$. We minimize the L2 loss. This tests the capacity of the network directly.
+\item CIFAR-100 consists of $50000$ training image-label pairs, and $10000$ pairs for validation. Each pair has $3072$ inputs and $100$ one-hot outputs. We minimize the softmax loss (cross-entropy loss on a softmax activation), and also apply L1 regularization to the output with a multiplier of $10^-4$ for some reason. We do not apply any image-specific operations to inputs, and simply treat those as vectors of numbers, which tests capacity in isolation from generalization.
+\end{itemize}
+
+Each LDL cycles through dimensions and multiplies by a matrix each time, until the dimensions are back in the original order. Non-linearities in between those matrix multiplications significantly hurt performance, and should only be placed between whole layers. TODO: Show the result.
+
+Internally, to get around severe hardware limitations, we have implemented this on top of TensorFlowJS. The creators of its WebGL backend decided to only support rank $6$ tensors; as such, we cannot test $n=2$, but only $n=16$ and above.
+
+We do not share weight matrices across non-mixed dimension, because otherwise, there would be very few parameters.
 
     TODO: Have a table comparing runs (on the "Random" dataset) of linearithmic vs quadratic (mean and stddev of loss). (Sure hope that this trend of quadratic-is-worse continues into other experiments.) ("We intentionally tried to not over-think synthetic tests, so that it is more likely that they say something meaningful rather than a cherry-picked coincidence. This reduces the amount of computation that we need to perform.")
 
     TODO: Present CIFAR-100-based comparisons, once we have them?
 
+    TODO: Compare with GAN-gating. If there is no difference, say so (ugh).
+
     TODO: Compare with RNN-based meta-learning.
 
-    TODO: Compare with GAN-augmented RNNs.
-
-    TODO: Run GAN-augmented RNNs with no inputs. Hopefully, it won't be completely indistinguishable from random noise.
-
-The main objective of this section is to justify the hypothesis that we can extract interesting representations from no data, only self-interaction. This regime separates approaches which take diversity from data and approaches which make their own diversity.
+    TODO: Run GAN-gated RNNs with no inputs. Hopefully, it won't be completely indistinguishable from random noise. "The main objective of this section is to justify the hypothesis that we can extract interesting representations from no data, only self-interaction. This regime separates approaches which take diversity from data (which is the bulk of modern machine learning) and approaches which make their own diversity."
 
 // To fit our prior software and hardware constraints, we have implemented a machine learning framework on top of TensorFlowJS, which adds minor difficulty to our experiments, as we have to re-implement all infrastructure for every experiment. However, to implement the simplest Transformer-based version of TGBA, that complexity is unneeded. TODO: ...This probably should go into Criticisms, if anywhere.
 
@@ -247,7 +266,7 @@ Our approach exists, and thus it can be criticized, and in doing so changed.
 \item \textbf{Too much fun.} Consider this: if one only pays attention to the manner of presentation rather than what is presented, then can that one truly be called a scientist? We have already neutered the humor to near non-existence.
 \item \textbf{The suggested self-replication environments sound incredibly dangerous.} Though, much less dangerous than completely ignoring any possibilities of them arising in unforeseen circumstances, similarly to how a cleaning robot would put a bucket over its sensors to "remove" the mess. Knowledge is dangerous, but as a civilization, is it more dangerous to not have knowledge.
 \item \textbf{TGBA is not AGI-ready, as it lacks X.} It does not: it can do anything and represent anything, by definition. Though we can only hope that theoretical simplicity always translates well into practical simplicity.
-\item TODO: "Why not simply brand transcendence as meta-learning or self-supervised learning; why a separate system of terms?" The point of this work is to create another full-fledged worldview from first principles, able to turn any input into its own rules, and follow it to transcendence. In our experience, initiation of a runaway worldview creation process is much more reliable for creating worldviews than copying human culture including all its imperfect redundancy and complexity. Worldview creation is much more akin to replicating humanity than humans, the latter of which is what ML research is commonly concerned with. ...These arguments sound quite murky.
+\item \textbf{Some places that narration strays to sound crackpot-like and cult-like.} General intelligence, by definition, can do anything and can be found in anything that is general enough. So it stands to reason that all attempts to reach it would pass through non-fashionable conceptual places. Still, we tried to ground text in concrete applications where we can, though our capabilities are limited.
 \item TODO: ...Shitty experiments? Need to actually perform the experiments first, though.
 \item TODO: ...No, some people really do think that the No Free Lunch Theorem means anything. Have to include it.
 \end{itemize}
