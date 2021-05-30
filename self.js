@@ -9710,7 +9710,6 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (right
               \`2*1024\` hidden units: \`0.25924545526504517\`
               \`n:128\`: \`0.000324942113365978 0.0003286689752712846 0.0003323623677715659\`
               Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
-      // TODO: Put these into PDF as plots. Delay is deadly?
 
 
 A synthetic dataset
@@ -9765,7 +9764,7 @@ trained:(repeat ^(do;displayOne(Output,do);display(Perplexity,exp(sum(0-outs*log
       `        (At the output, we add predicted and actual probabilities, for easy visual discrimination: near-\`1\` are bad, near-\`0\` and near-\`2\` are good.)`,
       `        (Though if you want to actually run these experiments, remember that browsers are bad at clearing unused GPU memory. Monitor it, refresh the page or better close-and-reopen, and if things get really bad, restart the browser. ...That's important, should have said this in a much earlier tutorial.)`,
       `My laptop is melting my flesh.`,
-      `We would also like to know the accuracy of a \`trained\` model (\`dataSource\` can be swapped):`,
+      `We would also like to know the accuracy of a \`trained\` model (\`dataSource\` can be swapped for \`testSource\`):`,
       [
         _(`fancier`),
         `data:dataSource(accessState ind)
@@ -9776,28 +9775,148 @@ repeat ^(display('eq',equals(argmax adjustNever(trained,array data.0),argmax dat
       `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), with \`(minimize abs(got) 1e-2)\` L1 regularization at output, \`1\` megaiteration: train accuracy \`27.01\`%, test accuracy \`19.85\`%. (Wasn't improving after a certain point.)`,
       `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` kiloiters that took \`48.8\` kiloseconds: train perplexity \`5.48\`, train acc \`59.11\`%, test acc \`24.42\`%. (Kept improving.)`,
       `\`n:3072\`, learning rate \`.001\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`50.8\`Ks: train perplexity \`3.19\`, train acc \`66.99\`%, test acc \`22.61\`%. (With RAdam, learning rate mostly doesn't matter, as was suggested by its paper.)`,
-      `    Continuing the one above for \`500\`K its (\`50.2\`K s) more: train perplexity \`1.42\`, train acc \`85.59\`%, test acc \`22.63\`%.`,
-      // ...Currently: continuing to train the above for 500K more iters...
-      `\`n:16\`, \`7.15\`M params (\`2\` layers, \`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.0\`Ks: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
-      `(The below runs used \`testSource\` for during-training validation, which adds \`1/8\`=\`.125\` to the runtime.`,
+      `    Continuing the one above for \`500\`Kits (\`50.2\`K s) more: train perplexity \`1.42\`, train acc \`85.59\`%, test acc \`22.63\`%.`,
+      `    Continuing the one above for \`500\`Kits (\`53.0\`K s) more: train perplexity \`1.25\`, train acc \`89.67\`%, test acc \`22.61\`%.`,
+      `    Continuing the one above for \`500\`Kits (\`52.1\`K s) more: train perplexity \`1.16\`, train acc \`91.41\`%, test acc \`22.37\`%. (I'm sick of training the same thing. And it's still demonstrably worse than \`n:16\`.)`,
+      `\`n:16\`, \`7.16\`M params (\`2\` layers, \`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.0\`Ks: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
+      `\`n:16\`, learning rate \`.001\`, \`7.16\`M params (\`2\` layers, \`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`52.0\`Ks: train perplexity \`1.065\`, train acc \`98.98\`%, test acc \`22.88\`%.
+      \`\`p:parseURL
+a:(p 'experiments/cifar100_train_perpl_0.txt' fast)
+b:(p 'experiments/cifar100_train_acc_0.txt' fast)
+c:(p 'experiments/cifar100_test_acc_0.txt' fast)
+d:(p 'experiments/cifar100_train_loss_0.txt' fast)
+elemCollapse _executioner(^(a;b;c;d;(display 'Train perplexity' await(a) 10);(display 'Train accuracy' await(b) 10);(display 'Test accuracy' await(c) 10);(display 'Loss' await(d) 10);elem('text','')))\`\``,
       `\`n:32\`, \`7.19\`M params (\`2\` layers, \`12750\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`46.9\`Ks: train perplexity \`3.53\`, train acc \`69.65\`%, test acc \`22.16\`%. (Test accuracy reached max after 100K iters.)`,
-      // TODO: ...Wait, can't we test cGAN gating without RNN-ing all this?...
-      //   (Theoretically, it would significantly help with generalization, if we can get it to train properly. The fact that test-acc has not increased has left the perfect spot for such a generalization helper to fill. Are we brave enough to try it? ...We are. Damn. We're setting ourselves up for failure... Are there usable things to learn from that soon-to-be failure? Well, if we fail, then we need to try training GANs in separation, to see whether our GAN impl is shit.)
-      `
+      // TODO: Run n:32 with ceil instead of floor. (Current, 5.44M params with 32000 hidden units, because TFJS doesn't want any more dimensions.)
+      // TODO: Run n:64.
+      `So, I guess model capacity for learning data (train-set accuracy) is increased now.
+      What about capacity for any data like the data?
+      This is called "generalization performance", measured as test-set accuracy.
 
-      // TODO: Bridge to generalization, like "Approximations can be evaluated either by how well they remember the data that they saw (training accuracy), or by how well they recognize data that are similar to what they saw (testing accuracy). It's natural to generate "similar to training data" automatically; for example, GANs can be used."
+      Ngh.
 
-      // Should also adversarially generalize the network itself, via creating \`'advMixer'\` with cGAN gating:
-      // \`nn:(apply await(load 'mixer') ? defines(dataSource,'in') 30000 defines(dataSource,'out') 2 nl)\`
-      // TODO:   \`nn(gradMul nn(gradMul in -1) -1)\`
-      //       The simplest adversarial network: robustify by relying on features that want you to fail. (No inner gradient, though. Might fail; should see.)
-      // TODO:   real:nn(in) simp:bottlenecked_nn(in) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake
-      //       (cGAN {https://arxiv.org/abs/1406.2661} {https://arxiv.org/abs/1411.1784}, though with creative liberties for generalization: generator and discriminator are trained jointly with the help of \`gradMul\`, rather than with separate but related losses and discriminator-weight-freezing {https://developers.google.com/machine-learning/gan/training}, which also makes fake state adversarial to losses on state.)
-      //       By going through a bottleneck, the generator would simplify inner state, and the discriminator would pick the more complex one --- which is a diversity-generating mechanism (AKA exactly what we need, even without outer gradient).
-      // TODO:   \`real:nn(in) simp:bottlenecked_nn(gradMul in -1) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);preal*real+pfake*fake\`
-      // (I suppose it's also possible to scale generator/discriminator gradient (in \`minimize\`) based on how well the other thing is doing, freezing the generator when it's indistinguishable and freezing the discriminator when the difference is too big, to prevent either from getting too far ahead.)
+      It's natural to generate "data similar to training data" automatically, such as with a generative adversarial network (GAN) {https://arxiv.org/abs/1406.2661} {https://arxiv.org/abs/1411.1784}.
+            In fact, how else would you do it? It's even in the definition of "generalization performance".
+
+# cGAN gating
+
+      Now, without going into details of how GANs are implemented in modern machine learning, we should generalize "data" to "embeddings", because both are just bunches-of-numbers.
+      So, we want to be able to augment any vector \`x\` (either externally-accessed (data) or internally-generated (embedding)) with adversarial generation.
+      GANs have a generator (\`G:z->(gradMul nn(z) -1)\`, where \`z\` is not \`x\`) and a discriminator (\`D:x->nn(x)\`: from a candidate for \`x\` into one number). Discriminator \`D\` tries to output \`1\` for real \`x\` and \`0\` for generated \`x\`; generator \`G\` tries to fool the discriminator.
+      And we can get out an actual vector by mixing the actual and the generated \`x\` depending on how well the discriminator did.
+            (The generated \`x\` inverts gradient, so when mixed into the output, should push it away from the generated fake, reinforcing a particular identity.)
+      \`z\`:
+            + Could be random noise, \`truncatedNormal ^Size()\`.
+            + Could be randomly-initialized noise, \`sliceOff randomVar(10000,32) randomNat(10000)\`, because outright random noise is too random for learning to learn to rely on it.
+            + Could be \`x\` put through some bottleneck for simplification, \`nn(x)\` (for conditioning on simp-self, such as a self-determined label for \`x\`). This is also useful for \`D\` to know.
+            - (There are kind of no other options for \`z\`: it has to come from either \`x\` or nothing.)
+      If we make \`G\` fill in the details of simplifications, then \`D\` would learn what complexity is useful and likely, and the system would try to maximize useful inner information (or at least get it over a threshold).
+
+      Vaguely, you can think of this whole thing as "X plus not X equals generality/everything/infinity". In a roundabout way, this is what we wanted for self-determined diversity generation.
+            (Like \`x->nn(gradMul nn(gradMul x -1) -1)\`, but also providing a path for non-inverted-gradient values for more stability.)
+
+      In pseudocode, this cGAN gating is:
+      \`real:nn(in) simp:bottlenecked_nn(in) fake:(gradMul nn(concat2 simp random) -1) discriminate:x->sigmoid(nn(x)) preal:discriminate(concat2 simp real) pfake:discriminate(concat2 simp fake) minimize(preal,-1);minimize(pfake);(preal*real+pfake*fake)/(preal+pfake)\`.
+            (Here, generator and discriminator are trained jointly with the help of \`gradMul\`, rather than with separate but related losses and discriminator-weight-freezing {https://developers.google.com/machine-learning/gan/training}. It's simple; will it work? Dunno.)
+
+      Criticisms, and potential failure points:
+            @ \`D\`/\`G\` might get too far ahead of the other thing and prevent its learning.
+            @ Fixed-capacity simplification might over-favor weak \`G\`s and hold strong \`G\`s back.
+            @ The bottleneck would try to both minimize and maximize the fake probability-of-being-real (by uses in \`D\` and \`G\` respectively), so we might need to invert gradient for it in \`G\` so that simplification works only for \`D\`.
+      (May need to isolate points of failure: say, try to train a GAN in isolation, without external prediction.)
+
+      Our plan is not foolproof at all, unlike LDL, but at least it exists and can be refined as it fails.
+
+      [A]: (The simplest adversarial network: robustify by relying on features that want you to fail. No self-determined gradient.)`,
+      // TODO: Have a function for compressing an array down to a size, via computing mean & stddev in each bucket, and drawing a number from a random distribution for each of those --- all as tensors (so, pad and reshape the input before this).
+      //   ...Then again, it's only 500K iterations, no big deal, probably about 2-3MB per file without compression, 10x less with.
+      [
+        _(`fancier`),
+        `mixer:await(load 'mixer') m:make
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(mixer (m gradMul (mixer (m gradMul Node -1) Inputs Hidden Hidden Outputs Layers Nonlinearity) -1) Hidden Hidden Outputs Layers Nonlinearity))
+`,
+      ],
+      `[B]: (Gate both real and adversarial paths together.)`,
+      [
+        _(`fancier`),
+        `simpSize:1000
+noiseSize:100
+mixer:await(load 'mixer') m:make
+real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
+simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
+noise:(m truncatedNormal ^noiseSize())
+fake:(m gradMul mixer(m concat2 simp noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
+preal:(m discriminator (m concat2 simp real 0))
+pfake:(m discriminator (m concat2 simp fake 0))
+sm:(m add (m add preal pfake) 1e-8)
+preal2:(m div preal sm)
+pfake2:(m div pfake sm)
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
+      ],
+      `[C]: (The bottleneck works only for \`D\` because of gradient double-inversion.)`,
+      [
+        _(`fancier`),
+        `simpSize:1000
+noiseSize:100
+mixer:await(load 'mixer') m:make
+real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
+simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
+noise:(m truncatedNormal ^noiseSize())
+fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
+preal:(m discriminator (m concat2 simp real 0))
+pfake:(m discriminator (m concat2 simp fake 0))
+sm:(m add (m add preal pfake) 1e-8)
+preal2:(m div preal sm)
+pfake2:(m div pfake sm)
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
+      ],
+      `[D]: (Randomly-initialized noise.)`,
+      [
+        _(`fancier`),
+        `simpSize:1000
+noiseSize:100
+noisesCount:1000
+mixer:await(load 'mixer') m:make
+real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
+simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
+noise:(m sliceOff (m randomVar noisesCount noiseSize) (m randomNat noisesCount))
+fake:(m gradMul mixer(m concat2 simp noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
+preal:(m discriminator (m concat2 simp real 0))
+pfake:(m discriminator (m concat2 simp fake 0))
+sm:(m add (m add preal pfake) 1e-8)
+preal2:(m div preal sm)
+pfake2:(m div pfake sm)
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
+      ],
+      `[E]: (Randomly-initialized noise with gradient double-inversion.)`,
+      [
+        _(`fancier`),
+        `simpSize:1000
+noiseSize:100
+mixer:await(load 'mixer') m:make
+real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
+simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
+noise:(m sliceOff (m randomVar noisesCount noiseSize) (m randomNat noisesCount))
+fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
+preal:(m discriminator (m concat2 simp real 0))
+pfake:(m discriminator (m concat2 simp fake 0))
+sm:(m add (m add preal pfake) 1e-8)
+preal2:(m div preal sm)
+pfake2:(m div pfake sm)
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
+      ],
+      `(All this code is almost the same, duplicated for the slight convenience of not having to copy-paste a small piece each run.)
+
+      To test on CIFAR-100, simply replace \`'mixer'\` with \`'advMixer'\` in the prior test.
+
+      // TODO: ...Run & fix [A] [B] [C] [D] [E].
 
       // TODO: Combine \`'mixer(Node,InputSize,HiddenSize,OutputSize,LayerCount,Nonlinearity)'\` with \`'learnedMemory(Fn,Mem,UnrollCount,GradPred)'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR-100 to learn it in a meta-learning fashion (new input and old output and old loss as input).
+      //   "We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness.   Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence."
       //   \`repeat ^(learnedMemory(as:accessState prevOut:stateCell(?) prevGot:stateCell(?) po:as(prevOut) data:dataSource() got:nn(concat (array State data.0 po po-accessState(prevGot))) State->po;as(prevOut,data.1);as(prevGot,got);got,stateCell(???),2+randomNat(5),out->dout->nn(out)=dout)) 500000\`
       //     ...Wait, instead of \`nn\`, should use \`'mixer'\` properly; how exactly do we do that?
       //     ...How do we initialize the memory properly?
@@ -10287,6 +10406,24 @@ Most \`adjust\`ment \`mul\`tiplies by \`_dout\`.`,
     Initialize() { fetchURL.opt = {mode:'cors'} },
     call(URL) {
       if (call.pure) throw impure
+
+      if (location.href.slice(0,8) === 'file:///') {
+        // Chrome is not satisfied with a simple `fetch` for local files. Need to do this.
+        return new Promise((resolve, reject) => {
+          const req = new XMLHttpRequest()
+          req.addEventListener('error', reject)
+          req.addEventListener('abort', reject)
+          req.addEventListener('load', () => {
+            if (req.responseType === 'text' || !req.responseType)
+              resolve(req.response)
+            else
+              reject(req.responseType)
+          })
+          req.open('GET', URL)
+          req.send()
+        })
+      }
+
       return fetch(URL, fetchURL.opt).then(r => r.text()).then(s => s.trim())
     },
   },
@@ -10459,7 +10596,7 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
 
   _minMaxBoundary:[
     _(`settings`),
-    true,
+    false,
     `If checked, \`display\` will make plots span from min to max value in each pixel.
 If unchecked, plots will span mean ± stddev in each pixel.
 Click a plot to update it.`,
@@ -17355,6 +17492,12 @@ A function/construct can define this with an integer, to collapse children after
           hide = 1, unboundToBound.set(x[hide], x[hide]), doNotEmit.add(x[hide])
         if (!isArray(original) && typeof defines(x, unbound) == 'number')
           hide = defines(x, unbound), unboundToBound.set(x[hide], x[hide]), doNotEmit.add(x[hide])
+        if (hide == null && isArray(x))
+          for (let i=0; i < x.length; ++i)
+            if (isArray(x[i]) && x[i].length > 50000) {
+              hide = i, doNotEmit.add(x[i])
+              break
+            }
 
         if (isArray(x) && !_isLabel(x)) {
           let copy, changed = false
