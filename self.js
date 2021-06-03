@@ -7000,6 +7000,13 @@ The adjustment is passed through to each arg.`,
   },
 
   mul:{
+    examples:[
+      `In cases where inputs do not have equal shapes, explicit broadcasting is required:`,
+      [
+        `v:randomVar(8,100) repeat ^(broadcastTo(modifyGrad randomVar(8,1) g->displayOne('grad',g);g,v)*v=5) 10000`,
+      ],
+      `(Technically, \`randomVar(8,1)*randomVar(8,100)\` would also work, but if you inspect gradients with \`modifyGrad ? g->displayOne('grad',g);g\`, it would have too much width, which could cause problems in more complicated computations.)`,
+    ],
     stack:true,
     use:true,
     type:[
@@ -7010,7 +7017,7 @@ The adjustment is passed through to each arg.`,
     ],
     merged:true,
     docs:`Multiplication, as in \`5*6\`=\`30\`.
-Also called Hadamard (element-wise) product, ⊙.`,
+Also called the Hadamard (element-wise) product, ⊙.`,
     argCount:2,
     dispose:true,
     interrupt:false,
@@ -8746,7 +8753,7 @@ Mostly for converting numbers.`,
       _(`array`),
       [
         _(`_limitTensorSize`),
-        _(`_inB`),
+        _(`_inA`),
         _(`_dout`),
       ],
     ],
@@ -9481,6 +9488,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
         const [x, Var, Outs, Dims, Shared = true, Optim = varAdam, Init = truncatedNormal] = ins
         const dThat = _matMul(x, dout, true, false)
         const a = _allocArray(1);  a[0] = Var
+        print('denseLayer adjust', x, Var[0], 'grad', dout, 'dThat', dThat) // ######################################################### TODO: Why is the gradient 8x100 when it should be 8x1 (same as the output)?? Who gave `discriminator` bad gradient?
         try { _disposeEachAndDealloc(adjust(Optim, a, null, dThat)) }
         finally { _allocArray(a), dispose(dThat) }
         const r = _matMul(dout, Var[0], false, true)
@@ -9643,10 +9651,11 @@ A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everyth
 An example non-linearity: \`m:x-mean(x) x->softsign(m/(sqrt(mean m*m)+1e-6))\`.
 
 This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one linearithmic dense layer), \`'out'\` (internal-to-vector), which are used in the \`call\`."
-    callFirst:mixDef(inDef(node,dims,inputs),dims,inputs,hidden,nonlinearity)
+    callInput:inDef(node,dims,inputs)
+    callFirst:mixDef(callInput,dims,inputs,hidden,nonlinearity)
     callRest:mixDef(w(equal a.0 undefined,node,m a.0 node),a.5,a.1,a.2,a.0)
     callBod:outDef(
-      reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5) m(nonlinearity,hidden,hidden,outputs,layers,dims),a->node->(w equal(a.1,a.2) (m add node callRest) callRest),w equal(inputs,hidden) (m add (m expandDims node -2) callFirst) callFirst)
+      reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5) m(nonlinearity,hidden,hidden,outputs,layers,dims),a->node->(w equal(a.1,a.2) (m add node callRest) callRest),w equal(inputs,hidden) (m add callInput callFirst) callFirst)
       ,dims
       ,inputs
       ,outputs
@@ -9727,7 +9736,7 @@ D:static(make u8 static(await importData()) undefined 'int32')
 ind:(where equal(at,undefined) randomNat(arrayLength(D)/n) at)
 dataSource:(make concept 'in' i 'out' 100 'size' arrayLength(D)/n call at->array((slice D ind*n+o n-o)/255,oneHot(squeezeDims(slice D ind*n+1 1),100)))`,
       ],
-      `(The dataset to train on: \`train.bin\`. Even more low-effort than {https://arxiv.org/abs/2103.03206}: we simply slice out the vector containing image pixels.)`,
+      `(The dataset to train on: \`train.bin\`. Even more low-effort than {https://arxiv.org/abs/2103.03206}: we simply slice out the vector containing image pixels, and normalize to 0..1.)`,
       [
         _(`fancier`),
         `o:2 i:3072 n:i+o
@@ -9772,25 +9781,41 @@ ind:stateCell(0)
 repeat ^(display('eq',equals(argmax adjustNever(trained,array data.0),argmax data.1));accessState(ind,ind+1)) defines(dataSource,'size')`,
       ],
       `(If needed, take the \`mean\` accuracy in the \`contextMenu\`.)`,
-      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), with \`(minimize abs(got) 1e-2)\` L1 regularization at output, \`1\` megaiteration: train accuracy \`27.01\`%, test accuracy \`19.85\`%. (Wasn't improving after a certain point.)`,
-      `\`n:3072\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` kiloiters that took \`48.8\` kiloseconds: train perplexity \`5.48\`, train acc \`59.11\`%, test acc \`24.42\`%. (Kept improving.)`,
-      `\`n:3072\`, learning rate \`.001\`, \`7.23\`M params (\`2\` layers, \`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`50.8\`Ks: train perplexity \`3.19\`, train acc \`66.99\`%, test acc \`22.61\`%. (With RAdam, learning rate mostly doesn't matter, as was suggested by its paper.)`,
+      `(All runs here had \`2\` layers.)`,
+      `\`n:3072\`, \`7.23\`M params (\`1536\` hidden units), with \`(minimize abs(got) 1e-2)\` L1 regularization at output, \`1\` megaiteration: train accuracy \`27.01\`%, test accuracy \`19.85\`%. (Wasn't improving after a certain point.)`,
+      `\`n:3072\`, \`7.23\`M params (\`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` kiloiters that took \`48.8\` kiloseconds: train perplexity \`5.48\`, train acc \`59.11\`%, test acc \`24.42\`%. (Kept improving.)`,
+      `\`n:3072\`, learning rate \`.001\`, \`7.23\`M params (\`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`50.8\`Ks: train perplexity \`3.19\`, train acc \`66.99\`%, test acc \`22.61\`%. (With RAdam, learning rate mostly doesn't matter, as was suggested by its paper.)`,
       `    Continuing the one above for \`500\`Kits (\`50.2\`K s) more: train perplexity \`1.42\`, train acc \`85.59\`%, test acc \`22.63\`%.`,
       `    Continuing the one above for \`500\`Kits (\`53.0\`K s) more: train perplexity \`1.25\`, train acc \`89.67\`%, test acc \`22.61\`%.`,
       `    Continuing the one above for \`500\`Kits (\`52.1\`K s) more: train perplexity \`1.16\`, train acc \`91.41\`%, test acc \`22.37\`%. (I'm sick of training the same thing. And it's still demonstrably worse than \`n:16\`.)`,
-      `\`n:16\`, \`7.16\`M params (\`2\` layers, \`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.0\`Ks: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
-      `\`n:16\`, learning rate \`.001\`, \`7.16\`M params (\`2\` layers, \`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`52.0\`Ks: train perplexity \`1.065\`, train acc \`98.98\`%, test acc \`22.88\`%.
+      `\`n:16\`, \`7.16\`M params (\`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.0\`Ks: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
+      `\`n:16\`, learning rate \`.001\`, \`7.16\`M params (\`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`52.0\`Ks: train perplexity \`1.065\`, train acc \`98.98\`%, test acc \`22.88\`%.
       \`\`p:parseURL
 a:(p 'experiments/cifar100_train_perpl_0.txt' fast)
 b:(p 'experiments/cifar100_train_acc_0.txt' fast)
 c:(p 'experiments/cifar100_test_acc_0.txt' fast)
 d:(p 'experiments/cifar100_train_loss_0.txt' fast)
-elemCollapse _executioner(^(a;b;c;d;(display 'Train perplexity' await(a) 10);(display 'Train accuracy' await(b) 10);(display 'Test accuracy' await(c) 10);(display 'Loss' await(d) 10);elem('text','')))\`\``,
-      `\`n:32\`, \`7.19\`M params (\`2\` layers, \`12750\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`46.9\`Ks: train perplexity \`3.53\`, train acc \`69.65\`%, test acc \`22.16\`%. (Test accuracy reached max after 100K iters.)`,
-      // TODO: Run n:32 with ceil instead of floor. (Current, 5.44M params with 32000 hidden units, because TFJS doesn't want any more dimensions.)
-      // TODO: Run n:64.
-      `So, I guess model capacity for learning data (train-set accuracy) is increased now.
-      What about capacity for any data like the data?
+elemCollapse _executioner(^(a;b;c;d;(display TrainPerplexity await(a) 10);(display TrainAccuracy await(b) 10);(display TestAccuracy await(c) 10);(display Loss await(d) 10);elem('text','')))\`\``,
+      `\`n:32\`, \`7.19\`M params (\`12750\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`46.9\`Ks: train perplexity \`3.53\`, train acc \`69.65\`%, test acc \`22.16\`%. (Test accuracy reached max after 100K iters.)
+      (The shape of the plots is practically the same, here and below.)`,
+      `\`n:32\`, ceil instead of \`floor\` in \`dims\` (\`floor(.999999+?)\`), \`5.44\`M params (\`32000\` hidden units as TFJS doesn't allow more), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`31.9\`Ks (and half the GPU memory, somehow): train perplexity \`1.32\`, train acc \`93.02\`%, test acc \`23.29\`%.`,
+      `\`n:32\`, LR \`.001\`, ceil, \`5.44\`M params (\`32768\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`32.4\`Ks: train perplexity \`1.175\`, train acc \`96.40\`%, test acc \`24.27\`%.
+      (Done for the consistency of learning rates.)
+      \`\`p:parseURL
+a:(p 'experiments/cifar100_train_perpl_1.txt' fast)
+b:(p 'experiments/cifar100_train_acc_1.txt' fast)
+c:(p 'experiments/cifar100_test_acc_1.txt' fast)
+d:(p 'experiments/cifar100_train_loss_1.txt' fast)
+elemCollapse _executioner(^(a;b;c;d;(display TrainPerplexity await(a) 10);(display TrainAccuracy await(b) 10);(display TestAccuracy await(c) 10);(display Loss await(d) 10);elem('text','')))\`\``,
+      `\`n:64\`, \`7.21\`M params (\`16500\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.3\`Ks: train perplexity \`2.18\`, train acc \`82.97\`%, test acc \`23.14\`%. (\`floor\` in \`dims\` is an affront to our gods.)`,
+      `\`n:64\`, ceil in \`dims\`, \`7.01\`M params (\`24576\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` Kit that took \`43.7\`Ks: train perplexity \`1.664\`, train acc \`87.96\`%, test acc \`23.38\`%.`,
+      `\`n:64\`, ceil in \`dims\`, LR \`.001\`, ..., \`500\`Kit that took \`49.2\`Ks: train perplexity \`1.515\`, train acc \`90.68\`%, test acc \`23.27\`%.`,
+      `
+Increasing model capacity for learning data (train-set accuracy) is nice and all.
+But you know the old saying about hard problems: unless we slay the core, all hope is lost.
+We have to face generality that makes learning generally useful, by focusing on test-set accuracy, or die trying.
+
+      What about capacity for any data like the data, not just the data?
       This is called "generalization performance", measured as test-set accuracy.
 
       Ngh.
@@ -9833,9 +9858,12 @@ elemCollapse _executioner(^(a;b;c;d;(display 'Train perplexity' await(a) 10);(di
       [
         _(`fancier`),
         `mixer:await(load 'mixer') m:make
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(mixer (m gradMul (mixer (m gradMul Node -1) Inputs Hidden Hidden Outputs Layers Nonlinearity) -1) Hidden Hidden Outputs Layers Nonlinearity))
-`,
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(mixer (m gradMul (mixer (m gradMul Node -1) Inputs Hidden Hidden Layers Nonlinearity) -1) Hidden Hidden Outputs Layers Nonlinearity))`,
       ],
+      `[A], \`3.4\`M params (\`10000\` hidden), \`17.6\`Ks: \`2\`% train acc, \`2.1\`% test acc.
+      (The output is always just 2 patterns of different brightness, meaning that the inverted-gradient layer collapsed representations. Far too adversarial.)`,
+      // TODO: ...Instead of gating, can also sum with the real embedding. (It'd be unbounded, though we can use \`tanh\` to limit perturbations to a range.)
+      // TODO: ...Also, AdvTNE: Instead of all this gating, simply \`add\` a bounded adversarial term to all the weights. (People say that it works well.) ...No, AdvTNE sums the unaltered path and a weighted adversarial-weights path, which is not quite as trivial to implement.
       `[B]: (Gate both real and adversarial paths together.)`,
       [
         _(`fancier`),
@@ -9844,16 +9872,17 @@ noiseSize:100
 mixer:await(load 'mixer') m:make
 real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
 simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
-noise:(m truncatedNormal ^noiseSize())
-fake:(m gradMul mixer(m concat2 simp noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
-preal:(m discriminator (m concat2 simp real 0))
-pfake:(m discriminator (m concat2 simp fake 0))
+noise:(m truncatedNormal (m arrayConcat m(arraySlice,m _tensorShape Node,0,-1) ^^noiseSize()))
+fake:(m gradMul mixer(m concat2 simp noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
+preal:(m discriminator (m concat2 simp real -1))
+pfake:(m discriminator (m concat2 simp fake -1))
 sm:(m add (m add preal pfake) 1e-8)
 preal2:(m div preal sm)
 pfake2:(m div pfake sm)
 save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
       ],
+      // TODO: Run [B] (after fixing all the bugs).
       `[C]: (The bottleneck works only for \`D\` because of gradient double-inversion.)`,
       [
         _(`fancier`),
@@ -9862,11 +9891,11 @@ noiseSize:100
 mixer:await(load 'mixer') m:make
 real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
 simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
-noise:(m truncatedNormal ^noiseSize())
-fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
-preal:(m discriminator (m concat2 simp real 0))
-pfake:(m discriminator (m concat2 simp fake 0))
+noise:(m truncatedNormal (m arrayConcat m(arraySlice,m _tensorShape Node,0,-1) ^^noiseSize()))
+fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
+preal:(m discriminator (m concat2 simp real -1))
+pfake:(m discriminator (m concat2 simp fake -1))
 sm:(m add (m add preal pfake) 1e-8)
 preal2:(m div preal sm)
 pfake2:(m div pfake sm)
@@ -9881,11 +9910,11 @@ noisesCount:1000
 mixer:await(load 'mixer') m:make
 real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
 simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
-noise:(m sliceOff (m randomVar noisesCount noiseSize) (m randomNat noisesCount))
-fake:(m gradMul mixer(m concat2 simp noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
-preal:(m discriminator (m concat2 simp real 0))
-pfake:(m discriminator (m concat2 simp fake 0))
+noise:(m sliceOff (m randomVar noisesCount noiseSize) (m randomNat noisesCount)) // TODO: ...How to broadcast THIS along the batch dimension?...
+fake:(m gradMul mixer(m concat2 simp noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
+preal:(m discriminator (m concat2 simp real -1))
+pfake:(m discriminator (m concat2 simp fake -1))
 sm:(m add (m add preal pfake) 1e-8)
 preal2:(m div preal sm)
 pfake2:(m div pfake sm)
@@ -9900,10 +9929,10 @@ mixer:await(load 'mixer') m:make
 real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
 simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
 noise:(m sliceOff (m randomVar noisesCount noiseSize) (m randomNat noisesCount))
-fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise 0,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid mixer(X,Outputs,Hidden,1,Layers,Nonlinearity)))
-preal:(m discriminator (m concat2 simp real 0))
-pfake:(m discriminator (m concat2 simp fake 0))
+fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
+preal:(m discriminator (m concat2 simp real -1))
+pfake:(m discriminator (m concat2 simp fake -1))
 sm:(m add (m add preal pfake) 1e-8)
 preal2:(m div preal sm)
 pfake2:(m div pfake sm)
@@ -11849,11 +11878,25 @@ The original \`Next\` will be disposed of.`,
     call(prev, next) {
       if (call.pure) throw impure
       let t = keep(next)
-      while (_tensorSize(t) > _tensorSize(prev)) {
-        const n = sum(t, 0)
-        dispose(t), t = n
+      if (_tensorSize(prev) < _tensorSize(t)) {
+        if (_isDisposable(prev)) prev = prev.shape
+        if (prev.length >= t.shape.length) {
+          for (let i = prev.length, j = t.shape.length; i >= 0 && j >= 0; --i, --j) {
+            const I = i-1, J = j-1
+            if (prev[I] === 1 && t.shape[J] > 1) {
+              const t0 = sum(t, J)
+              const t1 = expandDims(t0, J);  dispose(t0)
+              dispose(t), t = t1
+            }
+          }
+        }
+        while (prev.length < t.shape.length) {
+          const n = sum(t, 0)
+          dispose(t), t = n
+        }
+        if (_tensorSize(t) > 1 && _tensorSize(t) < _tensorSize(prev))
+          error('Gradient shape is smaller than value shape:', tf.clone(t), 'value:', prev)
       }
-      if (_tensorSize(t) > 1 && _tensorSize(t) < _tensorSize(prev)) error('Gradient shape is smaller than value shape:', tf.clone(t), 'value:', prev)
       return t
     },
   },
