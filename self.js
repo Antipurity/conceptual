@@ -9488,7 +9488,6 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
         const [x, Var, Outs, Dims, Shared = true, Optim = varAdam, Init = truncatedNormal] = ins
         const dThat = _matMul(x, dout, true, false)
         const a = _allocArray(1);  a[0] = Var
-        print('denseLayer adjust', x, Var[0], 'grad', dout, 'dThat', dThat) // ######################################################### TODO: Why is the gradient 8x100 when it should be 8x1 (same as the output)?? Who gave `discriminator` bad gradient?
         try { _disposeEachAndDealloc(adjust(Optim, a, null, dThat)) }
         finally { _allocArray(a), dispose(dThat) }
         const r = _matMul(dout, Var[0], false, true)
@@ -9666,7 +9665,7 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
     'out' outDef
 )`,
       ],
-      `It's not pretty, without any good-looking branching and looping and equality constructs.`,
+      `It's not pretty, without any good-looking branching and looping and equality constructs. Though I don't think that the difference between 5 and 50 characters is significant enough to justify all the added moving parts to the language.`,
       `        Now, there is actually a problem here: TensorFlowJS does not support \`transpose\`s of rank more-than-\`6\` {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/transpose_gpu.ts}. Of course, people can't just make a loop in their code-generator, but instead have to create many near-identical functions in {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/shader_compiler.ts} for reading coordinates. Should have made our own WebGL compiler, ey? I don't have that kind of time.`,
       `        So, \`1\` \`transpose\` (with dims \`merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)\`) becomes \`4\` operations: \`squeezeDims\` along \`-2\`, \`unstack\` along \`0\`, \`stack\` along \`-1\`, \`expandDims\` along \`-2\`.`,
       `        ...Or so you'd think at first, but, max-rank-\`6\` applies to \`stack\` too.`,
@@ -9811,9 +9810,21 @@ elemCollapse _executioner(^(a;b;c;d;(display TrainPerplexity await(a) 10);(displ
       `\`n:64\`, ceil in \`dims\`, \`7.01\`M params (\`24576\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` Kit that took \`43.7\`Ks: train perplexity \`1.664\`, train acc \`87.96\`%, test acc \`23.38\`%.`,
       `\`n:64\`, ceil in \`dims\`, LR \`.001\`, ..., \`500\`Kit that took \`49.2\`Ks: train perplexity \`1.515\`, train acc \`90.68\`%, test acc \`23.27\`%.`,
       `
+This is the end of this LDL (linearithmic dense layer) \`tutorial\`.
+            It was very boring, I know. It's because I put most or all creative thoughts (the ones that unpredictably coalesce into a good form during the day, and should be preserved long enough to put into writing) into the paper on this. See the repo; see \`Self\` for the link.
+Nothing left here. Pointless to continue.
+      `,
+      [
+        _(`fancier`),
+        `REPL()`,
+        function() { return true },
+      ],
+      `# cGAN-gating
+
 Increasing model capacity for learning data (train-set accuracy) is nice and all.
 But you know the old saying about hard problems: unless we slay the core, all hope is lost.
 We have to face generality that makes learning generally useful, by focusing on test-set accuracy, or die trying.
+// TODO: ...That's quite the firey narration over nothing. Delete?
 
       What about capacity for any data like the data, not just the data?
       This is called "generalization performance", measured as test-set accuracy.
@@ -9822,8 +9833,6 @@ We have to face generality that makes learning generally useful, by focusing on 
 
       It's natural to generate "data similar to training data" automatically, such as with a generative adversarial network (GAN) {https://arxiv.org/abs/1406.2661} {https://arxiv.org/abs/1411.1784}.
             In fact, how else would you do it? It's even in the definition of "generalization performance".
-
-# cGAN gating
 
       Now, without going into details of how GANs are implemented in modern machine learning, we should generalize "data" to "embeddings", because both are just bunches-of-numbers.
       So, we want to be able to augment any vector \`x\` (either externally-accessed (data) or internally-generated (embedding)) with adversarial generation.
@@ -9851,6 +9860,8 @@ We have to face generality that makes learning generally useful, by focusing on 
       (May need to isolate points of failure: say, try to train a GAN in isolation, without external prediction.)
 
       Our plan is not foolproof at all, unlike LDL, but at least it exists and can be refined as it fails.
+
+To test on CIFAR-100, simply replace \`'mixer'\` with \`'advMixer'\` in the prior test.
 
       [A]: (The simplest adversarial network: robustify by relying on features that want you to fail. No self-determined gradient.)`,
       // TODO: Have a function for compressing an array down to a size, via computing mean & stddev in each bucket, and drawing a number from a random distribution for each of those --- all as tensors (so, pad and reshape the input before this).
@@ -9880,80 +9891,54 @@ pfake:(m discriminator (m concat2 simp fake -1))
 sm:(m add (m add preal pfake) 1e-8)
 preal2:(m div preal sm)
 pfake2:(m div pfake sm)
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul (m broadcastTo preal2 real) real) (m mul (m broadcastTo pfake2 fake) fake))))`,
       ],
-      // TODO: Run [B] (after fixing all the bugs).
-      `[C]: (The bottleneck works only for \`D\` because of gradient double-inversion.)`,
+      `When running [B] (with \`10000\` hidden units), it did train, had a loss spike, then collapsed embeddings at 100k epochs (so the pre-softmax outputs are about \`1e-14\`).`,
+      `[C]: (The bottleneck works only for \`D\` because of gradient double-inversion: \`simp\` in \`fake\` becomes \`(gradMul simp -1)\`.)
+      [Omitted for shortness, uh, brevity, yes]`,
+      `When running [C] (\`10000\` units), it collapsed pre-softmax outputs to \`1e-14\` after 140k epochs.
+
+      How about, I dunno, removing L1 regularization, and merging \`simp\` and \`real\`, and not weighing by discriminator output, and putting \`tanh\` on \`fake\` to limit its values...`,
+      `[D]:`,
       [
         _(`fancier`),
-        `simpSize:1000
-noiseSize:100
+        `noiseSize:100
 mixer:await(load 'mixer') m:make
-real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
-simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
+real:mixer(Node,Inputs,Hidden,Hidden,Layers,Nonlinearity)
 noise:(m truncatedNormal (m arrayConcat m(arraySlice,m _tensorShape Node,0,-1) ^^noiseSize()))
-fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
-preal:(m discriminator (m concat2 simp real -1))
-pfake:(m discriminator (m concat2 simp fake -1))
-sm:(m add (m add preal pfake) 1e-8)
-preal2:(m div preal sm)
-pfake2:(m div pfake sm)
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
+fake:(m gradMul mixer(m concat2 (m gradMul real -1) noise -1,Hidden+noiseSize,Hidden,Hidden,Layers,Nonlinearity) -1)
+discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,Hidden,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
+preal:(m discriminator real)
+pfake:(m discriminator fake)
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal -1) (m minimize pfake) mixer(m add (m mul .5 real) (m mul .5 (m softsign fake)),Hidden,Hidden,Outputs,Layers,Nonlinearity)))`,
       ],
-      `[D]: (Randomly-initialized noise.)`,
-      [
-        _(`fancier`),
-        `simpSize:1000
-noiseSize:100
-noisesCount:1000
-mixer:await(load 'mixer') m:make
-real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
-simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
-noise:(m sliceOff (m randomVar noisesCount noiseSize) (m randomNat noisesCount)) // TODO: ...How to broadcast THIS along the batch dimension?...
-fake:(m gradMul mixer(m concat2 simp noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
-preal:(m discriminator (m concat2 simp real -1))
-pfake:(m discriminator (m concat2 simp fake -1))
-sm:(m add (m add preal pfake) 1e-8)
-preal2:(m div preal sm)
-pfake2:(m div pfake sm)
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
-      ],
-      `[E]: (Randomly-initialized noise with gradient double-inversion.)`,
-      [
-        _(`fancier`),
-        `simpSize:1000
-noiseSize:100
-mixer:await(load 'mixer') m:make
-real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
-simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
-noise:(m sliceOff (m randomVar noisesCount noiseSize) (m randomNat noisesCount))
-fake:(m gradMul mixer(m concat2 (m gradMul simp -1) noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
-preal:(m discriminator (m concat2 simp real -1))
-pfake:(m discriminator (m concat2 simp fake -1))
-sm:(m add (m add preal pfake) 1e-8)
-preal2:(m div preal sm)
-pfake2:(m div pfake sm)
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul preal2 real) (m mul pfake2 fake))))`,
-      ],
-      `(All this code is almost the same, duplicated for the slight convenience of not having to copy-paste a small piece each run.)
+      `\`31\`Ks: \`10000\` units (\`4.1\`M params), \`.9*real+.1*tanh(fake)\` faking the output: \`89\`% train acc, \`22\`% test acc. Useless.`,
+      `\`10000\` units, \`.3*real+.7*softsign(fake)\` faking the output: collapsed (to \`-150000\` in outputs) after 140K iterations.`,
+      `\`10000\` units, \`.5*real+.5*softsign(fake)\` faking internal state: collapsed (to \`-200000\`) after 120k iterations.`,
+      `\`47\`Ks: \`10000\` units, \`real\` faking internal state, \`(minimize abs(got) 1e-4)\` on output: train acc \`33\`%, test acc \`22\`%; a few minor loss spikes during training. Very useless.`,
+      // Current: \`preal2*real+pfake2*(gradMul fake -1)\` (non-adversarial adversarial examples), L1 of 1e-4, \`(minimize abs(got) 1e-4)\`, faking internal state...
+      // x (...Might want to try decreasing/increasing simpSize, in case it does anything...)
+      //   (...And/or, train a GAN on internal states without connecting its output to anything.)
+      //   (...And/or, might want to not weigh by discriminator output, but simply have a fixed-coefficients weighted sum. Might even want to pass `fake` through `tanh` to limit its influence.)
+      //   (...And/or, might want `fake` to be `real+?`, for like-data perturbations.)
+      //   (...And/or, might want to merge `simp` and `real`.)
+      //   (...And/or, disable L1 regularization, because fakes would de-regularize instead.)
+      //   (...And/or, return `real` with no regard to the fake.)
+      //   (...Or maybe condition on `Node` and return `fake`. ...Which would give essentially no gradient to `real`.)
+      //   (...Could even have a GAN-less autoencoder.)
+      // TODO: Try training an actual GAN on the dataset, because it's not working out.
+      //   What's the code that would train a GAN? Need conditional generator and discriminator... In fact, `real` could be the actual input image concatenated with its label, and we discriminate that (for loss-from-self), and display preal/pfake/fake, and return `null` or literally a random tensor.
+      // TODO: [E] should be a plain GAN of the input. `real` could be the actual input image concatenated with its label, and we discriminate that (for loss-from-self), and display preal/pfake/fake, and return `null` or literally a random tensor.
+      `I don't think this is gonna work for increasing test-set accuracy on such a tiny dataset. Making X aware of things-like-X just increases robustness, not... test-set accuracy. And too many moving parts to be a fundamental solution, unlike LDL. And I don't think that it would add anything unique to science even if it works, unlike LDL.
+      Though it is possible that the cGAN is implemented very badly, because I'm inexperienced with those.
 
-      To test on CIFAR-100, simply replace \`'mixer'\` with \`'advMixer'\` in the prior test.
+      // TODO: ...Run & fix [A] [B] [C] and the rest.
 
-      // TODO: ...Run & fix [A] [B] [C] [D] [E].
+      // TODO: "We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness.   Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence."
+      // ...Should we even care about the RNN?... Not like we're gonna add anything unique to science.
 
-      // TODO: Combine \`'mixer(Node,InputSize,HiddenSize,OutputSize,LayerCount,Nonlinearity)'\` with \`'learnedMemory(Fn,Mem,UnrollCount,GradPred)'\` (with unroll-length being 2..4, chosen randomly each time) on CIFAR-100 to learn it in a meta-learning fashion (new input and old output and old loss as input).
-      //   "We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness.   Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence."
-      //   \`repeat ^(learnedMemory(as:accessState prevOut:stateCell(?) prevGot:stateCell(?) po:as(prevOut) data:dataSource() got:nn(concat (array State data.0 po po-accessState(prevGot))) State->po;as(prevOut,data.1);as(prevGot,got);got,stateCell(???),2+randomNat(5),out->dout->nn(out)=dout)) 500000\`
-      //     ...Wait, instead of \`nn\`, should use \`'mixer'\` properly; how exactly do we do that?
-      //     ...How do we initialize the memory properly?
-      //     ...How do we initialize previous-predictions and previous-outputs properly?
-      //     ...How do we predict gradient properly?
+      // TODO: ...Reflect on Conceptual, and how it reflects the vision of taking a program all across the Internet, with \`ToExtension()\`, one that is able to self-inspect (\`deconstruct\`) and self-modify (\`Rewrite()\`);   overtaken by the fact that learning does not share, and takes too much compute to be personal right now, and JS sucks anyway, as it is easiest to implement an RNN in a web driver...
 
-      // TODO: Run & fix that RNN on a meta-learned CIFAR-100 dataset.
-      // TODO: Run & fix that RNN without inputs and outputs, but with a 3-color in-image autoencoding.
 `,
     ],
   },
