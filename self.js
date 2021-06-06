@@ -303,6 +303,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       sigmoid:_(`sigmoid`),
       sum:_(`sum`),
       mean:_(`mean`),
+      std:_(`std`),
       max:_(`max`),
       min:_(`min`),
       abs:_(`abs`),
@@ -8308,6 +8309,31 @@ The adjustment is passed through, to be broadcasted.`,
     ],
   },
 
+  8444:[
+    _(`sub`),
+    _(`input`),
+    [
+      _(`mean`),
+      _(`input`),
+    ],
+  ],
+
+  std:_([
+    _(`func`),
+    _(`input`),
+    [
+      _(`sqrt`),
+      [
+        _(`mean`),
+        [
+          _(`mul`),
+          _(8444),
+          _(8444),
+        ],
+      ],
+    ],
+  ]),
+
   max:{
     use:2,
     examples:[
@@ -9579,11 +9605,11 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
       `Wwwwwwwwwwwwwwwwwwww
 
 A common problem in machine learning (ML) is the tension between generality and efficiency.
-Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a matrix: it connects every output to every input which is perfectly general, but, the cost of this is quadratic (both in time and memory).
+Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a matrix: it connects every output to every input, which is perfectly general, but, the cost of this is quadratic (both in time and memory).
 
-    This is a bummer for those folks who want to routinely process Jupiter-sized arrays of information, but find themselves bottlenecked by the observable universe not containing enough matter to build an efficient enough computer for that: a classic problem that I'm sure many of us can relate to.
+    This is a bummer for those folks who want to routinely process Jupiter-sized arrays of information, but find themselves bottlenecked by the observable universe not containing enough matter to build a big enough memory and an efficient enough computer for that: a classic problem that I'm sure many of us can relate to.
 
-    (This problem in ML is so much worse than in programming languages (PLs). There, a PL can be implemented in another PL, introducing little or no inefficiency, so this can go on for many layers, say, machine code then assembly then C (in parallel with a bunch of other system PLs) then JS then the Conceptual cluster. In ML, even one such layer is a challenge beyond modern capabilities, because each of them has the quadratic bottleneck.)
+    (This problem in ML is so much worse than in programming languages (PLs). There, a PL can be implemented in another PL, introducing little or no inefficiency, so this can go on for many layers, say, machine code then assembly then C (in parallel with a bunch of other system PLs) then JS then the Conceptual cluster. In ML, even one such layer is a challenge beyond modern capabilities, because each of them has the quadratic bottleneck, assuming \`matMul\`.)
 
 Can we fix dense layers?`,
       [
@@ -9665,7 +9691,7 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
     'out' outDef
 )`,
       ],
-      `It's not pretty, without any good-looking branching and looping and equality constructs. Though I don't think that the difference between 5 and 50 characters is significant enough to justify all the added moving parts to the language.`,
+      `It's not pretty, without any good-looking branching and looping and equality constructs. Though I don't think that the difference between 5 and 50 characters is significant enough to justify all the added moving parts to the language (especially considering that algorithmic improvements can get you much better compression).`,
       `        Now, there is actually a problem here: TensorFlowJS does not support \`transpose\`s of rank more-than-\`6\` {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/transpose_gpu.ts}. Of course, people can't just make a loop in their code-generator, but instead have to create many near-identical functions in {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/shader_compiler.ts} for reading coordinates. Should have made our own WebGL compiler, ey? I don't have that kind of time.`,
       `        So, \`1\` \`transpose\` (with dims \`merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)\`) becomes \`4\` operations: \`squeezeDims\` along \`-2\`, \`unstack\` along \`0\`, \`stack\` along \`-1\`, \`expandDims\` along \`-2\`.`,
       `        ...Or so you'd think at first, but, max-rank-\`6\` applies to \`stack\` too.`,
@@ -9683,11 +9709,13 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
       `Now, we can answer the most important question: does this work at all? (And by "we" we mean "the computer".)`,
       [
         _(`fancier`),
-        `data:dataset({inputSize 1024 outputSize 1024 datasetSize 1024 batchSize 16 batches 2048})`,
+        `data:dataset({inputSize 1024 outputSize 1024 datasetSize 1024 batchSize 16 batches 204800})`,
       ],
       `This will be the last of ML exploration, one way or another. I'm sure that you too feel stifled by the particular-ness of Conceptual's structure.`,
       `        (All programming languages are built on copying of code to data, using what are often called \`func\`tions. By construction, this is only a very tiny subset of all possible programs. With machine learning, infinity can be used directly, though it can be hard and resource-intensive to refine into what you need.)`,
       `\`\`settings ^_learningRate\`\``,
+      `                                            (Also remember that performance on some systems suffers with \`\`settings ^_disableSmoothTransitions\`\` unchecked.)
+                                            (And if the GPU is not fully utilized, then just increase the batch size, who needs CPU-side efficiency.)`,
       [
         _(`fancier`),
         `m:make
@@ -9701,23 +9729,31 @@ data in->out->(make func ? (m last mx (m select (m accessState displayedParams) 
 
 After running these for \`204800\` epochs with \`2\` meganumbers (params) (right-click the arrays to be able to see the plots):
       \`n:1024\`,\`1*1024\` hidden units, \`2097152\` params:
-          \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255\`
-      \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, when taking the ceil for \`dims\` instead of \`floor\`:
+          # \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255 0.0014314721338450909\`
+      // TODO: Separate the three above under "With intra-layer non-linearities".
+      \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, ceil in \`dims\`:
           \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
       \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
           \`0.0013092466397210956 0.0011801832588389516\`
       \`n:16\`, \`48*1024\` hidden units, \`1998848\` params:
           \`0.0018994645215570927 0.0019312293734401464 0.00163931620772928 0.0018365968717262149\`
+          // TODO: ...Actually, this one should be re-run too, because we might have switched initialization since then, according to narration.
           \`16*1024\` hidden units: \`0.08653200417757034\`
           \`2*1024\` hidden units: \`0.25273409485816956\`
+              // TODO: Run these 10 times each. Everything marked with # must be run 10 times total.
           Without a non-linearity in \`mixedRest\` (so those are only between full-mix layers):
-              \`0.00024176263832487166 0.0002465965517330915 0.0002438293886370957 0.00024560821475461125\`
-              What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for previous underperformance?
-              \`32*1024\` hidden units: \`0.00029104953864589334\`
-              \`16*1024\` hidden units: \`0.0433422327041626\`
-              \`2*1024\` hidden units: \`0.25924545526504517\`
-              \`n:128\`: \`0.000324942113365978 0.0003286689752712846 0.0003323623677715659\`
+              # \`48*1024\` hidden units (\`1998848\` params), \`floor\` in \`dims\`: \`0.00024176263832487166 0.0002465965517330915 0.0002438293886370957 0.00024560821475461125\`
+              // TODO: Run the above with varSGD instead of varRAdam in denseLayer.
+              What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for previous underperformance? // TODO: ...Or was it non-linearities? Was it not?
+              // TODO: Run the above and n:1024 with not 1/sqrt(in) but 1/in as init. Also, .5/sqrt(in).
+              # \`32*1024\` hidden units: \`0.00029104953864589334\`
+              # \`16*1024\` hidden units: \`0.0433422327041626\`
+              # \`2*1024\` hidden units: \`0.25924545526504517\`
+              // TODO: Also mention the param-counts.
+              // TODO: Also run the equal-param-count analogues to the things above.
+              \`n:128\`: # \`0.000324942113365978 0.0003286689752712846 0.0003323623677715659\`
               Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
+      // TODO: Update the PDF with these more accurate bounds.
 
 
 A synthetic dataset
@@ -9822,9 +9858,8 @@ Nothing left here. Pointless to continue.
       `# cGAN-gating
 
 Increasing model capacity for learning data (train-set accuracy) is nice and all.
-But you know the old saying about hard problems: unless we slay the core, all hope is lost.
-We have to face generality that makes learning generally useful, by focusing on test-set accuracy, or die trying.
-// TODO: ...That's quite the firey narration over nothing. Delete?
+But you know the old saying about hard problems: unless we end the core, all hope is lost.
+We have to face the generality that makes learning generally useful, by focusing on test-set accuracy.
 
       What about capacity for any data like the data, not just the data?
       This is called "generalization performance", measured as test-set accuracy.
@@ -9864,8 +9899,6 @@ We have to face generality that makes learning generally useful, by focusing on 
 To test on CIFAR-100, simply replace \`'mixer'\` with \`'advMixer'\` in the prior test.
 
       [A]: (The simplest adversarial network: robustify by relying on features that want you to fail. No self-determined gradient.)`,
-      // TODO: Have a function for compressing an array down to a size, via computing mean & stddev in each bucket, and drawing a number from a random distribution for each of those --- all as tensors (so, pad and reshape the input before this).
-      //   ...Then again, it's only 500K iterations, no big deal, probably about 2-3MB per file without compression, 10x less with.
       [
         _(`fancier`),
         `mixer:await(load 'mixer') m:make
@@ -9873,8 +9906,6 @@ save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(mixer (m g
       ],
       `[A], \`3.4\`M params (\`10000\` hidden), \`17.6\`Ks: \`2\`% train acc, \`2.1\`% test acc.
       (The output is always just 2 patterns of different brightness, meaning that the inverted-gradient layer collapsed representations. Far too adversarial.)`,
-      // TODO: ...Instead of gating, can also sum with the real embedding. (It'd be unbounded, though we can use \`tanh\` to limit perturbations to a range.)
-      // TODO: ...Also, AdvTNE: Instead of all this gating, simply \`add\` a bounded adversarial term to all the weights. (People say that it works well.) ...No, AdvTNE sums the unaltered path and a weighted adversarial-weights path, which is not quite as trivial to implement.
       `[B]: (Gate both real and adversarial paths together.)`,
       [
         _(`fancier`),
@@ -9916,30 +9947,24 @@ save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m 
       `\`10000\` units, \`.3*real+.7*softsign(fake)\` faking the output: collapsed (to \`-150000\` in outputs) after 140K iterations.`,
       `\`10000\` units, \`.5*real+.5*softsign(fake)\` faking internal state: collapsed (to \`-200000\`) after 120k iterations.`,
       `\`47\`Ks: \`10000\` units, \`real\` faking internal state, \`(minimize abs(got) 1e-4)\` on output: train acc \`33\`%, test acc \`22\`%; a few minor loss spikes during training. Very useless.`,
-      // Current: \`preal2*real+pfake2*(gradMul fake -1)\` (non-adversarial adversarial examples), L1 of 1e-4, \`(minimize abs(got) 1e-4)\`, faking internal state...
-      // x (...Might want to try decreasing/increasing simpSize, in case it does anything...)
-      //   (...And/or, train a GAN on internal states without connecting its output to anything.)
-      //   (...And/or, might want to not weigh by discriminator output, but simply have a fixed-coefficients weighted sum. Might even want to pass `fake` through `tanh` to limit its influence.)
-      //   (...And/or, might want `fake` to be `real+?`, for like-data perturbations.)
-      //   (...And/or, might want to merge `simp` and `real`.)
-      //   (...And/or, disable L1 regularization, because fakes would de-regularize instead.)
-      //   (...And/or, return `real` with no regard to the fake.)
-      //   (...Or maybe condition on `Node` and return `fake`. ...Which would give essentially no gradient to `real`.)
-      //   (...Could even have a GAN-less autoencoder.)
-      // TODO: Try training an actual GAN on the dataset, because it's not working out.
-      //   What's the code that would train a GAN? Need conditional generator and discriminator... In fact, `real` could be the actual input image concatenated with its label, and we discriminate that (for loss-from-self), and display preal/pfake/fake, and return `null` or literally a random tensor.
-      // TODO: [E] should be a plain GAN of the input. `real` could be the actual input image concatenated with its label, and we discriminate that (for loss-from-self), and display preal/pfake/fake, and return `null` or literally a random tensor.
-      `I don't think this is gonna work for increasing test-set accuracy on such a tiny dataset. Making X aware of things-like-X just increases robustness, not... test-set accuracy. And too many moving parts to be a fundamental solution, unlike LDL. And I don't think that it would add anything unique to science even if it works, unlike LDL.
-      Though it is possible that the cGAN is implemented very badly, because I'm inexperienced with those.
+      `\`48\`Ks: \`10000\` units, \`preal2*real+pfake2*(gradMul fake -1)\` faking internal state (non-adversarial adversarial examples), \`(minimize abs(got) 1e-4)\` on output: train acc \`20\`%, test acc \`17\`%. (Haah, funny run. Also, performance at 5k iterations is the same as after 500k, as performance spiked and never really recovered.)`,
+      `\`50\`Ks: \`10000\` units, \`preal2*real+pfake2*fake\` faking internal state (actual adversarial state), \`(minimize abs(got) 1e-4)\` on output: train acc \`24\`%, test acc \`19\`%. (Failed successfully.)`,
+      `
+I don't think that this is gonna work for increasing test-set accuracy on such a tiny dataset. Making X aware of things-like-X just increases robustness, not... test-set accuracy. And too many moving parts to be a fundamental solution, unlike LDL. And I don't think that it would add anything unique to science even if it works, unlike LDL.
+      Though it is possible that the cGAN is implemented very badly, because I'm inexperienced with those. If I thought that it has potential, should have switched to implementing a GAN.
 
-      // TODO: ...Run & fix [A] [B] [C] and the rest.
 
-      // TODO: "We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness.   Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence."
-      // ...Should we even care about the RNN?... Not like we're gonna add anything unique to science.
 
-      // TODO: ...Reflect on Conceptual, and how it reflects the vision of taking a program all across the Internet, with \`ToExtension()\`, one that is able to self-inspect (\`deconstruct\`) and self-modify (\`Rewrite()\`);   overtaken by the fact that learning does not share, and takes too much compute to be personal right now, and JS sucks anyway, as it is easiest to implement an RNN in a web driver...
+I think it's time to give up on \`tutorial matMul\`, and in the same breath, give up on Conceptual, as it no longer serves a purpose.
 
-`,
+Conceptual reflects the vision of taking a program all across the Internet, with \`ToExtension()\`, one that is able to self-inspect (\`deconstruct\`) and self-modify (\`Rewrite()\`) — the future of computing;   overtaken by the fact that to share is to separate but learning does not needlessly separate and does not share, and learning takes too much compute to be personal right now, and JS sucks anyway, as it is easiest to implement an RNN in a web driver.
+      (I thought I'd need a custom programming language, but it's just adding bias toward re-use, and learning should have no biases.)
+"We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness.   Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence."
+
+And it's not like any of this is useful to anyone, so I wouldn't be able to extract any money (life-resource) out of it. The more I work on this, the more acutely I feel the impending demise, and I can no longer ignore it. And, while I would like to work on that much better RNN, I don't see a way how as I have no talent or experience in ML, so the future's looking bright, but not for me.
+
+Anyway.
+Good night.`,
     ],
   },
 
@@ -12385,6 +12410,7 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     adjustLater:true,
     adjust:{
       dispose:_(`_disposeEachAndDealloc`),
+      impure:true,
       call(ins, _, dout) {
         // Simply: `adjust(loss,array got need,null,1).0` but with `future`-handling code.
         const [got, need, loss = loss2] = ins
