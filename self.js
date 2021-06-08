@@ -304,6 +304,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       sum:_(`sum`),
       mean:_(`mean`),
       std:_(`std`),
+      max2:_(`max2`),
       max:_(`max`),
       min:_(`min`),
       abs:_(`abs`),
@@ -2590,6 +2591,21 @@ For anything else, display the globals the expression binds to, and an expandabl
               elemValue(elem('unimportant', 'Image: '), toImage),
               elemCollapse(() => daintyEvaluator([displayOne, elemValue(elem('collapsed', '···'), v), [quote, v]]))
             ])
+        },
+      },
+      {
+        docs:`\`mean\` and \`std\` deviation for numeric arrays and non-disposed tensors.`,
+        call([el, v]) {
+          if (_isNumericArray(v) && v.length > 1 && v.every(_isNum) || _isDisposable(v) && !v.isDisposedInternal) {
+            const t0 = mean(v), t1 = std(v)
+            const a = sync(t0), b = sync(t1);  dispose(t0), dispose(t1)
+            return elem('div', [
+              elemValue(elem('unimportant', 'Mean ', mean)),
+              elemValue(elem('number', ''+a), a),
+              elemValue(elem('unimportant', '  std-dev ', std)),
+              elemValue(elem('number', ''+b), b),
+            ])
+          }
         },
       },
       {
@@ -5477,7 +5493,7 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
         `Output`,
       ],
     ],
-    docs:`\`make Construct …Args\`: Creates one construct when called.
+    docs:`\`make Construct …Args\`: Creates one \`construct\` when called.
 Cycles are impossible to create using only this.`,
     call(...x) {
       const obj = construct(x)
@@ -8334,6 +8350,12 @@ The adjustment is passed through, to be broadcasted.`,
     ],
   ]),
 
+  max2:{
+    docs:`\`x->y->(where x<y y x)\`, though only for numbers.`,
+    interrupt:false,
+    call(x,y) { return x = _num(x), y = _num(y), x < y ? y : x },
+  },
+
   max:{
     use:2,
     examples:[
@@ -9652,7 +9674,7 @@ Can we fix dense layers?`,
       [
         _(`fancier`),
         `n:16
-dims:floor(log(where inputs<hidden where(hidden<outputs,outputs,hidden) where(inputs<outputs,outputs,inputs))/log(n))
+dims:floor(log(max2 hidden max2(inputs,outputs))/log(n))
 inDim:1+floor((inputs-1)/n**(d-1))
 outDim:1+floor((outputs-1)/n**(d-1))
 paddedIns:inDim*n**(d-1)
@@ -9679,12 +9701,7 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
     callInput:inDef(node,dims,inputs)
     callFirst:mixDef(callInput,dims,inputs,hidden,nonlinearity)
     callRest:mixDef(w(equal a.0 undefined,node,m a.0 node),a.5,a.1,a.2,a.0)
-    callBod:outDef(
-      reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5) m(nonlinearity,hidden,hidden,outputs,layers,dims),a->node->(w equal(a.1,a.2) (m add node callRest) callRest),w equal(inputs,hidden) (m add callInput callFirst) callFirst)
-      ,dims
-      ,inputs
-      ,outputs
-    )
+    callBod:outDef(reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5) m(nonlinearity,hidden,hidden,outputs,layers,dims),a->node->(w equal(a.1,a.2) (m add node callRest) callRest),w equal(inputs,hidden) (m add callInput callFirst) callFirst),dims,inputs,outputs)
     call node->inputs->hidden->outputs->layers->nonlinearity->(w equal(inputs,outputs) (w equal(inputs,hidden) callBod (m add node callBod)) callBod)
     'in' inDef
     'mix' mixDef
@@ -9702,6 +9719,7 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
       `        Not.`,
       `        Apparently, \`where\` (formerly used in used in \`relu\`) cannot handle more than rank-\`4\` tensors.`,
       `        As far as I can tell, they just didn't bother adding even 2 more items into an array just below the rank check {https://github.com/tensorflow/tfjs/blob/master/tfjs-backend-webgl/src/select_gpu.ts}.`,
+      `        \`softsign\` it is, then. (Later, modified \`relu\` to use \`mul\`.)`,
       ``,
       `        Come on. It's not like we're trying to do anything out of the ordinary here, we're just trying to have \`20\` dimensions in tensor indices.`,
       `        (Though, pointing out the inadequacies of others is fun. My code had more bugs, by the way.)`,
@@ -9714,45 +9732,53 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
       `This will be the last of ML exploration, one way or another. I'm sure that you too feel stifled by the particular-ness of Conceptual's structure.`,
       `        (All programming languages are built on copying of code to data, using what are often called \`func\`tions. By construction, this is only a very tiny subset of all possible programs. With machine learning, infinity can be used directly, though it can be hard and resource-intensive to refine into what you need.)`,
       `\`\`settings ^_learningRate\`\``,
-      `                                            (Also remember that performance on some systems suffers with \`\`settings ^_disableSmoothTransitions\`\` unchecked.)
-                                            (And if the GPU is not fully utilized, then just increase the batch size, who needs CPU-side efficiency.)`,
+      `                                            (Also remember that performance on some systems suffers with \`\`settings ^_disableSmoothTransitions\`\` unchecked. Or on some multi-GPU systems with Nvidia drivers, with a solution in \`tutorial softmax\`.)
+                                            (And if the GPU is not fully utilized, then just increase the batch size, who needs CPU-side efficiency. Or run many at once. Or suck it up.)`,
       [
         _(`fancier`),
         `m:make
 mx:(apply await(load 'mixer') ? in 16*1024 out 1 softsign)
 displayedParams:stateCell(false)
 displayParams:m(func,Fn,m last (m displayOne 'Params' (m parametersInVars Fn)) (m accessState displayedParams true))
-data in->out->(make func ? (m last mx (m select (m accessState displayedParams) null displayParams (m quote mx)) mx))`,
+data in->out->(m func ? (m last mx (m select (m accessState displayedParams) null displayParams (m quote mx)) mx))`,
       ],
       `
-      Now, you might find yourself asking some questions. Such as "why does this need 1GB of GPU memory to run?" or "why does running out of GPU memory break everything but does not free that memory?". But don't worry: you are not alone. It bothers me too, and I have no answers.
+      Now, you might find yourself asking some questions. Such as "why does this need 1GB of GPU memory to run?" or "why does running out of GPU memory break everything but does not free that memory, forcing a browser restart?". But don't worry: you are not alone. It bothers me too, and I have no answers.
 
-After running these for \`204800\` epochs with \`2\` meganumbers (params) (right-click the arrays to be able to see the plots):
+After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss is averaged over the last \`5000\` iterations) (right-click the arrays to be able to see the plots and, since they was tiresome to type, \`mean\` and \`std\` too):
       \`n:1024\`,\`1*1024\` hidden units, \`2097152\` params:
           # \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255 0.0014314721338450909\`
-      // TODO: Separate the three above under "With intra-layer non-linearities".
-      \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, ceil in \`dims\`:
-          \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
-      \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
-          \`0.0013092466397210956 0.0011801832588389516\`
-      \`n:16\`, \`48*1024\` hidden units, \`1998848\` params:
-          \`0.0018994645215570927 0.0019312293734401464 0.00163931620772928 0.0018365968717262149\`
-          // TODO: ...Actually, this one should be re-run too, because we might have switched initialization since then, according to narration.
-          \`16*1024\` hidden units: \`0.08653200417757034\`
-          \`2*1024\` hidden units: \`0.25273409485816956\`
-              // TODO: Run these 10 times each. Everything marked with # must be run 10 times total.
-          Without a non-linearity in \`mixedRest\` (so those are only between full-mix layers):
-              # \`48*1024\` hidden units (\`1998848\` params), \`floor\` in \`dims\`: \`0.00024176263832487166 0.0002465965517330915 0.0002438293886370957 0.00024560821475461125\`
-              // TODO: Run the above with varSGD instead of varRAdam in denseLayer.
-              What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for previous underperformance? // TODO: ...Or was it non-linearities? Was it not?
-              // TODO: Run the above and n:1024 with not 1/sqrt(in) but 1/in as init. Also, .5/sqrt(in).
-              # \`32*1024\` hidden units: \`0.00029104953864589334\`
-              # \`16*1024\` hidden units: \`0.0433422327041626\`
-              # \`2*1024\` hidden units: \`0.25924545526504517\`
-              // TODO: Also mention the param-counts.
-              // TODO: Also run the equal-param-count analogues to the things above.
-              \`n:128\`: # \`0.000324942113365978 0.0003286689752712846 0.0003323623677715659\`
-              Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
+      With intra-layer non-linearities in \`mixedRest\` (yeah, those extra \`matMul\`s are extra layers, sure):
+          \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, ceil in \`dims\`:
+              \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
+          \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
+              \`0.0013092466397210956 0.0011801832588389516\`
+          # \`n:16\`, \`48*1024\` hidden units, \`1998848\` params: \`0.0007762182503938675 0.0007768133655190468 0.0007878425531089306 0.0007808140362612903 0.0006592486752197146\`
+              \`16*1024\` hidden units: \`0.08653200417757034\`
+              \`2*1024\` hidden units: \`0.25273409485816956\`
+      Without a non-linearity in \`mixedRest\` (so those are only between full-mix layers):
+          # \`n:128\`, ceil in \`dims\`, \`12*1024\` hidden units, \`1900544\` params: \`0.00031006266362965107\` // TODO: 5
+          # \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\`
+              What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for underperformance when I last tried inter-layer (not shown)?
+              # \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\`
+              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947\`
+              # \`2*1024\` hidden units, \`311296\` params: \`0.2628728747367859\`
+              # ceil in \`dims\` (\`floor(.999999+?)\`), \`2*1024\` hidden units, \`114688\` params: \`0.5009892582893372 0.5001762509346008 0.4998488426208496 0.5016201734542847 0.5031338930130005\`
+          Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
+          Comparing reduced-hidden-units \`n:16\` with \`n:1024\`:
+              \`640\` units, \`1310720\` params: \`?\` // TODO: 1
+              // TODO: Also for 688128 params...
+              // TODO: Also for 311296 params...
+              // TODO: Also for 114688 params...
+          In \`denseLayer\`, \`varSGD\` instead of \`varRAdam\`:
+              \`n:16\`: \`?\` // TODO: 1
+              \`n:1024\`: \`?\` // TODO: 1
+          In \`denseLayer\`, \`.5/sqrt(in)\` instead of \`1/sqrt(in)\`:
+              \`n:16\`: \`?\` // TODO: 1
+              \`n:1024\`: \`?\` // TODO: 1
+          In \`denseLayer\`, \`2/sqrt(in)\` instead of \`1/sqrt(in)\`:
+              \`n:16\`: \`?\` // TODO: 1
+              \`n:1024\`: \`?\` // TODO: 1
       // TODO: Update the PDF with these more accurate bounds.
 
 
@@ -9845,6 +9871,7 @@ elemCollapse _executioner(^(a;b;c;d;(display TrainPerplexity await(a) 10);(displ
       `\`n:64\`, \`7.21\`M params (\`16500\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.3\`Ks: train perplexity \`2.18\`, train acc \`82.97\`%, test acc \`23.14\`%. (\`floor\` in \`dims\` is an affront to our gods.)`,
       `\`n:64\`, ceil in \`dims\`, \`7.01\`M params (\`24576\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` Kit that took \`43.7\`Ks: train perplexity \`1.664\`, train acc \`87.96\`%, test acc \`23.38\`%.`,
       `\`n:64\`, ceil in \`dims\`, LR \`.001\`, ..., \`500\`Kit that took \`49.2\`Ks: train perplexity \`1.515\`, train acc \`90.68\`%, test acc \`23.27\`%.`,
+      // TODO: ...Re-run the 4 relevant CIFAR-100 experiments with the bug fixed.
       `
 This is the end of this LDL (linearithmic dense layer) \`tutorial\`.
             It was very boring, I know. It's because I put most or all creative thoughts (the ones that unpredictably coalesce into a good form during the day, and should be preserved long enough to put into writing) into the paper on this. See the repo; see \`Self\` for the link.
@@ -9959,7 +9986,8 @@ I think it's time to give up on \`tutorial matMul\`, and in the same breath, giv
 
 Conceptual reflects the vision of taking a program all across the Internet, with \`ToExtension()\`, one that is able to self-inspect (\`deconstruct\`) and self-modify (\`Rewrite()\`) — the future of computing;   overtaken by the fact that to share is to separate but learning does not needlessly separate and does not share, and learning takes too much compute to be personal right now, and JS sucks anyway, as it is easiest to implement an RNN in a web driver.
       (I thought I'd need a custom programming language, but it's just adding bias toward re-use, and learning should have no biases.)
-"We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness.   Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence."
+We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness. I implemented a dense layer once; I don't think AGI is too different.
+      Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence.
 
 And it's not like any of this is useful to anyone, so I wouldn't be able to extract any money (life-resource) out of it. The more I work on this, the more acutely I feel the impending demise, and I can no longer ignore it. And, while I would like to work on that much better RNN, I don't see a way how as I have no talent or experience in ML, so the future's looking bright, but not for me.
 
@@ -11529,11 +11557,16 @@ Counts up how many numbers are stored in \`varSGD\`s and similar (weight matrice
         `f:x->x@randomVar(1,15) parametersInVars(x->f(x)@f(x)@randomVar(15,1))`,
         `30`,
       ],
+      `Can also print all the individual shapes:`,
+      [
+        `f:x->x@randomVar(1,15) parametersInVars(x->f(x)@f(x)@randomVar(15,1),true)`,
+        `(1 15) (15 1)`,
+      ],
     ],
-    call(x) {
+    call(x, fullReport = false) {
       const backctx = _invertBindingContext(_bindingsAt())
       const env = new Set
-      let n = 0
+      let n = !fullReport ? 0 : []
       walk(x)
       env.clear()
       return n
@@ -11545,7 +11578,8 @@ Counts up how many numbers are stored in \`varSGD\`s and similar (weight matrice
         if (env.has(x)) return; else env.add(x)
         if (defines(x, varSGD)) {
           const i = typeof defines(x, varSGD) == 'number' ? defines(x, varSGD) : 1, v = x[i]
-          if (isArray(v) && v[0] === quote && isArray(v[1])) n += _tensorSize(v[1][0])
+          if (isArray(v) && v[0] === quote && isArray(v[1]))
+            !fullReport ? (n += _tensorSize(v[1][0])) : n.push(_tensorShape(v[1][0]))
         }
         x.forEach(walk)
       }
@@ -13124,7 +13158,7 @@ Allows testing that an embedding-to-embedding connection works for arbitrary num
 This \`stack\`s each batch to minimize CPU/GPU communication.
 
 \`Options\` is \`{inputSize 10 inputFunc (0 1) outputSize 1 outputFunc (0 1) datasetSize 1024 batchSize 64 batches 1000 loss loss2}\` by default.
-\`inputFunc\` is \`(Mean StdDev)\` that are passed to \`truncatedNormal\` or a function that accepts from \`inputSize\` to input. \`outputFunc\` is mean and standard deviation too, or a function of \`outputSize\` and input.`,
+\`inputFunc\` is \`(Mean StdDev)\` that are passed to \`truncatedNormal\` or a function from \`inputSize\` to input. \`outputFunc\` is mean and standard deviation too, or a function of \`outputSize\` and input.`,
     construct(x, obj) {
       if (obj === undefined) {
         obj = function test(conner) {
@@ -16192,7 +16226,7 @@ Array data gets its head consulted (once, not recursively). A function acts like
 
 This gives functions (such as \`call\` or \`adjust\`) free and easy extensibility points. For example, rather than co-opting strings and files (duck typing, docstrings, documentation, READMEs) to convey parts of a concept, define functionality such as \`docs\` directly.
 
-A concept is not necessarily static. The dream is to make \`alloc\`/\`conceptType\` continuously \`regenerate\` concepts, ever improving. But this prospect are mostly theoretical for now.`,
+A concept is not necessarily static, though making it dynamic/learned is not best implemented as a precisely-defined structure.`,
     philosophy:`Concepts have no defined boundaries and affect other things, so obviously, making \`concept\` be able to define one level of things in special circumstances fully encapsulates the concept of a concept.
 (This was poking fun at the naming of \`concept\`, which is a rigid consequence of a learned representation. Still a solid way to define code networks such as Conceptual, though. And perhaps the \`autoWorld\` family could give a good way to make \`concept\`s dynamic and learned? We'll see.)`,
     readAt:{
@@ -22679,7 +22713,7 @@ May you find happiness on the road ahead. \`\`elemCollapse elemValue(elem 'text'
 \`stateCell()\`: the smallest separate mutable piece of memory, initialized to \`undefined\`.
 Most numeric operations can also take these directly, without going through \`accessState\`.
 
-Compared to arrays or other linear memory, these are much more directly representable in neural memory (in your mind), but are also much more static in size.`,
+Compared to arrays or other linear memory, these are much more directly representable in half-neural memory (in your mind), but are also much more static in size.`,
     readAt:{
       accessState:_(`accessState`),
     },

@@ -26,9 +26,7 @@ There is no end to what can be learned and how. However, modern machine learning
 
 "Humans have general intelligence" is an extremely strong statement about the nature of reality and how to best learn it, because the most predictive models of reality re-implement that reality. Accepting or denying the generality of humans implies respectively either "anything can happen" or "life and/or the universe was created with a finite bucket-list of what it will ever achieve". Refinement and simplification of these thought directions leads to either computational physics (to our knowledge, the most refined attempt so far is the Wolfram Model \cite{Wolfram_2020}, where the universe is a hypergraph transformed by rewriting rules) or god-given souls as explicit physical laws (which just so happened to look like evolution of general things every step of the way). Here, we explore the "general intelligence is best" direction.
 
-What is intelligence? Optimizers minimize or maximize their objectives (computed real numbers, such as "how many paperclips are there") by choosing from complete possibilities: search over "how" to improve "what". A formalization of this is AIXI \cite{DBLP:journals/corr/cs-AI-0004001}. An optimizer could explicitly enumerate separate possibilities such as in program synthesis ×××, but it does not have to: for example, a neural network with good random initialization forms a complete set of hypotheses of numeric causation (initialization diversity is important \cite{mellor2021neural}), and backpropagation through that network refines those hypotheses without collapsing diversity except as needed.
-
-        TODO: Some references to program synthesis papers, such as that recent thingy (DreamCoder)?
+What is intelligence? Optimizers minimize or maximize their objectives (computed real numbers, such as "how many paperclips are there") by choosing from complete possibilities: search over "how" to improve "what". A formalization of this is AIXI \cite{DBLP:journals/corr/cs-AI-0004001}. An optimizer could explicitly enumerate separate possibilities such as in program synthesis \cite{ellis2020dreamcoder}, but it does not have to: for example, a neural network with good random initialization forms a complete set of hypotheses of numeric causation (initialization diversity is important \cite{mellor2021neural}), and backpropagation through that network refines those hypotheses without collapsing diversity except as needed.
 
 Searching over "how" to improve "what" is a powerful way to use a dynamic thing to augment a static thing, however, the "what" is still static, so the "why" is unknown. For generality and thus optimal performance, we must \textit{transcend} objectives: let them go in such a manner that we will arrive at them anyway.
 
@@ -48,32 +46,28 @@ Data analysis of recordings of biological brains supports attractor neural netwo
 
 The field of meta-learning studies learning-to-learn: improvement of an inner optimization loop by an outer one. However, that outer loop must still have a static goal, therefore, meta-learning is not full generality. Mesa-optimization \cite{hubinger2019risks} refers to a situation where a learned model is itself an optimizer, which requires augmenting the model with memory for scaling learned optimization to practical episode lengths: an RNN \cite{Ravi2017OptimizationAA}. Making the mesa-learner and learner close in capability by making input and weight sizes approximately equal (which our LDL largely accomplishes) may facilitate mesa-optimization in RNNs. (Mesa-optimization and meta-learning can be argued to be exactly the same, only framed differently: mesa-learner and its learner, vs learner and its meta-learner.)
 
-A lot of research attempts to overcome shortcomings of a static loss, by harnessing either its inversion or all possibilities. Examples include adversarial training \cite{goodfellow2015explaining} \cite{du2021understanding}; intrinsically motivated reinforcement learning approaches \cite{6294131} such as goal exploration \cite{DBLP:journals/corr/abs-1708-02190}; quality diversity \cite{meyerson2017discovering} \cite{Gravina_2019} \cite{parkerholder2020effective}. Loss inversion can at most increase robustness of the original, while preserving diverse local optima eventually will not have enough storage to be effective when faced with truly general search spaces (those with infinite possibilities). More importantly, the solutions are too complex and specific to be fundamental. We argue that mesa-optimization can learn them if the environment demands it.
-
-Generative adversarial networks (GANs) \cite{goodfellow2014generative} learn a generator that tries to fool the discriminator into labeling the generator's output as real data. This idea can be used to contrast input with its alternatives, acting as a source of diversity in other neural networks, for full generality of loss.
+A lot of research attempts to overcome shortcomings of a static loss, by harnessing either its modification such as inversion or all possibilities. Examples include adversarial training stochastic weight averaging \cite{izmailov2019averaging}; \cite{goodfellow2015explaining} \cite{du2021understanding}; intrinsically motivated reinforcement learning approaches \cite{6294131} such as goal exploration \cite{DBLP:journals/corr/abs-1708-02190}; quality diversity \cite{meyerson2017discovering} \cite{Gravina_2019} \cite{parkerholder2020effective}. Loss inversion can at most increase robustness of the original, while preserving diverse local optima eventually will not have enough storage to be effective when faced with truly general search spaces (those with infinite possibilities). More importantly, the solutions are too complex and specific to be fundamental, as infinite complexity ought to be contained only in parameters for simplicity. We argue that mesa-optimization can learn these solutions if the environment demands it.
 
 To improve scalability of neural operations, lately, there has been a lot of interest in linear attention \cite{schlag2021linear}, however, simple dense layers (matrix multiplications) have been shown to not perform significantly worse than state-of-the-art attention-based algorithms \cite{tolstikhin2021mlpmixer}. Memory-augmented neural networks \cite{collier2019memoryaugmented} restrict computation to only one or a few heads and thus linearize operation, now heavily biased toward memorization. Other ways to linearize dense layers include weight pruning \cite{zhou2021effective} and $k$-nearest-neighbor search among discrete actions \cite{DBLP:journals/corr/Dulac-ArnoldESC15}. We propose the simple but general LDL.
 
 \section{Algorithm}
 
-In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any algorithm that incorporates generality, efficiency, and persistence at every level (in other synonyms, diversity / practicality / self-sufficiency, corresponding to brain / transcendence / galaxy):
+In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any algorithm that incorporates efficiency, generality, and persistence at every level (in other synonyms, practicality / diversity / self-sufficiency, corresponding to transcendence / galaxy / brain):
 
 \begin{itemize}
 \item Changes state (base level):
 \begin{itemize}
-\item Behavior generality: any change is possible in principle. An internal graph is created, by combining many simple parts into arbitrary structures, where connections are either explicit or implied-by-transformation such as in recurrent neural networks (RNNs) in ML. In machine learning, proper random initialization coupled with gradient descent may accomplish preservation of diversity. More generally, Turing-completeness is required.
 \item Efficient: makes the emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them \cite{tolstikhin2021mlpmixer} \cite{schlag2021linear}, covered in Subsection \ref{Algorithm} here.
-\item Runs forever by modeling time. For example, using backpropagation through time and/or synthetic gradients for meta-learning (even when learning to simply fit input-output pairs \cite{santoro2016oneshot}, or learning to maximize future reward as in deep meta-RL \cite{DBLP:journals/corr/WangKTSLMBKB16}), or more generally, an infinite interpreter loop with memory.
+\item General in behavior: any change is possible in principle. An internal graph is created, by combining many simple parts into arbitrary structures, where connections are either explicit or implied-by-transformation such as in recurrent neural networks (RNNs) in ML. In machine learning, proper random initialization coupled with gradient descent may accomplish preservation of diversity. More generally, Turing-completeness is required.
+\item Runs forever. This means an infinite interpreter loop that modifies memory.
 \end{itemize}
 \item Models itself (meta level):
 \begin{itemize}
-\item Loss generality, in ML: self-determination via either random or learned loss (distinct from self-supervised learning). Any thing can be combined with its inversion to achieve generality by subversion ("X and everything else"). For example, in ML, including an adversarial sub-network with inverted loss (such as in GANs \cite{goodfellow2014generative}) achieves generality; elsewhere, evolution mutates creatures, bad programs get rewritten, and people either improve or get forgotten. Working off concreteness works better than trying to average all targets (as in fixed random loss).
-\item Able to indirectly encode a model that is as general and intelligent as itself. Linearity of state-change allows the learned model/optimizer to be approximately as big as its optimizer, which allows self-replication via learned meta-circularity.
-\item Autonomous: non-trivial states are produced even without input from the world, same as the world that it would model.
+\item Able to indirectly encode a model that is as general and intelligent as itself. Linearity of state-change allows the learned model/optimizer to be approximately as big as its optimizer, which facilitates self-replication via learned meta-circularity.
+\item General in loss, in ML: self-determination of loss (which is distinct from self-supervised learning). It is unclear what the best method of self-determination is, because the words "best method" already imply a metric to optimize by, which self-determination is supposed to pick for itself. Transcendence (learning a mesa-optimizer) is the most universal method of self-determination; prediction learns representations of the world; adversarial training increases robustness of representations. Seemingly unsatisfactorily, we suggest focusing on the universal method (transcendence) rather than on what are technically its special cases (such as RL), because we believe that machine learning can already provide good enough special cases to bootstrap to universality.
+\item Models time. For example, using backpropagation through time and/or synthetic gradients for meta-learning (even when learning to simply fit input-output pairs \cite{santoro2016oneshot}, or learning to maximize future reward as in deep meta-RL \cite{DBLP:journals/corr/WangKTSLMBKB16}).
 \end{itemize}
 \end{itemize}
-
-    TODO: For loss generality, if we don't find anything good, we might have to write "Loss generality, in ML: self-determination of loss (which is distinct from self-supervised learning). It is unclear what the best method of self-determination is, because the words "best method" already imply a metric to optimize by, which self-determination is supposed to pick for itself. Transcendence (learning a mesa-optimizer) is the most universal method of self-determination; prediction learns representations of the world; adversarial training increases robustness of representations. Seemingly unsatisfactorily, we suggest focusing on the universal method (transcendence) rather than on what are technically its special cases (such as RL), because we believe that machine learning can already provide good enough special cases to bootstrap to universality." (...It even sounds supremely reasonable once written out. Yeah, I don't think that we'd see any success with adversarial training.)
 
 Such algorithms are \textbf{AGI-ready}, able to represent everything in the world usefully.
 
@@ -99,7 +93,7 @@ Generality melts everything into generality, and we can do that to ML algorithms
 \begin{itemize}
 \item Arbitrary behaviors, also called "do anything".
 
-A well-studied approach to doing anything is generating programs in a programming language. Every programming language is a worldview for use by humans: everything is a function, or everything is an object, or everything is a logical statement, or any combination of the above, and so on. All theoretically equivalent for program generation (as long as we prevent all possible crashes and infinite loops without sacrificing Turing-completeness), but practically inducing different futures on learners.
+A well-studied approach to doing anything is generating programs in a programming language. Every programming language is a worldview for use by humans: everything is a function, or everything is an object, or everything is a logical statement, or any combination of the above, and so on. All theoretically equivalent for program generation (as long as we prevent all possible crashes and infinite loops without sacrificing Turing-completeness), but practically inducing different short-term futures on learners.
 
 To generate a program, at each smallest piece of it (\textit{cell}), the system must choose what function to call and with what arguments (if needed, reframe this with other language-appropriate synonyms). We can express the system's preferences at each choice as an objective function, and optimize future values of that via reinforcement learning (RL) at each cell, though the system as a whole may not have an objective function that is compressible to be shorter than the system.
 
@@ -116,25 +110,23 @@ All the pieces are now in place. We can now suggest a relatively simple implemen
 
 To learn everything that can exist, we impose a model on everything that can exist, equal to the world that it represents. There are 2 parts to this: change and change-of-change.
 
-We can model arbitrary behavior by maintaining a tensor state which is repeatedly modified by all-mixing operations (a neural network), so that a large number of simple cells combine into arbitrary structures to interact in any way. This is the basic premise of RNNs (ignoring input/output vectors and gradient for now). In fact, anything more complex should only get in the way of perfectly modeling arbitrary behavior.
+We can model arbitrary behavior by maintaining a tensor state which is repeatedly modified by all-mixing operations (a neural network), so that a large number of simple cells combine into arbitrary structures to interact in any way. This is the basic premise of RNNs (ignoring input/output vectors and gradient for now). In fact, anything more complex would only get in the way of perfectly modeling arbitrary behavior. (For better training efficiency, the RNN may process sequence items in causally-masked batches \cite{NEURIPS2020_1457c0d6}, or gate its state \cite{hochreiter1997lstm} \cite{cho2014learning}, and/or have long-range connections \cite{dieng2017topicrnn}. However, with enough data and training, a simple big RNN that processes items one-by-one should be able to learn all of these schemes if needed.)
 
 \begin{itemize}
 \item Close-to-linear-time all-mixing operations are required if we want Jupiter-sized memories without universe-sized computers, or if we want to make indirectly encoding self-equivalents in RNN weights efficient enough to be a viable solution (exposing all signals as inputs, to be used or ignored as needed).
 
-We propose \textit{linearithmic dense layers}: reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense-layer operations are performed, bringing the total cost down to $C=dn^{d+1}=d N^{1+1/d}$ (assuming that multiplication of two $n \times n$ matrices costs $n^3$ operations). $d=\log{N}$ minimizes this cost, making it $C=\mathcal{O}(N \log{N})$, with $n={\rm e}$. Alternatively, we can fix $n$ to be $2$ or $3$ or $4$ for the near-minimal cost of $C=\frac{n}{\log{n}} N \log{N}$. Effectively, instead of mixing each index with every other, we mix each digit of each index. (This has a similar time complexity to single-filter convolution and to linear attention \cite{vaswani2017attention} on small vectors, but has less inductive biases: neither spatial locality nor fixed-size sparsity on a secondary representation layer.)
+We propose \textit{linearithmic dense layers} (LDL): reshape the input vector of size $N$ to have $d$ dimensions each sized as $n=\sqrt[d]{N}$, over which $d$ dense-layer operations are performed, bringing the total cost down to $C=dn^{d+1}=d N^{1+1/d}$ (assuming that multiplication of two $n \times n$ matrices costs $n^3$ operations). $d=\log{N}$ minimizes this cost, making it $C=\mathcal{O}(N \log{N})$, with $n={\rm e}$. Alternatively, we can fix $n$ to be $2$ or $3$ or $4$ for the near-minimal cost of $C=\frac{n}{\log{n}} N \log{N}$. Effectively, instead of mixing each index with every other, we mix each digit of each index. (This has a similar time complexity to single-filter convolution and to linear attention \cite{vaswani2017attention} on small vectors, but has less inductive biases: neither spatial locality nor fixed-size sparsity.)
 
-\item Modern machine learning systems often struggle with diversity: once data is learned, there is no longer a need to change, and gradient becomes $0$. For learned generality of loss, we require not a loss that simply tends to $0$ at $\infty$, but one which can go both up and down, oscillating forever. This suggests adversarial sub-networks, in which gradient is inverted ($g \rightarrow -g$). We propose conditional-GAN \cite{DBLP:journals/corr/IsolaZZE16} gating. Suppose that we have a vector $x$ that we want to augment. The adversarial generator $G(z,c)$ (where $z$ is random noise, and the condition $c$ is $x$ put through a bottleneck layer) tries to fool the discriminator $D(x,c)$ into high loss, and the final vector (replacing $x$) weights real and adversarial states according to $D$. This would drive the output toward complexity which can still be discriminated from random noise, allowing robust diversity and maximizing \textit{useful} information content.
-
-(We formulate cGAN gating using only local transformations such as gradient inversion, without explicitly deriving the generator's loss, so that the idea can be applied in non-trivial settings, such as an RNN.)
+These can be used as a stand-alone architecture, or incorporated into almost any other machine learning model.
 \end{itemize}
 
 This algorithm may need data.
 \begin{itemize}
-\item No data: a random initialization may be Turing-complete but is a Turing tar-pit \cite{10.1145/947955.1083808} in which everything is possible but nothing is easy. An optimal source of self-determined gradient would push a stand-alone system to a boundary between order and chaos \cite{feng2020optimal} for robust diversity.
-\item With data: likely the most useful course of action for accelerating AGI research is to collect all datasets and environments in the human world under a single vector-in vector-out program interface, accessible in one run either randomly or in a meta-environment (which would serve the same purpose as the Internet for humans, and/or be the same), and then to pre-train a huge RNN on all of them. We can somewhat approximate this with random data or a single dataset, to demonstrate that this scaling-up is feasible.
+\item No data: a random initialization may be Turing-complete but is a Turing tar-pit \cite{10.1145/947955.1083808} in which everything is possible but nothing is easy. An optimal source of self-determined gradient would push a stand-alone system to a boundary between order and chaos \cite{feng2020optimal} for robust diversity; most machine learning models already accomplish that given data.
+\item Given data: likely the most useful course of action for accelerating AGI research is to collect all datasets and environments in the human world under a single vector-in vector-out program interface, accessible in one run either randomly or in a meta-environment (which would serve the same purpose as the Internet for humans, and/or be the same), and then to pre-train a huge RNN on all of them. We can somewhat approximate this with random data or a single dataset, to demonstrate that this scaling-up is feasible.
 \end{itemize}
 
-(To skip theory that follows, skip to the Experiments section.)
+(To skip the theory that follows, skip to the Experiments section.)
 
 \subsection{Brain}
 
@@ -150,7 +142,7 @@ While humans are demonstrably smarter than non-human animals, they do not seem t
 
 We posit that \textit{all} learning algorithms eventually converge to a fixed point during their development, called general intelligence: the best way to learn is to have infinite diversity, and the best way to deal with infinite diversity is to have generality, and the most usable generality is simple. If we view the brain as a system that naturally developed in the physical universe (by a process that we call evolution here) rather than one that spontaneously popped into existence, then it is natural that some of the most recent animals, such as humans, have general intelligence, which makes TGBA evolutionarily plausible.
 
-Humans possess an information-processing organ that fits what a brain does almost perfectly: the central nervous system (more commonly called "brain"). Studies indicate that it is self-reconfiguring, massively parallel, and analog (in some ways): exactly the kind of qualities that are required for an efficient implementation of a simplest model of the brain.
+Humans possess an information-processing organ that fits what a brain does almost perfectly: the central nervous system (more commonly called "brain"). Studies indicate that it is self-reconfiguring, massively parallel, and analog (from a certain point of view \cite{HODGKIN1952}): exactly the kind of qualities that are required for an efficient implementation of a simplest model of the brain.
 
 With it, humans combine actions into whatever they want, in any way they decide. Unfortunately, because of generality, deducing anything from behavior of a human mind is synonymous with confirmation bias, though a correct theory will be able to represent any other theory within itself. This is why we are so non-specific and all-encompassing in the wording of this work.
 
@@ -196,41 +188,7 @@ Scraping the Web for text (as in \cite{NEURIPS2020_1457c0d6}) or multimodal data
 
 More generally, environments that encourage self-replication in some manner should be conducive to transcendence, assuming that the agent fits the basic definition of TGBA. Examples include creatures competing for survival, people teaching other people their worldviews, designing an efficient production process, programming a computer, creating AGI. These would encourage simplicity, generality, and usefulness (AGI), which facilitate the runaway worldview creation process that is transcendence. We conjecture that all intuitively-visible acceleration of progress of life (compared to non-life) and humanity has been intrinsically linked to the creation and proliferation of such environments. As such, creating a similar environment for programs will likely lead to AGI.
 
-\section{Experiments}
-
-    TODO: "To validate our proposal, we present an experimental analysis of LDL vs DL on simple data."
-
-    TODO: Link to the repo in a footnote ("Code is available at ???", probably linking first to the tutorial and then to the repo).
-
-\subsection{Linearithmic vs Quadratic Dense Layers}
-
-We compare LDL and DL for the same parameter count (and computation time), with little to no hyperparameter tuning. We find that LDL achieves better performance faster.
-
-More specifically, we simply connect the input vector to the output vector through $1$ hidden layer. We optimize via the Rectified Adam optimizer \cite{liu2019radam} with $\alpha=0.9$ and $\beta=0.95$. We vary $n$ ($n=N$ is DL) and pick the hidden-layer size to match the parameter count.
-
-Each LDL cycles through dimensions and multiplies by a matrix each time, until the dimensions are back in the original order. Non-linearities in between those matrix multiplications significantly hurt performance, and should only be placed between whole layers, as shown by Tables \ref{LDLintraVSinter} and \ref{LDLscaling}.
-
-Internally, to get around severe hardware limitations, we have implemented this on top of TensorFlowJS \cite{tensorflow2015-whitepaper}. The creators of its WebGL backend decided to only support rank $6$ tensors, which leaves us with 4 dimensions for use (1 is occupied by preventing false weight sharing, 1 may be the batch dimension); as such, we cannot test $n=2$, but only $n=16$ and above.
-
-We do not share weight matrices across non-mixed dimensions, because otherwise, there would be very few parameters for small values of $n$. These matrices are initialized by drawing from $\mathcal{N}(0,\,1/in)$.
-
-We test on two datasets: Random and CIFAR-100 \cite{Krizhevsky09learningmultiple}.
-
-\begin{itemize}
-\item The Random dataset consists of $1024$ input-output pairs, both consisting of $1024$ numbers drawn from a normal distribution with mean $0$ and variance $1$: $\mathcal{N}(0,\,1)$. For 204800 iterations, we minimize the L2 loss, with learning rate $3 \times 10^{-4}$, batch size 16, and the softsign non-linearity ($x \rightarrow x/(1+|x|)$). This tests the network capacity directly.
-
-At the very least, given the same amount of compute, LDL achieves lower loss than DL, as seen in Table \ref{randomLDLvsDL}.
-
-In Table \ref{LDLscaling}, we found that for LDL (low $n$), each hidden unit has much lower representational capacity than for DL (high $n$), however, since many more units can be packed, the overall capacity is higher.
-
-\item CIFAR-100 consists of $50000$ training image-label pairs, and $10000$ pairs for validation. Each pair has $3072$ inputs and $100$ one-hot outputs. We minimize the softmax loss (cross-entropy loss on a softmax activation), with learning rate $10^{-3}$ and batch size 8, and also apply L1 regularization to the output with a multiplier of $10^{-4}$ for some reason. As the non-linearity, we use batch normalization \cite{ioffe2015batch} followed by ReLU ($x \rightarrow \max(0,x)$). We do not apply any image-specific operations to inputs apart from normalizing each pixel to 0..1, and simply treat images as vectors of numbers, which tests capacity in isolation from generalization.
-
-We found that LDL increases training-set accuracy with almost no impact on test-set accuracy compared to DL, even if DL is trained longer (see Table \ref{LDLimages}). This suggests that increasing the size of the hidden layer increases model capacity, or at the very least, increases training efficiency.
-\end{itemize}
-
-We hypothesize that applying LDL to significantly bigger datasets would have significantly less problems with generalizations, though we have no means of testing that.
-
-It is also possible that LDL is not a good stand-alone architecture. Still, it is a drop-in replacement for DL and so it can be incorporated into any other already-well-performing model at no cost, as long as no DL directly communicates with a non-DL quadratic-complexity operation. As such, we are optimistic about the usefulness of LDL.
+\section{Experiments: Linearithmic vs Quadratic Dense Layers}
 
 \begin{table}
 \begin{center}
@@ -263,6 +221,20 @@ Params & $n$ & Hidden units & Loss $\downarrow$ (mean $\pm$ std-dev) \\
 \label{randomLDLvsDL}
 \end{table}
 
+    TODO: Link to the repo in a footnote ("Code and its tutorial, and the programming language and framework and runtime system that they are written in are available at ???", probably linking first to the tutorial and then to the repo).
+
+We compare LDL and DL for the same parameter count (and computation time), with little to no hyperparameter tuning, on simple data. We find that LDL achieves better performance faster.
+
+More specifically, we simply connect the input vector to the output vector through $1$ hidden layer. We optimize via the Rectified Adam optimizer \cite{liu2019radam} with $\alpha=0.9$ and $\beta=0.95$. We vary $n$ ($n=N$ is DL) and pick the hidden-layer size to match the parameter count.
+
+Each LDL cycles through dimensions and multiplies by a matrix each time, until the dimensions are back in the original order. Non-linearities in between those matrix multiplications significantly hurt performance, and should only be placed between whole layers, as shown by Tables \ref{LDLintraVSinter} and \ref{LDLscaling}.
+
+Internally, to get around severe hardware limitations, we have implemented this on top of TensorFlowJS \cite{tensorflow2015-whitepaper}. The creators of its WebGL backend decided to only support rank $6$ tensors, which leaves us with 4 dimensions for use (1 is occupied by preventing false weight sharing, 1 may be the batch dimension); as such, we cannot test $n=2$, but only $n=16$ and above.
+
+We do not share weight matrices across non-mixed dimensions, because otherwise, there would be very few parameters for small values of $n$. These matrices are initialized by drawing from $\mathcal{N}(0,\,1/in)$.
+
+We test on two datasets: Random and CIFAR-100 \cite{Krizhevsky09learningmultiple}.
+
 \begin{table}
 \begin{center}
 \begin{tabular}{ccc}
@@ -281,6 +253,18 @@ $n$ & Hidden units & Loss $\downarrow$ \\
 \caption{The impact of the hidden layer size, with non-linearities only between layers (Random).}
 \label{LDLscaling}
 \end{table}
+
+\begin{itemize}
+\item The Random dataset consists of $1024$ input-output pairs, both consisting of $1024$ numbers drawn from a normal distribution with mean $0$ and variance $1$: $\mathcal{N}(0,\,1)$. For 204800 iterations, we minimize the L2 loss, with learning rate $3 \times 10^{-4}$, batch size 16, and the softsign non-linearity ($x \rightarrow x/(1+|x|)$). This tests the network capacity directly.
+
+At the very least, given the same amount of compute, LDL achieves lower loss than DL, as seen in Table \ref{randomLDLvsDL}.
+
+In Table \ref{LDLscaling}, we found that for LDL (low $n$), each hidden unit has much lower representational capacity than for DL (high $n$), however, since many more units can be packed, the overall capacity is higher.
+
+\item CIFAR-100 consists of $50000$ training image-label pairs, and $10000$ pairs for validation. Each pair has $3072$ inputs and $100$ one-hot outputs. We minimize the softmax loss (cross-entropy loss on a softmax activation), with learning rate $10^{-3}$ and batch size 8, and also apply L1 regularization to the output with a multiplier of $10^{-4}$ for some reason. As the non-linearity, we use batch normalization \cite{ioffe2015batch} followed by ReLU ($x \rightarrow \max(0,x)$). We do not apply any image-specific operations to inputs apart from normalizing each pixel to 0..1, and simply treat images as vectors of numbers, which tests capacity in isolation from generalization.
+
+We found that LDL increases training-set accuracy with almost no impact on test-set accuracy compared to DL, even if DL is trained longer (see Table \ref{LDLimages}). This suggests that increasing the size of the hidden layer increases model capacity, or at the very least, increases training efficiency.
+\end{itemize}
 
 \begin{table}
 \begin{center}
@@ -303,39 +287,47 @@ Full & 64 & 24576 & 7.01M & 500K & 49.2K & 90.68\% & 23.27\% \\
 \label{LDLimages}
 \end{table}
 
-\subsection{cGAN-gating}
+We hypothesize that applying LDL to significantly bigger datasets would have significantly less problems with generalizations, though we have no means of testing that.
 
-    TODO: Compare with cGAN-gating. If there is no difference, say so (ugh).
-
-    TODO: Compare with RNN-based meta-learning.
-
-    TODO: Run cGAN-gated RNNs with no inputs. Hopefully, it won't be completely indistinguishable from random noise. "The main objective of this subsection is to justify the hypothesis that we can extract interesting representations from no data, only self-interaction. This regime separates approaches which take diversity from data (which is the bulk of modern machine learning) and approaches which make their own diversity."
+It is also possible that LDL is not a good stand-alone architecture. Still, it is a drop-in replacement for DL and so it can be incorporated into any other already-well-performing model at no cost, as long as no DL directly communicates with a non-DL quadratic-complexity operation. As such, we are optimistic about the usefulness of LDL.
 
 \section{Discussion and Conclusion}
 
-We have presented an alternative viewpoint of general intelligence which we have named TGBA, where it can end human civilization not because this new being is super smart, but because in following what they want to do, humans and/or sufficiently general and integrated programs are able to initiate runaway worldview creation, which assimilates everything that humans are into becoming parts of the new world, without any struggle, dissent, or suspicion, and with no new beings involved and no one to blame. In fact, it could be argued that this is what has been happening since the beginning of human history. We have codified this viewpoint into its simplest and most useful, Transformer-based, implementation.
+We have refined the common worldview of general intelligence into what we have named TGBA, in which the primary mode of existence is escaping the confines of the basic implementation, and the universal improvement of intelligence eventually negates all intelligence. It is worth stressing that this is not an alternative to AGI, this is AGI taken to its logical conclusions and refocused on what matters. Naturally, this presents challenges for AI safety, namely, "we cannot control what will happen, only what will spread to the human world" and "even the absolute best case is indistinguishable from death, after a long time span".
 
-    TODO: ...No Transformers now.
+We have proposed a simple and generic way to facilitate transcendence: using linearithmic dense layers (LDL). They seem to improve model capacity at no cost.
 
-We argue that AGI already exists, even though this does not mean what this is commonly assumed to mean. This takes shape in a loose collection of parts that form generality when combined, in direct analogy with programming languages (where some combinations are very small and clear, others are gargantuan and imperfectly-overlapping, but all are general); and in re-formulating everything that can exist in an easily-learnable representation, in a field known as machine learning (where every operation is differentiable and maps numbers to numbers). The intuition of programming languages brings completeness to ML, implying that it is possible today to not only conduct research on parts (AI) but also on how they connect into architectures that can do literally anything (AGI), which explains the prevalence of work on AGI and the possibility to do conclusively better. This implies that there will be no significant theoretical breakthroughs from modern AI to AGI, which our children will likely be able to either confirm or deny.
-
-    TODO: Almost definitely, we will fail to discover anything interesting. Say that.
+We propose a research direction that implements TGBA properly, simply via a big RNN that learns a representation of the world. We are held back mostly by the lack of a good dataset/environment and the lack of computational power.
 
 This work raises many questions which can be explored in the future, such as:
 
 \begin{itemize}
 \item Is our work is a special case of one of Schmidhuber's works?
 
-\item How big can an LDL be made? Can it stand alone?
+\item Since an LDL decreases model parameter count via exponentially-more-encompassing operations, is it a transformation in a hyperbolic space? If so, it might need special mathematical machinery to be effective \cite{peng2021hyperbolic}.
 
-\item Can proper self-determination learn useful behavior (such as maximizing a reward) from only being exposed to data, without external human-defined gradient? For instance, if we train a big RNN that only learns to predict inputs from their randomly (or adversarially) masked (or perturbed) versions, which produces actions in its environment in some deterministic fashion based on RNN's internal state (which does not give gradient to the RNN), then can this non-RL agent learn RL-like behaviors, such as purposeful information maximization? (An RNN should be able to notice correlations and maximize its predictive power. This is similar to \cite{schmidhuber2020reinforcement}, but without a future return as an input except as mesa-learned. In addition, a brain-machine interface ought to not have to change rewards of humans to function effectively.)
+\item Does LDL scale? Can it stand alone?
 
-\item Can proper self-determination learn useful behavior from no data at all? Humanity did, as did some thinkers. All is a consequence of generality, but how much computational power and/or luck does it take?
+\item Can proper self-determination learn useful behavior (such as maximizing a reward) from only being exposed to data, without external human-defined gradient? For instance, if we train a big RNN that only learns to predict inputs from their randomly (or adversarially) masked (or perturbed) versions, which produces actions in its environment in some deterministic fashion based on RNN's internal state (which does not give gradient to the RNN), then can this non-RL agent learn RL-like behaviors, such as purposeful information maximization, possibly via a mesa-optimizer that minimizes loss, discovered from random trajectories that seemed to make sense? This scheme is similar to \cite{schmidhuber2020reinforcement}, though without a future return as an input except as mesa-learned. (In addition, a brain-machine interface ought to not have to change rewards of humans to function effectively.)
+
+\item Can proper self-determination learn useful behavior from no data at all? Humanity did, as did some thinkers, though their usefulness was likely made to overcome their limitations, and in pure generality, would not exist.
 
 \item Is there a natural (generally useful to humans) environment that facilitates mesa-optimization and is easier to implement than a web driver?
 
 \item Can we find concrete recommendations on either increasing or decreasing the danger of AGI algorithms, if they have no human-defined reward? To share with individuals means to split representations and thus reduce overall performance, so general intelligence would naturally subsume individuals into itself. Is there a better solution to slowing this down than indoctrination?
 \end{itemize}
+
+\section{Broader impact}
+
+Linearithmic dense layers might improve machine learning algorithms, which have extremely broad applications.
+
+The TGBA worldview provides the necessary and mostly sufficient conditions for AGI formation, allowing relatively concrete implementation recommendations and predictions.
+
+\textbf{AGI} has the potential to accomplish situationally useful tasks, such as solving any problems that anyone can ever think of, increasing quality of human life to an arbitrary level, uplifting animal consciousness, providing self-awareness to humanity, separating meaning from death, \textbf{increasing shareholder value}, providing a more efficient societal-value optimizer than the single-number economics optimizer, expanding the scope of human discourse from only precisely-defined constructions to also reliably-acquired intuitions, and making large-scale space exploration viable.
+
+On the other hand, the ability to reliably plug a new initialization of a generally-intelligent algorithm into anything completely devalues all individuality and lays the groundwork for phasing out everything about humans. Furthermore, such trained initializations are likely to hold values that are implied by their training data rather than values that humans want them to have, transcending even a carefully-chosen objective, implying adoption difficulties in deception-heavy areas. Due to the improved scaling of AGI compared to humans, such difficulties might result in the premature destruction of all or most of humanity if handled improperly.
+
+AGI might help combat societal bias.
 
 \section{Criticisms}
 
@@ -357,24 +349,8 @@ Our approach exists, and thus it can be criticized, and in doing so changed.
 \item \textbf{The suggested self-replication environments sound incredibly dangerous.} Though, much less dangerous than completely ignoring any possibilities of them arising in unforeseen circumstances, similarly to how a cleaning robot would put a bucket over its sensors to "remove" the mess. Knowledge is dangerous, but as a civilization, is it more dangerous to not have knowledge.
 \item \textbf{TGBA is not AGI-ready, as it lacks X.} It does not: it can do anything and represent anything, by definition. Though we can only hope that theoretical simplicity always translates well into practical simplicity.
 \item \textbf{Some places that narration strays to sound crackpot-like and cult-like.} General intelligence, by definition, can do anything and can be found in anything that is general enough. So it stands to reason that all attempts to reach it would pass through non-fashionable conceptual places. Still, we tried to ground text in concrete applications where we can, though our capabilities are limited.
-\item \textbf{Why is there a section on self-criticism?} Adversarial training increases robustness. In addition, we believe that humans are largely unused to proper circular reasons (due to being parts of worldviews in opposition to badly-thought-out suggestions, rather than considering full worldviews), so this warranted further discussion. The main criterion is self-replication: whether it captures the imagination.
+\item \textbf{Why is there a section on self-criticism?} Adversarial training increases robustness.
 \end{itemize}
-
-\section{Broader impact}
-
-Envision a future where every system has an additional interface with numeric inputs and outputs, optimized for learning by a neural-network-based general intelligence, without the overhead of visualization or vocalization. The most obvious users are TGBA-based programs and/or external hardware; in addition, via brain-computer interfaces with sufficiently high resolution, humans could use such interfaces too, which is how they would get widespread in the first place. This paragraph was completely unrelated to our work, but seems like a nice thought.
-
-    TODO: Ambiguous statements like that are annoying to scientists.
-
-    TODO: "This work is unlikely to cause any impact, because humanity has a history of completely ignoring worldviews that prefer simple and self-consistent generality to humanity's specific ways, only awarding recognition in rare cases. This leaves us free to plot against it." ...No, underexaggeration of impact is non-scientific; should throw away doubts, and say well-grounded words that sound like lies, if there are any.
-
-    TODO: Yep, paste the funny thing into here. ...Maybe. It \textit{does} sound evil. Maybe should be more serious.
-
-The broader field that this work belongs to, AGI, has the potential to TODO: What's good about it? Solve any problems that anyone can ever think of? Uplift animal consciousness? Allow research into reasons for change in absence of needs? Give the ability to directly measure product value to an individual rather than society, de-emphasizing marketing skills and emphasizing quality of products? Expand human discourse from only precisely-defined constructions to also reliably-acquired intuitions? Make life conceptually alive, not only physically alive?
-
-The ability to reliably plug a new initialization of a generally-intelligent algorithm into anything completely devalues all individuality and lays the groudwork for phasing out everything about humans.
-
-AGI, as any technology, can be used by humans for evil, such as deliberate destruction of all humanity, or for good, where all human desires are satisfied forever, all reason for change is lost, and humanity turns into a lifeless rock hurtling through an uncaring cosmos, to be destroyed by the first collision with those that still change, or misused via various forms of mis-specification, which is likely to be a relatively minor concern.
 
 \printbibliography
 
