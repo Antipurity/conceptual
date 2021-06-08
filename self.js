@@ -3832,8 +3832,10 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
       const indicator = elem('div')
       updateIndicator()
       const keyEditor = editor(key === x ? '' : key[1], stringLanguage, Rewrite.ctx, (k, fail) => {
+        if (isArray(k) && k[0] === call) k = k[1]
         if (!fail) keyPreview = k ? label(k) : x, updateIndicator()
       }, (k, fail) => {
+        if (isArray(k) && k[0] === call) k = k[1]
         Rewrite.ctx.delete(key)
         key = keyPreview = k ? label(k) : x
         !fail && (Rewrite.ctx.set(_unlabel(key), value), Rewrite.ctx.set(x, value))
@@ -3852,7 +3854,7 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
         else _editorError(valueEditor, v)
         updateIndicator()
       })
-      return elem('div', [indicator, keyEditor, valueEditor, elemCollapse(Rewrite)])
+      return elem('div', [indicator, keyEditor, valueEditor, elemCollapse(() => Rewrite())])
 
       function updateIndicator() {
         const ctx = Rewrite.ctx, key = _unlabel(keyPreview)
@@ -9643,6 +9645,7 @@ Can we fix dense layers?`,
       It may be helpful to split the problem into multiple sub-parts, as is common in algorithms (such as sorting).
       In fact, if we \`reshape\` the input (1D) vector to have multiple dimensions, then we can mix along each dimension separately. Yes, that should be good.
             (\`transpose\` to make this dimension inner-most, then \`denseLayer\` to mix along the inner-most dimension.)
+            (If \`transpose\` cycles dimensions (via carefully-engineered dimension indices), then all we need is to repeat \`transpose\`-then-\`denseLayer\` \`d\` times.)
 
       What would be a good size for those \`d\` dimensions, though: \`n\`?
 
@@ -9739,13 +9742,13 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
         `m:make
 mx:(apply await(load 'mixer') ? in 16*1024 out 1 softsign)
 displayedParams:stateCell(false)
-displayParams:m(func,Fn,m last (m displayOne 'Params' (m parametersInVars Fn)) (m accessState displayedParams true))
+displayParams:m(func,Fn,m last (m print 'Params' (m parametersInVars Fn)) (m accessState displayedParams true))
 data in->out->(m func ? (m last mx (m select (m accessState displayedParams) null displayParams (m quote mx)) mx))`,
       ],
       `
       Now, you might find yourself asking some questions. Such as "why does this need 1GB of GPU memory to run?" or "why does running out of GPU memory break everything but does not free that memory, forcing a browser restart?". But don't worry: you are not alone. It bothers me too, and I have no answers.
 
-After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss is averaged over the last \`5000\` iterations) (right-click the arrays to be able to see the plots and, since they was tiresome to type, \`mean\` and \`std\` too):
+After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss is averaged over the last \`5000\` iterations) (right-click the arrays to be able to see the plots and, since they were tiresome to type, \`mean\` and \`std\` too):
       \`n:1024\`,\`1*1024\` hidden units, \`2097152\` params:
           # \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255 0.0014314721338450909\`
       With intra-layer non-linearities in \`mixedRest\` (yeah, those extra \`matMul\`s are extra layers, sure):
@@ -9758,27 +9761,25 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss 
               \`2*1024\` hidden units: \`0.25273409485816956\`
       Without a non-linearity in \`mixedRest\` (so those are only between full-mix layers):
           # \`n:128\`, ceil in \`dims\`, \`12*1024\` hidden units, \`1900544\` params: \`0.00031006266362965107\` // TODO: 5
-          # \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\`
-              What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for underperformance when I last tried inter-layer (not shown)?
-              # \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\`
-              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947\`
-              # \`2*1024\` hidden units, \`311296\` params: \`0.2628728747367859\`
-              # ceil in \`dims\` (\`floor(.999999+?)\`), \`2*1024\` hidden units, \`114688\` params: \`0.5009892582893372 0.5001762509346008 0.4998488426208496 0.5016201734542847 0.5031338930130005\`
+          # \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\` // TODO: 5
+              What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for underperformance when I last tried inter-layer NL (omitted)?
+              # \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\` // TODO: 5
+              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947 0.04388221725821495\` // TODO: 5
+              \`2*1024\` hidden units, \`311296\` params: \`0.2628728747367859\`
+              ceil in \`dims\` (\`floor(.999999+?)\`), \`2*1024\` hidden units, \`114688\` params: \`0.5009892582893372 0.5001762509346008 0.4998488426208496 0.5016201734542847 0.5031338930130005\`
           Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
           Comparing reduced-hidden-units \`n:16\` with \`n:1024\`:
-              \`640\` units, \`1310720\` params: \`?\` // TODO: 1
-              // TODO: Also for 688128 params...
-              // TODO: Also for 311296 params...
-              // TODO: Also for 114688 params...
+              # \`666\` units, \`1363968\` params: \`0.03054337203502655\` // TODO: 5
+              # \`333\` units, \`681984\` params: \`0.21292918920516968\` // TODO: 5
           In \`denseLayer\`, \`varSGD\` instead of \`varRAdam\`:
-              \`n:16\`: \`?\` // TODO: 1
-              \`n:1024\`: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
           In \`denseLayer\`, \`.5/sqrt(in)\` instead of \`1/sqrt(in)\`:
-              \`n:16\`: \`?\` // TODO: 1
-              \`n:1024\`: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
           In \`denseLayer\`, \`2/sqrt(in)\` instead of \`1/sqrt(in)\`:
-              \`n:16\`: \`?\` // TODO: 1
-              \`n:1024\`: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
       // TODO: Update the PDF with these more accurate bounds.
 
 
