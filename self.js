@@ -9772,14 +9772,19 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss 
               # \`666\` units, \`1363968\` params: \`0.03054337203502655\` // TODO: 5
               # \`333\` units, \`681984\` params: \`0.21292918920516968\` // TODO: 5
           In \`denseLayer\`, \`varSGD\` instead of \`varRAdam\`:
-              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
               \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`0.10705959796905518\`
+              This is a huge anomaly. Why is \`varSGD\` so much worse than \`varRAdam\`? Fixed with a much higher learning rate, but still. Is it some init issue?...
+              \`n:1024\`, LR \`.03\`: \`?\` // TODO: 1
+              \`n:16\`, LR \`.03\`: \`?\` // TODO: 1
+              // TODO: Check whether a much higher learning rate also makes n:1024 significantly better.
+          // TODO: ...This is a huge anomaly. Should also try with \`varAdam\`.
           In \`denseLayer\`, \`.5/sqrt(in)\` instead of \`1/sqrt(in)\`:
-              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
               \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
           In \`denseLayer\`, \`2/sqrt(in)\` instead of \`1/sqrt(in)\`:
-              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
               \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
       // TODO: Update the PDF with these more accurate bounds.
 
 
@@ -19356,7 +19361,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       let html = _htmlOfRewrite(JS)
       const download = elem('a', 'Download the next rewrite, or preview:')
       download.download = 'index.html'
-      download.style.verticalAlign = 'bottom'
       const refresh = elemValue(button(function() {
         html = iframe.srcdoc = _htmlOfRewrite(JS)
         URL.revokeObjectURL(u), u = download.href = URL.createObjectURL(new Blob([html], {type:'text/html'}))
@@ -19370,7 +19374,8 @@ The correctness of quining of functions can be tested by checking that the rewri
       iframe.srcdoc = html
       const iframeResize = elem('div', iframe)
       iframeResize.classList.add('resizable')
-      const result = elem('div', [download, refresh, iframeResize])
+      download.style.verticalAlign = refresh.style.verticalAlign = 'middle'
+      const result = elem('div', [refresh, download, iframeResize])
       return result
     },
   },
