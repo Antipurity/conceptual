@@ -17,8 +17,6 @@
 
 There is no end to what can be learned and how. However, modern machine learning systems impose a non-general structure on what is learned and how: minimizing a particular loss function with respect to a particular model architecture. We motivate and introduce \textit{Transcendent Galaxy-Brain Algorithms} (TGBA): an evolutionarily-plausible approach to implementing general intelligence, which optimizes anything in any way. Using only a few basic considerations, we highlight the similarities between general minds and universes, and argue that they are the same. We introduce linearithmic dense layers (LDL), which can significantly increase the capacity of almost any machine learning model at no cost.
 
-    TODO: Codewords...
-
     TODO: ...For once, look up IEEE standards on articles? And read the example.
 
     TODO: Is the abstract still fully relevant? What do we need to add? (At least some mention of AGI for clickbait, right?)
@@ -194,7 +192,7 @@ More generally, environments that encourage self-replication in some manner shou
 Relevant criticism:
 
 \begin{itemize}
-\item \textbf{Clearly, not all losses/objectives are conducive to transcendence. A simple extreme example is "kill yourself ASAP".} This is correct, and indicates that there is a best loss for transcendence, which we can find with thought or other manner of computation. A mesa-optimizer is more complex and fragile than a set of heuristics, therefore, learning a mesa-optimizer requires the loss to be stable, as in \textit{building a representation} of the outside world. \textit{Predicting} inputs given masked/perturbed inputs is likely the best loss for transcendence, at least in pre-training. (RL is likely to have difficulties transcending, though Upside Down RL \cite{schmidhuber2020reinforcement} may work better.)
+\item \textbf{Clearly, not all losses/objectives are conducive to transcendence. A simple extreme example is "kill yourself ASAP".} This is correct, and indicates that there is a best loss for transcendence, which we can find with thought or other manner of computation. A mesa-optimizer is more complex and fragile than a set of heuristics, therefore, learning a mesa-optimizer requires the loss to be stable, as in \textit{building a representation} of the outside world. \textit{Predicting} inputs given masked/perturbed inputs is likely the best loss for transcendence, at least in pre-training. (RL is likely to have difficulties transcending, though Upside Down RL \cite{schmidhuber2020reinforcement} may work better: detachment from the world may be the best way to fully understand it.)
 \end{itemize}
 
 \section{Experiments: Linearithmic vs Quadratic Dense Layers}
@@ -270,7 +268,7 @@ At the very least, given the same amount of compute, LDL achieves lower loss tha
 
 In Table \ref{LDLscaling}, we found that for LDL (low $n$), each hidden unit has much lower representational capacity than for DL (high $n$), however, since many more units can be packed, the overall capacity is higher.
 
-\item CIFAR-100 consists of $50000$ training image-label pairs, and $10000$ pairs for validation. Each pair has $3072$ inputs and $100$ one-hot outputs. We minimize the softmax loss (cross-entropy loss on a softmax activation), with learning rate $10^{-3}$ and batch size 8, and also apply L1 regularization to the output with a multiplier of $10^{-4}$ for some reason. As the non-linearity, we use batch normalization \cite{ioffe2015batch} followed by ReLU ($x \rightarrow \max(0,x)$). We do not apply any image-specific operations to inputs apart from normalizing each pixel to 0..1, and simply treat images as vectors of numbers, which tests capacity in isolation from generalization.
+\item CIFAR-100 consists of $50000$ training image-label pairs, and $10000$ pairs for validation. Each pair has $3072$ inputs and $100$ one-hot outputs. We minimize the softmax loss (cross-entropy loss on a softmax activation), with learning rate $10^{-3}$ and batch size 8, and also apply L1 regularization to the output with a multiplier of $10^{-4}$ for some reason. As the non-linearity, we use batch normalization \cite{ioffe2015batch} without bias/rescaling followed by ReLU ($x \rightarrow \max(0,x)$). We do not apply any image-specific operations to inputs apart from normalizing each pixel to 0..1, and simply treat images as vectors of numbers, which tests capacity in isolation from generalization.
 
 We found that LDL increases training-set accuracy with almost no impact on test-set accuracy compared to DL, even if DL is trained longer (see Table \ref{LDLimages}). This suggests that increasing the size of the hidden layer increases model capacity, or at the very least, increases training efficiency.
 \end{itemize}

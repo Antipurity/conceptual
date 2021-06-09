@@ -9764,25 +9764,59 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss 
           # \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\` // TODO: 5
               What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for underperformance when I last tried inter-layer NL (omitted)?
               # \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\` // TODO: 5
-              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947 0.04388221725821495\` // TODO: 5
+              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947 0.04388221725821495\` // TODO: 5 x
               \`2*1024\` hidden units, \`311296\` params: \`0.2628728747367859\`
               ceil in \`dims\` (\`floor(.999999+?)\`), \`2*1024\` hidden units, \`114688\` params: \`0.5009892582893372 0.5001762509346008 0.4998488426208496 0.5016201734542847 0.5031338930130005\`
           Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
+
           Comparing reduced-hidden-units \`n:16\` with \`n:1024\`:
               # \`666\` units, \`1363968\` params: \`0.03054337203502655\` // TODO: 5
               # \`333\` units, \`681984\` params: \`0.21292918920516968\` // TODO: 5
-          In \`denseLayer\`, \`varSGD\` instead of \`varRAdam\`:
-              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+          In \`denseLayer\` (\`Rewrite\` it), \`varSGD\` instead of \`varRAdam\`, to see how robust LDLs are:
+              \`n:1024\`, \`1024\` units: \`0.0003273784532211721\`
               \`n:16\`, \`48*1024\` units: \`0.10705959796905518\`
-              This is a huge anomaly. Why is \`varSGD\` so much worse than \`varRAdam\`? Fixed with a much higher learning rate, but still. Is it some init issue?...
-              \`n:1024\`, LR \`.03\`: \`?\` // TODO: 1
-              \`n:16\`, LR \`.03\`: \`?\` // TODO: 1
-              // TODO: Check whether a much higher learning rate also makes n:1024 significantly better.
-          // TODO: ...This is a huge anomaly. Should also try with \`varAdam\`.
-          In \`denseLayer\`, \`.5/sqrt(in)\` instead of \`1/sqrt(in)\`:
+              This is a huge anomaly. Why is \`varSGD\` so much worse than \`varRAdam\`? Is it some init issue?...
+              LR \`.003\`, \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+              LR \`.003\`, \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+              LR \`.03\`, \`n:1024\`, \`1024\` units: \`1.4066916034782828e-11\`
+              LR \`.03\`, \`n:16\`, \`48*1024\` units: \`3.8550309862731003e-13\`
+              The anomaly persists. What can we determine about its bounds? Say, \`n:1024\` with \`666\`/\`333\` units was bottoming out, not merely training slower; does LDL's advantage also disappear in those settings with different optimizers?
+              LR \`.0003\`, \`n:1024\`, \`333\` units: \`0.2173244059085846\` (bottoming out)
+              LR \`.0003\`, \`n:16\`, \`16*1024\` units: \`0.286091685295105\` (oof)
+              LR \`.003\`, \`n:1024\`, \`333\` units: \`0.21068644523620605\` (bottoms out)
+              LR \`.003\`, \`n:16\`, \`16*1024\` units: \`0.07690425217151642\` (a bit better)
+              LR \`.03\`, \`n:1024\`, \`333\` units: \`0.2867078185081482\` (LR is too high for it)
+              LR \`.03\`, \`n:16\`, \`16*1024\` units: \`0.028061721473932266\` (okay, good enough)
+              LR \`.3\`, \`n:16\`, \`16*1024\` units: \`0.3520549535751343\` (overdid it)
+              Okay, so it's likely just a training problem, and LDLs still seem to have better capacity.
+              LR \`.0003\`, \`n:1024\`, \`666\` units: \`?\` // TODO: 1
+              LR \`.0003\`, \`n:16\`, \`32*1024\` units: \`?\` // TODO: 1
+              LR \`.03\`, \`n:1024\`, \`666\` units: \`?\` // TODO: 1
+              LR \`.03\`, \`n:16\`, \`32*1024\` units: \`?\` // TODO: 1
+              In \`denseLayer\`, \`.25/sqrt(in)\` instead of \`1/sqrt(in)\`:
+                  \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+                  \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1 x
+              In \`denseLayer\`, \`4/sqrt(in)\` instead of \`1/sqrt(in)\`:
+                  \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+                  \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+          In \`denseLayer\`, \`varAdam\` instead of \`varRAdam\`:
+              \`n:1024\`, \`1024\` units: \`0.001423900481313467\`
+              \`n:16\`, \`48*1024\` units: \`0.00020152713113930076\`
+              This one actually looks almost exactly like \`varRAdam\`. But why was \`varSGD\` training a better fully-connected layer?
+              \`n:1024\`, \`333\` units: \`?\` // TODO: 1
+              \`n:16\`, \`16*1024\` units: \`?\` // TODO: 1
+              \`n:16\`, \`32*1024\` units: \`?\` // TODO: 1
+              \`n:1024\`, \`666\` units: \`?\` // TODO: 1
+          In \`denseLayer\`, \`varMomentum\` instead of \`varRAdam\`:
               \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
               \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
-          In \`denseLayer\`, \`2/sqrt(in)\` instead of \`1/sqrt(in)\`:
+          In \`denseLayer\`, \`varRMSProp\` instead of \`varRAdam\`:
+              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+          In \`denseLayer\`, \`.25/sqrt(in)\` instead of \`1/sqrt(in)\`:
+              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
+              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+          In \`denseLayer\`, \`4/sqrt(in)\` instead of \`1/sqrt(in)\`:
               \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
               \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
       // TODO: Update the PDF with these more accurate bounds.
@@ -10747,8 +10781,8 @@ Click a plot to update it.`,
       const text = d3.select(elem('text')).style('opacity', 0).style('color', 'currentColor').style('display', 'block').style('transition', 'none').style('text-align', 'center')
       focus.style('width', '1em').style('height', '1em').style('border-radius', '.5em')
       text.node().append(elem('text'), elem('number'))
-      text.node().firstChild.style.textShadow = '0 0 .15em var(--background)'
-      text.node().lastChild.style.textShadow = '0 0 .15em var(--background)'
+      text.node().firstChild.style.textShadow = '-0.15em .15em .15em var(--background)'
+      text.node().lastChild.style.textShadow = '-0.15em .15em .15em var(--background)'
       tooltip.append(focus.node(), text.node())
 
       // Also show the exact value at cursor.
@@ -10830,6 +10864,7 @@ Click a plot to update it.`,
       // Compute the mean (in `mins`).
       for (let i=0; begin2 + i*step < end; ++i) {
         let a = begin2 + i*step, b = Math.min(begin2 + (i+1)*step, end)
+        if (b-a < step && b-step > 0) a = b-step // Reduce last-pixel jumping.
         mins[i] = 0
         for (let j = a; j < b; ++j)
           if (data[j] !== data[j] || !isFinite(data[j])) continue
@@ -10839,6 +10874,7 @@ Click a plot to update it.`,
       // Compute stddev in each pixel (in `maxs`).
       for (let i=0; begin2 + i*step < end; ++i) {
         let a = begin2 + i*step, b = Math.min(begin2 + (i+1)*step, end)
+        if (b-a < step && b-step > 0) a = b-step
         maxs[i] = 0
         for (let j = a; j < b; ++j)
           if (data[j] !== data[j] || !isFinite(data[j])) continue
