@@ -308,6 +308,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       max:_(`max`),
       min:_(`min`),
       abs:_(`abs`),
+      ceil:_(`ceil`),
       floor:_(`floor`),
       sign:_(`sign`),
       softsign:_(`softsign`),
@@ -2282,6 +2283,8 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
   elemCollapse:{
     docs:`Collapses an element (or a range of elements) in-place. Click to expand again. Pass in a function to create the element only if needed. Pass in null as \`end\` to collapse all consequent non-bracket siblings.`,
     call(start, end = undefined) {
+      const originalStart = start
+      if (typeof start === 'string') start = stringToDoc(start) // This can execute code (and interrupt).
       const col = elem('collapsed')
       if (typeof start == 'function') {
         col.setAttribute('content', '···')
@@ -2302,7 +2305,7 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
           }
         }
       } else {
-        if (isArray(start)) start = elem('text', start) // Assume `stringToDoc` made `start`.
+        if (isArray(start)) start = elemValue(elem('text', start), originalStart) // Assume `stringToDoc` made `start`.
         const parent = start.parentNode, pre = parent && _smoothHeightPre(parent)
         let nextCol = end !== undefined ? end : start.nextSibling
         const d = elem('hidden')
@@ -8462,6 +8465,14 @@ Is \`where 0<X X 0-X\`.`,
     mergeAdjustment:_(`_mergeTensors`),
   },
 
+  ceil:{
+    merged:true,
+    argCount:1,
+    dispose:true,
+    interrupt:false,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.ceil(a) : _tf(tf.ceil(a)) },
+  },
+
   floor:{
     stack:true,
     use:true,
@@ -8702,6 +8713,7 @@ Use \`sync\` to get the result as a non-tensor.`,
       cast:_(`cast`),
       range:_(`range`),
       transpose:_(`transpose`),
+      swapDims:_(`swapDims`),
       expandDims:_(`expandDims`),
       squeezeDims:_(`squeezeDims`),
       slice:_(`slice`),
@@ -8738,17 +8750,21 @@ Changes the tensor shape without changing the underlying data.
       [
         `repeat ^(reshape randomVar(10,100) ^(10 10))=1 1000`,
       ],
+      `Even explicitly, so that the outer \`1\` batch dimension can be preserved:`,
+      [
+        `repeat ^(reshape randomVar(1,100) ^(10 10) true)=1 1000`,
+      ],
     ],
     argCount:2,
     interrupt:false,
     dispose:true,
     impure:true,
-    call(a, shape) {
+    call(a, shape, batched = undefined) {
       a = _num(a), shape = _isDisposable(shape) ? shape.shape : shape
 
       // This makes `tf.reshape` batch-friendly.
       const N = _tensorSize(a), M = _tensorSize(shape)
-      if (_isDisposable(a) && N > M && N % M === 0 && (N/M)|0 === a.shape[0])
+      if (batched || batched === undefined && _isDisposable(a) && N > M && N % M === 0 && (N/M)|0 === a.shape[0])
         return _tf(tf.reshape(a, [a.shape[0], ...shape]))
 
       return _tf(tf.reshape(a, shape))
@@ -8856,7 +8872,7 @@ Creates a tensor of length \`floor (Start-End)/Step\`, with each value at \`i\` 
     ],
     merged:true,
     docs:`\`transpose What\`
-Swaps two innermost dimensions around.
+Swaps two innermost dimensions.
 Alternatively, \`transpose What DimensionsBecome\`.`,
     examples:[
       [
@@ -8913,6 +8929,50 @@ Alternatively, \`transpose What DimensionsBecome\`.`,
           _(`_inB`),
           _(`_dout`),
         ],
+      ],
+    ],
+  },
+
+  swapDims:{
+    merged:true,
+    docs:`\`swapDims Tensor A B\`
+Swaps two dimensions. \`B\` is \`-1\` by default.`,
+    examples:[
+      [
+        `repeat ^(swapDims randomVar(10,2,20) 0)=5 1000`,
+      ],
+      [
+        `repeat ^(swapDims randomVar(10,2,20) 1)=5 1000`,
+      ],
+    ],
+    interrupt:false,
+    dispose:true,
+    impure:true,
+    call(x, a, b = -1) {
+      x = _num(x)
+      if (typeof x == 'number') return x
+      if (!_isDisposable(x)) error('Not a tensor:', x)
+      if (a < 0) a += x.shape.length
+      if (b < 0) b += x.shape.length
+      if (a >= x.shape.length) error('Not enough dims:', x, a)
+      if (b >= x.shape.length) error('Not enough dims:', x, b)
+      if (a === b) return keep(x)
+
+      const d = swapDims.dims || (swapDims.dims = [])
+      d.length = x.shape.length
+      for (let i=0; i < d.length; ++i) d[i] = i
+      d[a] = b, d[b] = a
+
+      return transpose(x, d)
+    },
+    mergeAdjustment:_(`_mergeTensors`),
+    adjust:[
+      _(`array`),
+      [
+        _(`swapDims`),
+        _(`_dout`),
+        _(`_inB`),
+        _(`_inC`),
       ],
     ],
   },
@@ -9535,7 +9595,7 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
     adjust:{
       dispose:_(`_disposeEachAndDealloc`),
       call(ins, out, dout) { // Route `matMul`'s gradient to input and optimizer as needed.
-        const [x, Var, Outs, Dims, Shared = true, Optim = varAdam, Init = truncatedNormal] = ins
+        const [x, Var, Outs, Dims, Shared = true, Optim = varRAdam, Init = truncatedNormal] = ins
         const dThat = _matMul(x, dout, true, false)
         const a = _allocArray(1);  a[0] = Var
         try { _disposeEachAndDealloc(adjust(Optim, a, null, dThat)) }
@@ -9635,7 +9695,20 @@ Let's take a dense layer for example, meaning, \`matMul\` of a row-vector by a m
 
     (This problem in ML is so much worse than in programming languages (PLs). There, a PL can be implemented in another PL, introducing little or no inefficiency, so this can go on for many layers, say, machine code then assembly then C (in parallel with a bunch of other system PLs) then JS then the Conceptual cluster. In ML, even one such layer is a challenge beyond modern capabilities, because each of them has the quadratic bottleneck, assuming \`matMul\`.)
 
-Can we fix dense layers?`,
+Can we fix dense layers?
+Can YOU fix dense layers?
+To be clear: go from an algorithm that scales with the square of the input/output vector size, to one that scales linearly or linearithmically or such.
+Take some time to think about it.
+
+
+
+
+Now.
+
+
+
+
+Bow your head and accept my power, or go it alone and fail.`,
       [
         _(`fancier`),
         `rv:randomVar repeat ^(rv(10)@rv(10,20)=rv(20)) 100`,
@@ -9656,7 +9729,7 @@ Can we fix dense layers?`,
             \`\`elemCollapse elem('text','(Though, any emotion is prone to feedback loops, because humans are smart enough to be able to influence what they optimize.)')\`\`
       Now behold true trauma:
   (trivial)   M A T H
-              (Not for me. For an inferior insect such as yourself. I remember when I tasted a beetle.)
+              (Not for me. For an inferior insect such as yourself. I remember when I tasted squashed beetle.)
 
       If we have \`N\` inputs.
             (\`N\` is \`n**d\`, so \`d\` is \`log(N)/log(n)\` and \`n\` is \`N**(1/d)\`.)
@@ -9673,39 +9746,45 @@ Can we fix dense layers?`,
             (Do not mix along the index. Mix along each digit of indices. This still mixes each with each.)
 
       The only thing left is to implement transpose-then-mix linearithmic dense layers (LDL).
-              (And quite a few un-mentioned details, of the sort that you could figure out anyway by trying to implement it. Such as un/padding \`'out'\`puts / \`'in'\`puts, or inserting a dimension of \`1\` to prvent spurious broadcasting by \`denseLayer\`. See if you can figure the details out from this implementation.)`,
+              (And quite a few un-mentioned details, of the sort that you could figure out anyway by trying to implement it. Such as un/padding \`'out'\`puts / \`'in'\`puts, or inserting a dimension of \`1\` to prevent spurious broadcasting by \`denseLayer\`. See if you can figure the details out from this implementation.)
+      [Inter-skips:]`,
       [
         _(`fancier`),
         `n:16
-dims:floor(log(max2 hidden max2(inputs,outputs))/log(n))
-inDim:1+floor((inputs-1)/n**(d-1))
-outDim:1+floor((outputs-1)/n**(d-1))
-paddedIns:inDim*n**(d-1)
-paddedOuts:outDim*n**(d-1)
+dims:ceil(log(max2 hidden max2(inputs,outputs))/log(n))
+inDim:ceil(inputs/n**(d-1))
+outDim:ceil(outputs/n**(d-1))
+inDims:reverse(transform(d-1,i->ins->clip(ceil ins/n**i,1,n),inputs))
+outDims:reverse(transform(d-1,i->outs->clip(ceil outs/n**i,1,n),outputs))
+paddedIns:inDim*reduce(inDims,mul,1)
+paddedOuts:outDim*reduce(outDims,mul,1)
 m:make
 w:where
 paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,m zeros (m arrayConcat (m arraySlice (m _tensorShape node) 0 -1) m(quote,m paddedIns-inputs)),-1))
-inDef:node->d->inputs->m(expandDims,m(reshape,paddedInput,m quote arrayCons(inDim,arrayFilledWith d-1 n)),-2)
+inDef:node->d->inputs->m(stack,m unstack m(reshape,paddedInput,m quote arrayCons(inDim,inDims),true) 0,-2)
 transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,w equal(d,1) 1 0)) d)
 mixedFirst:(m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim d+1 false)
-mixedRest:(m denseLayer (m transpose node (m quote td.1)) (m quote m()) n td.0 false)
-mixDef:node->d->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 transposeDims nl),td->node->mixedRest,mixedFirst)
-reshapedOut:m(reshape,node,m quote m(paddedOuts))
+mixedRest:(m denseLayer (m transpose (apply td.2 node) (m quote td.1)) (m quote m()) (td.3).i td.0 false)
+mixDef:node->d->outD->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 transposeDims nl outD),td->node->i->mixedRest,mixedFirst)
+reshapedOut:m(reshape,m stack (m unstack node -2) 0,m quote m(paddedOuts),true)
 outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs,-1))
 save('mixer',
   m concept
-    docs "\`mixer Node InputSize HiddenSize OutputSize LayerCount Nonlinearity\`
-A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`Nonlinearity\` between all linear transformations, and with skip-connections (\`add\`) between layers for slightly better gradient flow.
+    docs "\`mixer Node InputSize HiddenSize OutputSize LayerCount OuterNonlinearity InnerNonlinearity\`
+A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`OuterNonlinearity\` between all linear transformation batches (and \`InnerNonlinearity\` within batches), and with skip-connections (\`add\`) between layers for slightly better gradient flow.
 (Call this when \`make\`ing another \`func\`tion.)
 
-An example non-linearity: \`m:x-mean(x) x->softsign(m/(sqrt(mean m*m)+1e-6))\`.
+The input must have exactly one batch dimension; if needed, \`expandDims(?,0)\` then \`squeezeDims(?,0)\`.
+
+An example non-linearity: \`m:x-mean(x) ?->(m x->softsign(m/(sqrt(mean m*m)+1e-6)) ?)\`.
+    Or \`id\`.
 
 This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one linearithmic dense layer), \`'out'\` (internal-to-vector), which are used in the \`call\`."
     callInput:inDef(node,dims,inputs)
-    callFirst:mixDef(callInput,dims,inputs,hidden,nonlinearity)
-    callRest:mixDef(w(equal a.0 undefined,node,m a.0 node),a.5,a.1,a.2,a.0)
-    callBod:outDef(reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5) m(nonlinearity,hidden,hidden,outputs,layers,dims),a->node->(w equal(a.1,a.2) (m add node callRest) callRest),w equal(inputs,hidden) (m add callInput callFirst) callFirst),dims,inputs,outputs)
-    call node->inputs->hidden->outputs->layers->nonlinearity->(w equal(inputs,outputs) (w equal(inputs,hidden) callBod (m add node callBod)) callBod)
+    callFirst:mixDef(callInput,dims,arrayFilledWith dims-1 n,inputs,hidden,innerNL)
+    callRest:mixDef(apply a.0 node,a.5,a.6,a.1,a.2,a.8)
+    callBod:outDef(reduce(transform layers i->a->where(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5 a.7 a.7 a.8) m(nonlinearity,hidden,hidden,outputs,layers,dims,arrayFilledWith dims-1 n,d->outputs->outDims dims outputs,innerNL),a->node->(w equal(a.1,a.2) (m add node callRest) callRest),w equal(inputs,hidden) (m add callInput callFirst) callFirst),dims,inputs,outputs)
+    call node->inputs->hidden->outputs->layers->nonlinearity->innerNL->(w equal(inputs,outputs) (w equal(inputs,hidden) callBod (m add node callBod)) callBod)
     'in' inDef
     'mix' mixDef
     'out' outDef
@@ -9716,7 +9795,9 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
       `        So, \`1\` \`transpose\` (with dims \`merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,0)) d)\`) becomes \`4\` operations: \`squeezeDims\` along \`-2\`, \`unstack\` along \`0\`, \`stack\` along \`-1\`, \`expandDims\` along \`-2\`.`,
       `        ...Or so you'd think at first, but, max-rank-\`6\` applies to \`stack\` too.`,
       `        The only real option (without fixing other people's code for them) is to make \`n\` so big that there are at most \`5\` dimensions.`,
-      `        \`n:8\` is enough to fit \`2e5\` inputs. \`n:16\` can fit \`1e7\`. Still linearithmic, just with a slightly bigger constant.`,
+      `        \`n:8\` is enough to fit \`32768\` units. \`n:16\` can fit \`1e6\`. Still linearithmic, just with a slightly bigger constant.`,
+      `            (Though, there's also the batch dimension. So, only much less can fit.)`,
+      `                (Though, later replaced \`expandDims(?,-2)\` with \`stack(unstack ? 0,-2)\`, so we have \`5\` dims again.)`,
       ``,
       `        So now, our code works.`,
       `        Not.`,
@@ -9735,12 +9816,12 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
       `This will be the last of ML exploration, one way or another. I'm sure that you too feel stifled by the particular-ness of Conceptual's structure.`,
       `        (All programming languages are built on copying of code to data, using what are often called \`func\`tions. By construction, this is only a very tiny subset of all possible programs. With machine learning, infinity can be used directly, though it can be hard and resource-intensive to refine into what you need.)`,
       `\`\`settings ^_learningRate\`\``,
-      `                                            (Also remember that performance on some systems suffers with \`\`settings ^_disableSmoothTransitions\`\` unchecked. Or on some multi-GPU systems with Nvidia drivers, with a solution in \`tutorial softmax\`.)
+      `                                            (Also remember that performance on some systems suffers with \`\`settings ^_disableSmoothTransitions\`\` unchecked. Or on some multi-GPU systems with Nvidia drivers, where you might need to rename the browser executable and/or create a hardlink to it.)
                                             (And if the GPU is not fully utilized, then just increase the batch size, who needs CPU-side efficiency. Or run many at once. Or suck it up.)`,
       [
         _(`fancier`),
         `m:make
-mx:(apply await(load 'mixer') ? in 16*1024 out 1 softsign)
+mx:(apply await(load 'mixer') ? in 16*1024 out 1 ?->(m softsign ?) id)
 displayedParams:stateCell(false)
 displayParams:m(func,Fn,m last (m print 'Params' (m parametersInVars Fn)) (m accessState displayedParams true))
 data in->out->(m func ? (m last mx (m select (m accessState displayedParams) null displayParams (m quote mx)) mx))`,
@@ -9752,7 +9833,7 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss 
       \`n:1024\`,\`1*1024\` hidden units, \`2097152\` params:
           # \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255 0.0014314721338450909\`
       With intra-layer non-linearities in \`mixedRest\` (yeah, those extra \`matMul\`s are extra layers, sure):
-          \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, ceil in \`dims\`:
+          \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, \`ceil\` in \`dims\`:
               \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
           \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
               \`0.0013092466397210956 0.0011801832588389516\`
@@ -9760,26 +9841,27 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss 
               \`16*1024\` hidden units: \`0.08653200417757034\`
               \`2*1024\` hidden units: \`0.25273409485816956\`
       Without a non-linearity in \`mixedRest\` (so those are only between full-mix layers):
-          # \`n:128\`, ceil in \`dims\`, \`12*1024\` hidden units, \`1900544\` params: \`0.00031006266362965107\` // TODO: 5
-          # \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\` // TODO: 5
+          # \`n:128\`, \`ceil\` in \`dims\`, \`12*1024\` hidden units, \`1900544\` params: \`0.00031006266362965107 0.00031061487970873713\`
+          # \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\`
               What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for underperformance when I last tried inter-layer NL (omitted)?
-              # \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\` // TODO: 5
-              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947 0.04388221725821495\` // TODO: 5 x
+              # \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\`
+              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947 0.04388221725821495 0.04591932147741318\`
               \`2*1024\` hidden units, \`311296\` params: \`0.2628728747367859\`
-              ceil in \`dims\` (\`floor(.999999+?)\`), \`2*1024\` hidden units, \`114688\` params: \`0.5009892582893372 0.5001762509346008 0.4998488426208496 0.5016201734542847 0.5031338930130005\`
+              \`ceil\` in \`dims\`, \`2*1024\` hidden units, \`114688\` params: \`0.5009892582893372 0.5001762509346008 0.4998488426208496 0.5016201734542847 0.5031338930130005\`
           Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
 
           Comparing reduced-hidden-units \`n:16\` with \`n:1024\`:
-              # \`666\` units, \`1363968\` params: \`0.03054337203502655\` // TODO: 5
-              # \`333\` units, \`681984\` params: \`0.21292918920516968\` // TODO: 5
+              # \`666\` units, \`1363968\` params: \`0.03054337203502655\`
+              # \`333\` units, \`681984\` params: \`0.21292918920516968\`
+
           In \`denseLayer\` (\`Rewrite\` it), \`varSGD\` instead of \`varRAdam\`, to see how robust LDLs are:
-              \`n:1024\`, \`1024\` units: \`0.0003273784532211721\`
-              \`n:16\`, \`48*1024\` units: \`0.10705959796905518\`
-              This is a huge anomaly. Why is \`varSGD\` so much worse than \`varRAdam\`? Is it some init issue?...
-              LR \`.003\`, \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
-              LR \`.003\`, \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+              LR \`.0003\`, \`n:1024\`, \`1024\` units: \`0.0003273784532211721\`
+              LR \`.0003\`, \`n:16\`, \`48*1024\` units: \`0.10705959796905518\`
+              LR \`.003\`, \`n:1024\`, \`1024\` units: \`9.374383864654834e-13\`
+              LR \`.003\`, \`n:16\`, \`48*1024\` units: \`0.000009306398169428576\`
               LR \`.03\`, \`n:1024\`, \`1024\` units: \`1.4066916034782828e-11\`
               LR \`.03\`, \`n:16\`, \`48*1024\` units: \`3.8550309862731003e-13\`
+              This is a huge anomaly. Why is \`varSGD\` so much worse than \`varRAdam\`? Is it some init issue?...
               The anomaly persists. What can we determine about its bounds? Say, \`n:1024\` with \`666\`/\`333\` units was bottoming out, not merely training slower; does LDL's advantage also disappear in those settings with different optimizers?
               LR \`.0003\`, \`n:1024\`, \`333\` units: \`0.2173244059085846\` (bottoming out)
               LR \`.0003\`, \`n:16\`, \`16*1024\` units: \`0.286091685295105\` (oof)
@@ -9789,37 +9871,154 @@ After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss 
               LR \`.03\`, \`n:16\`, \`16*1024\` units: \`0.028061721473932266\` (okay, good enough)
               LR \`.3\`, \`n:16\`, \`16*1024\` units: \`0.3520549535751343\` (overdid it)
               Okay, so it's likely just a training problem, and LDLs still seem to have better capacity.
-              LR \`.0003\`, \`n:1024\`, \`666\` units: \`?\` // TODO: 1
-              LR \`.0003\`, \`n:16\`, \`32*1024\` units: \`?\` // TODO: 1
-              LR \`.03\`, \`n:1024\`, \`666\` units: \`?\` // TODO: 1
-              LR \`.03\`, \`n:16\`, \`32*1024\` units: \`?\` // TODO: 1
               In \`denseLayer\`, \`.25/sqrt(in)\` instead of \`1/sqrt(in)\`:
-                  \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
-                  \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1 x
+                  \`n:16\`, \`48*1024\` units: \`.774\` (did not learn at all)
               In \`denseLayer\`, \`4/sqrt(in)\` instead of \`1/sqrt(in)\`:
-                  \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
-                  \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
+                  \`n:16\`, \`48*1024\` units: \`0.33651769161224365\` (began at 800 loss, so, may want to tone the multiplier down a notch; ended in a very bad place)
           In \`denseLayer\`, \`varAdam\` instead of \`varRAdam\`:
               \`n:1024\`, \`1024\` units: \`0.001423900481313467\`
               \`n:16\`, \`48*1024\` units: \`0.00020152713113930076\`
               This one actually looks almost exactly like \`varRAdam\`. But why was \`varSGD\` training a better fully-connected layer?
-              \`n:1024\`, \`333\` units: \`?\` // TODO: 1
-              \`n:16\`, \`16*1024\` units: \`?\` // TODO: 1
-              \`n:16\`, \`32*1024\` units: \`?\` // TODO: 1
-              \`n:1024\`, \`666\` units: \`?\` // TODO: 1
-          In \`denseLayer\`, \`varMomentum\` instead of \`varRAdam\`:
-              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
-              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
-          In \`denseLayer\`, \`varRMSProp\` instead of \`varRAdam\`:
-              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
-              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
-          In \`denseLayer\`, \`.25/sqrt(in)\` instead of \`1/sqrt(in)\`:
-              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
-              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
-          In \`denseLayer\`, \`4/sqrt(in)\` instead of \`1/sqrt(in)\`:
-              \`n:1024\`, \`1024\` units: \`?\` // TODO: 1
-              \`n:16\`, \`48*1024\` units: \`?\` // TODO: 1
-      // TODO: Update the PDF with these more accurate bounds.
+
+Actually, with \`\`settings ^_numericCPU\`\`, we should be able to run with arbitrary tensor ranks, just with much smaller datasets. Didn't even think of that.
+      \`64\` inputs and outputs and dataset examples, \`ceil\` in \`dims\`:
+          \`n:64\`, \`64\` units, \`8192\` params: \`0.000008572877050028183\`
+          \`n:64\`, \`46\` units, \`5888\` params: \`0.013236382976174355\`
+          \`n:8\` (sqrt), \`256\` units, \`5632\` params: \`0.00003373153958818875\`
+          \`n:4\` (cbrt), \`256\` units, \`4352\` params: \`0.02959940768778324\`
+          \`n:2\`, \`256\` units, \`5888\` params: \`0.15433886647224426 0.12541256844997406\`
+          \`n:2\`, \`256\` units, \`5632\` params (code changed): \`0.1730518937110901\`
+              (Intra-layer batch norm here (\`y:x-mean(x) ?->(m x->y/(sqrt(mean y*y)+1e-8) ?)\`) does not help: \`0.14121349155902863\`.)
+              (Pretty sure that it's \`slice\`ing out half of output units, and padding with \`64\` zeros, so like 75% of capacity is getting wasted here.)
+          Those "equal-params" unit counts are a little suspicious, so I cannot accept these results. Damn the improper implementation that does not assign all dimensions to very-small vectors properly.
+          Maybe we should still have a big dataset (1024?), but still about 10K params for tractability, to make inner sizes comparable?...
+          Made \`'mixer'\` waste less dimensions when input or output is small compared to hidden state. (Good timing: after so much was already computed and written down.)
+
+Actually, we can have skip-connections inside each layer (which might significantly help training for big depths, which occur at low \`n\`s). We need to swap a dimension, do a \`matMul\` (\`denseLayer\`), then swap it back, to make all shapes equal.
+      (Again, what a good time to write all this better code, invalidating all computations with the previous code.)
+(I'll just leave the above results, without any warning that they're superseded, to let you soak in the full experience of rewriting code.)
+      [Intra-skips:]`,
+      [
+        _(`fancier`),
+        `n:16
+dims:ceil(log(max2 hidden max2(inputs,outputs))/log(n))
+inDim:ceil(inputs/n**(d-1))
+outDim:ceil(outputs/n**(d-1))
+inDims:reverse(transform(d-1,i->ins->clip(ceil ins/n**i,1,n),inputs))
+outDims:reverse(transform(d-1,i->outs->clip(ceil outs/n**i,1,n),outputs))
+paddedIns:inDim*reduce(inDims,mul,1)
+paddedOuts:outDim*reduce(outDims,mul,1)
+m:make
+w:where
+paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,m zeros (m arrayConcat (m arraySlice (m _tensorShape node) 0 -1) m(quote,m paddedIns-inputs)),-1))
+inDef:node->d->inputs->m(stack,m unstack m(reshape,paddedInput,m quote arrayCons(inDim,inDims),true) 0,-2)
+mixedFirst:(m swapDims (m denseLayer (m swapDims node w(1<d,0,1)) (m quote m()) outDim d+1 false) w(1<d,0,1))
+mixedIndex:w(i+1<td.0-2,i+1,td.0-1)
+mixedRest:(m swapDims (m denseLayer (m swapDims (apply td.1 node) mixedIndex) (m quote m()) (td.3).i td.0 false) mixedIndex)
+mixDef:node->d->inD->outD->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 nl inD outD),td->node->i->(w equal((td.2).i,(td.3).i) (m add node mixedRest) mixedRest),w equal(inputs,outputs) (m add node mixedFirst) mixedFirst)
+reshapedOut:m(reshape,m stack (m unstack node -2) 0,m quote m(paddedOuts),true)
+outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs,-1))
+save('mixer',
+  m concept
+    docs "\`mixer Node InputSize HiddenSize OutputSize LayerCount OuterNonlinearity InnerNonlinearity\`
+A \`func\`tion to \`make\` \`adjust\`able linearithmic dense layers: mix everything-to-everything in the vector \`Node\` of length \`InputSize\` to produce a vector of length \`OutputSize\`, \`LayerCount+1\` times, with \`OuterNonlinearity\` between all linear transformation batches (and \`InnerNonlinearity\` within batches), and with skip-connections (\`add\`) throughout the layers for slightly better gradient flow (but only where dimensions match, so equal input/hidden/output dimensions work best).
+(Call this when \`make\`ing another \`func\`tion.)
+
+The input must have exactly one batch dimension; if needed, \`expandDims(?,0)\` then \`squeezeDims(?,0)\`.
+
+An example non-linearity: \`m:x-mean(x) ?->(m x->softsign(m/(sqrt(mean m*m)+1e-6)) ?)\`.
+    Or \`id\`.
+
+This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one linearithmic dense layer), \`'out'\` (internal-to-vector), which are used in the \`call\`."
+    callInput:inDef(node,dims,inputs)
+    callFirst:mixDef(callInput,dims,d->inputs->inDims dims inputs,arrayFilledWith dims-1 n,inputs,hidden,innerNL)
+    callRest:mixDef(apply a.0 node,a.5,arrayFilledWith a.5-1 n,a.6,a.1,a.2,a.8)
+    callBod:outDef(reduce(transform layers i->a->w(i+1<a.4,a,m a.0 a.1 a.3 a.3 a.4 a.5 a.7 a.7 a.8) m(nonlinearity,hidden,hidden,outputs,layers,dims,arrayFilledWith dims-1 n,d->outputs->outDims dims outputs,innerNL),a->node->callRest,callFirst),dims,inputs,outputs)
+    call node->inputs->hidden->outputs->layers->nonlinearity->innerNL->(w equal(inputs,outputs) (w equal(inputs,hidden) callBod (m add node callBod)) callBod)
+    'in' inDef
+    'mix' mixDef
+    'out' outDef
+)`,
+      ],
+      `
+\`64\`io:
+    \`n:2\`, \`256\`u \`4608\`p: \`\`elemCollapse"
+        Intra-skips:
+            Intra-layer \`softsign\`: \`0.04296008124947548\`
+            Inter-layer \`softsign\`: \`0.13787789642810822\`
+            So, extra non-linearities are good now?
+        Inter-skips:
+            Intra-layer \`softsign\`: \`0.1799943745136261\`
+            Inter-layer \`softsign\`: \`0.13399064540863037\`"\`\`
+        So skip-connections help iff we have many non-linearities in one layer. Else, unknown.
+    \`n:4\` (cbrt), \`?\`u \`?\`p: \`\`elemCollapse"
+        Intra-skips:
+            Intra-layer \`softsign\`: \`?\` // TODO
+            Inter-layer \`softsign\`: \`?\` // TODO
+        Inter-skips:
+            Intra-layer \`softsign\`: \`?\` // TODO
+            Inter-layer \`softsign\`: \`?\` // TODO"\`\`
+    \`n:8\` (sqrt), \`?\`u \`?\`p: \`\`elemCollapse"
+        Intra-skips:
+            Intra-layer \`softsign\`: \`?\` // TODO
+            Inter-layer \`softsign\`: \`?\` // TODO
+        Inter-skips:
+            Intra-layer \`softsign\`: \`?\` // TODO
+            Inter-layer \`softsign\`: \`?\` // TODO"\`\`
+    \`n:64\` (full), \`?\`u \`?\`p: \`\`elemCollapse"
+        Intra-skips:
+            Intra-layer \`softsign\`: \`?\` // TODO
+            Inter-layer \`softsign\`: \`?\` // TODO
+        Inter-skips:
+            Intra-layer \`softsign\`: \`?\` // TODO
+            Inter-layer \`softsign\`: \`?\` // TODO"\`\`
+\`1024\`io, \`2\`M params:
+    \`n:16\` (close to cbrt, but unlike \`n:8\`, we can run this), \`48*1024\`u \`1880064\`p:
+        Intra-skips:
+            Intra-layer \`softsign\`: \`\`elemCollapse"
+                \`varSGD\`: \`0.001144259236752987\`
+                \`varMomentum\`: \`0.001162143424153328\`
+                \`varRMSProp\`: \`0.0002183210162911564\`
+                \`varRAdam\`: \`0.00020338593458291143\`"\`\`
+                (Even plain SGD is not bad now.)
+            Inter-layer \`softsign\`: \`\`elemCollapse"
+                \`varSGD\`: \`0.00006496079731732607\` (way better)
+                \`varMomentum\`: \`0.0000648447748972103\`
+                \`varRMSProp\`: \`0.00016207985754590482\` (initially trained faster than SGD/Momentum, but then kinda bottomed out)
+                \`varRAdam\`: \`0.00015326894936151803\`"\`\`
+            So, inter-layer is better. (Kinda conflicting with \`n:2\`.)
+        Inter-skips:
+            Intra-layer \`softsign\`: \`\`elemCollapse"
+                \`varSGD\`: \`0.006106331944465637\`
+                \`varMomentum\`: \`0.006033353507518768\`
+                \`varRMSProp\`: \`0.000607385067269206\` (bottoming out)
+                \`varRAdam\`: \`0.0005764835514128208\`"\`\`
+                (In-layer skip connections do speed up training, at least with inter-layer NLs, as this is slower.)
+            Inter-layer \`softsign\`: \`\`elemCollapse"
+                \`varSGD\`: \`0.000020850831788266078\`
+                \`varMomentum\`: \`0.00003141110937576741\`
+                \`varRMSProp\`: \`0.00018530063971411437\` (bottoming out)
+                \`varRAdam\`: \`0.00017935290816240013\`"\`\`
+        So, inter-layer NLs are better, whereas (partial) inter-skips are controversial (worse with intra-layerNLs, better with inter-layer).
+        (And, SGD = SGD with momentum, and RMSProp = Adam. Whether SGD or R/Adam is better is controversial.)
+    Intra-skips inter-layer \`varRAdam\`:
+        \`n:32\` (sqrt), \`?\`u \`?\`p: \`?\` // TODO
+        \`n:128\`, \`?\`u \`?\`p: \`?\` // TODO
+        \`n:1024\` (full), \`918\`u \`1880064\`p: \`0.0018824153812602162\` // TODO: 5
+\`1024\`io, ?????? params:
+    Intra-skips inter-layer \`varRAdam\`:
+        \`n:16\`, \`1024\`u \`73728\`p: \`0.31698131561279297\`
+        \`n:16\`, \`16*1024\`u \`659456\`p: \`0.03221355378627777 0.032351523637771606 0.03226030245423317 0.032208725810050964 0.032005425542593\`
+            \`\`elemCollapse"Padded/sliced io to \`16*1024\` for the full skip-connection experience: \`1703936\`u: \`0.05565287172794342\` (a sanity check that does not seem perfectly sane, as loss differs, though not terribly)"\`\`
+        \`n:16\`, \`32*1024\`u \`1269760\`p: \`0.00028287459281273186 0.00028394904802553356 0.0002822627138812095 0.00028381525771692395 0.00028426203061826527\`
+        \`n:32\`, \`?\`u \`660\`Kp: \`?\` // TODO
+        \`n:32\`, \`?\`u \`1.25\`Mp: \`?\` // TODO
+        \`n:1024\`, \`?\`u \`660\`Kp: \`?\` // TODO
+        \`n:1024\`, \`?\`u \`1.25\`Mp: \`?\` // TODO
+// TODO: Update the PDF.
+// TODO: ...Does attention interact with dense layers quadratically? Or is it only in sequence length?
+`,
+      `
 
 
 A synthetic dataset
@@ -9859,7 +10058,7 @@ testSource:(make concept 'in' i 'out' 100 'size' arrayLength(D)/n call at->array
         `batchSize:8
 mn:x-mean(x)
 nl:x->tanh(mn/(sqrt(mean mn*mn)+1e-8))
-nn:static(make func ? (apply await(load 'mixer') ? defines(dataSource,'in') 30000 defines(dataSource,'out') 2 nl))
+nn:static(make func ? (apply await(load 'mixer') ? defines(dataSource,'in') 30000 defines(dataSource,'out') 2 ?->(make nl ?) id))
 data:zeroGrad(transform(batchSize,func dataSource()))
 ins:stack(transform data io->io.0)
 outs:stack(transform data io->io.1)
@@ -9868,7 +10067,7 @@ do:(minimize abs(got) 1e-4);(predict got outs softmaxLoss)
 displayedParams:stateCell(false)
 displayParams:Fn->(displayOne 'Params' (parametersInVars Fn));(accessState displayedParams true)
 testData:testSource()
-testOne:func(display(TestAccuracy,equals argmax(nn(testData.0)) argmax(testData.1)))
+testOne:func(display(TestAccuracy,equals argmax(nn(expandDims testData.0 0),-1) argmax(testData.1)))
 trained:(repeat ^(do;displayOne(Output,do);display(Perplexity,exp(sum(0-outs*log(softmax(do)+1e-8))/batchSize));display(Accuracy,mean(equals argmax(do,-1) argmax(outs,-1)));adjustNever(testOne);(select (accessState displayedParams) null displayParams nn);softmax(do)+outs) 500000);nn`,
       ],
       `        (At the output, we add predicted and actual probabilities, for easy visual discrimination: near-\`1\` are bad, near-\`0\` and near-\`2\` are good.)`,
@@ -9911,7 +10110,7 @@ elemCollapse _executioner(^(a;b;c;d;(display TrainPerplexity await(a) 10);(displ
       `\`n:64\`, \`7.21\`M params (\`16500\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.3\`Ks: train perplexity \`2.18\`, train acc \`82.97\`%, test acc \`23.14\`%. (\`floor\` in \`dims\` is an affront to our gods.)`,
       `\`n:64\`, ceil in \`dims\`, \`7.01\`M params (\`24576\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` Kit that took \`43.7\`Ks: train perplexity \`1.664\`, train acc \`87.96\`%, test acc \`23.38\`%.`,
       `\`n:64\`, ceil in \`dims\`, LR \`.001\`, ..., \`500\`Kit that took \`49.2\`Ks: train perplexity \`1.515\`, train acc \`90.68\`%, test acc \`23.27\`%.`,
-      // TODO: ...Re-run the 4 relevant CIFAR-100 experiments with the bug fixed.
+      // TODO: Re-run, at the very least, n:16, with the ceil version.
       `
 This is the end of this LDL (linearithmic dense layer) \`tutorial\`.
             It was very boring, I know. It's because I put most or all creative thoughts (the ones that unpredictably coalesce into a good form during the day, and should be preserved long enough to put into writing) into the paper on this. See the repo; see \`Self\` for the link.
@@ -9969,7 +10168,7 @@ To test on CIFAR-100, simply replace \`'mixer'\` with \`'advMixer'\` in the prio
       [
         _(`fancier`),
         `mixer:await(load 'mixer') m:make
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(mixer (m gradMul (mixer (m gradMul Node -1) Inputs Hidden Hidden Layers Nonlinearity) -1) Hidden Hidden Outputs Layers Nonlinearity))`,
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->InnerNL->(mixer (m gradMul (mixer (m gradMul Node -1) Inputs Hidden Hidden Layers Nonlinearity InnerNL) -1) Hidden Hidden Outputs Layers Nonlinearity InnerNL))`,
       ],
       `[A], \`3.4\`M params (\`10000\` hidden), \`17.6\`Ks: \`2\`% train acc, \`2.1\`% test acc.
       (The output is always just 2 patterns of different brightness, meaning that the inverted-gradient layer collapsed representations. Far too adversarial.)`,
@@ -9979,17 +10178,17 @@ save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(mixer (m g
         `simpSize:1000
 noiseSize:100
 mixer:await(load 'mixer') m:make
-real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity)
-simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity)
+real:mixer(Node,Inputs,Hidden,Outputs,Layers,Nonlinearity,InnerNL)
+simp:mixer(Node,Inputs,Hidden,simpSize,Layers,Nonlinearity,InnerNL)
 noise:(m truncatedNormal (m arrayConcat m(arraySlice,m _tensorShape Node,0,-1) ^^noiseSize()))
-fake:(m gradMul mixer(m concat2 simp noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
+fake:(m gradMul mixer(m concat2 simp noise -1,simpSize+noiseSize,Hidden,Outputs,Layers,Nonlinearity,InnerNL) -1)
+discriminator:(m func X (m sigmoid (m denseLayer (apply Nonlinearity mixer(X,simpSize+Outputs,Hidden,Hidden,Layers,Nonlinearity,InnerNL)) (m quote m()) 1 1)))
 preal:(m discriminator (m concat2 simp real -1))
 pfake:(m discriminator (m concat2 simp fake -1))
 sm:(m add (m add preal pfake) 1e-8)
 preal2:(m div preal sm)
 pfake2:(m div pfake sm)
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul (m broadcastTo preal2 real) real) (m mul (m broadcastTo pfake2 fake) fake))))`,
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->InnerNL->(m last (m minimize preal2 -1) (m minimize pfake2) (m add (m mul (m broadcastTo preal2 real) real) (m mul (m broadcastTo pfake2 fake) fake))))`,
       ],
       `When running [B] (with \`10000\` hidden units), it did train, had a loss spike, then collapsed embeddings at 100k epochs (so the pre-softmax outputs are about \`1e-14\`).`,
       `[C]: (The bottleneck works only for \`D\` because of gradient double-inversion: \`simp\` in \`fake\` becomes \`(gradMul simp -1)\`.)
@@ -10002,13 +10201,13 @@ save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m 
         _(`fancier`),
         `noiseSize:100
 mixer:await(load 'mixer') m:make
-real:mixer(Node,Inputs,Hidden,Hidden,Layers,Nonlinearity)
+real:mixer(Node,Inputs,Hidden,Hidden,Layers,Nonlinearity,InnerNL)
 noise:(m truncatedNormal (m arrayConcat m(arraySlice,m _tensorShape Node,0,-1) ^^noiseSize()))
-fake:(m gradMul mixer(m concat2 (m gradMul real -1) noise -1,Hidden+noiseSize,Hidden,Hidden,Layers,Nonlinearity) -1)
-discriminator:(m func X (m sigmoid (m denseLayer (m Nonlinearity mixer(X,Hidden,Hidden,Hidden,Layers,Nonlinearity)) (m quote m()) 1 1)))
+fake:(m gradMul mixer(m concat2 (m gradMul real -1) noise -1,Hidden+noiseSize,Hidden,Hidden,Layers,Nonlinearity,InnerNL) -1)
+discriminator:(m func X (m sigmoid (m denseLayer (apply Nonlinearity mixer(X,Hidden,Hidden,Hidden,Layers,Nonlinearity,InnerNL)) (m quote m()) 1 1)))
 preal:(m discriminator real)
 pfake:(m discriminator fake)
-save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->(m last (m minimize preal -1) (m minimize pfake) mixer(m add (m mul .5 real) (m mul .5 (m softsign fake)),Hidden,Hidden,Outputs,Layers,Nonlinearity)))`,
+save('advMixer',Node->Inputs->Hidden->Outputs->Layers->Nonlinearity->InnerNL->(m last (m minimize preal -1) (m minimize pfake) mixer(m add (m mul .5 real) (m mul .5 (m softsign fake)),Hidden,Hidden,Outputs,Layers,Nonlinearity,InnerNL)))`,
       ],
       `\`31\`Ks: \`10000\` units (\`4.1\`M params), \`.9*real+.1*tanh(fake)\` faking the output: \`89\`% train acc, \`22\`% test acc. Useless.`,
       `\`10000\` units, \`.3*real+.7*softsign(fake)\` faking the output: collapsed (to \`-150000\` in outputs) after 140K iterations.`,
@@ -13345,6 +13544,10 @@ Maximizes memory re-use.`,
         `transform 10 a->b->a*b 5`,
         `0 5 10 15 20 25 30 35 40 45`,
       ],
+      `\`transform\` also passes the index as the third arg, in case you need it:`,
+      [
+        `transform transform(10,x->2*x+1) perItem->global->i->i/perItem 'broadcasted'`,
+      ],
     ],
     call(a,f,c) {
       if (!isArray(a) && typeof a != 'string' && typeof a != 'number')
@@ -13353,7 +13556,7 @@ Maximizes memory re-use.`,
       let [result = _allocArray(typeof a != 'number' ? a.length : a), i = 0] = interrupt(2)
       try {
         for (; i < result.length; ++i)
-          result[i] = f(typeof a != 'number' ? a[i] : i, c)
+          result[i] = f(typeof a != 'number' ? a[i] : i, c, i)
         return result
       } catch (err) { if (err === interrupt) interrupt.stack.push(result, i); else _disposeEachAndDealloc(result);  throw err }
     },
@@ -13367,7 +13570,7 @@ Maximizes memory re-use.`,
             let [dresult = _allocArray(typeof a != 'number' ? a.length : a), i = dresult.length] = interrupt(2)
             try {
               for (; i > 0; --i) {
-                const ins = _allocArray(2); ins[0] = typeof a != 'number' ? a[i-1] : i-1, ins[1] = c
+                const ins = _allocArray(3);  ins[0] = typeof a != 'number' ? a[i-1] : i-1, ins[1] = c, ins[2] = i-1
                 try {
                   const dins = adjust(f, ins, null, dout[i-1])
                   if (!isArray(dins)) errorStack('bad adj', dins)
@@ -13428,7 +13631,7 @@ Maximizes memory re-use.`,
 
   loop:{
     use:4,
-    docs:`\`loop Array Accumulator Initial\`→\`AccumulatedArray\`: loops over the array left-to-right, setting \`Output.i\` to \`Accumulator(Array.i,where 0<i Output.(i-1) Initial)\` then returning \`Output\`.
+    docs:`\`loop Array Accumulator Initial\`→\`AccumulatedArray\`: loops over the array left-to-right, setting \`Output.i\` to \`Accumulator(Array.i,where 0<i Output.(i-1) Initial,i)\` then returning \`Output\`.
 \`Array\` can also be a \`'string'\`.
 
 Can also add \`true\` after those args, to \`reverse\` both input and output (go right-to-left).
@@ -13500,10 +13703,10 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
       try {
         if (reversed)
           for (; i >= 0; --i)
-            outs[i] = f(typeof a == 'number' ? i : a[i], i < n-1 ? outs[i+1] : initial)
+            outs[i] = f(typeof a == 'number' ? i : a[i], i < n-1 ? outs[i+1] : initial, i)
         else
           for (; i < n; ++i)
-            outs[i] = f(typeof a == 'number' ? i : a[i], i ? outs[i-1] : initial)
+            outs[i] = f(typeof a == 'number' ? i : a[i], i ? outs[i-1] : initial, i)
 
         // No need for `adjust` to preserve the output.
         const copy = _allocArray(outs.length)
@@ -13532,9 +13735,9 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
           let dinitial
           for (; i >= 0; --i) {
             const j = reversed ? i+1 : i-1
-            let dins, ins = _allocArray(2); ins[0] = typeof a == 'number' ? i : a[i], ins[1] = (reversed ? i < n-1 : i) ? outs[j] : initial
+            let dins, ins = _allocArray(3);  ins[0] = typeof a == 'number' ? i : a[i], ins[1] = (reversed ? i < n-1 : i) ? outs[j] : initial, ins[2] = i
             try { dins = adjust(f, ins, outs[i], douts[i]) } finally { _allocArray(ins) }
-            if (!isArray(dins) || dins.length != 2) errorStack('bad adjustment', dins)
+            if (!isArray(dins)) errorStack('bad adjustment', dins)
             let grad
             if (reversed ? i < n-1 : i) {
               [da[i], grad = 0] = dins, _allocArray(dins)
