@@ -1,7 +1,10 @@
+/* Licensed under GPLv3. */
 /* Code begins at the first `})({`, as methods that are bound to each other. _XXX methods are private and somewhat invisible. */
 'use strict';
 (function() {
-const __version = '0'
+const __version = `5`
+const __line = function(lines, funs) { for (let i=0; i < funs.length; ++i) __line.lines[''].push(lines[i], funs[i]) }
+__line.lines = {['']:[]}
 const _ = (function is(name) {
   const obj = Object.create(is)
   return obj.is = name, obj
@@ -117,12 +120,12 @@ function __base(net) {
 __base({
 
   Initialize:{
-    docs:`The program's entry point.`,
     readAt:{
       Browser:_(`Browser`),
       NodeJS:_(`NodeJS`),
       WebWorker:_(`WebWorker`),
     },
+    docs:`The program's entry point.`,
     nameResult:[
       `The nightmare reborn`,
     ],
@@ -136,7 +139,6 @@ __base({
       // Turn `net` into maps.
       let ctx = new Map
       Object.keys(net).forEach(k => ctx.set(k, net[k]))
-      ctx.set('_globalScope', net)
       Self.ctx = ctx
       Self[defines.key][_id(readAt)] = net, Object.freeze(Self[defines.key])
 
@@ -179,7 +181,6 @@ __base({
   },
 
   Execution:{
-    docs:`Execution-related functionality.`,
     readAt:{
       Time:_(`Time`),
       Numeric:_(`Numeric`),
@@ -187,10 +188,10 @@ __base({
       limit:_(`limit`),
       interpreter:_(`interpreter`),
     },
+    docs:`Execution-related functionality.`,
   },
 
   Documentation:{
-    docs:`Documentation-related functions.`,
     readAt:{
       tutorial:_(`tutorial`),
       docs:_(`docs`),
@@ -202,10 +203,10 @@ __base({
       todo:_(`todo`),
       philosophy:_(`philosophy`),
     },
+    docs:`Documentation-related functions.`,
   },
 
   Numeric:{
-    docs:`A namespace for some very primitive numeric-computation-related functionality.`,
     readAt:{
       _numericCPU:_(`_numericCPU`),
       _debugNaNs:_(`_debugNaNs`),
@@ -217,6 +218,7 @@ __base({
       NumTypes:_(`NumTypes`),
       Neural:_(`Neural`),
     },
+    docs:`A namespace for some very primitive numeric-computation-related functionality.`,
   },
 
   _numericCPU:[
@@ -233,7 +235,6 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   ],
 
   NumInit:{
-    docs:`A namespace for numeric initialization.`,
     readAt:{
       zeros:_(`zeros`),
       identity:_(`identity`),
@@ -242,46 +243,10 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       randomVarData:_(`randomVarData`),
       varData:_(`varData`),
     },
+    docs:`A namespace for numeric initialization.`,
   },
 
   Arithmetic:{
-    examples:[
-      `Loss goes down.`,
-      [
-        `repeat ^randomVar(ones)+randomVar(ones)=5 100`,
-      ],
-      [
-        `repeat ^randomVar(ones)*randomVar(ones)=5 100`,
-      ],
-      [
-        `repeat ^randomVar(ones)-randomVar(ones)=5 100`,
-      ],
-      [
-        `repeat ^randomVar(ones)/randomVar(ones)=5 100`,
-      ],
-      [
-        `repeat ^randomVar(ones)**randomVar(ones)=5 1000`,
-      ],
-      [
-        `repeat ^sqrt(randomVar(ones))=5 1000`,
-      ],
-      [
-        `repeat ^exp(randomVar(ones))=5 100`,
-      ],
-      [
-        `repeat ^expm1(randomVar(ones))=5 100`,
-      ],
-      [
-        `repeat ^log(randomVar(ones))=5 1000`,
-      ],
-      [
-        `repeat ^sin(randomVar(ones))=.5 1000`,
-      ],
-      [
-        `repeat ^softsign(randomVar(ones))=.5 1000`,
-      ],
-    ],
-    docs:`This is where we shamelessly copy over the functions of TensorFlowJS that we need.`,
     readAt:{
       assertFinite:_(`assertFinite`),
       less:_(`less`),
@@ -318,14 +283,56 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       oneHot:_(`oneHot`),
       matMul:_(`matMul`),
     },
+    docs:`This is where we shamelessly copy over the functions of TensorFlowJS that we need.`,
+    examples:[
+      `Loss goes down.`,
+      [
+        `repeat ^randomVar(ones)+randomVar(ones)=5 100`,
+      ],
+      [
+        `repeat ^randomVar(ones)*randomVar(ones)=5 100`,
+      ],
+      [
+        `repeat ^randomVar(ones)-randomVar(ones)=5 100`,
+      ],
+      [
+        `repeat ^randomVar(ones)/randomVar(ones)=5 100`,
+      ],
+      [
+        `repeat ^randomVar(ones)**randomVar(ones)=5 1000`,
+      ],
+      [
+        `repeat ^sqrt(randomVar(ones))=5 1000`,
+      ],
+      [
+        `repeat ^exp(randomVar(ones))=5 100`,
+      ],
+      [
+        `repeat ^expm1(randomVar(ones))=5 100`,
+      ],
+      [
+        `repeat ^log(randomVar(ones))=5 1000`,
+      ],
+      [
+        `repeat ^sin(randomVar(ones))=.5 1000`,
+      ],
+      [
+        `repeat ^softsign(randomVar(ones))=.5 1000`,
+      ],
+    ],
   },
 
   assertFinite:{
     docs:`For debugging.`,
-    argCount:1,
-    keep:1,
-    dispose:1,
     interrupt:false,
+    argCount:1,
+    dispose:1,
+    adjust:[
+      _(`array`),
+      _(`_dout`),
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
+    keep:1,
     call(x) {
       if (_isDisposable(x)) {
         const data = x.dataSync()
@@ -335,11 +342,6 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       }
       return x
     },
-    mergeAdjustment:_(`_mergeTensors`),
-    adjust:[
-      _(`array`),
-      _(`_dout`),
-    ],
   },
 
   _isNum(x) { return typeof x == 'number' },
@@ -357,11 +359,15 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   },
 
   less:{
+    docs:`a<b for each value.`,
+    interrupt:false,
+    argCount:2,
+    dispose:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
       [
         _(`boolsType`),
         [
@@ -370,19 +376,19 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
         ],
       ],
     ],
-    docs:`a<b for each value.`,
-    argCount:2,
-    dispose:true,
-    interrupt:false,
     call(a,b) { return a=_num(a), b=_num(b), _isNum(a) && _isNum(b) ? a<b : _tf(tf.less(a,b)) },
   },
 
   equals:{
+    docs:`a==b for each value. Like \`equal\` but broadcasted on \`tensor\`s.`,
+    interrupt:false,
+    argCount:2,
+    dispose:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
       [
         _(`boolsType`),
         [
@@ -391,48 +397,17 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
         ],
       ],
     ],
-    docs:`a==b for each value. Like \`equal\` but broadcasted on \`tensor\`s.`,
-    argCount:2,
-    dispose:true,
-    interrupt:false,
     call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a===b : _tf(tf.equal(a,b)) },
   },
 
   where:{
-    use:true,
-    type:[
-      _(`funcType`),
-      [
-        _(`boolsType`),
-        [
-          _(`rest`),
-          `Sizes`,
-        ],
-      ],
-      _(5696),
-      _(5696),
-      _(5696),
-    ],
     readAt:{
       values:_(`_whereValues`),
     },
     docs:`a?b:c for each value.`,
+    interrupt:false,
     argCount:3,
     dispose:true,
-    interrupt:false,
-    call(a,b,c) {
-      if (typeof a == 'boolean') return a ? keep(b) : keep(c) // `_whereValues`
-      a=_num(a), b=_num(b), c=_num(c)
-      // Since `tf.where` doesn't broadcast numbers, we must do it ourselves. (A one-liner otherwise.)
-      //   (Wouldn't have been a problem with manual compilation for GPU…)
-      const shape = a && a.size > 1 ? a.shape : b && b.size > 1 ? b.shape : c && c.size > 1 ? c.shape : a.shape
-      let db=false, dc=false
-      try {
-        if (typeof b == 'number' || b.size === 1) b = broadcastTo(b, shape), db=true
-        if (typeof c == 'number' || c.size === 1) c = broadcastTo(c, shape), dc=true
-        return _tf(tf.where(a,b,c))
-      } finally { db && dispose(b), dc && dispose(c) }
-    },
     adjust:[
       _(`array`),
       0,
@@ -454,6 +429,33 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       _(`_mergeTensors`),
       _(`_mergeTensors`),
     ],
+    use:true,
+    type:[
+      _(`funcType`),
+      [
+        _(`boolsType`),
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+      ],
+      _(41),
+      _(41),
+      _(41),
+    ],
+    call(a,b,c) {
+      if (typeof a == 'boolean') return a ? keep(b) : keep(c) // `_whereValues`
+      a=_num(a), b=_num(b), c=_num(c)
+      // Since `tf.where` doesn't broadcast numbers, we must do it ourselves. (A one-liner otherwise.)
+      //   (Wouldn't have been a problem with manual compilation for GPU…)
+      const shape = a && a.size > 1 ? a.shape : b && b.size > 1 ? b.shape : c && c.size > 1 ? c.shape : a.shape
+      let db=false, dc=false
+      try {
+        if (typeof b == 'number' || b.size === 1) b = broadcastTo(b, shape), db=true
+        if (typeof c == 'number' || c.size === 1) c = broadcastTo(c, shape), dc=true
+        return _tf(tf.where(a,b,c))
+      } finally { db && dispose(b), dc && dispose(c) }
+    },
   },
 
   _whereValues:_([
@@ -476,7 +478,6 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   ]),
 
   NumTypes:{
-    docs:`A namespace for common numeric types.`,
     readAt:{
       i8:_(`i8`),
       i16:_(`i16`),
@@ -487,6 +488,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       f32:_(`f32`),
       f64:_(`f64`),
     },
+    docs:`A namespace for common numeric types.`,
   },
 
   i8:{
@@ -538,7 +540,6 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   },
 
   Data:{
-    docs:`A namespace for some data-representation-related functions.`,
     readAt:{
       _mergeIfDefined:_(`_mergeIfDefined`),
       Constructions:_(`Constructions`),
@@ -547,6 +548,7 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
       indicesToString:_(`indicesToString`),
       stateCell:_(`stateCell`),
     },
+    docs:`A namespace for some data-representation-related functions.`,
   },
 
   _mergeIfDefined:[
@@ -557,18 +559,15 @@ If CPU is faster at massively-parallel big numeric computations, then times are 
   ],
 
   Time:{
-    docs:`A namespace for some time-related functionality.`,
     readAt:{
       userTime:_(`userTime`),
       realTime:_(`realTime`),
       await:_(`await`),
     },
+    docs:`A namespace for some time-related functionality.`,
   },
 
   UI:{
-    docs:`A namespace for user interface functionality.`,
-    philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).
-Keep names short and rely on the IDE. Route gradient not through the closest text representation, but through actual dependencies.`,
     readAt:{
       Languages:_(`Languages`),
       hierarchy:_(`hierarchy`),
@@ -584,13 +583,12 @@ Keep names short and rely on the IDE. Route gradient not through the closest tex
       _highlightInterrupts:_(`_highlightInterrupts`),
       elem:_(`elem`),
     },
+    docs:`A namespace for user interface functionality.`,
+    philosophy:`Even when switching languages and/or bindings makes some things look the same, being able to {highlight ref-equal objects}, and {view the basic default-bindings serialization}, and {link to actual values without going through text}, makes meaning a first-class citizen. This is impossible to achieve without first-class UI support, but with it, incomprehensible code can be easy to understand (replicate in a mind).
+Keep names short and rely on the IDE. Route gradient not through the closest text representation, but through actual dependencies.`,
   },
 
   Languages:{
-    docs:`A namespace for languages and their handling.
-One of programming's most annoying debates is tabs vs spaces. With UI support, you can choose neither.`,
-    philosophy:`Languages just define how the bound-graph structure gets parsed/serialized, not execution.
-Decoupling form from meaning allows composition and trivial changing of forms.`,
     readAt:{
       serialize:_(`serialize`),
       fast:_(`fast`),
@@ -602,6 +600,10 @@ Decoupling form from meaning allows composition and trivial changing of forms.`,
       _colorVariables:_(`_colorVariables`),
       _maxSerializedTensorSize:_(`_maxSerializedTensorSize`),
     },
+    docs:`A namespace for languages and their handling.
+One of programming's most annoying debates is tabs vs spaces. With UI support, you can choose neither.`,
+    philosophy:`Languages just define how the bound-graph structure gets parsed/serialized, not execution.
+Decoupling form from meaning allows composition and trivial changing of forms.`,
   },
 
   repeat:{
@@ -650,6 +652,7 @@ Results of evaluating DAG nodes are not preserved.`,
   },
 
   Self:{
+    readAt:undefined,
     docs:`Open programming environment with machine learning, to treat humans and programs equally.
 A namespace for every function here. Project's GitHub page: {https://github.com/Antipurity/conceptual}`,
     philosophy:`What happens when you force a person to change.
@@ -658,7 +661,6 @@ Can't get away from it, love it so much.
 I sacrificed myself to bring this to you.
 So that no one has to sacrifice anything for transcendence.
 In particular, so that AGI doesn't have to sacrifice humanity in order to transcend it, which, let's be real, definitely will happen if humanity is not transcendent enough.`,
-    readAt:_(`undefined`),
   },
 
   argCount:{
@@ -666,18 +668,18 @@ In particular, so that AGI doesn't have to sacrifice humanity in order to transc
   },
 
   userTime:{
+    readAt:{
+      start:_(`_userTimeStart`),
+    },
+    docs:`\`userTime()\`⇒\`TimeMark\` or \`userTime(TimeMark)\`⇒\`UserDuration\`: returns the time spent on this job as \`f64\` milliseconds, or the non-negative in-job time elapsed since the mark.
+
+This does not include time spent on other jobs, but does include the time to interrupt/restore execution.`,
+    interrupt:false,
     type:[
       _(`funcType`),
       _(`userTime`),
       _(`_numberType`),
     ],
-    docs:`\`userTime()\`⇒\`TimeMark\` or \`userTime(TimeMark)\`⇒\`UserDuration\`: returns the time spent on this job as \`f64\` milliseconds, or the non-negative in-job time elapsed since the mark.
-
-This does not include time spent on other jobs, but does include the time to interrupt/restore execution.`,
-    readAt:{
-      start:_(`_userTimeStart`),
-    },
-    interrupt:false,
     impure:true,
     call(mark) { return _userTimeSince(mark) },
   },
@@ -696,20 +698,20 @@ This does not include time spent on other jobs, but does include the time to int
   ]),
 
   realTime:{
-    type:[
-      _(`funcType`),
-      _(`realTime`),
-      _(`_numberType`),
-    ],
+    readAt:{
+      start:_(`_realTimeStart`),
+    },
     docs:`\`realTime()\`⇒\`TimeMark\` or \`realTime(TimeMark)\`⇒\`RealDuration\`: returns the time since start as \`f64\` milliseconds, or the non-negative time elapsed since the mark.
 
 This includes time spent on other jobs.
 
 If there is a discrepancy between user-time and real-time in a job's run-time, crank up \`\`settings ^_msBeforeInterrupt\`\`.`,
-    readAt:{
-      start:_(`_realTimeStart`),
-    },
     interrupt:false,
+    type:[
+      _(`funcType`),
+      _(`realTime`),
+      _(`_numberType`),
+    ],
     impure:true,
     call(mark) { return _timeSince(mark) },
   },
@@ -728,17 +730,16 @@ If there is a discrepancy between user-time and real-time in a job's run-time, c
   ]),
 
   limit:{
-    docs:`The namespace for limiting resources available to code.
-Also: \`limit {'time' Milliseconds 'arrays' Count 'tensorMemory' Bytes} Func …Args\` to limit the resources available to \`Func\`.`,
     readAt:{
       time:_(`limitTime`),
       arrays:_(`limitArrays`),
       tensorMemory:_(`limitTensorMemory`),
     },
+    docs:`The namespace for limiting resources available to code.
+Also: \`limit {'time' Milliseconds 'arrays' Count 'tensorMemory' Bytes} Func …Args\` to limit the resources available to \`Func\`.`,
     dispose:true,
-    adjustLater:true,
-    mergeAdjustment:null,
     adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
       call(ins, _, dout) {
         if (call.pure) throw impure
         let [failed] = interrupt(1)
@@ -752,8 +753,9 @@ Also: \`limit {'time' Milliseconds 'arrays' Count 'tensorMemory' Bytes} Func …
           return adjust(fn, args, _, dout)
         } catch (err) { if (err === interrupt) interrupt.stack.push(failed);  throw err }
       },
-      dispose:_(`_disposeEachAndDealloc`),
     },
+    mergeAdjustment:null,
+    adjustLater:true,
     call(opts, fn, ...args) {
       if (typeof fn != 'function') error('Not a func:', fn)
       const [time, arrays, tensorMemory] = _destructure(opts, limit.opts || (limit.opts = ['time', 'arrays', 'tensorMemory']))
@@ -776,7 +778,6 @@ Also: \`limit {'time' Milliseconds 'arrays' Count 'tensorMemory' Bytes} Func …
   },
 
   limitTime:{
-    use:true,
     docs:`\`limitTime Duration Func …Args\`: returns \`Func(…Args)\` if its \`userTime\` never stretches past \`Duration\`, or throws \`limit\` otherwise (on the first \`_checkInterrupt\` that sees the violation).
 \`Duration\` is in milliseconds.
 
@@ -784,6 +785,12 @@ What is an infinite loop?
     To you, it's an annoyance.
     To a simple program, it's lethal.
     With \`limitTime\`, it's just a failure.`,
+    dispose:true,
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
+    },
+    mergeAdjustment:null,
     examples:[
       `Interrupts are not free, so experiment with this: \`\`settings ^_msBeforeInterrupt\`\``,
       [
@@ -799,6 +806,7 @@ What is an infinite loop?
         `limitTime 100e3 repeat 2.718281828459045 10000`,
       ],
     ],
+    use:true,
     type:[
       _(`funcType`),
       _(`_numberType`),
@@ -816,13 +824,7 @@ What is an infinite loop?
       ],
       `Output`,
     ],
-    dispose:true,
     adjustLater:true,
-    mergeAdjustment:null,
-    adjust:{
-      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
-      dispose:_(`_disposeEachAndDealloc`),
-    },
     call(duration, fn, ...args) {
       if (!limitTime.o) limitTime.o = {time:null}
       limitTime.o.time = duration
@@ -832,16 +834,16 @@ What is an infinite loop?
   },
 
   limitArrays:{
-    use:true,
     docs:`\`limitArrays Count Func …Args\`
 An imperfect way to limit memory: returns \`Func(…Args)\`, or throws \`limit\` otherwise (in \`_allocArray\`).`,
     dispose:true,
-    adjustLater:true,
-    mergeAdjustment:null,
     adjust:{
-      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
       dispose:_(`_disposeEachAndDealloc`),
+      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
     },
+    mergeAdjustment:null,
+    use:true,
+    adjustLater:true,
     call(count, fn, ...args) {
       if (!limitArrays.o) limitArrays.o = {arrays:null}
       limitArrays.o.arrays = count
@@ -851,16 +853,16 @@ An imperfect way to limit memory: returns \`Func(…Args)\`, or throws \`limit\`
   },
 
   limitTensorMemory:{
-    use:true,
     docs:`\`limitTensorMemory Count Func …Args\`
 An imperfect way to limit memory: returns \`Func(…Args)\`, or throws \`limit\` otherwise (in \`_allocArray\`).`,
     dispose:true,
-    adjustLater:true,
-    mergeAdjustment:null,
     adjust:{
-      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
       dispose:_(`_disposeEachAndDealloc`),
+      call(ins, _, dout) { return defines(limit, adjust)(ins, _, dout) },
     },
+    mergeAdjustment:null,
+    use:true,
+    adjustLater:true,
     call(count, fn, ...args) {
       if (!limitTensorMemory.o) limitTensorMemory.o = {tensorMemory:null}
       limitTensorMemory.o.tensorMemory = count
@@ -870,18 +872,18 @@ An imperfect way to limit memory: returns \`Func(…Args)\`, or throws \`limit\`
   },
 
   _userTimeSince:{
-    use:1,
     docs:`Like \`_timeSince\` but for \`userTime\`.`,
     interrupt:false,
+    use:1,
     call(mark = 0) { return typeof mark == 'number' ? call.env[_id(userTime)] + _timeSince(call.env[_id(realTime)]) - mark : error('Bad mark:', mark) },
   },
 
   _timeSince:{
-    use:1,
     docs:`\`_timeSince()\`⇒\`TimeMark\` or \`(_timeSince TimeMark)\`⇒\`RealDuration\`: returns the current time as f64 milliseconds, or the non-negative time elapsed since the mark.
 Makes no attempt to correct for the time to measure, \`(_timeSince _timeSince())\`.
 Browsers reduce the precision of this to prevent timing attacks. Putting that precision back could be beneficial, somewhere in their hidden options.`,
     interrupt:false,
+    use:1,
     call(mark = 0) {
       if (typeof performance != ''+void 0 && performance.now) { // Browser
         if (typeof mark != 'number') error('Bad mark:', mark)
@@ -905,15 +907,15 @@ Browsers reduce the precision of this to prevent timing attacks. Putting that pr
   },
 
   tensorMemorySince:{
+    docs:`\`tensorMemorySince()\`⇒\`Mark\` or \`(tensorMemorySince Mark)\`: Measures required-memory-size change (allocated memory) as non-negative \`f64\` byte count.
+In browsers, returns \`tensor\` memory.
+Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tensorMemorySince())\` (which is 0 in browsers).`,
+    interrupt:false,
     use:1,
     type:[
       _(`funcType`),
       _(`_numberType`),
     ],
-    docs:`\`tensorMemorySince()\`⇒\`Mark\` or \`(tensorMemorySince Mark)\`: Measures required-memory-size change (allocated memory) as non-negative \`f64\` byte count.
-In browsers, returns \`tensor\` memory.
-Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tensorMemorySince())\` (which is 0 in browsers).`,
-    interrupt:false,
     impure:true,
     call(mark = 0) {
       if (typeof mark != 'number') error('Bad mark:', mark)
@@ -933,8 +935,8 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
   },
 
   countReachableObjects:{
-    impure:true,
     interrupt:true,
+    impure:true,
     call(from = Self, makeHierarchy = false) {
       const seen = new Set
       const backctx = _invertBindingContext(Self.ctx)
@@ -967,8 +969,10 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
   },
 
   isArray:{
-    use:true,
+    docs:`\`isArray X\`: whether \`X\` is an \`array\`.`,
+    interrupt:false,
     argCount:1,
+    use:true,
     type:[
       _(`funcType`),
       `LiterallyAnything`,
@@ -977,46 +981,44 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
         1,
       ],
     ],
-    docs:`\`isArray X\`: whether \`X\` is an \`array\`.`,
-    interrupt:false,
     call(a) { return Array.isArray(a) },
   },
 
   arrayLength:{
-    use:true,
+    interrupt:false,
     argCount:1,
+    use:true,
     type:[
       _(`funcType`),
       `IDontCare`,
       _(`_numberType`),
     ],
-    interrupt:false,
     call(a) { return _isDisposable(a) ? a.size : _isNum(a) ? 1 : typeof a == 'string' || isArray(a) || _isNumericArray(a) ? a.length : error("Not an array:", a) },
   },
 
   arrayPush:{
-    use:true,
+    interrupt:false,
     argCount:2,
+    use:true,
     type:[
       _(`funcType`),
       `SomeArrayPlease`,
       `Some value, I don't care`,
       `ThenWeWillGiveYouNothing`,
     ],
-    interrupt:false,
     call(a, value) { isArray(a) ? _changeArrayItem(a, a.length, value) : error("Not an array:", a) },
   },
 
   arrayLimit:{
-    use:true,
+    interrupt:false,
     argCount:2,
+    use:true,
     type:[
       _(`funcType`),
       `SomeArrayPlease`,
       `And please some maximum array size, like a 100`,
       `ThenWeWillGiveYouNothing`,
     ],
-    interrupt:false,
     call(a, maxSize) {
       if (!isArray(a)) error("Not an array:", a)
       if (typeof maxSize != 'number' || maxSize !== maxSize>>>0) error("Not an index:", maxSize)
@@ -1031,8 +1033,9 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
   },
 
   arraySlice:{
-    use:true,
+    interrupt:false,
     argCount:3,
+    use:true,
     type:[
       _(`funcType`),
       `SomeArrayPlease`,
@@ -1040,7 +1043,6 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
       `And another index`,
       `Gives you a slice`,
     ],
-    interrupt:false,
     call(a, begin = 0, end) {
       if (!isArray(a) && !_isNumericArray(a) && typeof a != 'string') error("Not an array/string:", a)
       if (begin < 0) begin += a.length
@@ -1067,6 +1069,8 @@ Makes no attempt to correct for the memory-to-measure, \`(tensorMemorySince tens
   arraySorted:{
     docs:`\`arraySorted(Array)\`: sorts an array of numbers into ascending order, and returns the sorted copy.
 (Or, given a \`tensor\`, returns the array of its sorted values.)`,
+    interrupt:false,
+    argCount:1,
     examples:[
       [
         `display 'hi' arraySorted(biasedGlorotNormal(50,50)@biasedGlorotNormal(50,50))`,
@@ -1123,8 +1127,6 @@ Just pick the correct variance. \`8/sqrt(n)\` for big \`n\`×\`n\` matrices work
 Now, the big question: do we want to actually demonstrate that these things learn better?
 No.`,
     ],
-    interrupt:false,
-    argCount:1,
     call(a) {
       if (_isDisposable(a)) {
         const t = sync(a)
@@ -1137,8 +1139,9 @@ No.`,
   },
 
   arrayAscends:{
-    use:true,
+    interrupt:false,
     argCount:1,
+    use:true,
     type:[
       _(`funcType`),
       [
@@ -1151,7 +1154,6 @@ No.`,
         1,
       ],
     ],
-    interrupt:false,
     call(a) {
       if (!isArray(a) && !_isNumericArray(a)) error("Not an array:", a)
       if (typeof a[0] != 'number') return false
@@ -1162,22 +1164,22 @@ No.`,
   },
 
   arrayFilledWith:{
-    argCount:2,
     interrupt:false,
+    argCount:2,
     keep:2,
     call(n, v) { return new Array(n).fill(v) },
   },
 
   arrayCons:{
-    use:2,
+    interrupt:false,
     argCount:2,
+    use:2,
     type:[
       _(`funcType`),
       `array head`,
       `plus the rest of the array (or hey, a string, I do not judge)`,
       `equals a concatenation (not at all efficient, but it works)`,
     ],
-    interrupt:false,
     call(a,b) { // [a, ...b]
       if (typeof b == 'string') {
         if (typeof a == 'number') {
@@ -1193,10 +1195,10 @@ No.`,
   },
 
   arrayCar:{
-    use:1,
     docs:`Returns array head, \`deconstruct\`ing if an object.`,
     interrupt:false,
     dispose:true,
+    use:1,
     call(a) {
       if (isArray(a)) return keep(a[0]) // Return array heads.
       if (a instanceof WeakMap) return weakMap // Also deconstruct objects.
@@ -1209,10 +1211,10 @@ No.`,
   },
 
   arrayCdr:{
-    use:1,
     docs:`Returns array tail (everything but its head), \`deconstruct\`ing if an object.`,
     interrupt:false,
     dispose:_(`_killArray`),
+    use:1,
     call(a) {
       if (!isArray(a)) a = deconstruct(a)
       if (!isArray(a)) return
@@ -1221,7 +1223,6 @@ No.`,
   },
 
   _listen:{
-    docs:`Registers a global event listener, or sets an interval if \`Type\` is a number (ms).`,
     readAt:{
       Deinitialize:_(`Deinitialize`),
       _cwt:[
@@ -1234,6 +1235,7 @@ No.`,
         _(`_cwtStage5`),
       ],
     },
+    docs:`Registers a global event listener, or sets an interval if \`Type\` is a number (ms).`,
     call(Type, listener, opt) {
       if (!Deinitialize.events) Deinitialize.events = [], Deinitialize.intervals = []
       if (typeof Type == 'number') {
@@ -1273,7 +1275,7 @@ Yes.`,
 
   _disableSmoothTransitions:[
     _(`settings`),
-    true, // #########################################################################
+    true,
     `Whether to disable smooth transitions.
 Animatedness, liveliness of the image… there shall be none. Only one image, static and efficient to render, burnt into your disgusting mind.`,
   ],
@@ -1293,15 +1295,11 @@ Probably necessary if \`_noBoxStylingForPrograms\` is checked.`,
   ],
 
   Browser:{
+    readAt:{
+      icon:`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAHaElEQVR4XuWbW8htUxTHnQ4P7l7Eg0KRu3POC5E4yp04lBRhh3g5cin3S1/ul3KJFye0ESXlIHfKcRLx4n6LQnkgL+4eEP/fao6vuec317ysvfb+6tujRnvtucYaY86xxphzjDHnWrZJO+yvW3PCkxM03LpQeH+C5kzdO0T4jfAL4bfCD1roV6l9Z+Gewl2FbwkfS/Beq3v3Zfq33o3joxjdspaHL1P7HRnG3L5SeHuE7lC1rREe6wYDyeXCOwt4QuLL/1z/XxY+I9wYef4Ktd1WwDcqP6aAoZidXcBwnWgu8Oi21fX5wnO8QYdsHlHDIMM7JR8LeliI7F88Pg842bluL5AfKuBpcciZPEI+FuIiwHZCtHtVTrq7j0me0kJbKp/HbxVipT87Xpj4fgV9GJHvKyCl+ZDvMWp4RXiRcM4poUD2PEnMEmrkGyMGj/x7hfTppcJOzMs3BZT6PPyfEOLLdwtXFwqMkfk+WSM/xmuDGi8Rwuf0wj418lEApvxh4UOQXSy8p4I+RbrC3ayRn+JX27cVKKDG764R/c09DR42+CNQMu+Uiq3p43oU8F8hZ0zrNOFJhfQlZKzzAHFCX/CsGD0pxFWzUKoAZm0mvT+yHOsIBo58WPdYlnorURwlxLqTUKIA3vxzQtb3zYX4K8qIwdFqxK8PFh4p3CIh/R/d28zd/1u/myZoUfzrwrcL5f8luoeEWGvSEnIKwJ8OcIyIuEqiQ38cdADFnRgZ3AtqO8G1c31chAbFE/hg1jXADE+EynPvCm9pe7hNAWjtPaE/29vaX9MRo91DF9cL/SXqWv23CZXrGz3GyL9B+GUXYXoGSyR8NiBeOTCQ39wLFUCEh/Z+EL4fCG/LG2r6SMeIIYjYmPmJ7wGu8VeT73e+hr9PG07uJFo7ePIXKMCP7d/Q3dUTUICxJHZHEV+7ht30SxDj5xZdB27PhQrYoBuHu5vzuYNZgJ/VYS6xQKcPC/AHhV9e7Rr863EH3qYA2gmUCJuBJotkUOTUls+T2JC38xtC3wr4SgLM1Jlfdu9r5I5PLL4hd6DOYAnU2nBQvIm2rG4SCnjQdfa8KSkAcWSRZnnNJGhAPm+aib2MvhXAMoUZAv51X4aQinCx8Kae4A8ql5GNswyGg2IVIEa4yd0g3mDNZxXoA8JlMOQ5n4n6CqD0RC2uDboEQm288P1/hcc7guf1u1xICa0PsECojReVpb18C6CG92ZGMlEVdb5xgWDocWEsFD5D7UVJTKYTxBe5pO0w0Ww0C7hLfygopIB4nCRjXED7RIbAwP0O3S+RX8oKS2XT11QeAh8KOpeaAj7Tn8YkMoAF1MblPktyAv/5WDrMm2M+6Ao8bxFmikfjBiiAuv2jhdLoWM60UqxC04wVRMZ1NZ6PJV+xfp2FAkpLysYAE+2SpGCSYT2hrSSGq3WpPeBavNlSWIcCCIOZkUtTXSYpJqsa2FLEYT0BeSy9AHkBM7fVEyyf/7NGiGiZXGuKostRAH6NaQ6FJRsi9InlqiRjwxQZOG7jL6PIQZ4PA/2hXA34+Tz1gJI5Ibf2+7KsLL4GBZAmWupbWiD1N0ZiL4m3QP5vsz00FkhZ6ht7jtIb80I4GFyO+kBqieyyMbIyFt7yZkosIdwaY0BEeJg2gw0BWbE3H9IN1MAbioWylOJwmzBiLJ3H7M3Py2yL72NhMYHLq8J3hJ+6TmDepzpuWM+vwoPcGwxrfPi5+XxEPyNNMVpf/taitu21p3SNm+wr3Cchv3hz1Hpi2+Pbq4Gszfwz7Dzb098Lw11i3jZZ3k/COWHt5gcrBM+1yWdO2UnI9nwMQvlV2+MwnGkFtLkAPmgu8ImuQxf4zZkgNflJuIDJ3ybiAsw/5gIx+cUuMBSjcSZB/JdZPIQ+JkGWXgbS6yS4UgztyMqsLYOrugZCpcWRaQZCXc4HNIHQNEJh8oBzhf7WWi4UZmmrzQc6hcKlQYT5dNdkiHzg92BiaEuGoK3NA2DdKRma+XQYzeXqgfbillJBhDHvXVMSwyQxzXFhGiUxXC3X15GS2MwXRUvcoM+yOMfZKML45wMoi8eyyC4WV10WR8i0N0aIEfzzAdTyFnVjZOa3xrCCmdwcnfntcUpPM31AwmpvM31ExpYaZmFWgx+FkzgkxTJHEkTxwirAyCbCpBps8tvOIdYsibFDUjt68htedkYoZDyNY3LXSah/PsCu6cuiHZMLFTHJg5IvSph/PsCu/T4s2kFJvxNschCkhPl8zBz9o7JHiCAVj9cclSUPeU1Yc1SWegLB1lhHZW2Q+Ct7AmE+X+OTMdqBaxyOyyh4HsXzMno5LG28l+xx+dJCKIrgeFnrweMOb3ESH0zU9LH5YKL2kxlOktppyw5jHnmk709mavvWfDID5DJBv9dL7qMpGxwTUcmGCPR2PgCNzwljR2tT1rFgl1bENfKNt//ZXJfzASMHJWFaOh8syQ8nay1hSX46a0oonRNyH08T+9vxu64fT1NEpYQ2tY+nTQmT+nz+OwkIEy2TyT7lLsKpfT7/P/yLMrzOf4DHAAAAAElFTkSuQmCC`,
+    },
     docs:`A REPL interface.
 Supported browsers: modern Chrome/Chromium and Firefox.`,
-    readAt:{
-      icon:_(`BrowserIconURL`),
-    },
-    js:[
-      `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js`,
-      `https://d3js.org/d3.v6.min.js`,
-    ],
     style:`.into * {transition: all .2s ease-in, margin 0s, padding 0s; box-sizing: border-box; vertical-align:top; animation: fadein .2s; font-family: monospace, monospace; font-size:1rem}
 
 @keyframes fadein { from {opacity:0} }
@@ -1475,8 +1473,13 @@ settings:hover>label { visibility:visible; opacity:1; background-color:rgba(90,1
 separated-text>serialization, text>serialization, separated-text>serialization *, text>serialization * { animation:none !important }
 
 inline-block { display:inline-block }
-`,
 
+parse-error { box-shadow: 0 0 .2em darkred;  border-left: .1em solid red }
+`,
+    js:[
+      `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js`,
+      `https://d3js.org/d3.v6.min.js`,
+    ],
     call(into = document.body) {
       Self.into = into
       serialize.displayed = serialize.dom
@@ -1836,7 +1839,9 @@ inline-block { display:inline-block }
       _listen('copy', evt => { if (!getSelection().isCollapsed) evt.clipboardData.setData('text/plain', String(getSelection())), evt.preventDefault() })
 
       // Forget values of removed trees as soon as possible (also, on adding, un-forget, just in case).
+      let domChanged = false
       const gcObs = new MutationObserver(records => {
+        domChanged = true
         for (let i=0; i < records.length; ++i)
           if (records[i].type === 'childList' && records[i].addedNodes)
             for (let j=0; j < records[i].addedNodes.length; ++j) {
@@ -1850,14 +1855,15 @@ inline-block { display:inline-block }
             }
       })
       function reinstateTree(el) {
+        if (el instanceof Node && ('to' in el)) elemValue(el, el.to)
         if (!(el instanceof Element)) return
-        if ('to' in el) elemValue(el, el.to)
         for (let ch = el.firstChild; ch; ch = ch.nextSibling) reinstateTree(ch)
       }
       gcObs.observe(Self.into, { childList:true, subtree:true, characterData:true })
       // To make sure we didn't miss anything, garbage-collect DOM elements every 5 mins.
       let domgc = false, domenv = _newExecutionEnv()
       _listen(300000, () => {
+        if (!domChanged) return;  else domChanged = false
         atCursor.lastEvt = null
         if (domgc) return; else domgc = true
         _doJob([GarbageCollectUI], domenv)
@@ -1892,8 +1898,8 @@ Presents a console REPL with outputs labeled sequentially, or just reads and exe
 Example: \`nodejs self.js basic <input.txt >output.txt\` will write the result of executing everything in \`input.txt\` (parsed with language \`basic\`) to \`output.txt\`.`,
     call() {
       if (process.argv.length > 3) return console.log(`Usage:
-nodejs self.js
-nodejs self.js basic`)
+    nodejs self.js
+    nodejs self.js basic`)
       const lang = process.argv[2] && Self.ctx.get(process.argv[2]) || fancier
 
       const out = process.stdout
@@ -1973,7 +1979,7 @@ The \`_closestNodeParent\` is shown by this.`,
     examples:[
       [
         `_purifyInWorker ^(1*2+3*4)`,
-      ]
+      ],
     ],
     await:true,
     call(expr) {
@@ -2078,11 +2084,11 @@ Linking to outside of the \`editor\` \`quote\`s the value, linking to inside sho
   },
 
   hierarchy:{
-    docs:`Turns a map from globals into a namespace-based hierarchy.`,
     readAt:{
       disableBindings:_(`disableBindingsElem`),
       settings:_(`settings`),
     },
+    docs:`Turns a map from globals into a namespace-based hierarchy.`,
     call(m, topLevel, parents = readAt.parents, lang = basic, binds, sourceCodeOrder = true) {
       if (typeof document == ''+void 0) return m
       if (!(m instanceof Map)) error("Expected a map, got", m)
@@ -2295,7 +2301,11 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
           const el = start(col)
           _isPromise(el) ? el.then(ins) : ins(el)
           function ins(el) {
-            if (p) isArray(el) ? el.forEach(el => p.insertBefore(el, col)) : el.parentNode !== p && p.insertBefore(el, col), p.removeChild(col)
+            if (p) {
+              if (isArray(el)) el.forEach(el => p.insertBefore(el, col))
+              else if (el instanceof Node) el.parentNode !== p && p.insertBefore(el, col), p.removeChild(col)
+              else error('Not a DOM node:', el)
+            }
             if (!instant) {
               if (_getOuterWindow(p) || _getOuterContextMenu(p)) _updateBroken(_getOuterWindow(p) || _getOuterContextMenu(p))
               else p && _updateBroken(p)
@@ -2344,9 +2354,8 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
       return col
     },
   },
-  
+
   print:{
-    docs:`\`(print …Values)\`: For debugging; prints to the current DOM node or console.`,
     readAt:{
       _printToConsole:_(`_printToConsole`),
       prompt:_(`prompt`),
@@ -2354,6 +2363,7 @@ Text in double-backticks will be replaced with the result of executing it: \`1+2
       structured:_(`structured`),
       structuredSentence:_(`structuredSentence`),
     },
+    docs:`\`(print …Values)\`: For debugging; prints to the current DOM node or console.`,
     call(...x) {
       const prevPure = call.pure;  call.pure = false
       print.did = true
@@ -2491,6 +2501,29 @@ A stripped-down version of \`display\`.`,
         }
       },
       {
+        docs:`For arrays, show the globals involved, auto-updated.`,
+        call([el, v]) {
+          const backctx = _invertBindingContext(Self.ctx)
+          let r, watcher = null
+          if (isArray(v) && v.length && v.some(x => backctx.has(x))) {
+            r = elemValue(elem('div'), v)
+            observe(v, update, true)()
+            watcher = setInterval(() => !r.isConnected && (observe(v, update, false), clearInterval(watcher)), 30000)
+            return r
+          }
+
+          function update() {
+            if (!r.isConnected && watcher != null) return clearInterval(watcher), observe(v, update, false)
+            while (r.lastChild) r.lastChild.remove()
+            r.append(elem('bracket', '('))
+            for (let x of v)
+              r.firstChild !== r.lastChild && r.append(' '),
+              r.append(backctx.has(x) ? elemValue(elem('known', backctx.get(x)), x) : elemValue(elem('collapsed', '···'), x))
+            r.append(elem('bracket', ')'))
+          }
+        },
+      },
+      {
         docs:`For numbers, display a slider from 0 to 2*number for easy adjusting.
 For strings, display them in a <textarea> for easy editing and copying.
 For anything else, display the globals the expression binds to, and an expandable basic definition.`,
@@ -2621,8 +2654,6 @@ For anything else, display the globals the expression binds to, and an expandabl
             ])
         },
       },
-
-
       {
         docs:`A table for \`readAt\`s.`,
         call([el, v]) {
@@ -2643,7 +2674,7 @@ For anything else, display the globals the expression binds to, and an expandabl
               const lkp = defines(v, readAt)
               a = Object.keys(defines(v, readAt)).map(k => [k, lkp[k]])
             } else a = [...backctx].filter(([v,k]) => v && v !== true && k[0] !== '_' && !readAt.parents.has(v)).map(([v,k])=>[k,v])
-  
+          
             return elem('div', [
               elemValue(elem('unimportant', 'Namespace for:'), readAt),
               elem('table', a.length <= 16 ? a.map(row) : [a.slice(0,16).map(row), elemCollapse(() => a.slice(16).map(row))]),
@@ -2746,8 +2777,6 @@ Collates \`map\`s from \`DOMElement.'to'\` to auto-world/type/embedding in the s
   },
 
   contextMenu:{
-    docs:`Creates and displays a \`<context-menu>\` element near the specified element.`,
-    philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     readAt:{
       describe:_(`describe`),
       toWindow:_(`elemToWindow`),
@@ -2760,6 +2789,8 @@ Collates \`map\`s from \`DOMElement.'to'\` to auto-world/type/embedding in the s
       addSearchElem:_(`addSearchElem`),
       editObject:_(`editObject`),
     },
+    docs:`Creates and displays a \`<context-menu>\` element near the specified element.`,
+    philosophy:`Do not expect important information to get up in your face to yell about itself. Drill down to what you need or want. (In fact, those that want to improve will naturally be inclined to prioritize their shortcomings, so using the first impression can be counter-productive.)`,
     _printAll:[
       {
         docs:`Propose to execute functions that define \`button\`.`,
@@ -2783,7 +2814,7 @@ Collates \`map\`s from \`DOMElement.'to'\` to auto-world/type/embedding in the s
               elemValue(elemCollapse(() => {
                 const result = elem('div')
                 result.classList.add('resizable')
-      
+              
                 fetch(v[2], {mode:'cors'})
                 .catch(r => elemInsert(result, serialize(_errorRepr(r), undefined, undefined, serialize.displayed)))
                 .then(r => r.arrayBuffer())
@@ -2827,7 +2858,7 @@ Allow editing run-time and rewrite-time values.`,
           }
           if (elemExpandAll(el, true))
             elems.push(button(() => elemExpandAll(el), '🔮', 'Expand all collapsed element trees here.'))
-          if (_getOuterWindow(el) !== el && !_isEditable(el))
+          if (_getOuterWindow(el) !== el)
             elems.push(button(() => elemCollapse(el), '…', 'Collapse element tree.'))
           if (el.nextSibling && el.nextSibling.tagName !== 'BRACKET')
             elems.push(button(() => elemCollapse(el, null), '…$', 'Collapse to end.'))
@@ -3003,6 +3034,10 @@ Allow editing run-time and rewrite-time values.`,
   evaluator:{
     docs:`\`(evaluator Expr Env)\`: When logged to DOM, this displays the expression, its \`print\`s along the way, and its one evaluation result in one removable (by clicking on the prompt) DOM element.
 When evaluating \`a:b\`, binds \`a\` to \`^b\` in consequent parses/serializations in the parent REPL; when evaluating anything else, tries to add the result to the \`CurrentUsage\` binding. Both are reverted when the evaluator is removed.`,
+    Initialize() {
+      evaluator.none = Symbol('none')
+      evaluator.history = Symbol('history')
+    },
     _printAll:[
       {
         docs:`Display evaluation's result.`,
@@ -3027,10 +3062,6 @@ When evaluating \`a:b\`, binds \`a\` to \`^b\` in consequent parses/serializatio
         },
       },
     ],
-    Initialize() {
-      evaluator.none = Symbol('none')
-      evaluator.history = Symbol('history')
-    },
     call(expr, env = _newExecutionEnv(), thenElem) {
       if (call.pure) throw impure
 
@@ -3173,8 +3204,18 @@ Leaving this off leaves objects like \`static\` or \`dataset\` unfilled, but mak
             s.setBaseAndExtent(...focus, ...anchor)
           }
           then(expr)
-        } else
+        } else {
+          // Insert a visual indicator of the error.
+          const failedAt = _loadCaret(ed, parse.lastIndex)
+          if (failedAt && failedAt[0] instanceof Node) {
+            const rng = document.createRange()
+            rng.setStart(...failedAt), rng.setEnd(...failedAt)
+            const prev = ed.querySelector('parse-error')
+            if (prev) prev.remove()
+            rng.insertNode(elem('parse-error'))
+          }
           err(r)
+        }
       })
     })
   },
@@ -3192,14 +3233,14 @@ Leaving this off leaves objects like \`static\` or \`dataset\` unfilled, but mak
   },
 
   editor:{
-    docs:`\`(editor InitialString Lang Binds OnInput OnEnter)\`: creates a user-editable expression input.
-\`OnInput\` is passed the parsed expression and whether the currently entered text fails to parse. \`OnEnter\` is passed the expression and whether that's the parsing's error message, and it returns \`true\` to clear editor contents.
-Don't do expensive synchronous tasks in \`OnInput\`.`,
     readAt:{
       _autocompleteBrackets:_(`_autocompleteBrackets`),
       _fullParseConstruction:_(`_fullParseConstruction`),
       _typingChill:_(`_typingChill`),
     },
+    docs:`\`(editor InitialString Lang Binds OnInput OnEnter)\`: creates a user-editable expression input.
+\`OnInput\` is passed the parsed expression and whether the currently entered text fails to parse. \`OnEnter\` is passed the expression and whether that's the parsing's error message, and it returns \`true\` to clear editor contents.
+Don't do expensive synchronous tasks in \`OnInput\`.`,
     call(initialString = '', lang = fancier, binds = Self.ctx, onInput, onEnter, alwaysConstruct = false) {
       if (typeof initialString != 'string' && !(initialString instanceof Node))
         error('String expected, got', initialString)
@@ -3364,7 +3405,6 @@ Too much updating when you're training a NN, so, off.`,
   ],
 
   REPL:{
-    docs:`\`(REPL Language Bindings)\`: Creates a visual REPL element (read-evaluate-print loop).`,
     readAt:{
       editor:_(`editor`),
       evaluator:_(`evaluator`),
@@ -3373,6 +3413,7 @@ Too much updating when you're training a NN, so, off.`,
       _evaluatorPrintsInput:_(`_evaluatorPrintsInput`),
       _evaluatorObservesInput:_(`_evaluatorObservesInput`),
     },
+    docs:`\`(REPL Language Bindings)\`: Creates a visual REPL element (read-evaluate-print loop).`,
     call(lang = fancier, binds = new Map(Self.ctx)) {
       if (!defines(lang, parse) || !defines(lang, serialize)) throw "Invalid language"
       if (!(binds instanceof Map)) throw "Invalid binding context"
@@ -3413,7 +3454,7 @@ Too much updating when you're training a NN, so, off.`,
                 if (!binds.has(name))
                   (binds = new Map(binds)).set(name, quote(result))
                 _bindingsAt.binds = binds
-  
+      
                 then(null, _colored(name + ': ', 36) + serialize(result, undefined, undefined, {...opt, offset:1+Math.ceil(name.length/2+.5)})) // cyan
               })
             } catch (err) {
@@ -3598,13 +3639,13 @@ Too much updating when you're training a NN, so, off.`,
   ],
 
   tutorial:{
+    readAt:{
+      _expandTutorialBindings:_(`_expandTutorialBindings`),
+    },
     docs:`\`tutorial Func\`: views the unlockable code tutorial of \`Func\`, if available.
 \`tutorial()\`: views all globally-available tutorials.
 
 All tutorials are finite. Savor them while they last.`,
-    readAt:{
-      _expandTutorialBindings:_(`_expandTutorialBindings`),
-    },
     tutorial:[
       `A nice, sunny day out, with not a single cloud in sight.
 Let's make our understanding of tutorials as clear as the weather.
@@ -3753,10 +3794,10 @@ Now, type \`tutorial call\` (to know the basics) or \`tutorial callAdjust\` (to 
   },
 
   editObject:{
-    todo:`Replace \`construct\`s within with non-expandable references, so that it's possible to edit particular things in complex graphs without doubling every object.`,
     docs:`\`editObject Object\`: allows the user to edit the runtime object in-place.
 \`editObject Object null\` checks whether the object is editable.
 \`editObject Object Language\` specifies the editor's language.`,
+    todo:`Replace \`construct\`s within with non-expandable references, so that it's possible to edit particular things in complex graphs without doubling every object.`,
     call(x, lang) {
       if (!isArray(x) && defines(x, deconstruct) === undefined && !(x instanceof Map)) return
       if (defines(deconstruct(x), editObject) === false) return
@@ -3877,13 +3918,13 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
   },
 
   settings:{
-    docs:`\`settings()\`: presents a hierarchy of all global user-modifiable settings.
-\`settings Opt\`: presents the interface to change one option.`,
     readAt:{
       Commands:_(`Commands`),
       rangeSetting:_(`rangeSetting`),
       settingsToolbar:_(`settingsToolbar`),
     },
+    docs:`\`settings()\`: presents a hierarchy of all global user-modifiable settings.
+\`settings Opt\`: presents the interface to change one option.`,
     call(opt) {
       if (opt === undefined) {
         const m = _allocMap()
@@ -3971,22 +4012,20 @@ Also supports \`editRewrite Global null\` to check whether an object can be rewr
   },
 
   Commands:new Map([
-    ['AuxClick', _(`contextMenu`)],
-    ['CtrlClick', _(`insertLinkTo`)],
-    ['z', function(target, range, evt) { // Click/uncollapse.
+    [`AuxClick`,_(`contextMenu`)],
+    [`CtrlClick`,_(`insertLinkTo`)],
+    [`z`,function(target, range, evt) { // Click/uncollapse.
       if (target && target.tagName === 'COLLAPSED' && target.lastChild && target.lastChild.tagName === 'HIDDEN')
         return evt = target.lastChild.lastChild, target.click(), evt // Don't lose the element.
       target && target.click && target.click()
     }],
-    ['x', function(target, range, evt) { // Collapse.
-      if (target && !_isEditable(target)) return elemCollapse(target)
-      if (!target || target.to === undefined) return
-      return evt = elemValue(elem('collapsed', '···'), target.to), evt.special = true, target.replaceWith(evt), evt
+    [`x`,function(target, range, evt) { // Collapse.
+      if (target) return elemCollapse(target)
     }],
-    ['c', function(target, range, evt) { // Context-menu.
+    [`c`,function(target, range, evt) { // Context-menu.
       contextMenu(target, range)
     }],
-    ['v', function(target, range, evt) { // Highlight values.
+    [`v`,function(target, range, evt) { // Highlight values.
       Self.into.classList.toggle('noValueHighlight', !!_hoverHighlightsDOMValues[1], true)
       writeAt(_hoverHighlightsDOMValues, 1, !_hoverHighlightsDOMValues[1])
     }],
@@ -4035,8 +4074,7 @@ Return \`_stopIteration\` to stop iteration.`,
         if (from.indexOf('···') >= 0) {
           const s = from.replace('···', '')
           if (s) el.parentNode.insertBefore(document.createTextNode(s), el.nextSibling), el.firstChild.textContent = '···'
-        } else
-          el.remove(), --j
+        }
       } else if (el.tagName === 'COLLAPSED' || el.tagName === 'SERIALIZATION') {
         if (el.tagName === 'COLLAPSED') {
           if (!el.firstChild || el.firstChild.tagName !== 'HIDDEN')
@@ -4159,7 +4197,7 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
       try { into.insertBefore(el, before) }
       catch (err) { console.error(into, el, before); throw err }
       _updateBroken(into)
- 
+     
       _smoothHeightPost(into, pre)
       _updateMaxScrollEnd(wasMax)
 
@@ -4170,10 +4208,10 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
   },
 
   elemRemove:{
-    docs:`Removes a DOM element from the displayed document smoothly (if CSS transitions are enabled for it, and are specified in seconds, with all-props being the first), by transitioning height and opacity to 0.`,
     readAt:{
       particles:_(`particles`),
     },
+    docs:`Removes a DOM element from the displayed document smoothly (if CSS transitions are enabled for it, and are specified in seconds, with all-props being the first), by transitioning height and opacity to 0.`,
     call(el, absolutize = false, doParticles = true, doHeight = true) {
       if (!el || el.removed) return
       el.removed = true
@@ -4221,20 +4259,20 @@ Very bad performance if a lot of inserts happen at the same time, but as good as
 
   _removalParticlesFrequency:[
     _(`settings`),
-    .5,
+    0.5,
     `The probability of extra effects for removing a visual element is %%%.`,
     _(`rangeSetting`),
     0,
     1,
-    .01,
+    0.01,
   ],
 
   particles:{
-    docs:`A splash of magical particles.`,
-    philosophy:`Most people create programming languages to improve performance for specific cases or to prove their way of thinking superior to others, but I actually just wanted to be a wizard and use a PL to enhance my craft.`,
     readAt:{
       _removalParticlesFrequency:_(`_removalParticlesFrequency`),
     },
+    docs:`A splash of magical particles.`,
+    philosophy:`Most people create programming languages to improve performance for specific cases or to prove their way of thinking superior to others, but I actually just wanted to be a wizard and use a PL to enhance my craft.`,
     call(x,y,w,h, n = Math.sqrt(w*h)/10 * Math.random()) {
       if (_disableSmoothTransitions[1]) return
       if (Math.random() < 1 - _removalParticlesFrequency[1]) return
@@ -4358,10 +4396,10 @@ Quite expensive.`,
   },
 
   docs:{
-    docs:`\`docs()\`: returns a hierarchical documentation elem. \`docs Func\`: makes documentation.`,
     readAt:{
       docsToHTML:_(`docsToHTML`),
     },
+    docs:`\`docs()\`: returns a hierarchical documentation elem. \`docs Func\`: makes documentation.`,
     call(f = undefined) {
       if (f !== undefined)
         return elem('text', stringToDoc(defines(f, docs)))
@@ -4379,25 +4417,23 @@ Quite expensive.`,
     },
   },
 
-  docsToHTML:{
-    call() {
-      return 'Below is the output of `docsToHTML()`.\n\n'+(function convert(el) {
-        if (!(el instanceof Element)) return el.nodeValue
-        if (!el.firstChild) return ''
-        let tag = el.tagName.toLowerCase(), suffix = ''
-        let tag2 = ''
-        if (tag === 'node') tag = 'code'
-        if (tag === 'known') tag = 'b'
-        if (tag === 'details') tag2 = tag, tag = 'blockquote', suffix = '<hr>'
-        else if (el.parentNode && el.parentNode.tagName === 'DETAILS' && tag != 'summary')
-          tag2 = 'blockquote'
-        if (tag === 'space' || tag === 'span') tag = ''
-        let start = tag ? `<${tag}>` : '', end = tag ? `</${tag}>` : ''
-        if (tag2)
-          start += `<${tag2}${tag2 === 'details' && el.open ? ' open' : ''}>`, end = `</${tag2}>` + end
-        return `${start}${[...el.childNodes].map(convert).join('')}${suffix}${end}`
-      })(docs())
-    },
+  docsToHTML() {
+    return 'Below is the output of `docsToHTML()`.\n\n'+(function convert(el) {
+      if (!(el instanceof Element)) return el.nodeValue
+      if (!el.firstChild) return ''
+      let tag = el.tagName.toLowerCase(), suffix = ''
+      let tag2 = ''
+      if (tag === 'node') tag = 'code'
+      if (tag === 'known') tag = 'b'
+      if (tag === 'details') tag2 = tag, tag = 'blockquote', suffix = '<hr>'
+      else if (el.parentNode && el.parentNode.tagName === 'DETAILS' && tag != 'summary')
+        tag2 = 'blockquote'
+      if (tag === 'space' || tag === 'span') tag = ''
+      let start = tag ? `<${tag}>` : '', end = tag ? `</${tag}>` : ''
+      if (tag2)
+        start += `<${tag2}${tag2 === 'details' && el.open ? ' open' : ''}>`, end = `</${tag2}>` + end
+      return `${start}${[...el.childNodes].map(convert).join('')}${suffix}${end}`
+    })(docs())
   },
 
   examples:{
@@ -4483,10 +4519,6 @@ Quite expensive.`,
   },
 
   philosophy:{
-    docs:`Unlike regular philosophy, this one stems only from computation.
-
-Theoretically, it is as good as any other. Practically, technology grows exponentially whereas human things cannot, so its variant will overtake all others sooner or later.`,
-    philosophy:`Beliefs that are good enough for telling or a story are common. Beliefs that are good enough for code are rare. I haven't really seen much AGI-worthy stuff elsewhere, which makes people boring to me. Help me find interesting stuff.`,
     readAt:[
       `The only real way to understand something is to code it. Or do you think that humans are not intelligent creatures, and their words do not have unseen connections to the whole mind? No, a word is more than a thing, too foggy. The only way to understand learning is to be unable to learn and learn anyway.`,
       `There are things that do all other things. (Turing machines, particular logic systems like rewriting rules or category theory, functionalities of programming languages and their IRs; particular cellular automata, randomness-based program searches like evolution, general intelligences.)
@@ -4532,17 +4564,21 @@ I've seen so many such metaphors and events, both in fiction and the real world,
         `You cannot change your true nature by throwing more compute at it.`,
       ],
     ],
+    docs:`Unlike regular philosophy, this one stems only from computation.
+
+Theoretically, it is as good as any other. Practically, technology grows exponentially whereas human things cannot, so its variant will overtake all others sooner or later.`,
+    philosophy:`Beliefs that are good enough for telling or a story are common. Beliefs that are good enough for code are rare. I haven't really seen much AGI-worthy stuff elsewhere, which makes people boring to me. Help me find interesting stuff.`,
   },
 
   await:{
-    docs:`\`(await MaybePromise)\`: waits for the promise to finish before continuing evaluation.`,
-    _cancel(p) {
-      if (p && typeof p.cancel == 'function') p.cancel()
-    },
     readAt:{
       delay:_(`delay`),
       parseURL:_(`parseURL`),
       fetchURL:_(`fetchURL`),
+    },
+    docs:`\`(await MaybePromise)\`: waits for the promise to finish before continuing evaluation.`,
+    _cancel(p) {
+      if (p && typeof p.cancel == 'function') p.cancel()
     },
     call(p) {
       if (!_isPromise(p)) return p
@@ -4607,8 +4643,6 @@ I've seen so many such metaphors and events, both in fiction and the real world,
   },
 
   _schedule:{
-    docs:`\`(_schedule Expr Env Then)\`⇒JobId: schedule an expression for evaluation, with an environment (defining where its logging should go to, and its current variables, read/write journals, and more; use _newExecutionEnv() for this) and a native function for continuation.
-This is a low-level primitive that a user can indirectly interact with. Sub-job scheduling must be implemented in-job, to deny resource denial.`,
     readAt:{
       _execute:_(`_execute`),
       _executioner:_(`_executioner`),
@@ -4617,6 +4651,8 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
       _maxUsageOfCPU:_(`_maxUsageOfCPU`),
       _runInBackground:_(`_runInBackground`),
     },
+    docs:`\`(_schedule Expr Env Then)\`⇒JobId: schedule an expression for evaluation, with an environment (defining where its logging should go to, and its current variables, read/write journals, and more; use _newExecutionEnv() for this) and a native function for continuation.
+This is a low-level primitive that a user can indirectly interact with. Sub-job scheduling must be implemented in-job, to deny resource denial.`,
     call(expr, env, then, noCheck = false) {
       // Call this to initiate a later evaluation of an expression; the callback will be called with the result.
       if (then && typeof then != 'function') throw "Expected a function continuation"
@@ -4633,8 +4669,8 @@ This is a low-level primitive that a user can indirectly interact with. Sub-job 
   _execute:{
     docs:`\`_execute Expr\`
 Like \`_schedule\` but returns a promise, so with \`await\`, this is usable in compiled-by-us code.`,
-    await:true,
     impure:true,
+    await:true,
     call(x) {
       const env = _newExecutionEnv(call.env)
       return new Promise(then => _schedule(x, env, then))
@@ -4644,8 +4680,8 @@ Like \`_schedule\` but returns a promise, so with \`await\`, this is usable in c
   _executioner:{
     docs:`\`_executioner Expr\`
 Returns a function that \`_execute\`s \`Expr\` when called.`,
-    await:true,
     impure:true,
+    await:true,
     call(x) {
       const env = call.env
       return function(el) {
@@ -4773,12 +4809,12 @@ If any promises the job depends on have a method .cancel, calls those.`,
 
   _maxUsageOfCPU:[
     _(`settings`),
-    .99,
+    1,
     `Debounce (run-then-wait) the interpreter loop to %%% CPU usage.`,
     _(`rangeSetting`),
-    .01,
-    .99,
-    .01,
+    0.01,
+    1,
+    0.01,
   ],
 
   _runInBackground:[
@@ -4860,38 +4896,38 @@ If any promises the job depends on have a method .cancel, calls those.`,
   },
 
   last:{
-    use:true,
     docs:`\`a;b;c\` or \`(last …Expressions)\`: (throws the first error or) returns the last result.
 Execution is guaranteed to happen in this order.
 In Scheme, the equivalent is called \`begin\`.`,
+    interrupt:false,
+    dispose:-1,
+    adjust:{
+      interrupt:false,
+      dispose:-1,
+      purify(ins, out, dout) { const a = created(new Array(ins.length).fill(0));  a[a.length-1] = dout;  return a },
+      keep:-1,
+      call(ins, out, dout) { const a = created(new Array(ins.length).fill(0));  a[a.length-1] = dout || 0;  return a },
+    },
+    mergeAdjustment:_(`_mergeTensors`),
+    use:true,
     type:[
       _(`funcType`),
       `x`,
       `y`,
       `y`,
     ],
-    _resultCanBe(x) { _resultCanBe(x[x.length-1]) },
     keep:-1,
-    dispose:-1,
-    interrupt:false,
+    _compileBody(env, assignTo, ...args) { return `${assignTo} = ${args[args.length-1]}` },
+    _resultCanBe(x) { _resultCanBe(x[x.length-1]) },
     call(...r) {
       // We shuffle in neither `call` nor compilation, so we can just do this:
       return r[r.length-1]
     },
-    _compileBody(env, assignTo, ...args) { return `${assignTo} = ${args[args.length-1]}` },
-    mergeAdjustment:_(`_mergeTensors`),
-    adjust:{
-      keep:-1,
-      dispose:-1,
-      interrupt:false,
-      call(ins, out, dout) { const a = created(new Array(ins.length).fill(0));  a[a.length-1] = dout || 0;  return a },
-      purify(ins, out, dout) { const a = created(new Array(ins.length).fill(0));  a[a.length-1] = dout;  return a },
-    },
   },
 
   rest:{
-    merged:true,
     docs:`\`(rest Array)\` or \`…Array\`: when statically used in an array, spreads the \`Array\` into the referencing array. Is a UI and documentation convenience. Does nothing otherwise.`,
+    merged:true,
   },
 
   false:false,
@@ -4899,22 +4935,22 @@ In Scheme, the equivalent is called \`begin\`.`,
   true:true,
 
   quote:{
-    use:1,
     docs:`\`(quote Expr)\` or \`^Expr\`: A special form that returns \`Expr\` unevaluated, quoting the exact object.
 
 Makes it easy to insert a reference to any object when generating a program, don't you think so, you cute rascal?
 But I know what you're really thinking: "even inside \`quote\`, arrays with heads that define \`construct\` will still be constructed by \`makeGraph\`, which is called by \`parse\`, so not all objects can be preserved as-is". That is a lot of really specific knowledge; how did you come across that? Anyway, good thing that program generation (such as \`consWorld\`) doesn't go through \`parse\`, then.`,
+    nameResult:[
+      `quoted`,
+      `exactly`,
+    ],
+    argCount:1,
     examples:[
       [
         `(quote x)`,
         `x`,
       ],
     ],
-    nameResult:[
-      `quoted`,
-      `exactly`,
-    ],
-    argCount:1,
+    use:1,
     call(x) { // Value ⇒ Expr
       // Create the `(quote Expr)` representation if needed.
       if (call.pure && call.pure.has(x)) return x
@@ -4926,6 +4962,7 @@ But I know what you're really thinking: "even inside \`quote\`, arrays with head
     docs:`\`Name\` or \`(label "Name")\`: represents a variable that can be bound or assigned.
 Equal-name labels are bound to the same thing within the same binding. Each unnamed label is unique.
 Evaluating a bound label results in its value, in the current function call. Evaluating an unbound named label results in an \`error()\`.`,
+    argCount:1,
     examples:[
       [
         `a a:1`,
@@ -4944,7 +4981,6 @@ Evaluating a bound label results in its value, in the current function call. Eva
         `sum x 1`,
       ],
     ],
-    argCount:1,
     call(name) {
       // Returns the label object, from cache if possible.
       if (!label.s)
@@ -4997,8 +5033,8 @@ Evaluating a bound label results in its value, in the current function call. Eva
 
   _id:{
     docs:`Return the unique integer index of an object/value, possibly newly given.`,
-    Initialize() { Self.ctx.forEach(v => _id(v)) },
     interrupt:false,
+    Initialize() { Self.ctx.forEach(v => _id(v)) },
     call(x, readonly = false, indexes = undefined) {
       if (indexes instanceof Map && indexes.has(x)) return indexes.get(x)
       if (!_id.xToIndex) _id.xToIndex = new Map, _id.n = 0, _id.sym = Symbol('_id')
@@ -5022,7 +5058,6 @@ Evaluating a bound label results in its value, in the current function call. Eva
   },
 
   Random:{
-    docs:`Some functions for random number generation.`,
     readAt:{
       _simpleRandomNat:_(`_simpleRandomNat`),
       nat:_(`randomNat`),
@@ -5032,6 +5067,7 @@ Evaluating a bound label results in its value, in the current function call. Eva
       truncatedNormal:_(`truncatedNormal`),
       biasedGlorotNormal:_(`biasedGlorotNormal`),
     },
+    docs:`Some functions for random number generation.`,
   },
 
   _simpleRandomNat:[
@@ -5041,7 +5077,6 @@ Evaluating a bound label results in its value, in the current function call. Eva
   ],
 
   randomNat:{
-    impure:true,
     docs:`\`(randomNat Nat)\`: Picks a random non-negative integer less than \`Nat\`, from a uniform distribution.
 An interface to JS's crypto.getRandomValues for generating random numbers on-demand as opposed to in-batches, optimizing to request the least amount of random bits required.`,
     nameResult:[
@@ -5049,8 +5084,9 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
       `nat`,
       `int`,
     ],
-    argCount:1,
     interrupt:false,
+    argCount:1,
+    impure:true,
     call(n) {
       if (isArray(n)) n = _pickCount(n)
 
@@ -5090,10 +5126,15 @@ An interface to JS's crypto.getRandomValues for generating random numbers on-dem
   },
 
   randomProb:{
-    impure:true,
-    use:true,
     docs:`\`(randomProb Probability)\`: Returns \`true\` with \`Probability\` \`p\`, else \`false\`.
 Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (possibly) faster.`,
+    nameResult:[
+      `passed`,
+      `isOk`,
+      `bool`,
+    ],
+    argCount:1,
+    use:true,
     type:[
       _(`funcType`),
       _(`_numberType`),
@@ -5102,12 +5143,7 @@ Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (
         1,
       ],
     ],
-    nameResult:[
-      `passed`,
-      `isOk`,
-      `bool`,
-    ],
-    argCount:1,
+    impure:true,
     call(p) {
       if (typeof p != 'number') error('Expected a number, got', p)
       if (p < 0) throw 'Probability is too low: '+p;
@@ -5133,13 +5169,13 @@ Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (
   },
 
   randomFloat:{
-    use:true,
     docs:`\`randomFloat()\`: Returns a number in 0…1.`,
+    argCount:0,
+    use:true,
     type:[
       _(`funcType`),
       _(`_numberType`),
     ],
-    argCount:0,
     call() { if (call.pure) throw impure;  return Math.random() },
   },
 
@@ -5177,6 +5213,47 @@ Equivalent to \`randomFloat<p\` with checks on \`p\` (it should be 0…1), but (
   },
 
   call:{
+    readAt:{
+      last:_(`last`),
+      quote:_(`quote`),
+      func:_(`func`),
+      select:_(`select`),
+      equal:_(`equal`),
+      purify:_(`purify`),
+      error:_(`error`),
+    },
+    docs:`\`call ^(Func …Args)\`: recursively \`call\`s all sub-items, then applies the first value (the function) to the rest of values.
+Defining this allows function application. In fact, \`F:(func …?)\` acts the same as \`(concept call F)\`.
+Computation cycles are disallowed (unless \`\`settings ^_forgiveMistakes\`\`), and every node's value (array's value) is only computed once.
+(This used to be used in the global \`interpreter\` loop, but was superseded by \`callAdjust\`.)
+
+
+All languages, and everything that does stuff, must have an internal representation (IR) of arbitrary computations.
+
+We chose our IR to be lambda-calculus-like: very simple and direct. But by itself, unlike Lambda calculus, our IR does not have closures, and needs a separate function to \`make\` them. This allows representing what actually happens in the machine more closely (theoretically, anyway).
+(An equivalent effect to closures can be achieved with arrays/objects anyway. Compilers could gain more from doing more search, even of seeming fundamentals: for example, partially-evaluate long-existing closures.)
+
+Another difference is that our IR has no variable bindings, choosing to share nodes instead. This makes it easy to inspect programs.
+
+It's simple so that it's easy to extend. Adding partial evaluation (\`purify\`)? Parallel execution? Compilation to a different target? Self-modification (\`using\`'s \`regenerate\`)? Simplicity itself, my friend. I'd extend it myself, but I want to use machine learning on these for optimal results, which is not trivial right now. But maybe I can work to make it more trivial to use?`,
+    nameResult:[
+      `result`,
+    ],
+    dispose:true,
+    philosophy:`Programming languages are typically geared towards creating an abstraction layer that's convenient for humans to understand and use. Even Lisp has macros. Something so direct as this IR is unusual outside of machine code. Why would it be wanted?
+
+It's for machines as much as it is for humans. If we can come up with a method of general learning that's as good as this IR could directly allow, then its intelligence is equal to humans'. (In other words, it's an arena where the vague and ever-shifting is made concrete.)
+And, it's universal, and so can represent any computation, any doing of stuff, any other IR, and any other method of learning. General learning on even the simplest IR is general intelligence. The most obscure property of intelligence, self-modification? Learnable too.
+
+In machine learning, The Bitter Lesson (as explained by the founder of reinforcement learning, Richard Sutton) is that compute reigns supreme over hand-engineered features in the end. Applied to programming languages, this means that a simple IR is sufficient. Lose all features but gain the world, assuming that learning has matured to be practical enough.
+
+What is programming? Here, it's composition of functions: a tree of sequences of choices of what to be doing.
+Sometimes they are annotated with types, and there is only one or a few choices; often, it's a huge mostly-worthless space.
+Random and local and population-based searches won't do well.
+Bayesian optimization needs simple constraints. But not only are our choices hierarchical, but they may well depend on nearby compositions.
+Transformers on program text/instructions (from observations to Turing-complete choices, learning to predict the best sequence via trying several sequences and picking the best one)? A stilted form of reinforcement learning. Too flat, models no process, so, ultimately unsuitable.
+Deep reinforcement learning? …Yes, it could work. With enough tricks from machine learning, with a good enough routing of differentiable information through the process of program generation (\`regenerate\`), and many choices stacked and interconnected — so really, hardly even RL at all. Learnable scaffolding around \`_choose\`, more like.
+AGI may be possible with modern science, but isn't trivial at all. But I like a challenge.`,
     use:1,
     tutorial:[
       `(Warning: this \`tutorial\` involves actually writing programs. If no want, try something easier, like \`tutorial callAdjust\`.)
@@ -5192,7 +5269,7 @@ And to debug what you wrote, call it with some \`quote\`d input, like the one ab
 Would you \`fancy\` composing composition out of these, by chance?`,
       [
         _(`fancy`),
-        '',
+        ``,
         function(fn) {
           // It's easier to write the interpreter than to pattern-match these cases. Do that.
           if (typeof fn != 'function') return
@@ -5219,7 +5296,7 @@ A node should remember its result. A \`map\` can remember keyed-by-node results,
 Can you see the unhandled cases?`,
       [
         _(`fancy`),
-        '',
+        ``,
         function(fn) {
           // No solution awaits you. Don't learn by imitating, learn by doing.
           // The ability to just do it is in everyone, and you can do whatever you want to too.
@@ -5253,47 +5330,6 @@ More importantly, if it was this simple for us to come up with an interpreter, t
 
 Well, no more talk. Goodbye, and take care.`,
     ],
-    docs:`\`call ^(Func …Args)\`: recursively \`call\`s all sub-items, then applies the first value (the function) to the rest of values.
-Defining this allows function application. In fact, \`F:(func …?)\` acts the same as \`(concept call F)\`.
-Computation cycles are disallowed (unless \`\`settings ^_forgiveMistakes\`\`), and every node's value (array's value) is only computed once.
-(This used to be used in the global \`interpreter\` loop, but was superseded by \`callAdjust\`.)
-
-
-All languages, and everything that does stuff, must have an internal representation (IR) of arbitrary computations.
-
-We chose our IR to be lambda-calculus-like: very simple and direct. But by itself, unlike Lambda calculus, our IR does not have closures, and needs a separate function to \`make\` them. This allows representing what actually happens in the machine more closely (theoretically, anyway).
-(An equivalent effect to closures can be achieved with arrays/objects anyway. Compilers could gain more from doing more search, even of seeming fundamentals: for example, partially-evaluate long-existing closures.)
-
-Another difference is that our IR has no variable bindings, choosing to share nodes instead. This makes it easy to inspect programs.
-
-It's simple so that it's easy to extend. Adding partial evaluation (\`purify\`)? Parallel execution? Compilation to a different target? Self-modification (\`using\`'s \`regenerate\`)? Simplicity itself, my friend. I'd extend it myself, but I want to use machine learning on these for optimal results, which is not trivial right now. But maybe I can work to make it more trivial to use?`,
-    philosophy:`Programming languages are typically geared towards creating an abstraction layer that's convenient for humans to understand and use. Even Lisp has macros. Something so direct as this IR is unusual outside of machine code. Why would it be wanted?
-
-It's for machines as much as it is for humans. If we can come up with a method of general learning that's as good as this IR could directly allow, then its intelligence is equal to humans'. (In other words, it's an arena where the vague and ever-shifting is made concrete.)
-And, it's universal, and so can represent any computation, any doing of stuff, any other IR, and any other method of learning. General learning on even the simplest IR is general intelligence. The most obscure property of intelligence, self-modification? Learnable too.
-
-In machine learning, The Bitter Lesson (as explained by the founder of reinforcement learning, Richard Sutton) is that compute reigns supreme over hand-engineered features in the end. Applied to programming languages, this means that a simple IR is sufficient. Lose all features but gain the world, assuming that learning has matured to be practical enough.
-
-What is programming? Here, it's composition of functions: a tree of sequences of choices of what to be doing.
-Sometimes they are annotated with types, and there is only one or a few choices; often, it's a huge mostly-worthless space.
-Random and local and population-based searches won't do well.
-Bayesian optimization needs simple constraints. But not only are our choices hierarchical, but they may well depend on nearby compositions.
-Transformers on program text/instructions (from observations to Turing-complete choices, learning to predict the best sequence via trying several sequences and picking the best one)? A stilted form of reinforcement learning. Too flat, models no process, so, ultimately unsuitable.
-Deep reinforcement learning? …Yes, it could work. With enough tricks from machine learning, with a good enough routing of differentiable information through the process of program generation (\`regenerate\`), and many choices stacked and interconnected — so really, hardly even RL at all. Learnable scaffolding around \`_choose\`, more like.
-AGI may be possible with modern science, but isn't trivial at all. But I like a challenge.`,
-    readAt:{
-      last:_(`last`),
-      quote:_(`quote`),
-      func:_(`func`),
-      select:_(`select`),
-      equal:_(`equal`),
-      purify:_(`purify`),
-      error:_(`error`),
-    },
-    nameResult:[
-      `result`,
-    ],
-    dispose:true,
     call(x) {
       // First, we handle purification and "I'm not a computation" and "I don't want to be a computation".
       if (call.pure) return purify(x)
@@ -5359,15 +5395,15 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
   },
 
   applyArray:{
-    use:true,
+    docs:`\`applyArray ^(Func …Args)\`: assuming that \`Func\` and \`Args\` are already evaluated, simply applies the function to arguments.`,
     argCount:1,
+    dispose:true,
+    use:true,
     type:[
       _(`funcType`),
       `I dunno, some array here`,
       `Its result will be given`,
     ],
-    docs:`\`applyArray ^(Func …Args)\`: assuming that \`Func\` and \`Args\` are already evaluated, simply applies the function to arguments.`,
-    dispose:true,
     call(x) {
       if (!isArray(x)) error('Not an array:', x)
       if (typeof x[0] != 'function')
@@ -5377,6 +5413,34 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
   },
 
   apply:{
+    readAt:{
+      applyArray:_(`applyArray`),
+      applyAdjust:_(`applyAdjust`),
+      applyStatically:_(`applyStatically`),
+    },
+    docs:`\`apply Func …Args\`: applies \`Func\` to \`Args\`.
+
+\`(apply Func …Args)\` is semantically the same as \`(Func …Args)\`, but it behaves better for \`adjust\`ment of computed \`Func\`s.`,
+    dispose:true,
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      call(ins, _, dout) {
+        if (call.pure) throw impure
+        const [fn, ...args] = ins
+        const dargs = adjust(fn, args, _, dout)
+        const dargs2 = _allocArray(1+dargs.length)
+        dargs2[0] = undefined
+        for (let i=0; i < dargs.length; ++i) dargs2[i+1] = dargs[i]
+        _allocArray(dargs)
+        return dargs2
+      },
+    },
+    mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      [
+        `repeat ^(apply \\?+randomVar() 5)=4 1000`,
+      ],
+    ],
     use:true,
     type:[
       _(`funcType`),
@@ -5394,35 +5458,7 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
       ],
       `Output`,
     ],
-    examples:[
-      [
-        `repeat ^(apply \\?+randomVar() 5)=4 1000`,
-      ],
-    ],
-    docs:`\`apply Func …Args\`: applies \`Func\` to \`Args\`.
-
-\`(apply Func …Args)\` is semantically the same as \`(Func …Args)\`, but it behaves better for \`adjust\`ment of computed \`Func\`s.`,
-    readAt:{
-      applyArray:_(`applyArray`),
-      applyAdjust:_(`applyAdjust`),
-      applyStatically:_(`applyStatically`),
-    },
-    dispose:true,
-    mergeAdjustment:_(`_mergeTensors`),
     adjustLater:true,
-    adjust:{
-      dispose:_(`_disposeEachAndDealloc`),
-      call(ins, _, dout) {
-        if (call.pure) throw impure
-        const [fn, ...args] = ins
-        const dargs = adjust(fn, args, _, dout)
-        const dargs2 = _allocArray(1+dargs.length)
-        dargs2[0] = undefined
-        for (let i=0; i < dargs.length; ++i) dargs2[i+1] = dargs[i]
-        _allocArray(dargs)
-        return dargs2
-      },
-    },
     call(fn, ...args) {
       if (typeof fn != 'function')
         error('Expected a function to call, got', fn)
@@ -5431,16 +5467,16 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
   },
 
   applyAdjust:{
-    examples:[
-      [
-        `repeat ^(applyAdjust \\(?+randomVar())=4 5) 1000`,
-      ],
-    ],
     docs:`\`applyAdjust Func …Args\`: \`apply\` \`Func\` to \`Args\`, and immediately \`adjust\`.
 
 \`(apply Func …Args)\` is semantically the same as \`(Func …Args)\`, but it behaves better for \`adjust\`ment of computed \`Func\`s.`,
     dispose:true,
     mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      [
+        `repeat ^(applyAdjust \\(?+randomVar())=4 5) 1000`,
+      ],
+    ],
     call(fn, ...args) {
       if (typeof fn != 'function')
         error('Expected a function to call, got', fn)
@@ -5461,7 +5497,6 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
   },
 
   Constructions:{
-    docs:`Arrays are a good way of representing graphs, but not all runtime objects are arrays. The functions here allow encoding objects in arrays.`,
     readAt:{
       make:_(`make`),
       makeDAG:_(`makeDAG`),
@@ -5474,9 +5509,12 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
       tensor:_(`tensor`),
       static:_(`static`),
     },
+    docs:`Arrays are a good way of representing graphs, but not all runtime objects are arrays. The functions here allow encoding objects in arrays.`,
   },
 
   make:{
+    docs:`\`make Construct …Args\`: Creates one \`construct\` when called.
+Cycles are impossible to create using only this.`,
     use:true,
     type:[
       _(`funcType`),
@@ -5498,8 +5536,6 @@ AGI may be possible with modern science, but isn't trivial at all. But I like a 
         `Output`,
       ],
     ],
-    docs:`\`make Construct …Args\`: Creates one \`construct\` when called.
-Cycles are impossible to create using only this.`,
     call(...x) {
       const obj = construct(x)
       construct(x, obj)
@@ -5549,14 +5585,14 @@ Lack of cycles allows us to pre/post \`construct\` at the same time, no backpatc
   ],
 
   makeGraph:{
-    keep:1,
+    readAt:{
+      _logHiddenConstructionErrors:_(`_logHiddenConstructionErrors`),
+    },
     docs:`\`makeGraph Expr\`: Turns an array graph into an array/object graph, in place if possible.
 
 Constructs all dependencies before dependents, and throws if there is a cycle (unless instructed to hide errors).
     More "correct", but less trivially-parallelizable (if this was not JS).`,
-    readAt:{
-      _logHiddenConstructionErrors:_(`_logHiddenConstructionErrors`),
-    },
+    keep:1,
     call(x, e, noFullConstruction = false, openCollapsed = true, hideErrors = false, constructTheTopLevelArray = true, reconstruct) {
       if (openCollapsed && _isCollapsed(x)) return x
       if (!isArray(x)) return x
@@ -5616,6 +5652,11 @@ Constructs all dependencies before dependents, and throws if there is a cycle (u
   _isCollapsed(x) { return typeof document != ''+void 0 && x instanceof Element && x.tagName === 'COLLAPSED' && x.special },
 
   construct:{
+    docs:`\`construct(x)\`→\`obj\` / \`construct(x,obj)\`: To encode non-array objects in array graphs, a global \`defines\` this.
+Globals and user-defined concepts that statically define this are constructed right after parsing.
+
+This embodies a simple principle: a graph/network cannot be constructed without backpatching.
+(While this can be used to implement Lisp-like macros, please call quoted code or apply functions instead. \`construct\` is for non-array objects.)`,
     examples:[
       [
         `obj;construct(arr,obj);obj
@@ -5627,11 +5668,6 @@ arr:arrayCons(func,getLast(loop 10 i->x->arrayCons(i,x) array('func body')))`,
 a:transform(10,i→construct(^(arrayObject func 'later')))`,
       ],
     ],
-    docs:`\`construct(x)\`→\`obj\` / \`construct(x,obj)\`: To encode non-array objects in array graphs, a global \`defines\` this.
-Globals and user-defined concepts that statically define this are constructed right after parsing.
-
-This embodies a simple principle: a graph/network cannot be constructed without backpatching.
-(While this can be used to implement Lisp-like macros, please call quoted code or apply functions instead. \`construct\` is for non-array objects.)`,
     call(x, obj = undefined) {
       if (isArray(x)) {
         if (typeof defines(x, construct) == 'function')
@@ -5646,7 +5682,6 @@ This embodies a simple principle: a graph/network cannot be constructed without 
 
   tensor:{
     docs:`\`tensor Numbers Shapes Type\`: \`construct\`s a multi-dimensional array of numbers.`,
-    serialize:0,
     construct(x, obj) {
       if (obj === undefined) {
         let [_, data, shapes, t] = x
@@ -5660,6 +5695,7 @@ This embodies a simple principle: a graph/network cannot be constructed without 
         return _tf(tf.tensor(data, shapes, dtype))
       }
     },
+    serialize:0,
   },
 
   _toLittleEndian:{
@@ -5720,8 +5756,8 @@ This embodies a simple principle: a graph/network cannot be constructed without 
   },
 
   deconstruct:{
-    use:1,
     docs:`\`(deconstruct Object)\`: turn an object into its array-representation (that could be evaluated to re-create that native value).`,
+    use:1,
     call(v, allowPath = false, allowAsync = false) {
       if (defines(v, deconstruct)) return defines(v, deconstruct)
       else if (isArray(v)) return isArray(v[0]) || defines(v[0], construct) === undefined ? v.slice() : [arrayObject, ...v]
@@ -5878,6 +5914,7 @@ For example, both \`\\?+3 5\` and \`(func ? ?+3) 5\` return \`8\`.`,
   },
 
   _adjustFunc:{
+    dispose:_(`_disposeEachAndDealloc`),
     call(ins, dout) {
       if (call.pure) throw impure
       // Resilient to a func's adjustment changing from when it was first called.
@@ -5887,7 +5924,6 @@ For example, both \`\\?+3 5\` and \`(func ? ?+3) 5\` return \`8\`.`,
       try { return adj !== null ? adj(ins, undefined, dout) : _allocArray(ins.length).fill(0) }
       catch (err) { if (err === interrupt) interrupt.stack.push(adj);  throw err }
     },
-    dispose:_(`_disposeEachAndDealloc`),
   },
 
   id:{
@@ -5895,30 +5931,33 @@ For example, both \`\\?+3 5\` and \`(func ? ?+3) 5\` return \`8\`.`,
     argCount:1,
     dispose:1,
     keep:1,
-    call(x) { return x },
     _resultCanBe(x) { _resultCanBe(x[1]) },
+    call(x) { return x },
   },
 
   isFunc:{
     docs:`Yes, this returns whether the input is a function.`,
-    argCount:1,
     interrupt:false,
+    argCount:1,
     call(f) { return typeof f == 'function' },
   },
 
   func:{
-    use:true,
-    docs:`\`\\Body\` or \`func ? Body\` or \`func …ArgNodes Body\` or \`Arg1->Arg2->Arg3->Body\`: A \`construct\` that can be called to evaluate \`Body\`, replacing values of \`ArgNodes\` with dynamically-provided values.
-
-Note that despite what the arrow-syntax might suggest, there are no closures unless you \`make\` them (the objects you see are the only objects you get). Syntactic scope does not exist after parsing, so we wouldn't even know what's a closure. This way is more explicit anyway.
-
-Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up). Instead, re-compile the function object itself with \`writeAt\` (accessible from \`contextMenu\`) if a change is needed.`,
     readAt:{
       input:_(`input`),
       id:_(`id`),
       isFunc:_(`isFunc`),
     },
-    _resultCanBe(x) { _resultCanBe(x[x.length-1]) },
+    docs:`\`\\Body\` or \`func ? Body\` or \`func …ArgNodes Body\` or \`Arg1->Arg2->Arg3->Body\`: A \`construct\` that can be called to evaluate \`Body\`, replacing values of \`ArgNodes\` with dynamically-provided values.
+
+Note that despite what the arrow-syntax might suggest, there are no closures unless you \`make\` them (the objects you see are the only objects you get). Syntactic scope does not exist after parsing, so we wouldn't even know what's a closure. This way is more explicit anyway.
+
+Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up). Instead, re-compile the function object itself with \`writeAt\` (accessible from \`contextMenu\`) if a change is needed.`,
+    nameResult:[
+      `f`,
+      `g`,
+      `h`,
+    ],
     examples:[
       [
         `\\4 5`,
@@ -5935,6 +5974,7 @@ Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up
       ],
       `(IN BASE FOUR.)`,
     ],
+    use:true,
     construct(x, obj) {
       if (!isArray(x) || x.length < 2) error("Expected at least the function body")
       if (obj === undefined) {
@@ -5976,11 +6016,7 @@ Funcs do not \`observe\` their nodes (that would need a lot of memory to wire up
         } finally { _allocMap(inputs), poIndRc && defines(_postorderInfo, dispose)(poIndRc) }
       }
     },
-    nameResult:[
-      `f`,
-      `g`,
-      `h`,
-    ],
+    _resultCanBe(x) { _resultCanBe(x[x.length-1]) },
   },
 
   _giveAdjustTo(n) {
@@ -6308,10 +6344,10 @@ Use \`_doesAdjustRead\` to read out those props.`,
   },
 
   _postorderInfo:{
-    todo:`Since the arg-visiting order is technically arbitrary (unless \`last\`), allow funcs like \`sync\` to delay their visit as much as possible.`,
     docs:`Linearizes all execution-relevant information about a DAG into 3 equal-sized arrays.`,
     interrupt:false,
     dispose(poIndRc) { if (false && /* Plugging a leak... */ isArray(poIndRc)) poIndRc[1].forEach(_allocArray), poIndRc.forEach(_allocArray), _allocArray(poIndRc) },
+    todo:`Since the arg-visiting order is technically arbitrary (unless \`last\`), allow funcs like \`sync\` to delay their visit as much as possible.`,
     call(dag, inputs, reversed = false) {
       const po = _allocArray(0), ind = _allocArray(0), rc = _allocArray(0)
       const toIndex = _allocMap()
@@ -6361,11 +6397,8 @@ Use \`_doesAdjustRead\` to read out those props.`,
       if (d) d(x)
     }
   },
-  
+
   array:{
-    docs:`\`(array …Items)\`: creates a new array.
-The same as \`(make arrayObject …Items)\`.`,
-    Initialize() { array.count = 0 },
     readAt:{
       isArray:_(`isArray`),
       arrayLength:_(`arrayLength`),
@@ -6385,53 +6418,30 @@ The same as \`(make arrayObject …Items)\`.`,
       arrayObject:_(`arrayObject`),
       merged:_(`merged`),
     },
+    docs:`\`(array …Items)\`: creates a new array.
+The same as \`(make arrayObject …Items)\`.`,
     interrupt:false,
-    keep:true,
-    call(...x) { return created(!call.pure ? x : x.map(quote)) },
-    purify(...y) { return created(y) },
+    dispose:_(`_disposeEachAndDealloc`),
     adjust:_(`_dout`),
+    Initialize() { array.count = 0 },
+    purify(...y) { return created(y) },
     mergeAdjustment:_(`_mergeTensors`),
+    keep:true,
     _compileBody(env, assignTo, ...args) {
       // `v = _allocArray(N); v[0]=args[0]; v[1]=args[1]`.
       return `${assignTo} = ${env(_allocArray)}(${args.length})${args.map((a,i) => '; '+assignTo+'['+i+']='+a).join('')}`
     },
-    dispose:_(`_disposeEachAndDealloc`),
+    call(...x) { return created(!call.pure ? x : x.map(quote)) },
   },
 
   readAt:{
     docs:`\`readAt Array Index\` or \`Array.Index\`: reads the current value at a position in an array.
 (It's actually a relatively-thin wrapper around JS property access.)
 This also forms the user-visible hierarchy of globals.`,
+    interrupt:false,
     argCount:2,
     dispose:true,
-    interrupt:false,
-    call(arr, i) {
-      if (arr == null) return
-      if (i < 0) i += arr.length
-      if (call.pure && typeof arr == 'string') return arr[i]
-      if (call.pure && call.pure.has(arr)) {
-        const v = arr[i]
-        // `v` is a program (that quotes values), so we convert it to a value (with _unknown(…) for programs).
-        return !isArray(v) || call.pure.has(v) ? keep(v) : v[0] === quote ? keep(v[1]) : _unknown(v)
-      }
-      if (call.pure) throw impure
-      return keep(arr[i])
-      // readAt.parents: a Map from globals to what namespace they belong to.
-    },
-    purify(arrP, iP) {
-      // When the array is known but the index is not, copy the array so that writes can't interfere.
-      //   (But if the array is modified after `purify`, we wouldn't know.)
-      if (isArray(arrP) && arrP[0] !== quote) throw impure
-      const arr = !isArray(arrP) ? arrP : arrP[1]
-      if (iP < 0) iP += arr.length
-      if (!isArray(arr)) throw impure
-      return _unknown([readAt, quote(array(...arr)), iP])
-    },
     adjust:_(`_arrayReadAdjustment`),
-    mergeAdjustment:[
-      _(`_mergeArrays`),
-      null,
-    ],
     Initialize(net) {
       // Mark readAt.parents of globals.
       const backctx = _invertBindingContext(Self.ctx)
@@ -6455,31 +6465,59 @@ This also forms the user-visible hierarchy of globals.`,
       markParents(net)
       readAt.parents.set(net, Self)
     },
+    purify(arrP, iP) {
+      // When the array is known but the index is not, copy the array so that writes can't interfere.
+      //   (But if the array is modified after `purify`, we wouldn't know.)
+      if (isArray(arrP) && arrP[0] !== quote) throw impure
+      const arr = !isArray(arrP) ? arrP : arrP[1]
+      if (iP < 0) iP += arr.length
+      if (!isArray(arr)) throw impure
+      return _unknown([readAt, quote(array(...arr)), iP])
+    },
+    mergeAdjustment:[
+      _(`_mergeArrays`),
+      null,
+    ],
+    call(arr, i) {
+      if (arr == null) return
+      if (i < 0) i += arr.length
+      if (call.pure && typeof arr == 'string') return arr[i]
+      if (call.pure && call.pure.has(arr)) {
+        const v = arr[i]
+        // `v` is a program (that quotes values), so we convert it to a value (with _unknown(…) for programs).
+        return !isArray(v) || call.pure.has(v) ? keep(v) : v[0] === quote ? keep(v[1]) : _unknown(v)
+      }
+      if (call.pure) throw impure
+      return keep(arr[i])
+      // readAt.parents: a Map from globals to what namespace they belong to.
+    },
   },
+
   _arrayReadAdjustment:[
     _(`array`),
     [
       {
-        call(arr, i, dout) { const r = array();  return r[i] = dout, r },
+        interrupt:false,
         purify(arrP, iP, doutP) {
           // Known-index reads will know adjustment.
           if (isArray(iP) || typeof iP != 'number') throw impure
           const r = array();  return r[iP] = doutP, r
         },
-        interrupt:false,
+        call(arr, i, dout) { const r = array();  return r[i] = dout, r },
       },
       _(`_inA`),
       _(`_inB`),
       _(`_dout`),
     ],
   ],
+
   writeAt:{
     docs:`\`writeAt Array Index Value\`: changes the current value at a position in an array.
 If \`Index\` is undefined, re-constructs a construct in-place if possible.
 
 (Can actually interrupt if \`Array\` is a non-array object and \`construct\` interrupts.)`,
-    argCount:3,
     interrupt:false,
+    argCount:3,
     purify(arrP, iP, vP) {
       // Allow writing impure computations into created arrays.
       if (isArray(arrP) && arrP[0] !== quote) throw impure
@@ -6512,14 +6550,15 @@ If \`Index\` is undefined, re-constructs a construct in-place if possible.
       } else construct(v, arr), _observeChange(arr)
     },
   },
+
   observe:{
-    todo:`Have an extra arg \`Observer\`, so that we could automatically remember to un-observe when the observer gets de-allocated (finalized) or removed-from-DOM. (Not having it might be the cause of memory leaks.)`,
     docs:`\`observe Array OnChange\`: remembers to call the function (passing \`Array\`) sometime after the array changes from a \`writeAt\` call.
 If \`OnChange\` is not given, returns the current array of \`Array\`'s observers.
 Call this again with the same array and function to no longer call it.
 Many updates at the same time are merged into one call, scheduled in a separate task.`,
     interrupt:false,
     Initialize() { observe.rs = new WeakMap, observe.changed = new Set, observe.fn = _throttled(_callChangeObservers, .2) },
+    todo:`Have an extra arg \`Observer\`, so that we could automatically remember to un-observe when the observer gets de-allocated (finalized) or removed-from-DOM. (Not having it might be the cause of memory leaks.)`,
     call(arr, f, forceTo = undefined) {
       if (!isArray(arr) && defines(arr, deconstruct) === undefined) return f
       if (Object.isFrozen(arr)) return f
@@ -6542,6 +6581,7 @@ Many updates at the same time are merged into one call, scheduled in a separate 
       // .rs (a Map from arrays to their observers), .changed (a Set of arrays that changed), .fn (throttled _callChangeObservers).
     },
   },
+
   _observeChange(arr) {
     // Remembers to call `arr`'s observers.
     if (observe.rs && observe.rs.has(arr)) {
@@ -6549,6 +6589,7 @@ Many updates at the same time are merged into one call, scheduled in a separate 
       observe.changed.add(arr), b && setTimeout(observe.fn, 200)
     }
   },
+
   _callChangeObservers:{
     docs:`Calls all observers for all changed arrays.`,
     call() {
@@ -6572,6 +6613,7 @@ Many updates at the same time are merged into one call, scheduled in a separate 
       })
     },
   },
+
   arrayObject:{
     docs:`\`arrayObject …Items\`: \`construct\`s an actual array.
 When the array head is a \`construct\`-defining \`concept\`, this allows still correctly parsing the serialization.`,
@@ -6664,6 +6706,27 @@ When the array head is a \`construct\`-defining \`concept\`, this allows still c
   },
 
   select:{
+    docs:`\`select If Then Else …Args\`: calls \`Then …Arg\` if \`If\` is \`true\`, else \`Else …Args\`.
+Inconvenient compared to being able to refer to closed-over variables directly, but simple and Turing-complete.
+
+Branches can be \`null\`. \`select true Func null …Args\` is the same as \`apply Func …Args\`.
+
+This is much like the φ function in SSA forms, but explicitly passing arguments to code blocks.`,
+    dispose:true,
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      impure:true,
+      call(ins, _, dout) {
+        const [If, Then, Else, ...Args] = ins
+        return sync(If) === true ? typeof Then=='function' && adjust(Then, Args, null, dout) : typeof Else=='function' && adjust(Else, Args, null, dout)
+      },
+    },
+    purify(IfP, ThenP, ElseP, ...ArgsP) {
+      if (isArray(IfP) && IfP[0] !== quote) throw impure
+      return sync(IfP) === true ? (typeof Then=='function' ? purify([ThenP, ...ArgsP], true) : keep(Then)) : (typeof Else=='function' ? purify([ElseP, ...ArgsP], true) : keep(Else))
+      // If `IfP` was explicitly quoted by `quote`, then it's definitely not `true`.
+    },
+    mergeAdjustment:_(`_mergeTensors`),
     use:true,
     type:[
       _(`funcType`),
@@ -6675,7 +6738,7 @@ When the array head is a \`construct\`-defining \`concept\`, this allows still c
         _(`funcType`),
         [
           _(`rest`),
-          `Inputs`
+          `Inputs`,
         ],
         `Output`,
       ],
@@ -6683,50 +6746,32 @@ When the array head is a \`construct\`-defining \`concept\`, this allows still c
         _(`funcType`),
         [
           _(`rest`),
-          `Inputs`
+          `Inputs`,
         ],
         `Output`,
       ],
       [
         _(`rest`),
-        `Inputs`
+        `Inputs`,
       ],
       `Output`,
     ],
-    docs:`\`select If Then Else …Args\`: calls \`Then …Arg\` if \`If\` is \`true\`, else \`Else …Args\`.
-Inconvenient compared to being able to refer to closed-over variables directly, but simple and Turing-complete.
-
-Branches can be \`null\`. \`select true Func null …Args\` is the same as \`apply Func …Args\`.
-
-This is much like the φ function in SSA forms, but explicitly passing arguments to code blocks.`,
+    _compileBody(env, assignTo, If, Then, Else, ...Args) { return `${assignTo} = ${If} === true ? (typeof ${Then}=='function' ? ${Then}(${Args}) : ${env(keep)}(${Then})) : (typeof ${Else}=='function' ? ${Else}(${Args}) : ${env(keep)}(${Else}))` },
     _resultCanBe(x) { _resultCanBe(x[2]), _resultCanBe(x[3]) },
+    adjustLater:true,
     call(If, Then, Else, ...Args) {
       return sync(If) === true ? (typeof Then=='function' ? Then(...Args) : keep(Then)) : (typeof Else=='function' ? Else(...Args) : keep(Else))
-    },
-    purify(IfP, ThenP, ElseP, ...ArgsP) {
-      if (isArray(IfP) && IfP[0] !== quote) throw impure
-      return sync(IfP) === true ? (typeof Then=='function' ? purify([ThenP, ...ArgsP], true) : keep(Then)) : (typeof Else=='function' ? purify([ElseP, ...ArgsP], true) : keep(Else))
-      // If `IfP` was explicitly quoted by `quote`, then it's definitely not `true`.
-    },
-    _compileBody(env, assignTo, If, Then, Else, ...Args) { return `${assignTo} = ${If} === true ? (typeof ${Then}=='function' ? ${Then}(${Args}) : ${env(keep)}(${Then})) : (typeof ${Else}=='function' ? ${Else}(${Args}) : ${env(keep)}(${Else}))` },
-    dispose:true,
-    adjustLater:true,
-    mergeAdjustment:_(`_mergeTensors`),
-    adjust:{
-      impure:true,
-      call(ins, _, dout) {
-        const [If, Then, Else, ...Args] = ins
-        return sync(If) === true ? typeof Then=='function' && adjust(Then, Args, null, dout) : typeof Else=='function' && adjust(Else, Args, null, dout)
-      },
-      dispose:_(`_disposeEachAndDealloc`),
     },
   },
 
   equal:{
-    use:true,
     readAt:{
       softEqual:_(`softEqual`),
     },
+    docs:`\`equal A B\`: returns \`true\` if \`A\` and \`B\` are reference-equal, otherwise \`false\`.`,
+    interrupt:false,
+    argCount:2,
+    use:true,
     type:[
       _(`funcType`),
       `TypeA`,
@@ -6736,9 +6781,6 @@ This is much like the φ function in SSA forms, but explicitly passing arguments
         1,
       ],
     ],
-    docs:`\`equal A B\`: returns \`true\` if \`A\` and \`B\` are reference-equal, otherwise \`false\`.`,
-    argCount:2,
-    interrupt:false,
     call(a,b) { return a === b },
   },
 
@@ -6831,6 +6873,11 @@ Reading from and writing to such arrays during \`purify\` is allowed, even unkno
   },
 
   purify:{
+    readAt:{
+      _purifyInWorker:_(`_purifyInWorker`),
+      created:_(`created`),
+      impure:_(`impure`),
+    },
     docs:`\`purify ^Expr\`: Partially-evaluates the expression, without inlining or knowledge.
 The process is simple: if any of a node's inputs are unknown (or if it does an impure thing like calling \`randomNat\`, or its result \`_isUnknown\`), then the node is unknown (and might be inlined), else it's known (and can be computed with \`call\`).
 
@@ -6854,6 +6901,10 @@ Static is not good enough. Need dynamic.
 And who's to say that these are the only choices to ever make, anyway?
 Maybe, rather than trying to create a complete world by ourselves, we should allow a simple core to create whatever it wants.
 Believe in simplicity. Let the joy of love give you an answer.`,
+    nameResult:[
+      `purified`,
+      `computation`,
+    ],
     philosophy:`The vanity and psychosis of those who hold absolute power are of no use to everyone else. Swat them aside, to make room for coming up with better versions of yourself.
 I realized my mistake, and though I lost my vision, I can see the world now.`,
     examples:[
@@ -6865,15 +6916,6 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
         `purify ^(randomNat 5)`,
         `_unknown (randomNat 5)`,
       ],
-    ],
-    readAt:{
-      _purifyInWorker:_(`_purifyInWorker`),
-      created:_(`created`),
-      impure:_(`impure`),
-    },
-    nameResult:[
-      `purified`,
-      `computation`,
     ],
     call(x, inline = false, inputs, inputPrograms) {
       // `inline`: whether we're inlining a func body (so exceptions will not be swallowed/recorded).
@@ -6998,52 +7040,35 @@ I realized my mistake, and though I lost my vision, I can see the world now.`,
   ],
 
   add:{
-    stack:true,
-    use:true,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
-    ],
-    merged:true,
     docs:`Addition of two tensors, as in \`5+6\`=\`11\`.
 The adjustment is passed through to each arg.`,
+    interrupt:false,
     argCount:2,
     dispose:true,
-    interrupt:false,
-    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a+b : _tf(tf.add(a,b)) },
     adjust:[
       _(`array`),
       _(`_dout`),
       _(`_dout`),
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  mul:{
-    examples:[
-      `In cases where inputs do not have equal shapes, explicit broadcasting is required:`,
-      [
-        `v:randomVar(8,100) repeat ^(broadcastTo(modifyGrad randomVar(8,1) g->displayOne('grad',g);g,v)*v=5) 10000`,
-      ],
-      `(Technically, \`randomVar(8,1)*randomVar(8,100)\` would also work, but if you inspect gradients with \`modifyGrad ? g->displayOne('grad',g);g\`, it would have too much width, which could cause problems in more complicated computations.)`,
-    ],
-    stack:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
+      _(41),
     ],
     merged:true,
+    stack:true,
+    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a+b : _tf(tf.add(a,b)) },
+  },
+
+  mul:{
     docs:`Multiplication, as in \`5*6\`=\`30\`.
 Also called the Hadamard (element-wise) product, ⊙.`,
+    interrupt:false,
     argCount:2,
     dispose:true,
-    interrupt:false,
-    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a*b : _tf(tf.mul(a,b)) },
     adjust:[
       _(`array`),
       [
@@ -7058,23 +7083,30 @@ Also called the Hadamard (element-wise) product, ⊙.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  sub:{
-    stack:true,
+    examples:[
+      `In cases where inputs do not have equal shapes, explicit broadcasting is required:`,
+      [
+        `v:randomVar(8,100) repeat ^(broadcastTo(modifyGrad randomVar(8,1) g->displayOne('grad',g);g,v)*v=5) 10000`,
+      ],
+      `(Technically, \`randomVar(8,1)*randomVar(8,100)\` would also work, but if you inspect gradients with \`modifyGrad ? g->displayOne('grad',g);g\`, it would have too much width, which could cause problems in more complicated computations.)`,
+    ],
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
+      _(41),
     ],
     merged:true,
+    stack:true,
+    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a*b : _tf(tf.mul(a,b)) },
+  },
+
+  sub:{
     docs:`Subtraction, as in \`5-6\`=\`-1\`.`,
+    interrupt:false,
     argCount:2,
     dispose:true,
-    interrupt:false,
-    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a-b : a ? _tf(tf.sub(a,b)) : _tf(tf.neg(b)) },
     adjust:[
       _(`array`),
       _(`_dout`),
@@ -7085,23 +7117,23 @@ Also called the Hadamard (element-wise) product, ⊙.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  div:{
-    stack:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
+      _(41),
     ],
     merged:true,
+    stack:true,
+    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a-b : a ? _tf(tf.sub(a,b)) : _tf(tf.neg(b)) },
+  },
+
+  div:{
     docs:`Division, as in \`6/3\`=\`2\``,
+    interrupt:false,
     argCount:2,
     dispose:true,
-    interrupt:false,
-    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a/b : _tf(tf.div(a,b)) },
     adjust:[
       _(`array`),
       [
@@ -7128,28 +7160,23 @@ Also called the Hadamard (element-wise) product, ⊙.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  pow:{
-    stack:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
-    ],
-    examples:[
-      [
-        `tensor(1 2 3 4 5)**5`,
-      ],
+      _(41),
+      _(41),
+      _(41),
     ],
     merged:true,
-    dispose:true,
+    stack:true,
+    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? a/b : _tf(tf.div(a,b)) },
+  },
+
+  pow:{
     docs:`Raises the first arg to the power of the second arg.`,
-    argCount:2,
     interrupt:false,
-    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? Math.pow(a,b) : _noInfinities(_tf(tf.pow(a,b))) },
+    argCount:2,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -7179,22 +7206,28 @@ Also called the Hadamard (element-wise) product, ⊙.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  sqrt:{
-    stack:true,
+    examples:[
+      [
+        `tensor(1 2 3 4 5)**5`,
+      ],
+    ],
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
+      _(41),
     ],
     merged:true,
-    dispose:true,
+    stack:true,
+    call(a,b) { return a=_num(a), b=_num(b), typeof a == 'number' && typeof b == 'number' ? Math.pow(a,b) : _noInfinities(_tf(tf.pow(a,b))) },
+  },
+
+  sqrt:{
     docs:`\`\\pow(?,1/2)\``,
-    argCount:1,
     interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.sqrt(a) : _tf(tf.sqrt(a)) },
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -7208,18 +7241,44 @@ Also called the Hadamard (element-wise) product, ⊙.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    use:true,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+    ],
+    merged:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.sqrt(a) : _tf(tf.sqrt(a)) },
   },
 
-  8566:[
-    _(`mul`),
-    _(`_dout`),
-    _(`_out`),
-  ],
-
   softmax:{
-    stack:true,
-    merged:true,
+    docs:`\`e:exp(?) softmax:\\e/expandDims(sum(e,-1),-1)\`, but more numerically stable and differentiable (\`sum\` is too lazy to get a differentiability certificate).
+Nice for turning a bunch of numbers into a probability distribution, like a soft choice to \`mul\`tiply by.`,
+    interrupt:false,
+    argCount:1,
     dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`sub`),
+        _(89),
+        [
+          _(`mul`),
+          [
+            _(`expandDims`),
+            [
+              _(`sum`),
+              _(89),
+              -1,
+            ],
+            -1,
+          ],
+          _(`_out`),
+        ],
+      ],
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
     examples:[
       `\`\`settings ^_learningRate\`\``,
       [
@@ -7237,48 +7296,7 @@ Also called the Hadamard (element-wise) product, ⊙.`,
       `(Attention erases the order of queries/keys/values, so \`concat2\` some positional embedding to preserve that, or \`add\` it if you're a pleb who wants your model to underperform.)`,
       `Hmm... no errors... I'll be honest, I've put these examples here so that I could debug an error that arose in a more complicated use of attention. I thought for sure that attention is at fault, but, apparently not?`,
     ],
-    docs:`\`e:exp(?) softmax:\\e/expandDims(sum(e,-1),-1)\`, but more numerically stable and differentiable (\`sum\` is too lazy to get a differentiability certificate).
-Nice for turning a bunch of numbers into a probability distribution, like a soft choice to \`mul\`tiply by.`,
-    argCount:1,
-    interrupt:false,
-    call(a) {
-      // We do not use `tf.softmax`, because it seems to leak memory like crazy.
-      //   Nor do we use `max`, for the same reason.
-      a = _num(a)
-      if (!a.shape || !a.shape.length) return 1
-      let t0, t1, t2, t3, t4, t5, t6
-      try {
-        t0 = _tf(tf.neg(a))
-        t1 = min(t0, -1)
-        t6 = expandDims(t1, -1)
-        t2 = add(a, t6)
-        t3 = exp(a)
-        t4 = sum(t3, -1)
-        t5 = expandDims(t4, -1)
-        return div(t3, t5)
-      } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3), dispose(t4), dispose(t5), dispose(t6) }
-    },
-    adjust:[
-      _(`array`),
-      [
-        _(`sub`),
-        _(8566),
-        [
-          _(`mul`),
-          [
-            _(`expandDims`),
-            [
-              _(`sum`),
-              _(8566),
-              -1,
-            ],
-            -1,
-          ],
-          _(`_out`),
-        ],
-      ],
-    ],
-    mergeAdjustment:_(`_mergeTensors`),
+    merged:true,
     tutorial:[
       `Be honest.
 
@@ -7774,11 +7792,31 @@ elemCollapse _executioner(^a;b;d;e;display('Mean change',await a,10);display('Me
       Practically speaking, life may have no meaning, but if you get everything you do to transcendence, that's enough to overcome that (again, practically speaking). I mean, the previous narration feels more complete than a bunch of random code found randomly on the Internet, doesn't it? Even though both a result of life. Allegedly.
       `,
     ],
+    stack:true,
+    call(a) {
+      // We do not use `tf.softmax`, because it seems to leak memory like crazy.
+      //   Nor do we use `max`, for the same reason.
+      a = _num(a)
+      if (!a.shape || !a.shape.length) return 1
+      let t0, t1, t2, t3, t4, t5, t6
+      try {
+        t0 = _tf(tf.neg(a))
+        t1 = min(t0, -1)
+        t6 = expandDims(t1, -1)
+        t2 = add(a, t6)
+        t3 = exp(a)
+        t4 = sum(t3, -1)
+        t5 = expandDims(t4, -1)
+        return div(t3, t5)
+      } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3), dispose(t4), dispose(t5), dispose(t6) }
+    },
   },
 
   correlation:{
     docs:`Measures sample Pearson covariance (divided by standard deviations, so, correlation) of a matrix where observations of random variables are arranged in columns (each row is a variable, and the result is sized as rows-by-rows).
 Each number in the result is from -1 to 1.`,
+    interrupt:false,
+    dispose:true,
     examples:[
       `Reminder: in \`toImage\`, positive numbers are shown as white pixels, negative ones as red pixels.`,
       [
@@ -7791,8 +7829,6 @@ Each number in the result is from -1 to 1.`,
         `toImage correlation(randomVar(1,15)*tensor(1() -1() 1() -1() 1() -1() 1() -1()))`,
       ],
     ],
-    dispose:true,
-    interrupt:false,
     call(x) {
       x = _num(x)
       if (typeof x == 'number') return 0
@@ -7866,6 +7902,9 @@ To reverse this, use \`stringToIndices\`.`,
   },
 
   displayOne:{
+    readAt:{
+      toImage:_(`toImage`),
+    },
     docs:`\`displayOne Label Value\` or \`displayOne Label Value Colorize\`: displays one serialization of \`Value\` under \`Label\`, replacing the previous one if present.
 2D tensors will get displayed as images, best used with values between \`0\` and \`1\`.`,
     examples:[
@@ -7874,9 +7913,6 @@ To reverse this, use \`stringToIndices\`.`,
         `repeat ^(displayOne 'img' softmax(v)=i) 1000 v:randomVar(15,15) i:identity(^(15 15))`,
       ],
     ],
-    readAt:{
-      toImage:_(`toImage`),
-    },
     call(lbl, vle, colorize = null) {
       if (typeof document == ''+void 0) return
       if (document.visibilityState !== 'visible') return // Seems to leak GPU memory in the background without this, very rapidly.
@@ -7978,19 +8014,10 @@ Given a 2D tensor with values from \`0\` to \`1\`, this returns a promise that r
   },
 
   exp:{
-    stack:true,
-    use:true,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-    ],
-    merged:true,
-    dispose:true,
     docs:`\`exp:\\pow(2.718281828459045,?)\``,
-    argCount:1,
     interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.exp(a) : _noInfinities(_tf(tf.exp(a))) },
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8000,23 +8027,23 @@ Given a 2D tensor with values from \`0\` to \`1\`, this returns a promise that r
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  expm1:{
-    stack:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
     ],
     merged:true,
-    dispose:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.exp(a) : _noInfinities(_tf(tf.exp(a))) },
+  },
+
+  expm1:{
     docs:`\`expm1:\\exp(?)-1\`
 Why: speed, precision`,
-    argCount:1,
     interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.expm1(a) : _noInfinities(_tf(tf.expm1(a))) },
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8030,29 +8057,29 @@ Why: speed, precision`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    use:true,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+    ],
+    merged:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.expm1(a) : _noInfinities(_tf(tf.expm1(a))) },
   },
 
   _noInfinities(x) { // Prevent (positive) infinities, so that `0*x` can still mask them out.
     try { return _tf(tf.minimum(x, 1e37)) }
     finally { dispose(x) }
   },
-  
+
   log:{
-    stack:true,
-    use:true,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-    ],
-    merged:true,
-    dispose:true,
     docs:`The inverse function to \`exp\`onentiation.
 Returns the power that \`e\` (\`2.718281828459045\`…: easy to remember) needs to be raised to in order to get the arg.
 To find the answer for a different base, divide the result by \`log\` of that base.`,
-    argCount:1,
     interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.log(a) : _tf(tf.log(a)) },
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8062,22 +8089,22 @@ To find the answer for a different base, divide the result by \`log\` of that ba
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  sin:{
-    stack:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
     ],
     merged:true,
-    dispose:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.log(a) : _tf(tf.log(a)) },
+  },
+
+  sin:{
     docs:`Sine.`,
-    argCount:1,
     interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.sin(a) : _tf(tf.sin(a)) },
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8090,22 +8117,22 @@ To find the answer for a different base, divide the result by \`log\` of that ba
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  cos:{
-    stack:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
     ],
     merged:true,
-    dispose:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.sin(a) : _tf(tf.sin(a)) },
+  },
+
+  cos:{
     docs:`Cosine.`,
-    argCount:1,
     interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.cos(a) : _tf(tf.cos(a)) },
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8122,9 +8149,46 @@ To find the answer for a different base, divide the result by \`log\` of that ba
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    use:true,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+    ],
+    merged:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.cos(a) : _tf(tf.cos(a)) },
   },
 
   tanh:{
+    docs:`\`a:exp(?) b:exp(0-?) tanh:\\(a-b)/(a+b)\`
+Output is from \`-1\` to \`1\`.`,
+    interrupt:false,
+    argCount:1,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`mul`),
+        _(`_dout`),
+        [
+          _(`sub`),
+          1,
+          [
+            _(`mul`),
+            _(`_out`),
+            _(`_out`),
+          ],
+        ],
+      ],
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      [
+        `repeat ^(tanh(randomVar(5))=.5) 1000`,
+      ],
+    ],
+    merged:true,
     tutorial:[
       `This one deals with sequential state updating. So, fetch me some \`'learnedMemory'\` from \`examples stateCell\`.`,
       `You know.`,
@@ -8202,51 +8266,15 @@ repeat ^(lm fn hiddenMem N+1) 10000
       `Why are we doing this? What is our purpose here? What is any of this?`,
     ],
     stack:true,
-    examples:[
-      [
-        `repeat ^(tanh(randomVar(5))=.5) 1000`,
-      ],
-    ],
-    merged:true,
-    dispose:true,
-    docs:`\`a:exp(?) b:exp(0-?) tanh:\\(a-b)/(a+b)\`
-Output is from \`-1\` to \`1\`.`,
-    argCount:1,
-    interrupt:false,
     call(a) { return a=_num(a), typeof a == 'number' ? Math.tanh(a) : _noInfinities(_tf(tf.tanh(a))) },
-    adjust:[
-      _(`array`),
-      [
-        _(`mul`),
-        _(`_dout`),
-        [
-          _(`sub`),
-          1,
-          [
-            _(`mul`),
-            _(`_out`),
-            _(`_out`),
-          ],
-        ],
-      ],
-    ],
-    mergeAdjustment:_(`_mergeTensors`),
   },
 
   sigmoid:{
-    stack:true,
-    examples:[
-      [
-        `repeat ^(sigmoid(randomVar(5))=.5) 1000`,
-      ],
-    ],
-    merged:true,
-    dispose:true,
     docs:`\`sigmoid:\\1/(1+exp(0-?))\`
 Output is from \`0\` to \`1\`.`,
-    argCount:1,
     interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? 1 / (1 + Math.exp(-a)) : _noInfinities(_tf(tf.sigmoid(a))) },
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8254,7 +8282,7 @@ Output is from \`0\` to \`1\`.`,
         _(`_dout`),
         [
           _(`mul`),
-            _(`_out`),
+          _(`_out`),
           [
             _(`sub`),
             1,
@@ -8264,51 +8292,41 @@ Output is from \`0\` to \`1\`.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      [
+        `repeat ^(sigmoid(randomVar(5))=.5) 1000`,
+      ],
+    ],
+    merged:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? 1 / (1 + Math.exp(-a)) : _noInfinities(_tf(tf.sigmoid(a))) },
   },
 
   sum:{
-    use:2,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(`_numberType`),
-    ],
-    merged:true,
     docs:`Sum of values in a tensor, as in \`sum (tensor (1 2 3 4))\`=\`tensor 10\`.
 The adjustment is passed through, to be broadcasted.`,
-    dispose:true,
     interrupt:false,
-    call(a, axis) { return isArray(a) ? _tf(tf.addN(a, axis)) : (a=_num(a), typeof a == 'number' ? a : _tf(tf.sum(a, axis))) },
+    dispose:true,
     adjust:[
       _(`array`),
       _(`_dout`),
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  mean:{
-    examples:[
-      `This is your average learning curve:`,
-      [
-        `v:randomVar(50,50) repeat ^((v+v/10)=identity(^(50 50))-.02) 3000`,
-      ],
-      `This is your learning curve on first and second order norm:`,
-      [
-        `n:x-mean(x) norm:x->n/sqrt(mean(n*n)+1e-2) v:randomVar(50,50) repeat ^(norm(v+v/10)=identity(^(50 50))-.02) 3000`,
-      ],
-    ],
     use:2,
     type:[
       _(`funcType`),
-      _(5696),
+      _(41),
       _(`_numberType`),
     ],
     merged:true,
+    call(a, axis) { return isArray(a) ? _tf(tf.addN(a, axis)) : (a=_num(a), typeof a == 'number' ? a : _tf(tf.sum(a, axis))) },
+  },
+
+  mean:{
     docs:`Average of values in a tensor, as in \`mean (tensor (1 2 3 4))\`=\`tensor 2.5\`.
 The adjustment is passed through, to be broadcasted.`,
-    dispose:true,
     interrupt:false,
-    call(a, axis) { return a=_num(a), typeof a == 'number' ? a : _tf(tf.mean(a, axis)) },
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8328,16 +8346,25 @@ The adjustment is passed through, to be broadcasted.`,
       _(`_mergeTensors`),
       null,
     ],
-  },
-
-  8444:[
-    _(`sub`),
-    _(`input`),
-    [
-      _(`mean`),
-      _(`input`),
+    examples:[
+      `This is your average learning curve:`,
+      [
+        `v:randomVar(50,50) repeat ^((v+v/10)=identity(^(50 50))-.02) 3000`,
+      ],
+      `This is your learning curve on first and second order norm:`,
+      [
+        `n:x-mean(x) norm:x->n/sqrt(mean(n*n)+1e-2) v:randomVar(50,50) repeat ^(norm(v+v/10)=identity(^(50 50))-.02) 3000`,
+      ],
     ],
-  ],
+    use:2,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(`_numberType`),
+    ],
+    merged:true,
+    call(a, axis) { return a=_num(a), typeof a == 'number' ? a : _tf(tf.mean(a, axis)) },
+  },
 
   std:_([
     _(`func`),
@@ -8348,8 +8375,8 @@ The adjustment is passed through, to be broadcasted.`,
         _(`mean`),
         [
           _(`mul`),
-          _(8444),
-          _(8444),
+          _(108),
+          _(108),
         ],
       ],
     ],
@@ -8362,27 +8389,10 @@ The adjustment is passed through, to be broadcasted.`,
   },
 
   max:{
-    use:2,
-    examples:[
-      `\`\`settings ^_learningRate\`\``,
-      [
-        `repeat ^(max(randomVar(256))=5) 1000`,
-      ],
-      [
-        `repeat ^(max(randomVar(256))=-5) 1000`,
-      ],
-    ],
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(`_numberType`),
-    ],
-    merged:true,
     docs:`Max of values in a tensor.
 Seems to leak GPU memory on some systems. Use \`min\` instead.`,
-    dispose:true,
     interrupt:false,
-    call(a, axis) { return a=_num(a), typeof a == 'number' ? a : _tf(tf.max(a, axis)) },
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8397,9 +8407,43 @@ Seems to leak GPU memory on some systems. Use \`min\` instead.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      [
+        `repeat ^(max(randomVar(256))=5) 1000`,
+      ],
+      [
+        `repeat ^(max(randomVar(256))=-5) 1000`,
+      ],
+    ],
+    use:2,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(`_numberType`),
+    ],
+    merged:true,
+    call(a, axis) { return a=_num(a), typeof a == 'number' ? a : _tf(tf.max(a, axis)) },
   },
 
   min:{
+    docs:`Min of values in a tensor.`,
+    interrupt:false,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`where`),
+        [
+          _(`less`),
+          _(`_out`),
+          _(`_inA`),
+        ],
+        0,
+        _(`_dout`),
+      ],
+    ],
+    mergeAdjustment:_(`_mergeTensors`),
     examples:[
       `\`\`settings ^_learningRate\`\``,
       [
@@ -8410,41 +8454,15 @@ Seems to leak GPU memory on some systems. Use \`min\` instead.`,
       ],
     ],
     merged:true,
-    docs:`Min of values in a tensor.`,
-    dispose:true,
-    interrupt:false,
     call(a, axis) { return a=_num(a), typeof a == 'number' ? a : _tf(tf.min(a, axis)) },
-    adjust:[
-      _(`array`),
-      [
-        _(`where`),
-        [
-          _(`less`),
-          _(`_out`),
-          _(`_inA`),
-        ],
-        0,
-        _(`_dout`),
-      ],
-    ],
-    mergeAdjustment:_(`_mergeTensors`),
   },
 
   abs:{
-    stack:true,
-    use:true,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-    ],
-    merged:true,
     docs:`The absolute of values of a tensor, as in \`abs (tensor (1 -2 3 -4))\`=\`tensor (1 2 3 4)\`.
 Is \`where 0<X X 0-X\`.`,
+    interrupt:false,
     argCount:1,
     dispose:true,
-    interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.abs(a) : _tf(tf.abs(a)) },
     adjust:[
       _(`array`),
       [
@@ -8463,77 +8481,67 @@ Is \`where 0<X X 0-X\`.`,
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    use:true,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+    ],
+    merged:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.abs(a) : _tf(tf.abs(a)) },
   },
 
   ceil:{
-    merged:true,
+    interrupt:false,
     argCount:1,
     dispose:true,
-    interrupt:false,
+    merged:true,
     call(a) { return a=_num(a), typeof a == 'number' ? Math.ceil(a) : _tf(tf.ceil(a)) },
   },
 
   floor:{
-    stack:true,
-    use:true,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-    ],
-    merged:true,
     docs:`Floor.
 The adjustment is passed through.`,
+    interrupt:false,
     argCount:1,
     dispose:true,
-    interrupt:false,
-    call(a) { return a=_num(a), typeof a == 'number' ? Math.floor(a) : _tf(tf.floor(a)) },
     adjust:[
       _(`array`),
       _(`_dout`),
     ],
     mergeAdjustment:_(`_mergeTensors`),
-  },
-
-  sign:{
-    stack:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
     ],
     merged:true,
+    stack:true,
+    call(a) { return a=_num(a), typeof a == 'number' ? Math.floor(a) : _tf(tf.floor(a)) },
+  },
+
+  sign:{
     docs:`The sign of values in a tensor, as in \`sign (tensor (0 1 -2 3 -4))\`=\`tensor (0 1 -1 1 -1)\`.`,
+    interrupt:false,
     argCount:1,
     dispose:true,
-    interrupt:false,
+    use:true,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+    ],
+    merged:true,
+    stack:true,
     call(a) { return a=_num(a), typeof a == 'number' ? Math.sign(a)||0 : _tf(tf.sign(a)) },
   },
 
-  8354:[
-    _(`add`),
-    1,
-    [
-      _(`abs`),
-      _(`_inA`),
-    ],
-  ],
-
   softsign:{
-    stack:true,
-    use:1,
     docs:`\`x->x/(1+abs(x))\``,
     argCount:1,
     dispose:true,
-    mergeAdjustment:_(`_mergeTensors`),
-    call(x) {
-      x=_num(x)
-      const t0 = abs(x)
-      const t1 = add(1, t0);  dispose(t0)
-      const t2 = div(x, t1);  dispose(t1)
-      return t2
-    },
     adjust:[
       _(`array`),
       [
@@ -8541,36 +8549,32 @@ The adjustment is passed through.`,
         _(`_dout`),
         [
           _(`mul`),
-          _(8354),
-          _(8354),
+          _(111),
+          _(111),
         ],
       ],
     ],
+    mergeAdjustment:_(`_mergeTensors`),
+    use:1,
+    stack:true,
+    call(x) {
+      x=_num(x)
+      const t0 = abs(x)
+      const t1 = add(1, t0);  dispose(t0)
+      const t2 = div(x, t1);  dispose(t1)
+      return t2
+    },
   },
 
   clip:{
-    stack:true,
-    use:3,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
-      _(5696),
-    ],
-    merged:true,
-    dispose:true,
+    readAt:{
+      clip2:_(`_clip2`),
+    },
     docs:`\`clip Value Min Max\`
 Clips each value in a tensor between two static values (by default, between \`-2\` and \`2\`).
 Is \`where a<Min Min (where a<Max a Max)\`.`,
     interrupt:false,
-    call(a, Min=-2, Max=2) {
-      a=_num(a), Min=_num(Min), Max=_num(Max)
-      return typeof a == 'number' ? Math.min(Math.max(Min, a), Max) : _tf(tf.clipByValue(a, Min, Max))
-    },
-    readAt:{
-      clip2:_(`_clip2`),
-    },
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -8606,6 +8610,20 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
       null,
       null,
     ],
+    use:3,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+      _(41),
+      _(41),
+    ],
+    merged:true,
+    stack:true,
+    call(a, Min=-2, Max=2) {
+      a=_num(a), Min=_num(Min), Max=_num(Max)
+      return typeof a == 'number' ? Math.min(Math.max(Min, a), Max) : _tf(tf.clipByValue(a, Min, Max))
+    },
   },
 
   _noNaNs:{
@@ -8628,10 +8646,14 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
   },
 
   isNaN:{
+    docs:`Not-a-number values and non-number values return \`true\`. \`isNaN NaN\` is \`true\`. \`isNaN false\` is \`true\`.`,
+    interrupt:false,
+    argCount:1,
+    dispose:true,
     use:true,
     type:[
       _(`funcType`),
-      _(5696),
+      _(41),
       [
         _(`boolsType`),
         [
@@ -8641,10 +8663,6 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
       ],
     ],
     merged:true,
-    dispose:true,
-    docs:`Not-a-number values and non-number values return \`true\`. \`isNaN NaN\` is \`true\`. \`isNaN false\` is \`true\`.`,
-    interrupt:false,
-    argCount:1,
     call(a) { return typeof a == 'number' ? a !== a : !_isDisposable(a) ? true : _tf(tf.isNaN(a)) },
   },
 
@@ -8655,25 +8673,26 @@ Is \`where a<Min Min (where a<Max a Max)\`.`,
     _(`type`),
     [
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
     ],
     _(`docs`),
     `A differently-\`type\`d version of \`clip\`.`,
   ]),
 
   argmax:{
-    merged:true,
     docs:`The index of the \`max\` value in a tensor, as in \`argmax(tensor (0 1 -2 3 -4))\`=\`tensor 3 arrayObject() 'int32'\`.
 Use \`sync\` to get the result as a non-tensor.`,
-    dispose:true,
     interrupt:false,
+    dispose:true,
+    merged:true,
     call(a, axis) { return a=_num(a), typeof a == 'number' ? 0 : _tf(tf.argMax(a, axis)) },
   },
 
   oneHot:{
-    merged:true,
     docs:`\`oneHot Index Length\` or \`oneHot Index Length One\``,
+    interrupt:false,
+    dispose:true,
     examples:[
       [
         `oneHot 3 6`,
@@ -8688,8 +8707,7 @@ Use \`sync\` to get the result as a non-tensor.`,
       ],
       `\`sliceOff\` uses \`oneHot\` to calc the gradient.`,
     ],
-    dispose:true,
-    interrupt:false,
+    merged:true,
     call(i, n = null, one) {
       i = _num(i)
       if (i.length === 0) return null
@@ -8705,7 +8723,6 @@ Use \`sync\` to get the result as a non-tensor.`,
   },
 
   ReshapingOps:{
-    todo:`\`gather(Tensor,Indices)\`, to be able to make many \`sliceOff\`s at once.`,
     readAt:{
       sync:_(`sync`),
       reshape:_(`reshape`),
@@ -8714,6 +8731,7 @@ Use \`sync\` to get the result as a non-tensor.`,
       range:_(`range`),
       transpose:_(`transpose`),
       swapDims:_(`swapDims`),
+      moveDim:_(`moveDim`),
       expandDims:_(`expandDims`),
       squeezeDims:_(`squeezeDims`),
       slice:_(`slice`),
@@ -8724,24 +8742,39 @@ Use \`sync\` to get the result as a non-tensor.`,
       stack:_(`stack`),
       unstack:_(`unstack`),
     },
+    todo:`\`gather(Tensor,Indices)\`, to be able to make many \`sliceOff\`s at once.`,
   },
 
   sync:{
-    merged:true,
     docs:`Synchronously downloads a value from GPU to CPU.
 Ensures that a tensor is available as a JS value, like \`sync tensor(10()())\`=\`10\`.
 
 If you don't schedule other GPU commands to keep it busy while CPU waits for the result of an earlier one, then this is inefficiency.`,
-    argCount:1,
     interrupt:false,
+    argCount:1,
+    merged:true,
     call(a) { return !_isDisposable(a) ? a : a.size === 1 ? (a.dtype === 'bool' ? !!a.dataSync()[0] : a.shape.length ? a.dataSync()[0] : a.arraySync()) : a.dataSync() },
   },
 
   reshape:{
-    merged:true,
     docs:`\`reshape What Shape\`
 Changes the tensor shape without changing the underlying data.
 \`_tensorSize(What)\` and \`_tensorSize(Shape)\` must match.`,
+    interrupt:false,
+    argCount:2,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`reshape`),
+        _(`_dout`),
+        _(`_inA`),
+      ],
+    ],
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      null,
+    ],
     examples:[
       [
         `repeat ^(reshape randomVar(4,4,5) ^(4 20))=1 1000`,
@@ -8755,9 +8788,7 @@ Changes the tensor shape without changing the underlying data.
         `repeat ^(reshape randomVar(1,100) ^(10 10) true)=1 1000`,
       ],
     ],
-    argCount:2,
-    interrupt:false,
-    dispose:true,
+    merged:true,
     impure:true,
     call(a, shape, batched = undefined) {
       a = _num(a), shape = _isDisposable(shape) ? shape.shape : shape
@@ -8769,35 +8800,27 @@ Changes the tensor shape without changing the underlying data.
 
       return _tf(tf.reshape(a, shape))
     },
+  },
+
+  broadcastTo:{
+    docs:`\`broadcastTo What Shape\`
+Broadcasts a number/tensor into a shape compatible with another tensor. \`Shape\` can be a tensor too.
+Mostly for converting numbers.`,
+    interrupt:false,
+    argCount:2,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`_limitTensorSize`),
+        _(`_inA`),
+        _(`_dout`),
+      ],
+    ],
     mergeAdjustment:[
       _(`_mergeTensors`),
       null,
     ],
-    adjust:[
-      _(`array`),
-      [
-        _(`reshape`),
-        _(`_dout`),
-        _(`_inA`),
-      ],
-    ],
-  },
-
-  broadcastTo:{
-    use:true,
-    type:[
-      _(`funcType`),
-      _(`_numberType`),
-      [
-        _(`quote`),
-        `Sizes`,
-      ],
-      _(5696),
-    ],
-    merged:true,
-    docs:`\`broadcastTo What Shape\`
-Broadcasts a number/tensor into a shape compatible with another tensor. \`Shape\` can be a tensor too.
-Mostly for converting numbers.`,
     examples:[
       [
         `broadcastTo 5 tensor(1 23 4)`,
@@ -8807,107 +8830,47 @@ Mostly for converting numbers.`,
         `repeat ^(broadcastTo randomVar() ^(3 2 3))=5 1000`,
       ],
     ],
-    argCount:2,
-    interrupt:false,
-    dispose:true,
-    call(a, shape) { if (call.pure) throw impure;  return _tf(tf.broadcastTo(_num(a), !_isDisposable(shape) ? shape : shape.shape)) },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-      null,
-    ],
-    adjust:[
-      _(`array`),
+    use:true,
+    type:[
+      _(`funcType`),
+      _(`_numberType`),
       [
-        _(`_limitTensorSize`),
-        _(`_inA`),
-        _(`_dout`),
+        _(`quote`),
+        `Sizes`,
       ],
+      _(41),
     ],
+    merged:true,
+    call(a, shape) { if (call.pure) throw impure;  return _tf(tf.broadcastTo(_num(a), !_isDisposable(shape) ? shape : shape.shape)) },
   },
 
   cast:{
-    merged:true,
     docs:`\`cast Tensor Datatype\`
 Casts a tensor per-value into a different datatype, such as \`int32\`.`,
-    argCount:2,
     interrupt:false,
+    argCount:2,
     dispose:true,
+    merged:true,
     impure:true,
     call(a, dtype) { return _tf(tf.cast(_num(a), dtype)) },
   },
 
   range:{
-    merged:true,
     docs:`\`range Start End Step\`
 Creates a tensor of length \`floor (Start-End)/Step\`, with each value at \`i\` being \`Start+Step*i\`. \`Start\` is inclusive, \`End\` is exclusive.`,
-    argCount:2,
     interrupt:false,
+    argCount:2,
     dispose:true,
+    merged:true,
     call(Start, End, Step) { return Start >= End ? null : _tf(tf.range(Start, End, Step)) },
   },
 
   transpose:{
-    stack:true,
-    use:true,
-    type:[
-      _(`funcType`),
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `Sizes`,
-        ],
-        `A`,
-        `B`,
-      ],
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `Sizes`,
-        ],
-        `B`,
-        `A`,
-      ],
-    ],
-    merged:true,
     docs:`\`transpose What\`
 Swaps two innermost dimensions.
 Alternatively, \`transpose What DimensionsBecome\`.`,
-    examples:[
-      [
-        `transpose tensor(1() 23() 4())`,
-        `tensor (1 23 4)() (1 3)`,
-      ],
-      [
-        `repeat ^(transpose randomVar(10,20))=5 1000`,
-      ],
-      [
-        `repeat ^(transpose randomVar(2,3,4) ^(2 0 1))=5 10000`,
-      ],
-      `Can also broadcast along batch dimension/s:`,
-      [
-        `repeat ^(transpose randomVar(1,2,3,4) ^(1 2 0))=5 10000`,
-      ],
-    ],
     interrupt:false,
     dispose:true,
-    impure:true,
-    call(a, dims) {
-      a = _num(a)
-      if (typeof a == 'number') return a
-      if (_isDisposable(a) && _tensorSize(a) === 1) return keep(a)
-      if (!_isDisposable(a) || a.shape.length < 2) error('Not a (possibly batched) matrix:', a)
-      // TFJS's default dimension permutation is… peculiar, for something named `transpose`. So we provide the default case ourselves.
-      if (dims === undefined) dims = transpose.dims2 || (transpose.dims2 = [1,0])
-      if (!isArray(dims)) error('Must be undefined or an array:', dims)
-
-      if (dims.length < a.shape.length) {
-        const d2 = _padTransposeDims(dims, a)
-        try { return _tf(tf.transpose(a, d2)) } finally { _allocArray(d2) }
-      } else return _tf(tf.transpose(a, dims))
-    },
-    mergeAdjustment:_(`_mergeTensors`),
     adjust:[
       _(`array`),
       [
@@ -8931,12 +8894,81 @@ Alternatively, \`transpose What DimensionsBecome\`.`,
         ],
       ],
     ],
+    mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      [
+        `transpose tensor(1() 23() 4())`,
+        `tensor (1 23 4)() (1 3)`,
+      ],
+      [
+        `repeat ^(transpose randomVar(10,20))=5 1000`,
+      ],
+      [
+        `repeat ^(transpose randomVar(2,3,4) ^(2 0 1))=5 10000`,
+      ],
+      `Can also broadcast along batch dimension/s:`,
+      [
+        `repeat ^(transpose randomVar(1,2,3,4) ^(1 2 0))=5 10000`,
+      ],
+    ],
+    use:true,
+    type:[
+      _(`funcType`),
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+        `A`,
+        `B`,
+      ],
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+        `B`,
+        `A`,
+      ],
+    ],
+    merged:true,
+    impure:true,
+    stack:true,
+    call(a, dims) {
+      a = _num(a)
+      if (typeof a == 'number') return a
+      if (_isDisposable(a) && _tensorSize(a) === 1) return keep(a)
+      if (!_isDisposable(a) || a.shape.length < 2) error('Not a (possibly batched) matrix:', a)
+      // TFJS's default dimension permutation is… peculiar, for something named `transpose`. So we provide the default case ourselves.
+      if (dims === undefined) dims = transpose.dims2 || (transpose.dims2 = [1,0])
+      if (!isArray(dims)) error('Must be undefined or an array:', dims)
+
+      if (dims.length < a.shape.length) {
+        const d2 = _padTransposeDims(dims, a)
+        try { return _tf(tf.transpose(a, d2)) } finally { _allocArray(d2) }
+      } else return _tf(tf.transpose(a, dims))
+    },
   },
 
   swapDims:{
-    merged:true,
     docs:`\`swapDims Tensor A B\`
 Swaps two dimensions. \`B\` is \`-1\` by default.`,
+    interrupt:false,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`swapDims`),
+        _(`_dout`),
+        _(`_inB`),
+        _(`_inC`),
+      ],
+    ],
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
     examples:[
       [
         `repeat ^(swapDims randomVar(10,2,20) 0)=5 1000`,
@@ -8945,8 +8977,7 @@ Swaps two dimensions. \`B\` is \`-1\` by default.`,
         `repeat ^(swapDims randomVar(10,2,20) 1)=5 1000`,
       ],
     ],
-    interrupt:false,
-    dispose:true,
+    merged:true,
     impure:true,
     call(x, a, b = -1) {
       x = _num(x)
@@ -8965,16 +8996,56 @@ Swaps two dimensions. \`B\` is \`-1\` by default.`,
 
       return transpose(x, d)
     },
-    mergeAdjustment:_(`_mergeTensors`),
+  },
+
+  moveDim:{
+    docs:`\`moveDim Tensor From To\`
+Moves one dimension to another spot, displacing every dimension in between.
+Same as \`stack (unstack Tensor From) To\` but faster.`,
+    interrupt:false,
+    dispose:true,
     adjust:[
       _(`array`),
       [
-        _(`swapDims`),
+        _(`moveDim`),
         _(`_dout`),
-        _(`_inB`),
         _(`_inC`),
+        _(`_inB`),
       ],
     ],
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
+    examples:[
+      [
+        `repeat ^(moveDim randomVar(20,3,4,5) 0 -2)=5 10000`,
+      ],
+      [
+        `repeat ^(stack (unstack randomVar(20,3,4,5) 0) -2)=5 10000`,
+      ],
+      `So, 3 times faster.`,
+    ],
+    merged:true,
+    impure:true,
+    call(x, a, b) {
+      if (!x) return 0
+      if (!_isDisposable(x)) error('Not a tensor:', x)
+      if (typeof a != 'number' || typeof b != 'number') error('Not dim indices:', a, b)
+      if (a < 0) a += x.shape.length
+      if (b < 0) b += x.shape.length
+      if (a === b) return keep(x)
+
+      const d = moveDim.dims || (moveDim.dims = [])
+      d.length = x.shape.length
+      for (let i=0; i < d.length; ++i) d[i] = i
+      d[b] = a
+      if (a < b)
+        for (let i = a; i < b; ++i) d[i] = i+1
+      else
+        for (let i = b+1; i < a+1; ++i) d[i] = i-1
+
+      return transpose(x, d)
+    },
   },
 
   _padTransposeDims(dims, shape) {
@@ -8987,28 +9058,22 @@ Swaps two dimensions. \`B\` is \`-1\` by default.`,
   },
 
   expandDims:{
-    use:2,
-    type:[
-      _(`funcType`),
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `Sizes`,
-        ],
-      ],
-      [
-        _(`tensorType`),
-        1,
-        [
-          _(`rest`),
-          `Sizes`,
-        ],
-      ],
-    ],
-    merged:true,
     docs:`\`expandDims What\` or \`expandDims What Axis\`
 Inserts a dimension of size \`1\`.`,
+    interrupt:false,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`squeezeDims`),
+        _(`_dout`),
+        _(`_inB`),
+      ],
+    ],
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      null,
+    ],
     examples:[
       [
         `expandDims (tensor (6 5)) -1`,
@@ -9019,24 +9084,52 @@ Inserts a dimension of size \`1\`.`,
         `repeat ^(squeezeDims(expandDims(randomVar(2,3),1)@randomVar(2,3,4),1)=1) 1000`,
       ],
     ],
+    use:2,
+    type:[
+      _(`funcType`),
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+      ],
+      [
+        _(`tensorType`),
+        1,
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+      ],
+    ],
+    merged:true,
+    call(a, axis = 0) { return _isNum(a) ? a : _tf(tf.expandDims(_num(a), axis)) },
+  },
+
+  squeezeDims:{
+    docs:`\`squeezeDims What\` or \`squeezeDims What Axis\`
+Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
     interrupt:false,
     dispose:true,
-    call(a, axis = 0) { return _isNum(a) ? a : _tf(tf.expandDims(_num(a), axis)) },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-      null,
-    ],
     adjust:[
       _(`array`),
       [
-        _(`squeezeDims`),
+        _(`expandDims`),
         _(`_dout`),
         _(`_inB`),
       ],
     ],
-  },
-
-  squeezeDims:{
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      null,
+    ],
+    examples:[
+      [
+        `squeezeDims (tensor (6() 5())()()) -1`,
+        `tensor (6 5)()() (1 1 2)`,
+      ],
+    ],
     use:2,
     type:[
       _(`funcType`),
@@ -9057,16 +9150,6 @@ Inserts a dimension of size \`1\`.`,
       ],
     ],
     merged:true,
-    docs:`\`squeezeDims What\` or \`squeezeDims What Axis\`
-Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
-    examples:[
-      [
-        `squeezeDims (tensor (6() 5())()()) -1`,
-        `tensor (6 5)()() (1 1 2)`,
-      ],
-    ],
-    interrupt:false,
-    dispose:true,
     call(a, axis = 0) {
       if (_isNum(a)) return a
       a = _num(a)
@@ -9075,61 +9158,15 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
       if (a.shape[axis] !== 1 && a.shape[axis] !== undefined) return sum(a, axis)
       return _tf(tf.squeeze(_num(a), axis))
     },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-      null,
-    ],
-    adjust:[
-      _(`array`),
-      [
-        _(`expandDims`),
-        _(`_dout`),
-        _(`_inB`),
-      ],
-    ],
   },
 
   slice:{
-    docs:`\`slice Tensor Begin Size\` or \`slice Tensor Begin Size Axis\`: Returns a slice of the tensor, or a CPU-side array.`,
     readAt:{
       sliceOff:_(`sliceOff`),
     },
-    examples:[
-      [
-        `slice tensor((1 2) (3 4)) 0 1`,
-      ],
-      [
-        `repeat ^(slice(randomVar(60),randomNat(50),randomNat(10)+1)=1) 10000`,
-      ],
-      [
-        `repeat ^(slice(randomVar(5,60),randomNat(50),randomNat(10)+1,-1)=1) 10000`,
-      ],
-      `CPU-side arrays do not copy the underlying memory but return a view on it (a few pointers that can be used to read values).`,
-      `        So switching from GPU-side datasets to CPU-side datasets is as easy as changing \`tensor\` into \`u8\` or \`f32\`.`,
-      [
-        `slice u8(1 2 3 4) 1 1`,
-        `u8 2()`,
-      ],
-    ],
-    dispose:true,
+    docs:`\`slice Tensor Begin Size\` or \`slice Tensor Begin Size Axis\`: Returns a slice of the tensor, or a CPU-side array.`,
     interrupt:false,
-    call(a, begin, size, axis = 0) {
-      begin = _num(begin), size = _num(size)
-      if (!size) return null
-      if (begin < 0) begin += _isDisposable(a) ? _tensorSize(a) : a.length
-      if (_isNumericArray(a)) return a.subarray(begin, begin+size)
-      if (!_isDisposable(a)) return a
-      if (axis < 0) axis += a.shape.length
-      if (begin === 0 && a.shape[axis] === size) return keep(a)
-      if (axis === 0) return _tf(tf.slice(a, begin, size))
-      const A = _allocArray(axis+1).fill(0), B = _allocArray(axis+1).fill(-1)
-      A[axis] = begin, B[axis] = size
-      try { return _tf(tf.slice(a, A, B)) }
-      finally { _allocArray(B), _allocArray(A) }
-    },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-    ],
+    dispose:true,
     adjust:{
       dispose:_(`_disposeEachAndDealloc`),
       impure:true,
@@ -9149,10 +9186,68 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
         return [withStart]
       },
     },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
+    examples:[
+      [
+        `slice tensor((1 2) (3 4)) 0 1`,
+      ],
+      [
+        `repeat ^(slice(randomVar(60),randomNat(50),randomNat(10)+1)=1) 10000`,
+      ],
+      [
+        `repeat ^(slice(randomVar(5,60),randomNat(50),randomNat(10)+1,-1)=1) 10000`,
+      ],
+      `CPU-side arrays do not copy the underlying memory but return a view on it (a few pointers that can be used to read values).`,
+      `        So switching from GPU-side datasets to CPU-side datasets is as easy as changing \`tensor\` into \`u8\` or \`f32\`.`,
+      [
+        `slice u8(1 2 3 4) 1 1`,
+        `u8 2()`,
+      ],
+    ],
+    call(a, begin, size, axis = 0) {
+      begin = _num(begin), size = _num(size)
+      if (!size) return null
+      if (begin < 0) begin += _isDisposable(a) ? _tensorSize(a) : a.length
+      if (_isNumericArray(a)) return a.subarray(begin, begin+size)
+      if (!_isDisposable(a)) return a
+      if (axis < 0) axis += a.shape.length
+      if (begin === 0 && a.shape[axis] === size) return keep(a)
+      if (axis === 0) return _tf(tf.slice(a, begin, size))
+      const A = _allocArray(axis+1).fill(0), B = _allocArray(axis+1).fill(-1)
+      A[axis] = begin, B[axis] = size
+      try { return _tf(tf.slice(a, A, B)) }
+      finally { _allocArray(B), _allocArray(A) }
+    },
   },
 
   sliceOff:{
     docs:`\`sliceOff Tensor At\`: Chooses one index in the outer dimension, removing it. Often more convenient than \`slice\`.`,
+    interrupt:false,
+    argCount:2,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`oneHot`),
+        _(`_inB`),
+        [
+          _(`readAt`),
+          [
+            _(`readAt`),
+            _(`_inA`),
+            `shape`,
+          ],
+          0,
+        ],
+        _(`_dout`),
+      ],
+    ],
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      null,
+    ],
     examples:[
       [
         `sliceOff tensor((1 2) (3 4)) 0`,
@@ -9166,34 +9261,10 @@ Removes a dimension of size \`1\`. Opposite of \`expandDims\`.`,
         `repeat ^(sliceOff(randomVar(40,20),randomNat(40))=0) 1000`,
       ],
     ],
-    dispose:true,
-    interrupt:false,
-    argCount:2,
     call(a, at, axis) {
       if (!_isDisposable(a)) return a
       return gather(a, at, axis)
     },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-      null,
-    ],
-    adjust:[
-      _(`array`),
-      [
-        _(`oneHot`),
-        _(`_inB`),
-        [
-          _(`readAt`),
-          [
-            _(`readAt`),
-            _(`_inA`),
-            'shape',
-          ],
-          0,
-        ],
-        _(`_dout`),
-      ],
-    ],
   },
 
   gather:{
@@ -9202,15 +9273,8 @@ Reads parts of \`Value\` at specified \`Indices\` along the \`Axis\` (\`0\` by d
 The dimension \`Axis\` gets replaced by dimensions of \`Indices\`, the rest are preserved, so slices with specified indices get put into the result.
 
 \`adjust\`able if \`Axis\` is \`0\` (the default).`,
-    merged:true,
-    dispose:true,
     interrupt:false,
-    call(v, ind, axis = 0) { return ind === undefined ? keep(_num(v)) : _tf(tf.gather(_num(v), ind, axis)) },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-      null,
-      null,
-    ],
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -9223,12 +9287,22 @@ The dimension \`Axis\` gets replaced by dimensions of \`Indices\`, the rest are 
         ],
       ],
     ],
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      null,
+      null,
+    ],
+    merged:true,
+    call(v, ind, axis = 0) { return ind === undefined ? keep(_num(v)) : _tf(tf.gather(_num(v), ind, axis)) },
   },
 
   _firstDim(x) { return x.shape[0] },
 
   scatter:{
     docs:`\`scatter(Value,Indices,Length)\`: some CPU-approximation of the opposite of \`gather(Into,Indices)\` along \`Axis:0\` (which is of size \`Length\`), for gradient.`,
+    interrupt:false,
+    argCount:3,
+    dispose:true,
     examples:[
       [
         `scatter tensor(6 7) ^(1 2) 6`,
@@ -9246,9 +9320,6 @@ The dimension \`Axis\` gets replaced by dimensions of \`Indices\`, the rest are 
       ],
     ],
     merged:true,
-    dispose:true,
-    interrupt:false,
-    argCount:3,
     call(v, ind, len) {
       if (!_isDisposable(v)) error("Not a tensor:", v)
       ind = sync(ind)
@@ -9291,28 +9362,10 @@ The dimension \`Axis\` gets replaced by dimensions of \`Indices\`, the rest are 
   },
 
   split:{
-    merged:true,
     docs:`\`split Tensor SizesArray\`→\`TensorArray\`: Splits off tensors.
 Reverse of \`concat\`.`,
-    examples:[
-      [
-        `split tensor((1 2 2 3 3 4)) ^(2 2 2)`,
-        `(tensor (1 2)) (tensor (2 3)) (tensor (3 4))`,
-      ],
-      [
-        `repeat ^((concat (split concat(array(randomVar(1),randomVar(1),randomVar(1)),sz) sz) sz)=5) 1000 sz:^(1 1 1)`,
-      ],
-      [
-        `repeat ^(takeAt(sp,0)=5;takeAt(sp,1)=-5;v) 1000 sp:split(v,^(5 5)) v:randomVar(10)`,
-      ],
-    ],
-    dispose:_(`_disposeEachAndDealloc`),
     interrupt:false,
-    call(a, sz, axis) {
-      !isArray(sz) && typeof sz != 'number' && errorStack("Not an array of sizes to split (nor how many tensors to divide this into):", sz)
-      if (!a) return _allocArray(sz.length).fill(0)
-      a = tf.split(_num(a), sz, axis !== undefined ? axis : !a.shape.length ? 0 : a.shape.length-1);  a.forEach(_tf);  return a
-    },
+    dispose:_(`_disposeEachAndDealloc`),
     adjust:[
       _(`array`),
       [
@@ -9326,6 +9379,24 @@ Reverse of \`concat\`.`,
       _(`_mergeTensors`),
       null,
     ],
+    examples:[
+      [
+        `split tensor((1 2 2 3 3 4)) ^(2 2 2)`,
+        `(tensor (1 2)) (tensor (2 3)) (tensor (3 4))`,
+      ],
+      [
+        `repeat ^((concat (split concat(array(randomVar(1),randomVar(1),randomVar(1)),sz) sz) sz)=5) 1000 sz:^(1 1 1)`,
+      ],
+      [
+        `repeat ^(takeAt(sp,0)=5;takeAt(sp,1)=-5;v) 1000 sp:split(v,^(5 5)) v:randomVar(10)`,
+      ],
+    ],
+    merged:true,
+    call(a, sz, axis) {
+      !isArray(sz) && typeof sz != 'number' && errorStack("Not an array of sizes to split (nor how many tensors to divide this into):", sz)
+      if (!a) return _allocArray(sz.length).fill(0)
+      a = tf.split(_num(a), sz, axis !== undefined ? axis : !a.shape.length ? 0 : a.shape.length-1);  a.forEach(_tf);  return a
+    },
   },
 
   _concreteTensorSize(ctx, a, sz) {
@@ -9351,12 +9422,39 @@ Reverse of \`concat\`.`,
   },
 
   concat:{
-    use:3,
     readAt:{
       concat2:_(`concat2`),
       tile:_(`tile`),
     },
-    merged:true,
+    docs:`\`concat TensorArray SizesArray\`→\`Tensor\`: Concatenates tensors along the last dimension.
+All tensor datatypes and ranks (except in the non-batch first dimension) must match.
+Reverse of \`split\`.
+\`SizesArray\` is necessary for adjustment, optional otherwise.`,
+    interrupt:false,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`split`),
+        _(`_dout`),
+        _(`_inB`),
+        _(`_inC`),
+      ],
+    ],
+    mergeAdjustment:[
+      _(`_mergeArrays`),
+      null,
+    ],
+    examples:[
+      [
+        `concat array(tensor(1 2),tensor(2 3),tensor(3 4))`,
+        `tensor(1 2 2 3 3 4)`,
+      ],
+      [
+        `repeat ^(concat(array(randomVar(1),randomVar(1),randomVar(1)),^(1 1 1))=5) 1000`,
+      ],
+    ],
+    use:3,
     type:[
       _(`funcType`),
       [
@@ -9405,21 +9503,7 @@ Reverse of \`concat\`.`,
         `C`,
       ],
     ],
-    docs:`\`concat TensorArray SizesArray\`→\`Tensor\`: Concatenates tensors along the last dimension.
-All tensor datatypes and ranks (except in the non-batch first dimension) must match.
-Reverse of \`split\`.
-\`SizesArray\` is necessary for adjustment, optional otherwise.`,
-    examples:[
-      [
-        `concat array(tensor(1 2),tensor(2 3),tensor(3 4))`,
-        `tensor(1 2 2 3 3 4)`,
-      ],
-      [
-        `repeat ^(concat(array(randomVar(1),randomVar(1),randomVar(1)),^(1 1 1))=5) 1000`,
-      ],
-    ],
-    dispose:true,
-    interrupt:false,
+    merged:true,
     impure:true,
     call(a, sz, axis) {
       if (!isArray(a)) error("Expected an array of tensors, got", a)
@@ -9429,46 +9513,26 @@ Reverse of \`split\`.
       if (a.length == 1) return keep(a[0]) // Apparently, TFJS thinks that returning exactly the same tensor in this case is a great idea.
       return _tf(tf.concat(a, axis !== undefined ? axis : !a[0].shape.length ? 0 : a[0].shape.length-1))
     },
-    adjust:[
-      _(`array`),
-      [
-        _(`split`),
-        _(`_dout`),
-        _(`_inB`),
-        _(`_inC`),
-      ],
-    ],
-    mergeAdjustment:[
-      _(`_mergeArrays`),
-      null,
-    ],
   },
 
   stack:{
     readAt:{
       stack2:_(`stack2`),
     },
-    use:2,
-    type:[
-      _(`funcType`),
-      [
-        _(`arrayType`),
-        _(5696),
-        `ArrayLength`,
-      ],
-      [
-        _(`tensorType`),
-        `ArrayLength`,
-        [
-          _(`rest`),
-          `Sizes`,
-        ],
-      ],
-    ],
-    merged:true,
     docs:`\`stack TensorArray\`→\`Tensor\`: stacks equally-shaped tensors into a new outer dimension.
 
 If \`Numeric\` code does not call \`select\` or \`sync\`, and we want to repeat it for different inputs, then using \`stack\` (followed by code then \`unstack\`) should not change the results, but it will make code faster by using GPU to parallelize instead of the CPU.`,
+    interrupt:false,
+    dispose:true,
+    adjust:[
+      _(`array`),
+      [
+        _(`unstack`),
+        _(`_dout`),
+        _(`_inB`),
+      ],
+    ],
+    mergeAdjustment:_(`_mergeArrays`),
     examples:[
       `Simple usage:`,
       [
@@ -9484,21 +9548,48 @@ If \`Numeric\` code does not call \`select\` or \`sync\`, and we want to repeat 
         `repeat ^(stack(array(randomVar(),randomVar(),randomVar()))=5) 1000`,
       ],
     ],
-    dispose:true,
-    interrupt:false,
+    use:2,
+    type:[
+      _(`funcType`),
+      [
+        _(`arrayType`),
+        _(41),
+        `ArrayLength`,
+      ],
+      [
+        _(`tensorType`),
+        `ArrayLength`,
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+      ],
+    ],
+    merged:true,
     call(a, axis) { if (call.pure && call.pure.has(a)) throw impure;  return !isArray(a) && error('Not an array:', a), a.forEach(_num), _tf(tf.stack(a, axis)) },
+  },
+
+  unstack:{
+    docs:`\`unstack Tensor\`→\`TensorArray\`: unstacks the outer dimension into an array.
+Reverse of \`stack\`.`,
+    interrupt:false,
+    argCount:1,
+    dispose:_(`_disposeEachAndDealloc`),
     adjust:[
       _(`array`),
       [
-        _(`unstack`),
+        _(`stack`),
         _(`_dout`),
         _(`_inB`),
       ],
     ],
-    mergeAdjustment:_(`_mergeArrays`),
-  },
-
-  unstack:{
+    mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      [
+        `unstack (tensor ((1 2) (2 3) (3 4)))`,
+        `(tensor (1 2)) (tensor (2 3)) (tensor (3 4))`,
+      ],
+    ],
     use:2,
     type:[
       _(`funcType`),
@@ -9512,32 +9603,12 @@ If \`Numeric\` code does not call \`select\` or \`sync\`, and we want to repeat 
       ],
       [
         _(`arrayType`),
-        _(5696),
+        _(41),
         `ArrayLength`,
       ],
     ],
     merged:true,
-    docs:`\`unstack Tensor\`→\`TensorArray\`: unstacks the outer dimension into an array.
-Reverse of \`stack\`.`,
-    examples:[
-      [
-        `unstack (tensor ((1 2) (2 3) (3 4)))`,
-        `(tensor (1 2)) (tensor (2 3)) (tensor (3 4))`,
-      ],
-    ],
-    dispose:_(`_disposeEachAndDealloc`),
-    interrupt:false,
-    argCount:1,
     call(a, axis) { if (!a) return [];  a = tf.unstack(_num(a), axis);  a.forEach(_tf);  return a },
-    adjust:[
-      _(`array`),
-      [
-        _(`stack`),
-        _(`_dout`),
-        _(`_inB`),
-      ],
-    ],
-    mergeAdjustment:_(`_mergeTensors`),
   },
 
   denseLayer:{
@@ -9551,6 +9622,23 @@ A dense layer would change the last dimension of \`Input\` to be \`OutputCount\`
 When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner-most dimension will still be broadcasted to (not shared), unless you manually do \`expandDims(input,-2)\` to ensure that it's \`1\`. (Because \`matMul\` is technically a batched dense layer, not a dense layer.)
 
         (Allowing the \`varSGD\` family to accept initialization stuff might have been a better idea than this: more general and easier to compile.)`,
+    interrupt:false,
+    dispose:true,
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      call(ins, out, dout) { // Route `matMul`'s gradient to input and optimizer as needed.
+        const [x, Var, Outs, Dims, Shared = true, Optim = varRAdam, Init = truncatedNormal] = ins
+        const dThat = _matMul(x, dout, true, false)
+        const a = _allocArray(1);  a[0] = Var
+        try { _disposeEachAndDealloc(adjust(Optim, a, null, dThat)) }
+        finally { _allocArray(a), dispose(dThat) }
+        const r = _matMul(dout, Var[0], false, true)
+        const b = _allocArray(1);  b[0] = r;  return b
+      },
+    },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
     examples:[
       [
         `repeat ^(denseLayer(randomVar(20),^0(),15)=5) 10000`,
@@ -9563,8 +9651,6 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
         `repeat ^(denseLayer(randomVar(64,2,2,1,2),^0(),15,4,false)=5) 10000`,
       ],
     ],
-    interrupt:false,
-    dispose:true,
     varSGD:2,
     call(x, Var, Outs, Dims, Share = true, Optim = varRAdam, Init = truncatedNormal, Mean = 0, Stddev) {
       if (!_isDisposable(x)) error('Not a tensor:', x)
@@ -9589,64 +9675,15 @@ When specifying \`ShareWeights\` to be \`false\`, be aware that the second inner
       try { return _matMul(x, that) }
       finally { dispose(that) } // We do not preserve that, because it's expensive, so in `adjust`, we just assume that it is `Var[0]`. Good enough for us.
     },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-    ],
-    adjust:{
-      dispose:_(`_disposeEachAndDealloc`),
-      call(ins, out, dout) { // Route `matMul`'s gradient to input and optimizer as needed.
-        const [x, Var, Outs, Dims, Shared = true, Optim = varRAdam, Init = truncatedNormal] = ins
-        const dThat = _matMul(x, dout, true, false)
-        const a = _allocArray(1);  a[0] = Var
-        try { _disposeEachAndDealloc(adjust(Optim, a, null, dThat)) }
-        finally { _allocArray(a), dispose(dThat) }
-        const r = _matMul(dout, Var[0], false, true)
-        const b = _allocArray(1);  b[0] = r;  return b
-      },
-    },
   },
 
   matMul:{
-    stack:true,
-    use:true,
-    type:[
-      _(`funcType`),
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `R`,
-        ],
-        `N`,
-        `M`,
-      ],
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `R`,
-        ],
-        `M`,
-        `K`,
-      ],
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `R`,
-        ],
-        `N`,
-        `K`,
-      ],
-    ],
-    merged:true,
     docs:`Matrix multiplication of \`A\` by \`B\`.
 Like a cross-sectional dot product: each element of the output is the sum of every element in a row in \`A\` \`mul\`tiplied by its corresponding element in a column in \`B\`. (So, if input shapes are N×M and M×K, then output is shaped as N×K.)
 Can also handle "\`A\` is a vector" (the operation is then called a non-batched dense layer; resulting in a vector) and "\`A\` or \`B\` is a number" cases, by padding the missing outer dimensions with \`1\` then un-padding.`,
+    interrupt:false,
     argCount:2,
     dispose:true,
-    interrupt:false,
-    call(a,b) { return _matMul(_num(a), _num(b)) },
     adjust:[
       _(`array`),
       [
@@ -9685,6 +9722,38 @@ Can also handle "\`A\` is a vector" (the operation is then called a non-batched 
       ``,
       `Pointless.`,
     ],
+    use:true,
+    type:[
+      _(`funcType`),
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `R`,
+        ],
+        `N`,
+        `M`,
+      ],
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `R`,
+        ],
+        `M`,
+        `K`,
+      ],
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `R`,
+        ],
+        `N`,
+        `K`,
+      ],
+    ],
+    merged:true,
     tutorial:[
       `Wwwwwwwwwwwwwwwwwwww
 
@@ -9761,12 +9830,12 @@ paddedOuts:outDim*reduce(outDims,mul,1)
 m:make
 w:where
 paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,m zeros (m arrayConcat (m arraySlice (m _tensorShape node) 0 -1) m(quote,m paddedIns-inputs)),-1))
-inDef:node->d->inputs->m(stack,m unstack m(reshape,paddedInput,m quote arrayCons(inDim,inDims),true) 0,-2)
+inDef:node->d->inputs->(m moveDim m(reshape,paddedInput,m quote arrayCons(inDim,inDims),true) 0 -2)
 transposeDims:merged(transform d+1 i->d->w(i<d-2,i+1,w i<d-1 i+2 w(i<d,i,w equal(d,1) 1 0)) d)
 mixedFirst:(m denseLayer (m transpose node (m quote transposeDims)) (m quote m()) outDim d+1 false)
 mixedRest:(m denseLayer (m transpose (apply td.2 node) (m quote td.1)) (m quote m()) (td.3).i td.0 false)
 mixDef:node->d->outD->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 transposeDims nl outD),td->node->i->mixedRest,mixedFirst)
-reshapedOut:m(reshape,m stack (m unstack node -2) 0,m quote m(paddedOuts),true)
+reshapedOut:m(reshape,m moveDim node -2 0,m quote m(paddedOuts),true)
 outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs,-1))
 save('mixer',
   m concept
@@ -9797,7 +9866,9 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
       `        The only real option (without fixing other people's code for them) is to make \`n\` so big that there are at most \`5\` dimensions.`,
       `        \`n:8\` is enough to fit \`32768\` units. \`n:16\` can fit \`1e6\`. Still linearithmic, just with a slightly bigger constant.`,
       `            (Though, there's also the batch dimension. So, only much less can fit.)`,
-      `                (Though, later replaced \`expandDims(?,-2)\` with \`stack(unstack ? 0,-2)\`, so we have \`5\` dims again.)`,
+      `                (Though, later replaced \`expandDims(?,-2)\` with \`moveDim ? 0 -2\`, so we have \`5\` dims again.)`,
+      `                    (This might have made code 5x faster, because matrix-matrix multiplication might be more optimized than a bunch of vector-matrix mults. In TFJS, {https://github.com/tensorflow/tfjs/blob/50a5932c0fc75d3c3888c484ce6e1362fad73152/tfjs-backend-webgl/src/kernels/BatchMatMul_impl.ts} may want to multiply \`sharedDim\` by \`batchDim\` when checking against \`MATMUL_SHARED_DIM_THRESHOLD\`. And might want to make \`matMul\` reshape to rank \`3\` and back, to make TFJS not do that.)`,
+      `                    (This also turned uniform performance into "dense layers are faster".)`,
       ``,
       `        So now, our code works.`,
       `        Not.`,
@@ -9831,28 +9902,28 @@ data in->out->(m func ? (m last mx (m select (m accessState displayedParams) nul
 
 After running these for \`204800\` epochs with \`2\` meganumbers (params) (loss is averaged over the last \`5000\` iterations) (right-click the arrays to be able to see the plots and, since they were tiresome to type, \`mean\` and \`std\` too):
       \`n:1024\`,\`1*1024\` hidden units, \`2097152\` params:
-          # \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255 0.0014314721338450909\`
+          \`0.0011698934249579906 0.0011661143507808447 0.0010220715776085854 0.0014222601894289255 0.0014314721338450909\`
       With intra-layer non-linearities in \`mixedRest\` (yeah, those extra \`matMul\`s are extra layers, sure):
           \`n:128\`, \`12*1024\` hidden units, \`1900544\` params, \`ceil\` in \`dims\`:
               \`0.0008946591406129301 0.0009110493119806051 0.0009429942583665252\`
           \`n:64\`, \`20*1024\` hidden units, \`2031616\` params:
               \`0.0013092466397210956 0.0011801832588389516\`
-          # \`n:16\`, \`48*1024\` hidden units, \`1998848\` params: \`0.0007762182503938675 0.0007768133655190468 0.0007878425531089306 0.0007808140362612903 0.0006592486752197146\`
+          \`n:16\`, \`48*1024\` hidden units, \`1998848\` params: \`0.0007762182503938675 0.0007768133655190468 0.0007878425531089306 0.0007808140362612903 0.0006592486752197146\`
               \`16*1024\` hidden units: \`0.08653200417757034\`
               \`2*1024\` hidden units: \`0.25273409485816956\`
       Without a non-linearity in \`mixedRest\` (so those are only between full-mix layers):
-          # \`n:128\`, \`ceil\` in \`dims\`, \`12*1024\` hidden units, \`1900544\` params: \`0.00031006266362965107 0.00031061487970873713\`
-          # \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\`
+          \`n:128\`, \`ceil\` in \`dims\`, \`12*1024\` hidden units, \`1900544\` params: \`0.00031006266362965107 0.00031061487970873713\`
+          \`n:16\`, \`floor\` in \`dims\`, \`48*1024\` hidden units, \`1998848\` params: \`0.00020193590898998082 0.00020125115406699479\`
               What is this? I thought this whole approach was kinda like a dead end. Can it actually be an improvement? Was bad initialization the cause for underperformance when I last tried inter-layer NL (omitted)?
-              # \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\`
-              # \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947 0.04388221725821495 0.04591932147741318\`
+              \`32*1024\` hidden units, \`1343488\` params: \`0.00025959458434954286\`
+              \`16*1024\` hidden units, \`688128\` params: \`0.04319528490304947 0.04388221725821495 0.04591932147741318\`
               \`2*1024\` hidden units, \`311296\` params: \`0.2628728747367859\`
               \`ceil\` in \`dims\`, \`2*1024\` hidden units, \`114688\` params: \`0.5009892582893372 0.5001762509346008 0.4998488426208496 0.5016201734542847 0.5031338930130005\`
           Okay, I'll make \`node\` the default in \`mixedRest\` instead of \`where(equal td.2 undefined,node,m td.2 node)\`, I guess.
 
           Comparing reduced-hidden-units \`n:16\` with \`n:1024\`:
-              # \`666\` units, \`1363968\` params: \`0.03054337203502655\`
-              # \`333\` units, \`681984\` params: \`0.21292918920516968\`
+              \`666\` units, \`1363968\` params: \`0.03054337203502655\`
+              \`333\` units, \`681984\` params: \`0.21292918920516968\`
 
           In \`denseLayer\` (\`Rewrite\` it), \`varSGD\` instead of \`varRAdam\`, to see how robust LDLs are:
               LR \`.0003\`, \`n:1024\`, \`1024\` units: \`0.0003273784532211721\`
@@ -9911,12 +9982,12 @@ paddedOuts:outDim*reduce(outDims,mul,1)
 m:make
 w:where
 paddedInput:(w equal(paddedIns,inputs) node m(concat2,node,m zeros (m arrayConcat (m arraySlice (m _tensorShape node) 0 -1) m(quote,m paddedIns-inputs)),-1))
-inDef:node->d->inputs->m(stack,m unstack m(reshape,paddedInput,m quote arrayCons(inDim,inDims),true) 0,-2)
+inDef:node->d->inputs->(m moveDim m(reshape,paddedInput,m quote arrayCons(inDim,inDims),true) 0 -2)
 mixedFirst:(m swapDims (m denseLayer (m swapDims node w(1<d,0,1)) (m quote m()) outDim d+1 false) w(1<d,0,1))
 mixedIndex:w(i+1<td.0-2,i+1,td.0-1)
 mixedRest:(m swapDims (m denseLayer (m swapDims (apply td.1 node) mixedIndex) (m quote m()) (td.3).i td.0 false) mixedIndex)
 mixDef:node->d->inD->outD->inputs->outputs->nl->reduce(arrayFilledWith d-1 (m d+1 nl inD outD),td->node->i->(w equal((td.2).i,(td.3).i) (m add node mixedRest) mixedRest),w equal(inputs,outputs) (m add node mixedFirst) mixedFirst)
-reshapedOut:m(reshape,m stack (m unstack node -2) 0,m quote m(paddedOuts),true)
+reshapedOut:m(reshape,m moveDim node -2 0,m quote m(paddedOuts),true)
 outDef:node->d->inputs->outputs->(w equal(paddedOuts,outputs) reshapedOut m(slice,reshapedOut,0,outputs,-1))
 save('mixer',
   m concept
@@ -9951,28 +10022,27 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
             Intra-layer \`softsign\`: \`0.1799943745136261\`
             Inter-layer \`softsign\`: \`0.13399064540863037\`"\`\`
         So skip-connections help iff we have many non-linearities in one layer. Else, unknown.
-    \`n:4\` (cbrt), \`?\`u \`?\`p: \`\`elemCollapse"
+    \`n:4\` (cbrt), \`256\`u \`4352\`p: \`\`elemCollapse"
         Intra-skips:
-            Intra-layer \`softsign\`: \`?\` // TODO
-            Inter-layer \`softsign\`: \`?\` // TODO
+            Intra-layer \`softsign\`: \`0.002383998828008771\`
+            Inter-layer \`softsign\`: \`0.019389718770980835 0.02205105870962143\`
         Inter-skips:
-            Intra-layer \`softsign\`: \`?\` // TODO
-            Inter-layer \`softsign\`: \`?\` // TODO"\`\`
-    \`n:8\` (sqrt), \`?\`u \`?\`p: \`\`elemCollapse"
+            Intra-layer \`softsign\`: \`0.048092011362314224\`
+            Inter-layer \`softsign\`: \`0.031175998970866203 0.03009745478630066\`"\`\`
+        Again, intra-skips plus intra-layer is by far the best.
+    \`n:8\` (sqrt), \`192\`u \`4480\`p: \`\`elemCollapse"
         Intra-skips:
-            Intra-layer \`softsign\`: \`?\` // TODO
-            Inter-layer \`softsign\`: \`?\` // TODO
+            Intra-layer \`softsign\`: \`0.0004825126379728317\`
+            Inter-layer \`softsign\`: \`0.0032566473819315434\`
         Inter-skips:
-            Intra-layer \`softsign\`: \`?\` // TODO
-            Inter-layer \`softsign\`: \`?\` // TODO"\`\`
-    \`n:64\` (full), \`?\`u \`?\`p: \`\`elemCollapse"
-        Intra-skips:
-            Intra-layer \`softsign\`: \`?\` // TODO
-            Inter-layer \`softsign\`: \`?\` // TODO
-        Inter-skips:
-            Intra-layer \`softsign\`: \`?\` // TODO
-            Inter-layer \`softsign\`: \`?\` // TODO"\`\`
-\`1024\`io, \`2\`M params:
+            Intra-layer \`softsign\`: \`0.009494905360043049\`
+            Inter-layer \`softsign\`: \`0.004417960997670889\`"\`\`
+        And again, intra-skips plus intra-layer is by far the best.
+        (Though worse than \`n:4\`, implying that less is indeed better.)
+    \`n:64\` (full), \`36\`u \`4608\`p: \`0.05078140273690224 0.052629511803388596\`
+    Cbrt is better than sqrt. Consistent.
+    Inter-layer is better given inter-skips; but intra-layer is better given intra-skips. Not consistent.
+\`1024\`io, \`2\`M params (typically, a couple thousand seconds per run):
     \`n:16\` (close to cbrt, but unlike \`n:8\`, we can run this), \`48*1024\`u \`1880064\`p:
         Intra-skips:
             Intra-layer \`softsign\`: \`\`elemCollapse"
@@ -9986,7 +10056,7 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
                 \`varMomentum\`: \`0.0000648447748972103\`
                 \`varRMSProp\`: \`0.00016207985754590482\` (initially trained faster than SGD/Momentum, but then kinda bottomed out)
                 \`varRAdam\`: \`0.00015326894936151803\`"\`\`
-            So, inter-layer is better. (Kinda conflicting with \`n:2\`.)
+            So, inter-layer is better. (Conflicting with \`64\`io. Is it due to dataset size?)
         Inter-skips:
             Intra-layer \`softsign\`: \`\`elemCollapse"
                 \`varSGD\`: \`0.006106331944465637\`
@@ -9999,24 +10069,39 @@ This \`concept\` also \`defines\` \`'in'\` (vector-to-internal), \`'mix'\` (one 
                 \`varMomentum\`: \`0.00003141110937576741\`
                 \`varRMSProp\`: \`0.00018530063971411437\` (bottoming out)
                 \`varRAdam\`: \`0.00017935290816240013\`"\`\`
-        So, inter-layer NLs are better, whereas (partial) inter-skips are controversial (worse with intra-layerNLs, better with inter-layer).
+        So, inter-layer NLs are better, whereas (partial) inter-skips are controversial: worse with intra-layerNLs, better with inter-layer.
         (And, SGD = SGD with momentum, and RMSProp = Adam. Whether SGD or R/Adam is better is controversial.)
+    \`varRAdam\`, \`n:16\`, \`16*1024\`u \`659456\`p (to see whether these have any effect on bottomed-out loss curves):
+        Intra-skips: \`\`elemCollapse"
+            Intra-layer \`softsign\`: \`0.043852612376213074 0.043846964836120605 0.04394190013408661\`
+            Inter-layer \`softsign\`: \`0.032492611557245255 0.03237609937787056 0.03261331468820572\`"\`\`
+        Inter-skips: \`\`elemCollapse"
+            Intra-layer \`softsign\`: \`0.09823920577764511 0.10008081793785095 0.09798003733158112\`
+            Inter-layer \`softsign\`: \`0.0690249651670456 0.0650332048535347 0.06632774323225021\`"\`\`
+        Intra-skips is better.
+        Inter-layer is better.
+    \`varRAdam\`, \`n:16\`, \`32*1024\`u \`1269760\`p:
+        Intra-skips: \`\`elemCollapse"
+            Intra-layer \`softsign\`: \`0.0003311615437269211\`
+            Inter-layer \`softsign\`: \`0.00028471401310525835\`"\`\`
+        Inter-skips: \`\`elemCollapse"
+            Intra-layer \`softsign\`: \`0.0022426738869398832\`
+            Inter-layer \`softsign\`: \`0.0003616918402258307\`"\`\`
+        Intra-skips is better.
+        Inter-layer is better.
     Intra-skips inter-layer \`varRAdam\`:
-        \`n:32\` (sqrt), \`?\`u \`?\`p: \`?\` // TODO
-        \`n:128\`, \`?\`u \`?\`p: \`?\` // TODO
-        \`n:1024\` (full), \`918\`u \`1880064\`p: \`0.0018824153812602162\` // TODO: 5
-\`1024\`io, ?????? params:
-    Intra-skips inter-layer \`varRAdam\`:
-        \`n:16\`, \`1024\`u \`73728\`p: \`0.31698131561279297\`
-        \`n:16\`, \`16*1024\`u \`659456\`p: \`0.03221355378627777 0.032351523637771606 0.03226030245423317 0.032208725810050964 0.032005425542593\`
-            \`\`elemCollapse"Padded/sliced io to \`16*1024\` for the full skip-connection experience: \`1703936\`u: \`0.05565287172794342\` (a sanity check that does not seem perfectly sane, as loss differs, though not terribly)"\`\`
-        \`n:16\`, \`32*1024\`u \`1269760\`p: \`0.00028287459281273186 0.00028394904802553356 0.0002822627138812095 0.00028381525771692395 0.00028426203061826527\`
-        \`n:32\`, \`?\`u \`660\`Kp: \`?\` // TODO
-        \`n:32\`, \`?\`u \`1.25\`Mp: \`?\` // TODO
-        \`n:1024\`, \`?\`u \`660\`Kp: \`?\` // TODO
-        \`n:1024\`, \`?\`u \`1.25\`Mp: \`?\` // TODO
-// TODO: Update the PDF.
-// TODO: ...Does attention interact with dense layers quadratically? Or is it only in sequence length?
+        \`n:16\` (near cbrt), \`48*1024\`u \`1880064\`p: \`\`elemCollapse"\`0.00015362635895144194 0.00015380878176074475 0.0001535415940452367 0.00015338551020249724 0.00015270982112269849 0.0001537332427687943 0.00015308012370951474 0.00015288387658074498 0.00015374235226772726 0.0001538087526569143\`"\`\`
+        \`n:16\`, \`32*1024\`u \`1269760\`p: \`\`elemCollapse"\`0.00028287459281273186 0.00028394904802553356 0.0002822627138812095 0.00028381525771692395 0.00028426203061826527 0.00028164690593257546 0.0002833934559021145 0.00028132274746894836 0.0002780411741696298 0.00028160857618786395\`"\`\`
+        \`n:16\`, \`16*1024\`u \`659456\`p: \`\`elemCollapse"\`0.03221355378627777 0.032351523637771606 0.03226030245423317 0.032208725810050964 0.032005425542593 0.032369956374168396 0.03227755427360535 0.03217829018831253 0.03227957338094711 0.03247924894094467\`"\`\`
+        \`n:32\` (sqrt), \`27*1024\`u \`1890304\`p: \`\`elemCollapse"\`0.00020065730495844036 0.00020082313858438283 0.0002008466690313071 0.0002015077625401318 0.00020170801144558936\`"\`\`
+        \`n:32\`, \`18*1024\`u \`1282048\`p: \`\`elemCollapse"\`0.00034488592064008117 0.0003442685992922634 0.00034197859349660575 0.0003465280751697719 0.0003474772092886269\`"\`\`
+        \`n:32\`, \`9*1024\`u \`673792\`p: \`\`elemCollapse"\`0.030036047101020813 0.030070312321186066 0.029819713905453682 0.02998761460185051 0.03005370870232582\`"\`\`
+        \`n:128\`, \`12160\`u \`1882112\`p: \`\`elemCollapse"\`0.0002710095723159611 0.0002711329434532672 0.00027086614863947034 0.0002708226384129375 0.0002709670225158334 0.000271480850642547 0.00027105252956971526 0.0002709493855945766 0.00027171047986485064 0.0002715726150199771\`"\`\`
+        \`n:128\`, \`7936\`u \`1273856\`p: \`\`elemCollapse"\`0.00043824451859109104 0.0004380561877042055 0.00043687134166248143 0.0004391698748804629 0.00043878681026399136 0.0004399897006805986 0.0004364698543213308 0.0004394387942738831 0.00043827967601828277 0.00044164370046928525\`"\`\`
+        \`n:128\`, \`3584\`u \`647168\`p: \`\`elemCollapse"\`0.04241876304149628 0.04223858565092087 0.04262493550777435 0.04285675659775734 0.04239850118756294 0.04239463806152344 0.04265938326716423 0.042927905917167664 0.04246998578310013 0.04239816963672638\`"\`\`
+        \`n:1024\` (full), \`918\`u \`1880064\`p: \`\`elemCollapse"\`0.0018824153812602162 0.0018824560102075338 0.0018851254135370255 0.0018793788040056825 0.001875345828011632 0.0018766543362289667 0.0018896685214713216 0.00188142666593194 0.0018813397036865354 0.0018730501178652048\`"\`\`
+        \`n:1024\`, \`612\`u \`1253376\`p: \`\`elemCollapse"\`0.04580811411142349 0.045865558087825775 0.0460783876478672 0.045752476900815964 0.04568735137581825 0.045774802565574646 0.04559101164340973 0.0455901175737381 0.045812010765075684 0.045531485229730606\`"\`\`
+        \`n:1024\`, \`322\`u \`659456\`p: \`\`elemCollapse"\`0.2237001657485962 0.22343787550926208 0.22324888408184052 0.22337710857391357 0.2238953709602356 0.22325174510478973 0.22308418154716492 0.2231147587299347 0.22319428622722626 0.22426986694335938\`"\`\`
 `,
       `
 
@@ -10050,25 +10135,25 @@ testSource:(make concept 'in' i 'out' 100 'size' arrayLength(D)/n call at->array
         _(`fancier`),
         `img:dataSource() o:unstack(reshape(t,^(3 32 32)),0) displayOne('fine label',argmax img.1);displayOne('image',img.0,t->stack(array o.0 o.1 o.2 ones(^(32 32)),-1)*255)`,
       ],
-      `(Later, after training a network, you can add \`display('predictions',sync softmax(trained img.0))\` to the visualizer.)`,
+      `(Later, after training a network, you can add \`display('predictions',sync softmax(trained expandDims(img.0,0)))\` to the visualizer.)`,
       `When you have an attempt, no matter how bad it is, you can always improve it. But if you don't make one, it cannot be improved.`,
       `Run, run, run, do not delay.`,
       [
         _(`fancier`),
-        `batchSize:8
+        `batchSize:16
 mn:x-mean(x)
 nl:x->tanh(mn/(sqrt(mean mn*mn)+1e-8))
-nn:static(make func ? (apply await(load 'mixer') ? defines(dataSource,'in') 30000 defines(dataSource,'out') 2 ?->(make nl ?) id))
+nn:static(make func ? (apply await(load 'mixer') ? defines(dataSource,'in') 1000 defines(dataSource,'out') 1 ?->(make nl ?) id))
 data:zeroGrad(transform(batchSize,func dataSource()))
 ins:stack(transform data io->io.0)
 outs:stack(transform data io->io.1)
 got:nn(ins)
-do:(minimize abs(got) 1e-4);(predict got outs softmaxLoss)
+do:(minimize abs(got) 1e-3);(predict got outs softmaxLoss)
 displayedParams:stateCell(false)
-displayParams:Fn->(displayOne 'Params' (parametersInVars Fn));(accessState displayedParams true)
+displayParams:Fn->(print 'Params' (parametersInVars Fn) (parametersInVars Fn true));(accessState displayedParams true)
 testData:testSource()
 testOne:func(display(TestAccuracy,equals argmax(nn(expandDims testData.0 0),-1) argmax(testData.1)))
-trained:(repeat ^(do;displayOne(Output,do);display(Perplexity,exp(sum(0-outs*log(softmax(do)+1e-8))/batchSize));display(Accuracy,mean(equals argmax(do,-1) argmax(outs,-1)));adjustNever(testOne);(select (accessState displayedParams) null displayParams nn);softmax(do)+outs) 500000);nn`,
+trained:(repeat ^(do;displayOne(Output,do);display(OutputMean,mean do);display(Perplexity,exp(sum(0-outs*log(softmax(do)+1e-8))/batchSize));display(Accuracy,mean(equals argmax(do,-1) argmax(outs,-1)));adjustNever(testOne);(select (accessState displayedParams) null displayParams nn);softmax(do)+outs) 500000);nn`,
       ],
       `        (At the output, we add predicted and actual probabilities, for easy visual discrimination: near-\`1\` are bad, near-\`0\` and near-\`2\` are good.)`,
       `        (Though if you want to actually run these experiments, remember that browsers are bad at clearing unused GPU memory. Monitor it, refresh the page or better close-and-reopen, and if things get really bad, restart the browser. ...That's important, should have said this in a much earlier tutorial.)`,
@@ -10078,39 +10163,159 @@ trained:(repeat ^(do;displayOne(Output,do);display(Perplexity,exp(sum(0-outs*log
         _(`fancier`),
         `data:dataSource(accessState ind)
 ind:stateCell(0)
-repeat ^(display('eq',equals(argmax adjustNever(trained,array data.0),argmax data.1));accessState(ind,ind+1)) defines(dataSource,'size')`,
+repeat ^(display('eq',equals(argmax adjustNever(trained,array expandDims(data.0,0)) -1,argmax data.1));accessState(ind,ind+1)) defines(dataSource,'size')`,
       ],
       `(If needed, take the \`mean\` accuracy in the \`contextMenu\`.)`,
-      `(All runs here had \`2\` layers.)`,
-      `\`n:3072\`, \`7.23\`M params (\`1536\` hidden units), with \`(minimize abs(got) 1e-2)\` L1 regularization at output, \`1\` megaiteration: train accuracy \`27.01\`%, test accuracy \`19.85\`%. (Wasn't improving after a certain point.)`,
-      `\`n:3072\`, \`7.23\`M params (\`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` kiloiters that took \`48.8\` kiloseconds: train perplexity \`5.48\`, train acc \`59.11\`%, test acc \`24.42\`%. (Kept improving.)`,
-      `\`n:3072\`, learning rate \`.001\`, \`7.23\`M params (\`1536\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`50.8\`Ks: train perplexity \`3.19\`, train acc \`66.99\`%, test acc \`22.61\`%. (With RAdam, learning rate mostly doesn't matter, as was suggested by its paper.)`,
-      `    Continuing the one above for \`500\`Kits (\`50.2\`K s) more: train perplexity \`1.42\`, train acc \`85.59\`%, test acc \`22.63\`%.`,
-      `    Continuing the one above for \`500\`Kits (\`53.0\`K s) more: train perplexity \`1.25\`, train acc \`89.67\`%, test acc \`22.61\`%.`,
-      `    Continuing the one above for \`500\`Kits (\`52.1\`K s) more: train perplexity \`1.16\`, train acc \`91.41\`%, test acc \`22.37\`%. (I'm sick of training the same thing. And it's still demonstrably worse than \`n:16\`.)`,
-      `\`n:16\`, \`7.16\`M params (\`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.0\`Ks: train perplexity \`1.061\`, train acc \`98.16\`%, test acc \`22.63\`%. (So, going linearithmic significantly increases model capacity at literally no cost (less GPU memory usage, even), but does nothing for generalization.)`,
-      `\`n:16\`, learning rate \`.001\`, \`7.16\`M params (\`34000\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`52.0\`Ks: train perplexity \`1.065\`, train acc \`98.98\`%, test acc \`22.88\`%.
-      \`\`p:parseURL
-a:(p 'experiments/cifar100_train_perpl_0.txt' fast)
-b:(p 'experiments/cifar100_train_acc_0.txt' fast)
-c:(p 'experiments/cifar100_test_acc_0.txt' fast)
-d:(p 'experiments/cifar100_train_loss_0.txt' fast)
-elemCollapse _executioner(^(a;b;c;d;(display TrainPerplexity await(a) 10);(display TrainAccuracy await(b) 10);(display TestAccuracy await(c) 10);(display Loss await(d) 10);elem('text','')))\`\``,
-      `\`n:32\`, \`7.19\`M params (\`12750\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`46.9\`Ks: train perplexity \`3.53\`, train acc \`69.65\`%, test acc \`22.16\`%. (Test accuracy reached max after 100K iters.)
-      (The shape of the plots is practically the same, here and below.)`,
-      `\`n:32\`, ceil instead of \`floor\` in \`dims\` (\`floor(.999999+?)\`), \`5.44\`M params (\`32000\` hidden units as TFJS doesn't allow more), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`31.9\`Ks (and half the GPU memory, somehow): train perplexity \`1.32\`, train acc \`93.02\`%, test acc \`23.29\`%.`,
-      `\`n:32\`, LR \`.001\`, ceil, \`5.44\`M params (\`32768\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`32.4\`Ks: train perplexity \`1.175\`, train acc \`96.40\`%, test acc \`24.27\`%.
-      (Done for the consistency of learning rates.)
-      \`\`p:parseURL
-a:(p 'experiments/cifar100_train_perpl_1.txt' fast)
-b:(p 'experiments/cifar100_train_acc_1.txt' fast)
-c:(p 'experiments/cifar100_test_acc_1.txt' fast)
-d:(p 'experiments/cifar100_train_loss_1.txt' fast)
-elemCollapse _executioner(^(a;b;c;d;(display TrainPerplexity await(a) 10);(display TrainAccuracy await(b) 10);(display TestAccuracy await(c) 10);(display Loss await(d) 10);elem('text','')))\`\``,
-      `\`n:64\`, \`7.21\`M params (\`16500\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\`Kit that took \`49.3\`Ks: train perplexity \`2.18\`, train acc \`82.97\`%, test acc \`23.14\`%. (\`floor\` in \`dims\` is an affront to our gods.)`,
-      `\`n:64\`, ceil in \`dims\`, \`7.01\`M params (\`24576\` hidden units), \`(minimize abs(got) 1e-4)\`, \`500\` Kit that took \`43.7\`Ks: train perplexity \`1.664\`, train acc \`87.96\`%, test acc \`23.38\`%.`,
-      `\`n:64\`, ceil in \`dims\`, LR \`.001\`, ..., \`500\`Kit that took \`49.2\`Ks: train perplexity \`1.515\`, train acc \`90.68\`%, test acc \`23.27\`%.`,
-      // TODO: Re-run, at the very least, n:16, with the ceil version.
+      `[Redacted, because the code got changed and optimized: \`658\` kiloseconds worth of runs, not counting the crashed ones and the \`realTime\` on top of \`userTime\`. Each run is about \`50\`Ks, very uniform, unlike the runs below.]`,
+      `=== And now, with intra-skips: ===`,
+      `
+\`(minimize abs(do) 1e-3)\`, \`1\` hidden layer (runtimes are multiplied by the GPU usage percentage, usually):
+    Batch size \`8\`:
+        \`n:16\`, \`65536\`u \`3005952\`p: \`59.96\`% train \`21.32\`% test
+        \`n:16\`, \`131072\`u \`6075904\`p: \`65.05\`% train \`19.81\`% test
+        \`n:64\`, \`28672\`u \`3277824\`p, \`3.9\`Ks: \`29.13\`% train \`18.68\`% test
+        \`n:64\`, \`53248\`u \`6073344\`p, \`8.9\`Ks: \`34.13\`% train \`20.04\`% test (output mean is all over the place: very thicc line)
+        \`n:3072\`, \`948\`u \`3007056\`p: \`33.89\`% train \`18.00\`% test
+        \`n:3072\`, \`1896\`u \`6014112\`p, \`6.3\`Ks: \`37.24\`% train \`16.79\`% test \`\`P:parseURL A:await D:display F:fast
+a:(P 'experiments/cifar100_output_mean_2.txt' F)
+b:(P 'experiments/cifar100_perpl_2.txt' F)
+c:(P 'experiments/cifar100_train_acc_2.txt' F)
+d:(P 'experiments/cifar100_test_acc_2.txt' F)
+elemCollapse _executioner(^(a;b;c;d;(D OutputMean A(a) 10);(D TrainPerplexity A(b) 10);(D TrainAccuracy A(c) 10);(D TestAccuracy A(d) 10);elem('text','')))\`\`
+    Batch size \`16\`:
+        \`n:16\`, \`65536\`u \`3005952\`p, 7.6 8.4 8.5 8.6 Ks: \`91.74 91.88 92.80 92.77 92.76\`% train \`20.76 21.29 21.19 21.92 21.08\`% test
+        \`n:16\`, \`131072\`u \`6075904\`p: \`95.60\`% train \`21.94\`% test
+        \`n:64\`, \`28672\`u \`3277824\`p, 5.2 5.0 6.7 6.8 6.6 Ks: \`59.38 60.60 55.37 59.67 64.63\`% train \`21.48 20.90 20.91 21.45 20.46\`% test \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_6.txt' f)
+c:(P 'experiments/cifar100_train_acc_6.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 10);(D TrainAccuracy A(c) 10);elem('text','')))\`\`
+        \`n:64\`, \`53248\`u \`6073344\`p, \`8.8\`Ks: \`64.95\`% train \`21.04\`% test
+        \`n:3072\`, \`948\`u \`3007056\`p, 5.5 5.6 5.7 5.7 Ks: \`30.89 31.46 31.14 26.55 33.99\`% train \`18.34 18.14 16.77 18.43 17.55\`% test
+        \`n:3072\`, \`1896\`u \`6014112\`p, \`6.9\`Ks: \`33.08\`% train \`18.60\`% test \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_5.txt' f)
+c:(P 'experiments/cifar100_train_acc_5.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 10);(D TrainAccuracy A(c) 10);elem('text','')))\`\`
+    Batch size \`32\`:
+        \`n:16\`, \`65536\`u \`3005952\`p, \`14.5\`Ks: \`97.45\`% train \`21.29\`% test \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_3.txt' f)
+b:(P 'experiments/cifar100_perpl_3.txt' f)
+c:(P 'experiments/cifar100_train_acc_3.txt' f)
+d:(P 'experiments/cifar100_test_acc_3.txt' f)
+elemCollapse _executioner(^(a;b;c;d;(D OutputMean A(a) 10);(D TrainPerplexity A(b) 10);(D TrainAccuracy A(c) 10);(D TestAccuracy A(d) 10);elem('text','')))\`\`
+        \`n:16\`, \`131072\`u \`6075904\`p, \`26.2\`Ks: \`99.29\`% train \`23.50\`% test
+        \`n:64\`, \`28672\`u \`3277824\`p, \`6.5\`Ks: \`87.96\`% train \`20.44\`% test
+        \`n:64\`, \`53248\`u \`6073344\`p, \`9\`Ks (90% GPU use): \`94.19\`% train \`22.60 21.91\`% test
+        \`n:3072\`, \`948\`u \`3007056\`p, \`9.2\`Ks (60% GPU use): \`25.66\`% train \`17.60\`% test
+        \`n:3072\`, \`1896\`u \`6014112\`p, \`8.4\`Ks: \`25.60\`% train \`17.53\`% test \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_4.txt' f)
+b:(P 'experiments/cifar100_perpl_4.txt' f)
+c:(P 'experiments/cifar100_train_acc_4.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 10);(D TrainPerplexity A(b) 10);(D TrainAccuracy A(c) 10);elem('text','')))\`\`
+    While DL's (dense layer's) performance seems to degrade with increased batch size (BS) (each batch averages gradients, and there's probably lots of gradient cancellation between examples), LDL's performance improves. BS 16 separates roots 1/2/3 most cleanly, so, BS 16 from now on.
+    BS \`16\`, \`varRAdam\`, intra-skips, intra-layer:
+        \`n:16\`, \`131072\`u \`6075904\`p: \`89.22\`% train \`19.48\`% test (bottomed out at 300K iterations; output mean falls for 80K iterations then rises smoothly)
+        (Not as good as intra-skips inter-layer.)
+    BS \`16\`, \`varRAdam\`, inter-skips, inter-layer:
+        \`n:16\`, \`131072\`u \`6075904\`p, \`15.5\`Ks: \`97.24\`% train \`22.73\`% test
+        (A bit better than intra-skips inter-layer. Weird.)
+    BS \`16\`, \`varRAdam\`, inter-skips, intra-layer:
+        \`n:16\`, \`131072\`u \`6075904\`p, \`28.0\`Ks: \`95.40\`% train \`21.69\`% test
+        (As good as intra-skips inter-layer.)
+    \`3\`M iterations:
+        \`varRAdam\`, BS \`16\`, \`n:3072\`, \`948\`u \`3007056\`p, 38.0 37.1 32.2 37.2 33.7 Ks (60% GPU use): \`37.04 34.92 41.88 34.77 37.11\`% train \`16.22 16.09 15.78 16.89 15.74\`% test \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_7.txt' f)
+c:(P 'experiments/cifar100_train_acc_7.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 20);(D TrainAccuracy A(c) 20);elem('text','')))\`\`
+        \`varSGD\`, BS \`16\`, \`n:3072\`, \`948\`u \`3007056\`p (35% GPU use): \`64.18\`% train \`25.11\`% test (much more stable) \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_8.txt' f)
+c:(P 'experiments/cifar100_train_acc_8.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 20);(D TrainAccuracy A(c) 20);elem('text','')))\`\`
+    \`varSGD\` in \`denseLayer\`, BS \`16\`:
+        \`n:3072\`, \`1896\`u \`6014112\`p, \`6.2\`Ks: \`50.14 51.40\`% train \`25.28 25.06\`% test (output mean smoothly rises to .1)
+        (SGD is better than RAdam for a singular dense layer. Why does optimizing 1 matrix multiplication have so much variation?)
+        Intra-skips:
+            Intra-layer NL:
+                \`n:64\`, \`53248\`u \`6073344\`p: \`64.75\`% train \`21.56\`% test (output mean bounces up-and-down)
+                \`n:16\`, \`131072\`u \`6075904\`p: \`48.93\`% train \`19.10\`% test (output mean slowly decreases)
+            Inter-layer NL (the default branch, elsewhere):
+                \`n:64\`, \`53248\`u \`6073344\`p, \`7.0\`Ks: \`46.34\`% train \`22.19\`% test
+                \`n:16\`, \`131072\`u \`6075904\`p, \`13.6\`Ks: \`34.16\`% train \`20.40\`% test
+                SGD has trouble with LDL again. But only if we don't have extra non-linearities.
+        Inter-skips (so, no skip-connections at all, with 1 hidden layer):
+            Intra-layer NL:
+                \`n:64\`, \`53248\`u \`6073344\`p, \`7.5\`Ks: \`67.16\`% train \`21.20\`% test (output mean slowly rises)
+                \`n:16\`, \`131072\`u \`6075904\`p, \`25.2\`Ks: \`58.84\`% train \`18.21\`% test (output mean slowly falls)
+            Inter-layer NL:
+                \`n:64\`, \`53248\`u \`6073344\`p: \`52.97\`% train \`22.23\`% test (output mean slowly rises)
+                \`n:16\`, \`131072\`u \`6075904\`p, \`10.0\`Ks: \`38.77\`% train \`20.08\`% test (output mean slowly rises)
+        This is all very contradictory and confusing. Sqrt is consistently better than cbrt, though, and mostly better than \`n:3072\`.
+        Maybe it's just that SGD really can't deal with consecutive matrix multiplications, and performance drops off way faster than with RMSProp.
+    Different NL:
+        Plain \`relu\` (without shifting and scaling to 0-mean 1-variance):
+            \`n:16\`, inter-skips, \`131072\`u \`6075904\`p, \`12.1\`Ks: \`99.15\`% train \`23.17\`% test (so much better) \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_10.txt' f)
+c:(P 'experiments/cifar100_train_acc_10.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 10);(D TrainAccuracy A(c) 10);elem('text','')))\`\`
+            \`n:64\`, \`53248\`u \`6073344\`p, \`7.7\`Ks: \`99.69\`% train \`24.49\`% test
+            \`n:3072\`, \`1896\`u \`6014112\`p, \`4.7 4.5\`Ks: \`3.93 3.41\`% train \`2.71 2.19\`% test (ewww, what is this, I feel second-hand embarrassment for it, enough for a second run) \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_11.txt' f)
+c:(P 'experiments/cifar100_train_acc_11.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 10);(D TrainAccuracy A(c) 10);elem('text','')))\`\`
+        \`softsign\`:
+            \`n:16\`, inter-skips, \`131072\`u \`6075904\`p, \`12.8\`Ks: \`99.90\`% train \`24.62\`% test (works extremely well) \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_9.txt' f)
+c:(P 'experiments/cifar100_train_acc_9.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 10);(D TrainAccuracy A(c) 10);elem('text','')))\`\`
+            \`n:64\`, \`53248\`u \`6073344\`p, \`7.7\`Ks: \`99.92\`% train \`24.82\`% test
+            \`n:3072\`, \`1896\`u \`6014112\`p, \`6.2\`Ks: \`70.16\`% train \`21.39\`% test (the mean line gets thiccer)
+            Okay, softsign seems so much more performant.
+        With normalization and \`relu\` as the default, test-time probably differed at test-time mostly because at training, shifting/scaling were averaged across a batch, whereas at testing, they were per-image. Batch norm is way too finicky. Should have realized that before pouring so much compute into it, though.
+        I guess it's time to re-do all these computations with softsign?
+        Repeating work, my favorite.
+        \`softsign\`:
+            \`n:3072\`, \`948\`u \`3007056\`p, \`3.1\`Ks: \`67.47\`% train \`20.45\`% test (I am intimidated by its capacity, almost unchanged from 6Mp)
+            3M iterations, \`n:3072\`, \`948\`u \`3007056\`p, \`20.0\`Ks: \`99.24\`% train \`18.57\`% test
+            The dense layer's performance is too good. We won't be able to notice any differences with LDL.
+            \`n:3072\`, \`474\`u \`1503528\`p, \`5.4\`Ks: \`67.92\`% train \`20.58\`% test (why is it so good? It's bad for comparing)
+            \`n:3072\`, \`237\`u \`751764\`p: \`55.00\`% train \`19.71\`% test (slightly worse, but not by much)
+            \`n:3072\`, \`239\`u \`758108p\`p, 6.1Ks (not GPU pre-multiplied, as all plain-text timings here are): \`56.59\`% train \`19.67\`% test
+            757K params it is, then.
+            Intra-skips, inter-layer NL:
+                \`n:64\`, \`7168\`u \`948224\`p: \`99.60\`% train \`21.31\`% test (param count differs, though; can only seem to get it down to 417K, not any higher)
+                \`n:16\`, \`16384\`u \`757248\`p: \`99.42\`% train \`19.69\`% test
+            Or, to better match what comes after:
+            \`n:3072\`, \`132\`u \`418704\`p, 6.2 7.5 5.2 4.7 4.6 Ks: \`42.69 42.20 44.72 44.17 44.87\`% train \`18.41 18.47 18.86 18.47 19.14\`% test
+            \`n:3072\`, \`132\`u \`418704\`p, 38.4 41.3 42.8 29.5 34.3 Ks of 3M iterations: \`69.21 69.53 69.97 71.11 71.77\`% train \`16.01 15.08 15.65 15.72 15.17\`% test \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_12.txt' f)
+c:(P 'experiments/cifar100_train_acc_12.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 20);(D TrainAccuracy A(c) 20);elem('text','')))\`\` \`\`P:parseURL A:await D:display f:fast
+a:(P 'experiments/cifar100_output_mean_13.txt' f)
+c:(P 'experiments/cifar100_train_acc_13.txt' f)
+elemCollapse _executioner(^(a;b;c;(D OutputMean A(a) 20);(D TrainAccuracy A(c) 20);elem('text','')))\`\`
+            Intra-skips:
+                Intra-layer NL:
+                    \`n:64\`, \`3584\`u \`416768\`p, 7.0 6.1 6.7 7.1 7.2 Ks: \`97.24 97.21 97.40 96.72 97.60\`% train \`20.57 20.48 20.82 20.57 21.14\`% test
+                    \`n:16\`, \`8192\`u \`382464\`p, 9.2 7.6 7.8 7.9 Ks: \`86.11 84.74 85.79 85.14 84.61\`% train \`19.19 19.18 19.20 18.89 18.97\`% test
+                Inter-layer NL:
+                    \`n:64\`, \`3584\`u \`416768\`p, 6.4 6.5 6.6 5.3 6.3 6.3 Ks: \`95.11 96.12 94.56 95.97 96.29 95.97 95.87\`% train \`19.22 19.00 18.70 18.98 19.28 19.76 19.40\`% test
+                    \`n:16\`, \`8192\`u \`382464\`p, 7.8 7.7 7.9 7.9 Ks: \`93.84 93.95 93.80 93.76 94.97\`% train \`18.54 18.43 18.63 18.08 18.22\`% test
+            Inter-skips:
+                Intra-layer NL:
+                    \`n:64\`, \`3584\`u \`416768\`p, 7.7K 6.0 6.1 6.2 6.2 Ks: \`96.28 97.38 96.32 97.57 96.92\`% train \`19.98 20.79 20.89 20.07 20.73\`% test
+                    \`n:16\`, \`8192\`u \`382464\`p, 9.7 8.2 8.2 8.2 8.4 Ks: \`82.98 85.20 83.36 82.68 83.96\`% train \`18.42 19.23 18.29 18.48 18.34\`% test
+                Inter-layer NL:
+                    \`n:64\`, \`3584\`u \`416768\`p, 7.5 5.3 5.5 5.6 5.7 Ks: \`95.49 95.35 95.32 94.99 96.13\`% train \`18.80 19.15 19.15 18.84 19.76\`% test
+                    \`n:16\`, \`8192\`u \`382464\`p, 8.6 7.0 7.2 7.4 Ks: \`93.44 94.10 93.72 94.24 94.69\`% train \`17.95 18.11 18.04 18.03 18.23\`% test
+            So, sqrt (64) is always better than cbrt (16); intra-layer NLs help with sqrt but hurt with cbrt; intra-skips are always better.
+        \`2\` layers, \`softsign\`:
+            \`n:3072\`, \`948\`u \`3905760\`p: \`98.40\`% train (...No, this cannot continue.)
+            \`n:3072\`, \`474\`u \`1728204\`p, 5.8Ks: \`95.48\`% train \`22.47\`% test (...So much performance. Too much.)
+            \`n:3072\`, \`132\`u \`436128\`p (too little), 7.2Ks: \`54.47\`% train \`20.68\`% test
+            \`n:3072\`, \`222\`u \`753468\`p: \`76.34\`% train \`21.45\`% test
+            \`n:64\`, \`3584\`u \`846848\`p, 8.9Ks: \`99.96\`% train \`22.35\`% test
+            \`n:16\`, \`8192\`u \`792064\`p, 11Ks: \`99.94\`% train \`20.38\`% test
+            Eh. Too inconclusive (with regards to sqrt/cbrt). Pretend that these 2-layers tests never happened.
+`,
       `
 This is the end of this LDL (linearithmic dense layer) \`tutorial\`.
             It was very boring, I know. It's because I put most or all creative thoughts (the ones that unpredictably coalesce into a good form during the day, and should be preserved long enough to put into writing) into the paper on this. See the repo; see \`Self\` for the link.
@@ -10220,10 +10425,22 @@ I don't think that this is gonna work for increasing test-set accuracy on such a
       Though it is possible that the cGAN is implemented very badly, because I'm inexperienced with those. If I thought that it has potential, should have switched to implementing a GAN.
 
 
+Adversarial training can only blur the goal/solution a bit. And maintaining a diverse set of goals/solutions loses efficacy if the environment has infinite complexity, as code does. Neither denying yourself nor knowing everything lead to a better self.
+A better "better self" construction method is probably, you know, letting the system actually construct/learn it. We can call this "better self" a \`\`elem 'i' (elem 'text' 'mesa-optimizer')\`\` (if it's not better, then the system wouldn't learn it), and the learning of it \`\`elem 'i' (elem 'text' 'transcendence')\`\`.
+The initial implementation only really needs:
+    @ Completeness: all inputs and all internal state are exposed to the learner, like \`State&Inputs->State\` (which means an infinite loop, learning through time). Outputs are \`slice\`d off of the internal state, so that they are exposed too.
+    @ Generality: the learner can do anything, meaning that its every output is a mix of its every input, like in a vector-matrix multiplication or an LDL.
+    @ Scalability: each iteration of the learner completes in linear time (like in an LDL), so that the mesa-optimizer can be as big as its optimizer.
+    @ Data.
+    @ Compute.
+Everything else is contained within that, by definition.
+And when a mesa-optimizer satisfies all those requirements too, the light of consciousness is successfully passed on, and all of life is ready to play out again. Kinda like death, but not really.
 
-I think it's time to give up on \`tutorial matMul\`, and in the same breath, give up on Conceptual, as it no longer serves a purpose.
 
-Conceptual reflects the vision of taking a program all across the Internet, with \`ToExtension()\`, one that is able to self-inspect (\`deconstruct\`) and self-modify (\`Rewrite()\`) — the future of computing;   overtaken by the fact that to share is to separate but learning does not needlessly separate and does not share, and learning takes too much compute to be personal right now, and JS sucks anyway, as it is easiest to implement an RNN in a web driver.
+
+I think it's time to give up on \`tutorial matMul\`, and in the same breath, give up on Conceptual, as all my work here is done. Being bound to Conceptual was limiting, but once again, I am free to smite the Earth, as I did in times long passed.
+
+Conceptual reflects the vision of taking a program all across the Internet, with \`ToExtension()\`, one that is able to self-inspect (\`deconstruct\`) and self-modify (\`Rewrite()\`) — the future of computing;   overtaken by the fact that to share is to separate but learning does not needlessly separate and does not share, and learning takes too much compute to be personal right now, and JS sucks anyway, as it is probably easiest to implement an RNN in a web driver.
       (I thought I'd need a custom programming language, but it's just adding bias toward re-use, and learning should have no biases.)
 We ought to give this RNN every signal as an input and every control as an output, thereby giving it consciousness. I implemented a dense layer once; I don't think AGI is too different.
       Not that it's a hard thing to do. Say, take a rock, illuminated by light: due to reflection, it's conscious of its surroundings. Hold up a mirror to the rock, and you'll give it consciousness AND self-awareness. I'm sorry. Such dumb concepts have no place near artificial general intelligence.
@@ -10233,14 +10450,16 @@ And it's not like any of this is useful to anyone, so I wouldn't be able to extr
 Anyway.
 Good night.`,
     ],
+    stack:true,
+    call(a,b) { return _matMul(_num(a), _num(b)) },
   },
 
   _matMul:{
-    merged:true,
     docs:`An interface to tf.matMul, but it can reshape args to accept JS numbers in both args, and row vectors in first arg.
 (The two extra args are booleans, indicating whether each of the first two args should be \`transpose\`d.)`,
-    dispose:true,
     interrupt:false,
+    dispose:true,
+    merged:true,
     call(a,b, tA, tB) {
       // The extra args are bools: whether to transpose the arg.
       if (a == null || b == null) error("Bad inputs to matMul:", a, b)
@@ -10255,13 +10474,13 @@ Good night.`,
         if (!iA) a = broadcastTo(a, sA = [1]), da = true, iA = true
         if (!iB) b = broadcastTo(b, sB = [1]), db = true, iA = true
         const rowVectorA = iA && sA.length < 2
-        if (iA && sA.length < 2) a = _tf(tf.reshape(a, sA = [a1, a2])), da = true
-        if (iB && sB.length < 2) b = _tf(tf.reshape(b, sB = [b1, b2])), db = true
+        if (iA && sA.length < 2) a = reshape(a, sA = [a1, a2]), da = true
+        if (iB && sB.length < 2) b = reshape(b, sB = [b1, b2]), db = true
         if (sA.length < sB.length || sA.length === sB.length && sA[0] === 1 && sB[0] !== 1) { const t = broadcastTo(a, sA = [...sB.slice(0,-2), ...sA.slice(-2)]);  da && dispose(a), a = t, da = true }
         if (sA.length > sB.length || sA.length === sB.length && sA[0] !== 1 && sB[0] === 1) { const t = broadcastTo(b, sB = [...sA.slice(0,-2), ...sB.slice(-2)]);  db && dispose(b), b = t, db = true }
         const r = _tf(tf.matMul(a, b, tA, tB))
         if (rowVectorA && !tA)
-          try { return _tf(tf.reshape(r, [!tB ? b2 : b1])) }
+          try { return reshape(r, [!tB ? b2 : b1]) }
           finally { dispose(r) }
         return r
       } finally { da && dispose(a), db && dispose(b) }
@@ -10314,10 +10533,6 @@ The more code runs with this off, the better.`,
   ],
 
   dispose:{
-    docs:`A low-level function for statically disposing a resource (with no references to other resources; currently only tensors).
-A function \`defines\` this to be \`true\` to make execution \`dispose\` its result, or a function to make compilation call that when the result is no longer needed, or an index to copy the definition from the input at that index.
-
-Memory management rewards only very clear thinking: everything that was created must be disposed exactly once, and each \`keep\` must have its \`dispose\`.`,
     readAt:{
       _debugDoubleDispose:_(`_debugDoubleDispose`),
       _debugCreation:_(`_debugCreation`),
@@ -10326,6 +10541,10 @@ Memory management rewards only very clear thinking: everything that was created 
       keep:_(`keep`),
       takeAt:_(`takeAt`),
     },
+    docs:`A low-level function for statically disposing a resource (with no references to other resources; currently only tensors).
+A function \`defines\` this to be \`true\` to make execution \`dispose\` its result, or a function to make compilation call that when the result is no longer needed, or an index to copy the definition from the input at that index.
+
+Memory management rewards only very clear thinking: everything that was created must be disposed exactly once, and each \`keep\` must have its \`dispose\`.`,
     Initialize() { dispose.keep = new WeakMap, dispose.not = new WeakMap },
     elemValue:_(`_isDisposable`),
     call(x) {
@@ -10356,6 +10575,7 @@ Define this with the index to make compilation not dispose that input (or with \
 Proper dynamic disposal requires a perfect method of disposing those preserved objects (either garbage collection, or adding reference-counting to all functions that mutate state, which only needs to cover a few functions to cover 99% behavior, and is extremely challenging to cover 100% of behavior with, since we didn't grow on top of reference-counting). We currently do garbage-collection, but only if the result is output to browser UI.`,
     interrupt:false,
     argCount:1,
+    _cancel(m) { m && _allocMap(m) },
     call(x) {
       if (_isDisposable(x)) {
         if (x.isDisposedInternal) return //error('Cannot keep: tensor already disposed:', x, 'made at', _tensorOrigins(x))
@@ -10365,20 +10585,19 @@ Proper dynamic disposal requires a perfect method of disposing those preserved o
       }
       return x
     },
-    _cancel(m) { m && _allocMap(m) },
   },
 
   takeAt:{
     docs:`Exactly like \`readAt\`, but takes responsibility for \`dispose\`ing the read resource.`,
     interrupt:false,
-    dispose:true,
     argCount:2,
-    call(a, i) { const r = readAt(a, i);  a[i] = undefined, dispose(r);  return r },
+    dispose:true,
     adjust:_(`_arrayReadAdjustment`),
     mergeAdjustment:[
       _(`_mergeArrays`),
       null,
     ],
+    call(a, i) { const r = readAt(a, i);  a[i] = undefined, dispose(r);  return r },
   },
 
   _rememberToDispose:{
@@ -10452,14 +10671,14 @@ Used when a job returns a value, when it's very unlikely that parts of the retur
   },
 
   _changeArrayItem:{
+    interrupt:false,
+    argCount:3,
     examples:[
       `The unit-test below may not seem like much, but to pass it, we need to handle the fact that we cannot just count the allowed tensors as one number, because that would count this one tensor twice. Have to count \`\`elem 'i' 'distinct'\`\` tensors that are allowed to exist past execution's end.`,
       [
         `_changeArrayItem(a,0,t);_changeArrayItem(a,1,t);a t:zeros(^2()) a:^arrayObject()`,
       ],
     ],
-    interrupt:false,
-    argCount:3,
     call(x, key, value) {
       // Does `x[key] = value` if `x` is an array, with proper disposal handling.
       if (call.pure) throw impure
@@ -10523,11 +10742,11 @@ The definitions take the type and the result-cache (a \`map\`), and must return 
   },
 
   typeDisposer:{
-    todo:`Have+use \`typeKeeper\` as the reverse of this.`,
     docs:`This allows the output type to define \`dispose\` of functions that return it, for \`autoFunc\`s to know the proper definition.
 
 The definitions take the type and the result-cache (a \`map\`), and must return \`(Func EssentialStructure)\`, where \`EssentialStructure\` is \`merged\`. \`Func\` will be cached and returned. Inner calls to \`typeDisposer\` will always return this tuple instead of \`Func\`.`,
     interrupt:false,
+    todo:`Have+use \`typeKeeper\` as the reverse of this.`,
     call(tp) {
       const prevInner = typeDisposer.inner
       if (isArray(tp) && defines(tp, typeDisposer)) try {
@@ -10776,13 +10995,13 @@ Simply asks/prompts the user to choose between \`Options\`.
   },
 
   display:{
-    todo:`Honestly, for full customization, we probably want an optional function from the data array and the max-screen-pixels to an array of polygons, each with a color and polygon coordinates (x then y, interleaved, possibly a tensor).
-
-Also, by default, only ever display a number (with the value being the whole history), and either:
-- Have a checkbox for switching to plot-mode;
-- Or make the context menu able to display plots for numbers-only arrays (updated when the array is updated, via \`observe\`, not a \`display\`-only debouncing thing). (Or both.)
-
-Also, allow multiple plots in the same, uh, plot.`,
+    readAt:{
+      remind:_(`remind`),
+      displayOne:_(`displayOne`),
+      _noPlots:_(`_noPlots`),
+      _noLossDisplay:_(`_noLossDisplay`),
+      _minMaxBoundary:_(`_minMaxBoundary`),
+    },
     docs:`\`display Label Value\` or \`display Label Value StepSize\`: displays a plot of all \`Value\`s at a \`Label\`. \`display Label\`: clears the display at a \`Label\`.
 Browser-only.
 The plot can display the exact values at cursor, and be zoomed in by a dragged click (and zoomed out by a quick click).
@@ -10793,6 +11012,17 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
 (There was a need to display losses during training. A day after, this appeared.)
 
 (When zoomed out, high-variance lines are thicc.)`,
+    interrupt:false,
+    Initialize() {
+      display.sizes = {top: 10, right: 20, bottom: 20, left: 90, width: 450, height: 150}
+    },
+    todo:`Honestly, for full customization, we probably want an optional function from the data array and the max-screen-pixels to an array of polygons, each with a color and polygon coordinates (x then y, interleaved, possibly a tensor).
+
+Also, by default, only ever display a number (with the value being the whole history), and either:
+- Have a checkbox for switching to plot-mode;
+- Or make the context menu able to display plots for numbers-only arrays (updated when the array is updated, via \`observe\`, not a \`display\`-only debouncing thing). (Or both.)
+
+Also, allow multiple plots in the same, uh, plot.`,
     examples:[
       [
         `(display hi ^(6 7 6.4 1 2.1 3))`,
@@ -10801,17 +11031,6 @@ The plot can display the exact values at cursor, and be zoomed in by a dragged c
         `repeat ^(display 'hu' (randomNat 10)) 100000`,
       ],
     ],
-    interrupt:false,
-    Initialize() {
-      display.sizes = {top: 10, right: 20, bottom: 20, left: 90, width: 450, height: 150}
-    },
-    readAt:{
-      remind:_(`remind`),
-      displayOne:_(`displayOne`),
-      _noPlots:_(`_noPlots`),
-      _noLossDisplay:_(`_noLossDisplay`),
-      _minMaxBoundary:_(`_minMaxBoundary`),
-    },
     call(lbl, vle, stepSize = 1) {
       if (typeof document == ''+void 0) return
       if (_isDisposable(vle)) { // Display tensors asynchronously, so we don't wait for them. (To really ensure a particular order, `await` the result.)
@@ -11128,8 +11347,42 @@ Click a plot to update it.`,
   },
 
   callAdjust:{
-    use:1,
+    readAt:{
+      _learningRate:_(`_learningRate`),
+      _firstMomentum:_(`_firstMomentum`),
+      _secondMomentum:_(`_secondMomentum`),
+      varSGD:_(`varSGD`),
+      commit:_(`commit`),
+      minimize:_(`minimize`),
+      adjust:_(`adjust`),
+      _debugAdjustSave:_(`_debugAdjustSave`),
+    },
+    docs:`\`callAdjust ^Expr\`: executes \`Expr\` then \`adjust\`s it.
+This is the default \`interpreter\`, so there's no need to call it in user code.
+
+Every number in an execution can potentially be predicted before it's actually computed. Going back to adjust an execution allows improving predictions.`,
     dispose:true,
+    Initialize() {
+      callAdjust.callCache = new WeakMap
+      callAdjust.adjustCache = new WeakMap
+    },
+    examples:[
+      `Loss goes down.`,
+      [
+        `repeat ^(v*2=4;v+2=4 v:varSGD(randomVarData(),.01)) 300`,
+      ],
+      [
+        `repeat ^(v*2=4;v+2=4 v:varMomentum(randomVarData(),.01,.99)) 1000`,
+      ],
+      [
+        `repeat ^(v*2=4;v+2=4 v:varRMSProp(randomVarData(),.01,.999)) 300`,
+      ],
+      [
+        `repeat ^(v*2=4;v+2=4 v:varAdam(randomVarData(),.01,.99,.999)) 1000`,
+      ],
+      `(Momentum and Adam are wiggly-wiggly if you zoom in.)`,
+    ],
+    use:1,
     type:[
       _(`funcType`),
       [
@@ -11138,10 +11391,7 @@ Click a plot to update it.`,
       ],
       `Result`,
     ],
-    docs:`\`callAdjust ^Expr\`: executes \`Expr\` then \`adjust\`s it.
-This is the default \`interpreter\`, so there's no need to call it in user code.
-
-Every number in an execution can potentially be predicted before it's actually computed. Going back to adjust an execution allows improving predictions.`,
+    impure:true,
     tutorial:[
       `One of the most basic primitives of intelligence is prediction: trying to see the future by adjusting a part of the past to be more like a part of the future that arrived. Both composable and embeddable, very nice.
 
@@ -11261,37 +11511,6 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
 
 \`\`REPL()\`\``,
     ],
-    examples:[
-      `Loss goes down.`,
-      [
-        `repeat ^(v*2=4;v+2=4 v:varSGD(randomVarData(),.01)) 300`,
-      ],
-      [
-        `repeat ^(v*2=4;v+2=4 v:varMomentum(randomVarData(),.01,.99)) 1000`,
-      ],
-      [
-        `repeat ^(v*2=4;v+2=4 v:varRMSProp(randomVarData(),.01,.999)) 300`,
-      ],
-      [
-        `repeat ^(v*2=4;v+2=4 v:varAdam(randomVarData(),.01,.99,.999)) 1000`,
-      ],
-      `(Momentum and Adam are wiggly-wiggly if you zoom in.)`,
-    ],
-    readAt:{
-      _learningRate:_(`_learningRate`),
-      _firstMomentum:_(`_firstMomentum`),
-      _secondMomentum:_(`_secondMomentum`),
-      varSGD:_(`varSGD`),
-      commit:_(`commit`),
-      minimize:_(`minimize`),
-      adjust:_(`adjust`),
-      _debugAdjustSave:_(`_debugAdjustSave`),
-    },
-    Initialize() {
-      callAdjust.callCache = new WeakMap
-      callAdjust.adjustCache = new WeakMap
-    },
-    impure:true,
     call(expr) {
       let [compCall, compAdj, result, adjustInfo] = interrupt(4)
       predict.happened = false
@@ -11347,7 +11566,7 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
 
   _learningRate:[
     _(`settings`),
-    3e-4,
+    0.0003,
     `The learning rate (multiplier of incoming gradient for variables) is ???.`,
     _(`rangeSetting`),
     1e-7,
@@ -11357,26 +11576,27 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
 
   _firstMomentum:[
     _(`settings`),
-    .9,
+    0.9,
     `How much previous-gradient \`varMomentum\`/\`varAdam\` will preserve at each update: ???.`,
     _(`rangeSetting`),
     0,
     1,
-    .01,
+    0.01,
   ],
 
   _secondMomentum:[
     _(`settings`),
-    .95,
+    0.95,
     `How much squares-of-previous-gradient \`varRMSProp\`/\`varAdam\` will preserve at each update: ???.`,
     _(`rangeSetting`),
     0,
     1,
-    .01,
+    0.01,
   ],
 
   _tf:{
     docs:`All tensor-creating function calls pass their results through this, so that we can do things with all TensorFlowJS tensors (for debugging).`,
+    Initialize() { _tf.count = 0 },
     _cancel(m) {
       if (isArray(m)) m.forEach(defines(_tf, _cancel))
       if (!(m instanceof Map)) return
@@ -11384,7 +11604,6 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
       try { m.forEach(_disposeKey), m.clear(), _allocMap(m) }
       finally { _tf.all = prevAll }
     },
-    Initialize() { _tf.count = 0 },
     call(x) {
       if (_tf.all)
         _tf.all.has(x) && error('Already been there:', x),
@@ -11407,9 +11626,25 @@ Next, might I suggest \`tutorial Neural\` to continue your training in the way o
   },
 
   truncatedNormal:{
-    use:3,
     docs:`\`truncatedNormal Sizes Mean StdDev\`: initializes a tensor by drawing each number from a truncated normal distribution.
 Values with magnitude of more than 2 standard deviations are dropped and re-picked.`,
+    interrupt:false,
+    dispose:true,
+    use:3,
+    type:[
+      _(`funcType`),
+      [
+        _(`quote`),
+        [
+          _(`computeType`),
+          _(`_concreteTensorSize`),
+          `Sizes`,
+        ],
+      ],
+      _(`_numberType`),
+      _(`_numberType`),
+      _(41),
+    ],
     call(sizes, mean = 0, stdev = 1, dtype) {
       if (_isDisposable(sizes)) sizes = sizes.shape
       if (!isArray(sizes)) error('Not an array:', sizes);  sizes.forEach(_num)
@@ -11419,27 +11654,13 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
 
       return _tf(tf.truncatedNormal(sizes, mean, stdev, dtype))
     },
-    type:[
-      _(`funcType`),
-      [
-        _(`quote`),
-        [
-          _(`computeType`),
-          _(`_concreteTensorSize`),
-          `Sizes`,
-        ],
-      ],
-      _(`_numberType`),
-      _(`_numberType`),
-      _(5696),
-    ],
-    dispose:true,
-    interrupt:false,
   },
 
   zeros:{
-    use:1,
     docs:`\`zeros Sizes\`: returns a tensor filled with \`0\`.`,
+    interrupt:false,
+    dispose:true,
+    use:1,
     type:[
       _(`funcType`),
       [
@@ -11450,18 +11671,19 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
           `Sizes`,
         ],
       ],
-      _(5696),
+      _(41),
     ],
-    dispose:true,
-    interrupt:false,
+    construct(x, obj) { if (obj === undefined) return isArray(x) && x[0] === zeros && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1]) && x[1][1][0] === 1 && x[1][1].length == 1 ? 0 : x },
     impure:true,
     call(sizes) { return !isArray(sizes) ? 0 : _tf(tf.zeros(sizes)) },
-    construct(x, obj) { if (obj === undefined) return isArray(x) && x[0] === zeros && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1]) && x[1][1][0] === 1 && x[1][1].length == 1 ? 0 : x },
   },
 
   identity:{
-    use:true,
     docs:`\`identity Sizes\`: returns the identity matrix/tensor: all numbers where indexes are equal are \`1\`, all others are \`0\`.`,
+    interrupt:false,
+    argCount:1,
+    dispose:true,
+    use:true,
     type:[
       _(`funcType`),
       [
@@ -11472,11 +11694,9 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
           `Sizes`,
         ],
       ],
-      _(5696),
+      _(41),
     ],
-    dispose:true,
-    interrupt:false,
-    argCount:1,
+    construct(x, obj) { if (obj === undefined) return isArray(x) && x[0] === identity && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1]) && x[1][1][0] === 1 && x[1][1].length == 1 ? 1 : x },
     impure:true,
     call(sizes) {
       if (!isArray(sizes)) error('Not an array:', sizes)
@@ -11492,12 +11712,13 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
         return _tf(buf.toTensor())
       }
     },
-    construct(x, obj) { if (obj === undefined) return isArray(x) && x[0] === identity && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1]) && x[1][1][0] === 1 && x[1][1].length == 1 ? 1 : x },
   },
 
   ones:{
-    use:1,
     docs:`\`ones Sizes\`: returns a tensor filled with \`1\`.`,
+    interrupt:false,
+    dispose:true,
+    use:1,
     type:[
       _(`funcType`),
       [
@@ -11508,16 +11729,17 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
           `Sizes`,
         ],
       ],
-      _(5696),
+      _(41),
     ],
-    dispose:true,
-    interrupt:false,
+    construct(x, obj) { if (obj === undefined) return isArray(x) && x[0] === ones && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1]) && x[1][1][0] === 1 && x[1][1].length == 1 ? 1 : x },
     impure:true,
     call(sizes) { return !isArray(sizes) ? 1 : _tf(tf.ones(sizes)) },
-    construct(x, obj) { if (obj === undefined) return isArray(x) && x[0] === ones && isArray(x[1]) && x[1][0] === quote && isArray(x[1][1]) && x[1][1][0] === 1 && x[1][1].length == 1 ? 1 : x },
   },
 
   biasedGlorotNormal:{
+    docs:`\`biasedGlorotNormal Bias …Sizes\`: Basically tf.initializers.glorotNormal for the current value, but with added bias (if passed).`,
+    interrupt:false,
+    dispose:true,
     use:true,
     type:[
       _(`funcType`),
@@ -11531,18 +11753,15 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
             `Sizes`,
           ],
         ],
-        _(5696),
+        _(41),
       ],
       [
         _(`rest`),
         `Sizes`,
         _(`quote`),
       ],
-      _(5696),
+      _(41),
     ],
-    docs:`\`biasedGlorotNormal Bias …Sizes\`: Basically tf.initializers.glorotNormal for the current value, but with added bias (if passed).`,
-    dispose:true,
-    interrupt:false,
     call(bias = null, ...sizes) {
       if (typeof bias == 'number') sizes.unshift(bias), bias = null
       if (!sizes.length && bias === identity) return truncatedNormal([], 1, Math.SQRT2)
@@ -11563,8 +11782,11 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
   },
 
   static:{
-    use:1,
+    docs:`\`static Expr\`: A \`construct\` that evaluates \`Expr\` and replaces it with \`^Result\`. (Don't use it.)
+
+(Forgive me, Master "Please don't use \`construct\` for macros".)`,
     argCount:1,
+    use:1,
     type:[
       _(`funcType`),
       [
@@ -11573,9 +11795,6 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       ],
       `T`,
     ],
-    docs:`\`static Expr\`: A \`construct\` that evaluates \`Expr\` and replaces it with \`^Result\`. (Don't use it.)
-
-(Forgive me, Master "Please don't use \`construct\` for macros".)`,
     construct(x, obj) {
       if (obj === undefined) return [quote, "Not evaluated yet"]
       else {
@@ -11587,6 +11806,12 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
   },
 
   applyStatically:{
+    docs:`\`applyStatically Func …Args\`: will \`apply\` \`Func\` to \`Args\`, and will become the (\`quote\`d) result at \`construct\`-time.
+
+With this, partial evaluation is implementable in \`construct\`s.
+
+(Forgive me, Master "Please don't use \`construct\` for macros".)`,
+    dispose:true,
     use:true,
     type:[
       _(`funcType`),
@@ -11604,12 +11829,6 @@ Values with magnitude of more than 2 standard deviations are dropped and re-pick
       ],
       `Output`,
     ],
-    docs:`\`applyStatically Func …Args\`: will \`apply\` \`Func\` to \`Args\`, and will become the (\`quote\`d) result at \`construct\`-time.
-
-With this, partial evaluation is implementable in \`construct\`s.
-
-(Forgive me, Master "Please don't use \`construct\` for macros".)`,
-    dispose:true,
     construct(x, obj) {
       if (obj === undefined) {
         if (!isArray(x) || x.length <= 1) error('Must be an array of at least 2 items (at least the func to apply):', x)
@@ -11629,6 +11848,10 @@ With this, partial evaluation is implementable in \`construct\`s.
   },
 
   randomVar:{
+    docs:`\`(randomVar …Sizes)\` or \`randomVar Bias …Sizes\`: A \`construct\` for easy creation of randomly-initialized \`varRAdam\`s, with fixed learning rate and momentums.
+\`Bias\` can be \`null\` (same as \`zeros\`) (the default) or \`identity\` or \`ones\`.
+
+(Forgive me, Master "Please don't use \`construct\` for macros".)`,
     use:true,
     type:[
       _(`funcType`),
@@ -11642,19 +11865,15 @@ With this, partial evaluation is implementable in \`construct\`s.
             `Sizes`,
           ],
         ],
-        _(5696),
+        _(41),
       ],
       [
         _(`rest`),
         `Sizes`,
         _(`quote`),
       ],
-      _(5696),
+      _(41),
     ],
-    docs:`\`(randomVar …Sizes)\` or \`randomVar Bias …Sizes\`: A \`construct\` for easy creation of randomly-initialized \`varRAdam\`s, with fixed learning rate and momentums.
-\`Bias\` can be \`null\` (same as \`zeros\`) (the default) or \`identity\` or \`ones\`.
-
-(Forgive me, Master "Please don't use \`construct\` for macros".)`,
     construct(x, obj) {
       if (obj === undefined) return [varRAdam, construct([randomVarData, ...x.slice(1)])]
       else { // Return `(varRAdam (quote (RandomTensor 0 0)))`.
@@ -11666,8 +11885,12 @@ With this, partial evaluation is implementable in \`construct\`s.
   },
 
   randomVarData:{
-    use:true,
+    docs:`\`randomVarData …Sizes\` or \`randomVarData Bias …Sizes\`: gives an easy way to create the initial \`VarData\` of a variable such as \`varMomentum\`.
+\`Bias\` can be \`null\` (same as \`zeros\`) (the default) or \`identity\` or \`ones\`.
+
+(Forgive me, Master "Please don't use \`construct\` for macros".)`,
     todo:`When re-\`construct\`ing with the same requested size, do not re-generate random numbers. Allows re-use.`,
+    use:true,
     type:[
       _(`funcType`),
       [
@@ -11680,7 +11903,7 @@ With this, partial evaluation is implementable in \`construct\`s.
             `Sizes`,
           ],
         ],
-        _(5696),
+        _(41),
       ],
       [
         _(`rest`),
@@ -11692,10 +11915,6 @@ With this, partial evaluation is implementable in \`construct\`s.
         `Sizes`,
       ],
     ],
-    docs:`\`randomVarData …Sizes\` or \`randomVarData Bias …Sizes\`: gives an easy way to create the initial \`VarData\` of a variable such as \`varMomentum\`.
-\`Bias\` can be \`null\` (same as \`zeros\`) (the default) or \`identity\` or \`ones\`.
-
-(Forgive me, Master "Please don't use \`construct\` for macros".)`,
     construct(x, obj) {
       if (obj === undefined) return [quote, undefined]
       else { // Return `(quote (RandomTensor 0 0))`.
@@ -11713,7 +11932,9 @@ With this, partial evaluation is implementable in \`construct\`s.
   },
 
   varData:{
-    use:1,
+    docs:`\`varData Initial\`: creates the \`VarData\` of a variable such as \`varSGD\`.
+Consumes \`Initial\`, so \`keep\` it.`,
+    interrupt:false,
     argCount:1,
     examples:[
       [
@@ -11723,9 +11944,7 @@ With this, partial evaluation is implementable in \`construct\`s.
         `repeat ^(varAdam(emb)*varAdam(emb)=50;varAdam(emb)) 500 emb:static(varData(biasedGlorotNormal 16))`,
       ],
     ],
-    docs:`\`varData Initial\`: creates the \`VarData\` of a variable such as \`varSGD\`.
-Consumes \`Initial\`, so \`keep\` it.`,
-    interrupt:false,
+    use:1,
     keep:1,
     call(initial) {
       if (typeof initial != 'number' && !_isDisposable(initial)) return initial
@@ -11798,10 +12017,10 @@ Counts up how many numbers are stored in \`varSGD\`s and similar (weight matrice
         `f:x->x@randomVar(1,15) parametersInVars(x->f(x)@f(x)@randomVar(15,1))`,
         `30`,
       ],
-      `Can also print all the individual shapes:`,
+      `Can also print all the individual shapes (to be precise, in reverse pre-order):`,
       [
         `f:x->x@randomVar(1,15) parametersInVars(x->f(x)@f(x)@randomVar(15,1),true)`,
-        `(1 15) (15 1)`,
+        `(15 1) (1 15)`,
       ],
     ],
     call(x, fullReport = false) {
@@ -11810,7 +12029,7 @@ Counts up how many numbers are stored in \`varSGD\`s and similar (weight matrice
       let n = !fullReport ? 0 : []
       walk(x)
       env.clear()
-      return n
+      return isArray(n) ? n.reverse() : n
       function walk(x) {
         if (backctx.has(x)) return
         if (!isArray(x) && defines(x, deconstruct)) x = defines(x, deconstruct)
@@ -11828,18 +12047,6 @@ Counts up how many numbers are stored in \`varSGD\`s and similar (weight matrice
   },
 
   varSGD:{
-    varSGD:true,
-    use:2,
-    todo:`Allow \`VarData\` to be lazily-specified (with a given std-dev), because human-types may not be inferred during program generation for long.`,
-    type:[
-      _(`funcType`),
-      [
-        _(`varData`),
-        `Sizes`,
-      ],
-      _(`_numberType`),
-      _(5696),
-    ],
     docs:`\`varSGD(VarData,LearningRate)\`
 Stochastic gradient descent (SGD). Here, optimizers are specified at each variable.
 A stateful tensor that reacts to \`adjust\`, by making \`commit\` subtract (a simple function of) the gradient.
@@ -11849,17 +12056,29 @@ This simply subtracts gradient each time, \`mul\`tiplied by learning rate.
 
 \`randomVarData\` can provide the \`VarData\`.`,
     interrupt:false,
-    adjustLater:true,
     dispose:true,
+    adjust:_(`_accumulateGradient`),
+    mergeAdjustment:null,
+    todo:`Allow \`VarData\` to be lazily-specified (with a given std-dev), because human-types may not be inferred during program generation for long.`,
+    use:2,
+    type:[
+      _(`funcType`),
+      [
+        _(`varData`),
+        `Sizes`,
+      ],
+      _(`_numberType`),
+      _(41),
+    ],
     impure:true,
+    adjustLater:true,
+    varSGD:true,
     call(data, changeMult = _learningRate[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges]`.
       if (!isArray(data)) error("Not var data:", data)
       data[3] = _optSGD, data[4] = changeMult
       return keep(_num(data[0]))
     },
-    adjust:_(`_accumulateGradient`),
-    mergeAdjustment:null,
   },
 
   _optMomentum(data) {
@@ -11871,7 +12090,16 @@ This simply subtracts gradient each time, \`mul\`tiplied by learning rate.
   },
 
   varMomentum:{
-    varSGD:true,
+    docs:`\`varMomentum(VarData,LearningRate,Mom1)\`
+Stochastic gradient descent (SGD) with Nesterov momentum.
+A stateful tensor that reacts to \`adjust\`, by making \`commit\` subtract (a simple function of) the gradient.
+
+Momentum is \`varSGD\` but subtracting not the gradient, but its running average: \`PrevGrad\` becomes \`Mom1*PrevGrad+(1-Mom1)*_dout\`.
+Nesterov momentum is returning not the current value but what it will be after \`PrevGrad\` will change it.`,
+    interrupt:false,
+    dispose:true,
+    adjust:_(`_accumulateGradient`),
+    mergeAdjustment:null,
     use:3,
     type:[
       _(`funcType`),
@@ -11881,18 +12109,11 @@ This simply subtracts gradient each time, \`mul\`tiplied by learning rate.
       ],
       _(`_numberType`),
       _(`_numberType`),
-      _(5696),
+      _(41),
     ],
-    docs:`\`varMomentum(VarData,LearningRate,Mom1)\`
-Stochastic gradient descent (SGD) with Nesterov momentum.
-A stateful tensor that reacts to \`adjust\`, by making \`commit\` subtract (a simple function of) the gradient.
-
-Momentum is \`varSGD\` but subtracting not the gradient, but its running average: \`PrevGrad\` becomes \`Mom1*PrevGrad+(1-Mom1)*_dout\`.
-Nesterov momentum is returning not the current value but what it will be after \`PrevGrad\` will change it.`,
-    interrupt:false,
-    adjustLater:true,
-    dispose:true,
     impure:true,
+    adjustLater:true,
+    varSGD:true,
     call(data, changeMult = _learningRate[1], velocityMult = _firstMomentum[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity]`.
       // Returning `currentValue - LR * velocity * velocityMult` (Nesterov momentum).
@@ -11902,8 +12123,6 @@ Nesterov momentum is returning not the current value but what it will be after \
       data[3] = _optMomentum, data[4] = changeMult, data[5] = velocityMult
       return sm
     },
-    adjust:_(`_accumulateGradient`),
-    mergeAdjustment:null,
   },
 
   _optRMSProp(data) {
@@ -11917,7 +12136,15 @@ Nesterov momentum is returning not the current value but what it will be after \
   },
 
   varRMSProp:{
-    varSGD:true,
+    docs:`\`varRMSProp(VarData,LearningRate,Mom2)\`
+Stochastic gradient descent (SGD) with root mean square propagation.
+A stateful tensor that reacts to \`adjust\`, by making \`commit\` subtract (a simple function of) the gradient.
+
+This is \`varSGD\` \`LearningRate\` gets divided by \`sqrt\` of a running average of gradients: \`PrevSqr\` becomes \`Mom2*PrevSqr+(1-Mom2)*_dout*_dout\`.`,
+    interrupt:false,
+    dispose:true,
+    adjust:_(`_accumulateGradient`),
+    mergeAdjustment:null,
     use:3,
     type:[
       _(`funcType`),
@@ -11927,25 +12154,17 @@ Nesterov momentum is returning not the current value but what it will be after \
       ],
       _(`_numberType`),
       _(`_numberType`),
-      _(5696),
+      _(41),
     ],
-    docs:`\`varRMSProp(VarData,LearningRate,Mom2)\`
-Stochastic gradient descent (SGD) with root mean square propagation.
-A stateful tensor that reacts to \`adjust\`, by making \`commit\` subtract (a simple function of) the gradient.
-
-This is \`varSGD\` \`LearningRate\` gets divided by \`sqrt\` of a running average of gradients: \`PrevSqr\` becomes \`Mom2*PrevSqr+(1-Mom2)*_dout*_dout\`.`,
-    interrupt:false,
-    adjustLater:true,
-    dispose:true,
     impure:true,
+    adjustLater:true,
+    varSGD:true,
     call(data, changeMult = _learningRate[1], accelMult = _secondMomentum[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity=0, accel]`.
       if (!isArray(data)) error("Not var data:", data)
       data[3] = _optRMSProp, data[4] = changeMult, data[5] = accelMult
       return keep(_num(data[0]))
     },
-    adjust:_(`_accumulateGradient`),
-    mergeAdjustment:null,
   },
 
   _optAdam(data) {
@@ -11967,7 +12186,15 @@ This is \`varSGD\` \`LearningRate\` gets divided by \`sqrt\` of a running averag
   },
 
   varAdam:{
-    varSGD:true,
+    docs:`\`varAdam(VarData,LearningRate,Mom1,Mom2)\`
+Stochastic gradient descent (\`varSGD\`) with adaptive moment estimation.
+A stateful tensor that reacts to \`adjust\`, by making \`commit\` subtract (a simple function of) the gradient.
+
+This combines \`varMomentum\` (first moment smoothing) and \`varRMSProp\` (second moment smoothing): the gradient gets blended, and the learning rate is smoothed per-parameter.`,
+    interrupt:false,
+    dispose:true,
+    adjust:_(`_accumulateGradient`),
+    mergeAdjustment:null,
     use:4,
     type:[
       _(`funcType`),
@@ -11978,25 +12205,17 @@ This is \`varSGD\` \`LearningRate\` gets divided by \`sqrt\` of a running averag
       _(`_numberType`),
       _(`_numberType`),
       _(`_numberType`),
-      _(5696),
+      _(41),
     ],
-    docs:`\`varAdam(VarData,LearningRate,Mom1,Mom2)\`
-Stochastic gradient descent (\`varSGD\`) with adaptive moment estimation.
-A stateful tensor that reacts to \`adjust\`, by making \`commit\` subtract (a simple function of) the gradient.
-
-This combines \`varMomentum\` (first moment smoothing) and \`varRMSProp\` (second moment smoothing): the gradient gets blended, and the learning rate is smoothed per-parameter.`,
-    interrupt:false,
-    adjustLater:true,
-    dispose:true,
     impure:true,
+    adjustLater:true,
+    varSGD:true,
     call(data, changeMult = _learningRate[1], velocityMult = _firstMomentum[1], accelMult = _secondMomentum[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity, accel]`.
       if (!isArray(data)) error("Not var data:", data)
       data[3] = _optAdam, data[4] = changeMult, data[5] = velocityMult, data[6] = accelMult
       return keep(_num(data[0]))
     },
-    adjust:_(`_accumulateGradient`),
-    mergeAdjustment:null,
   },
 
   _optRAdam(data) {
@@ -12026,38 +12245,38 @@ This combines \`varMomentum\` (first moment smoothing) and \`varRMSProp\` (secon
   },
 
   varRAdam:{
-    varSGD:true,
     docs:`\`varRAdam(VarData,LearningRate,Mom1,Mom2)\`
 Rectified Adam optimizer {https://github.com/LiyuanLucasLiu/RAdam}, which avoids gradient-variance-related problems, by estimating when to warmup (not adapt the second moment).
 Particularly suited for Transformers.`,
     interrupt:false,
-    adjustLater:true,
     dispose:true,
+    adjust:_(`_accumulateGradient`),
+    mergeAdjustment:null,
     impure:true,
+    adjustLater:true,
+    varSGD:true,
     call(data, changeMult = _learningRate[1], velocityMult = _firstMomentum[1], accelMult = _secondMomentum[1]) {
       // `data` is `[currentValue, nextChange, countOfChanges, opt, velocity, accel]`.
       if (!isArray(data)) error("Not var data:", data)
       data[3] = _optRAdam, data[4] = changeMult, data[5] = velocityMult, data[6] = accelMult
       return keep(_num(data[0]))
     },
-    adjust:_(`_accumulateGradient`),
-    mergeAdjustment:null,
   },
 
   varEma:{
     readAt:{
       emaVersionOf:_(`emaVersionOf`),
     },
-    examples:[
-      [
-        `v:randomVar(10,10) repeat ^(v=varEma(^0(),v,.01)) 100000`,
-      ],
-    ],
     docs:`\`varEma(VarData,CopyFrom,Momentum)\`
 The exponentially-moving average of another value (or \`varData\`, such as \`^0()\`): approximately, \`m:Momentum d:VarData writeAt(d,0,m*d.0+(1-m)*CopyFrom)\`.
 Used by \`emaVersionOf(Func,Momentum)\`.`,
     interrupt:false,
     dispose:true,
+    examples:[
+      [
+        `v:randomVar(10,10) repeat ^(v=varEma(^0(),v,.01)) 100000`,
+      ],
+    ],
     impure:true,
     call(data, copyFrom, mom) {
       if (!isArray(data)) error('Not varData:', data)
@@ -12076,6 +12295,9 @@ Used by \`emaVersionOf(Func,Momentum)\`.`,
   },
 
   emaVersionOf:{
+    docs:`\`emaVersionOf(Func,Momentum)\`
+Turns a function (and all its dependencies, where needed) into an exponentially-moving-average-variables version of itself.`,
+    dispose:true,
     examples:[
       `Bootstrap your own latent, with no explicit source of gradient except yourself? Self-determined prediction targets? Fact, or fiction?`,
       ``,
@@ -12119,9 +12341,6 @@ Used by \`emaVersionOf(Func,Momentum)\`.`,
       ``,
       `At best, it performs maybe 2x better.`,
     ],
-    docs:`\`emaVersionOf(Func,Momentum)\`
-Turns a function (and all its dependencies, where needed) into an exponentially-moving-average-variables version of itself.`,
-    dispose:true,
     call(fn, mom = .99) {
       if (typeof mom != 'number') error('Not a number:', mom)
       if (isArray(fn) || !isArray(defines(fn, deconstruct))) return
@@ -12158,8 +12377,8 @@ Turns a function (and all its dependencies, where needed) into an exponentially-
   _limitTensorSize:{
     docs:`\`_limitTensorSize Prev Next\`→\`Next\`: Sums across all outer axes of \`Next\` that are not present in \`Prev\`, if needed.
 The original \`Next\` will be disposed of.`,
-    dispose:true,
     interrupt:false,
+    dispose:true,
     call(prev, next) {
       if (call.pure) throw impure
       let t = keep(next)
@@ -12223,17 +12442,6 @@ Say, 0.02?
   },
 
   commit:{
-    docs:`\`commit()\` or \`commit false\` to discard changes: commits changes to variables that were made in this job. Returns \`true\` if anything was changed.
-This calls the optimizers registered by \`varSGD\` and such (such as \`_optSGD\`).
-Until this is done, the same value of variables is used.
-
-\`interpreter\` always calls this after execution.
-
-This is done to signify the end of an epoch of training a differentiable computation.
-Note that for generalization, small batches are better than large ones, disregarding parallelization concerns: {https://arxiv.org/pdf/2006.15081.pdf} (and momentum is useless for small batches).`,
-    philosophy:`Noise (in machine learning; whether dropout, or small batches) helps with generalization. It's helpful to always think about more general implications. Between arbitrary viewpoints (non-transient programs, or general intelligences), not-adapted-to behavior can largely be seen to be noise, so clearly unity is good and so is joyful discourse of the joyful unity (but self-ensembles are also possible, so this observation cancels itself out if easy scaling of an individual to the level of a society is possible, which it is for programs). So, democracy and open-ness are attractor points for humans (and we have largely converged to them already in many important areas), but for AGI, anything is possible. Be wary.
-Was that generalization too general and unexpected, quickly disappearing without its precise cause like a cookie? Maybe. Was it wrong in any way? I don't think so.`,
-    Initialize() { commit.arrs = new Set },
     readAt:{
       parametersInVars:_(`parametersInVars`),
       varSGD:_(`varSGD`),
@@ -12246,6 +12454,17 @@ Was that generalization too general and unexpected, quickly disappearing without
       _adaptiveGradientClipping:_(`_adaptiveGradientClipping`),
       _willCommit:_(`_willCommit`),
     },
+    docs:`\`commit()\` or \`commit false\` to discard changes: commits changes to variables that were made in this job. Returns \`true\` if anything was changed.
+This calls the optimizers registered by \`varSGD\` and such (such as \`_optSGD\`).
+Until this is done, the same value of variables is used.
+
+\`interpreter\` always calls this after execution.
+
+This is done to signify the end of an epoch of training a differentiable computation.
+Note that for generalization, small batches are better than large ones, disregarding parallelization concerns: {https://arxiv.org/pdf/2006.15081.pdf} (and momentum is useless for small batches).`,
+    Initialize() { commit.arrs = new Set },
+    philosophy:`Noise (in machine learning; whether dropout, or small batches) helps with generalization. It's helpful to always think about more general implications. Between arbitrary viewpoints (non-transient programs, or general intelligences), not-adapted-to behavior can largely be seen to be noise, so clearly unity is good and so is joyful discourse of the joyful unity (but self-ensembles are also possible, so this observation cancels itself out if easy scaling of an individual to the level of a society is possible, which it is for programs). So, democracy and open-ness are attractor points for humans (and we have largely converged to them already in many important areas), but for AGI, anything is possible. Be wary.
+Was that generalization too general and unexpected, quickly disappearing without its precise cause like a cookie? Maybe. Was it wrong in any way? I don't think so.`,
     call(perform = true) {
       if (call.pure) throw impure
       if (!call.env || !call.env[_id(commit)]) return
@@ -12286,7 +12505,7 @@ Was that generalization too general and unexpected, quickly disappearing without
 
             if (perform) _changeArrayItem(data, 0, sm)
             _changeArrayItem(data, 1, 0)
-          } catch (err) { print('offending data', data, change, sm);  throw err } // #############################################################
+          } catch (err) { print('offending data', data, change, sm);  throw err }
           finally { dispose(change), dispose(sm) }
         })
         dispose(divBy), divBy = 1
@@ -12311,8 +12530,6 @@ Make sure to call this before any changes to the array.`,
   },
 
   future:{
-    docs:`\`future()\` or \`future(Type)\` or \`future(Type,Writable)\`: a \`construct\` that can be read by \`predict\` and set by \`setFuture\`: if \`f:future()\`, then we could have \`PredictedNow()=f\` followed by \`setFuture(f,KnownLater())\`.
-By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
     readAt:{
       set:_(`setFuture`),
       get:_(`getFuture`),
@@ -12322,6 +12539,8 @@ By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
       _maxFuture:_(`_maxFuture`),
       _newFuture:_(`_newFuture`),
     },
+    docs:`\`future()\` or \`future(Type)\` or \`future(Type,Writable)\`: a \`construct\` that can be read by \`predict\` and set by \`setFuture\`: if \`f:future()\`, then we could have \`PredictedNow()=f\` followed by \`setFuture(f,KnownLater())\`.
+By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
     construct(x, obj) {
       if (obj === undefined) {
         obj = Object.create(null)
@@ -12343,15 +12562,15 @@ By default, \`Type\` is \`(tensorType 1)\` (a single number).`,
   },
 
   futureType:{
-    merged:true,
     docs:`\`futureType Type\`: a type of \`future\`s that can be \`predict\`ed and set to instances of \`Type\` (only manually).
 (From \`typeRefine\`'s perspective, this is just an array, nothing special.)`,
+    merged:true,
     call(t) { return merged([futureType, t]) },
   },
 
   writableFutureType:{
-    merged:true,
     docs:`Like \`futureType\`, but \`setFuture\` can auto-pick these.`,
+    merged:true,
     call(t) { return merged([writableFutureType, t]) },
   },
 
@@ -12372,20 +12591,15 @@ Non-numbers also get replaced with this value. They are possible, and thus will 
   _newFuture:{
     type:[
       _(`funcType`),
-      _(6518),
+      [
+        _(`writableFutureType`),
+        _(`_numberType`),
+      ],
     ],
     call() { return make(future, _numberType, true) },
   },
 
   _isFuture(f) { return !isArray(f) && isArray(defines(f, deconstruct)) && defines(f, deconstruct)[0] === future },
-
-  5696:[
-    _(`tensorType`),
-    [
-      _(`rest`),
-      `Sizes`,
-    ],
-  ],
 
   _numberType:[
     _(`tensorType`),
@@ -12394,8 +12608,8 @@ Non-numbers also get replaced with this value. They are possible, and thus will 
 
   _limitNumericValues:{
     docs:`\`clip(where isNaN(v) Nan v,Min,Max)\`, and take the \`mean\` of that if \`oneNumber\`.`,
-    dispose:true,
     interrupt:false,
+    dispose:true,
     call(v, Min, Max, Nan, oneNumber = true) {
       if (oneNumber) {
         // These bool checks make it easier to set goals, and discover good goals to set.
@@ -12418,29 +12632,13 @@ Non-numbers also get replaced with this value. They are possible, and thus will 
   },
 
   setFuture:{
-    type:[
-      _(`funcType`),
-      [
-        _(`writableFutureType`),
-        `T`,
-      ],
-      `T`,
-      `T`,
-    ],
-    call(fut, val) {
-      if (!fut || fut.isNumber === undefined) return val
-      const r = _limitNumericValues(val, _minFuture[1], _maxFuture[1], _minFuture[1], fut.isNumber && _tensorSize(val) > 1)
-      dispose(future.f.get(fut)), future.f.set(fut, r)
-      return val
-    },
     docs:`\`setFuture Future Value\` or \`Future←Value\`
 At call, sets the \`Value\` associated with the \`Future\` (to be retrieved by \`getFuture\`), then returns \`Value\`.
 
 (An alternative is to only set at adjustment, to allow predicting the next-set value instead of the finally-set value. But we don't use that, and that's more complicated.)`,
-    keep:2,
-    dispose:2,
-    argCount:2,
     interrupt:false,
+    argCount:2,
+    dispose:2,
     adjust:[
       _(`array`),
       undefined,
@@ -12450,54 +12648,51 @@ At call, sets the \`Value\` associated with the \`Future\` (to be retrieved by \
       null,
       _(`_mergeTensors`),
     ],
+    type:[
+      _(`funcType`),
+      [
+        _(`writableFutureType`),
+        `T`,
+      ],
+      `T`,
+      `T`,
+    ],
+    keep:2,
+    call(fut, val) {
+      if (!fut || fut.isNumber === undefined) return val
+      const r = _limitNumericValues(val, _minFuture[1], _maxFuture[1], _minFuture[1], fut.isNumber && _tensorSize(val) > 1)
+      dispose(future.f.get(fut)), future.f.set(fut, r)
+      return val
+    },
   },
 
   getFuture:{
+    docs:`\`getFuture Future\`: Gets the \`Value\` associated with the \`Future\`.
+\`predict\` uses this automatically on adjustment, which causes only the final \`setFuture\` to have any effect.`,
+    argCount:1,
+    dispose:true,
     call(fut) {
       if (call.pure) throw impure
       if (!_isFuture(fut)) return keep(fut)
       return keep(future.f.get(fut))
     },
-    docs:`\`getFuture Future\`: Gets the \`Value\` associated with the \`Future\`.
-\`predict\` uses this automatically on adjustment, which causes only the final \`setFuture\` to have any effect.`,
-    dispose:true,
-    argCount:1,
   },
 
   _defaultArg:{
     docs:`Computes the first arg if it is not undefined, else computes the second arg.`,
-    call(a, def) { return a !== undefined ? a : def },
     purify(aProg, defProg) { return _unknown(aProg) },
+    call(a, def) { return a !== undefined ? a : def },
   },
 
   minimize:{
-    use:2,
-    docs:`\`minimize Value\` or \`minimize Value Grad\`
-Gives \`Value\` the gradient of \`1\` (or \`Grad\`).
-When repeatedly executed, gradually \`adjust\`s \`Value\` to be the lowest it can be.`,
     readAt:{
       predict:_(`predict`),
     },
-    examples:[
-      [
-        `repeat ^(minimize a*a+2 a:randomVar()) 200`,
-      ],
-      [
-        `repeat ^(minimize _knowLoss(a);a*a+2 a:randomVar()) 200`,
-      ],
-    ],
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-    ],
-    keep:1,
-    dispose:1,
+    docs:`\`minimize Value\` or \`minimize Value Grad\`
+Gives \`Value\` the gradient of \`1\` (or \`Grad\`).
+When repeatedly executed, gradually \`adjust\`s \`Value\` to be the lowest it can be.`,
     interrupt:false,
-    call(v) {
-      if (call.pure) throw impure
-      return predict.happened = true, v
-    },
+    dispose:1,
     adjust:[
       _(`array`),
       [
@@ -12507,51 +12702,53 @@ When repeatedly executed, gradually \`adjust\`s \`Value\` to be the lowest it ca
       ],
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    examples:[
+      [
+        `repeat ^(minimize a*a+2 a:randomVar()) 200`,
+      ],
+      [
+        `repeat ^(minimize _knowLoss(a);a*a+2 a:randomVar()) 200`,
+      ],
+    ],
+    use:2,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+    ],
+    keep:1,
+    call(v) {
+      if (call.pure) throw impure
+      return predict.happened = true, v
+    },
   },
 
   zeroGrad:{
-    use:true,
     docs:`\`zeroGrad:x->gradMul(x,0)\``,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-    ],
-    keep:1,
-    dispose:1,
-    argCount:1,
     interrupt:false,
-    call(v) { return v },
+    argCount:1,
+    dispose:1,
     adjust:[
       _(`array`),
       0,
     ],
     mergeAdjustment:_(`_mergeTensors`),
+    use:true,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+    ],
+    keep:1,
+    call(v) { return v },
   },
 
   gradMul:{
-    use:true,
     docs:`\`gradMul Value Scale\`
 \`Scale\`s \`adjust\`ment gradient by \`mul\`tiplying it.`,
-    examples:[
-      [
-        `repeat ^(minimize _knowLoss(a);gradMul(a*a+2,1e-7) a:randomVar()) 200`,
-      ],
-      [
-        `repeat ^(minimize _knowLoss(a);gradMul(a*a+2,1e15) a:randomVar()) 200`,
-      ],
-    ],
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
-    ],
-    keep:1,
-    dispose:1,
-    argCount:2,
     interrupt:false,
-    call(v, scale) { return v },
+    argCount:2,
+    dispose:1,
     adjust:[
       _(`array`),
       [
@@ -12564,22 +12761,31 @@ When repeatedly executed, gradually \`adjust\`s \`Value\` to be the lowest it ca
       _(`_mergeTensors`),
       null,
     ],
+    examples:[
+      [
+        `repeat ^(minimize _knowLoss(a);gradMul(a*a+2,1e-7) a:randomVar()) 200`,
+      ],
+      [
+        `repeat ^(minimize _knowLoss(a);gradMul(a*a+2,1e15) a:randomVar()) 200`,
+      ],
+    ],
+    use:true,
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+      _(41),
+    ],
+    keep:1,
+    call(v, scale) { return v },
   },
 
   modifyGrad:{
     docs:`\`modifyGrad Value GradFunc Arg1 Arg2\`
 To \`adjust\` this, \`GradFunc(_dout,Arg1,Arg2)\` is returned as the gradient.`,
-    examples:[
-      [
-        `repeat ^modifyGrad(randomVar(ones),x->display('hi',x);x)=5 100`,
-      ],
-    ],
-    use:2,
-    keep:1,
-    dispose:1,
-    argCount:2,
     interrupt:false,
-    call(v, fn, arg) { return v },
+    argCount:2,
+    dispose:1,
     adjust:[
       _(`array`),
       [
@@ -12598,47 +12804,23 @@ To \`adjust\` this, \`GradFunc(_dout,Arg1,Arg2)\` is returned as the gradient.`,
       null,
       null,
     ],
-  },
-
-  6301:[
-    _(`_defaultArg`),
-    _(`_inC`),
-    _(`loss2`),
-  ],
-
-  6302:[
-    _(`getFuture`),
-    _(`_inB`),
-  ],
-
-  6303:[
-    _(6301),
-    _(`_inA`),
-    _(6302),
-  ],
-
-  predict:{
     examples:[
-      `\`\`settings ^_learningRate\`\``,
-      `L2 loss:`,
       [
-        `v:truncatedNormal(^(50 100)) repeat ^(softmax(v@randomVar(100,100))=oneHot(argmax v -1,100)) 10000`,
-      ],
-      [
-        `v:truncatedNormal(^(50 100)) repeat ^(predict softmax(v@randomVar(100,100)) oneHot(argmax v -1,100) got->need->(got-need)*(got-need)/2) 10000`,
-      ],
-      `Cross-entropy loss:`,
-      [
-        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->0-need*log(got+1e-6)) 10000`,
-      ],
-      [
-        `v:truncatedNormal(^(50 100)) got:v@randomVar(100,100) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 softmax(got) need));softmax(predict got need softmaxLoss) 100000`,
-      ],
-      `L1 loss:`,
-      [
-        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->abs(got-need)) 10000`,
+        `repeat ^modifyGrad(randomVar(ones),x->display('hi',x);x)=5 100`,
       ],
     ],
+    use:2,
+    keep:1,
+    call(v, fn, arg) { return v },
+  },
+
+  predict:{
+    readAt:{
+      future:_(`future`),
+      _predictFuture:_(`_predictFuture`),
+      _predictWritableFuture:_(`_predictWritableFuture`),
+      loss2:_(`loss2`),
+    },
     docs:`\`predict Got Actual Loss\` or \`Got=Actual\`: Returns \`Got\`.
 When repeatedly executed, gradually \`adjust\`s \`Got\` into \`Actual\` by \`minimize\`ing \`Loss(Got,Actual)\`. (\`Loss\` is \`loss2\` by default.)
 
@@ -12650,39 +12832,7 @@ But the "why" of a thing is often even more important than the thing itself. Whe
 If you care about prominent figures in deep learning, Yann LeCun in {http://www.cit.ctu.edu.vn/~dtnghi/rech/p2017/lecun-isscc-19.pdf} has advocated the use of self-supervised learning for efficient artificial intelligence. \`predict\` is much like that.
 \`predict\` is not intended as one rigid way to predict everything at once, nor as another way to burden users. It should be more efficient to do things like "don''t actually adjust anything here with 80% probability" (to decorrelate training samples) or "see this number, only available in the future? Predict it in the past" or "give me the best-by-goal-G program" or "decide from seen data what the datasets that you train on will be" or "decide to be the best version of yourself".
 This presents significant challenges compared to the simple and limited framework commonly used in deep learning. Literally everything will break. There is only one solution: to get good at everything.')\`\``,
-    philosophy:`Exposing predictions to others is very important to everyday life, whether letting your loved ones know exactly how you're feeling about a thing so that they can optimize actions to maximize your feelings, or remembering who's responsible for which action and how, or exposing cared-about parts of intelligence to all for much greater unity and efficiency in a society.
-There are ways to empirically verify this: if efficiency is greater, then a solution out-competes others. In communities of overly positive people, questions like "are you okay" are overly used. Smart people (very often found in puzzle-solving environments such as programming) very often doubt themselves and have imposter syndrome. Brave people care about fear.
-(Mathematicians may object to the use of the word "verify", but we're talking about intelligence here, not abstract towers. Intelligence specializes in making the vague concrete, by optimizing.)
-That honesty is nearly impossible to establish in pre-existing structures, especially things like governance. But the probability is not zero. It can be made real.`,
-    type:[
-      _(`funcType`),
-      _(5696),
-      _(5696),
-      _(5696),
-    ],
-    call(got, actual, loss=loss2) {
-      if (call.pure) throw impure
-      if (actual === undefined) return got
-      if (!_isDisposable(actual) && typeof actual != 'number') {
-        if (!_isFuture(actual)) error("Not a future:", actual)
-        if (_tensorSize(got) > 1) error("Prediction of a future is too big:", got, actual)
-        // `loss` will be called later, when the future is known.
-      } else {
-        const L = loss(got, actual)
-        try { _knowLoss(L) }
-        finally { dispose(L) }
-      }
-      return predict.happened = true, got
-    },
-    readAt:{
-      future:_(`future`),
-      _predictFuture:_(`_predictFuture`),
-      _predictWritableFuture:_(`_predictWritableFuture`),
-      loss2:_(`loss2`),
-    },
-    keep:1,
     dispose:1,
-    adjustLater:true,
     adjust:{
       dispose:_(`_disposeEachAndDealloc`),
       impure:true,
@@ -12720,8 +12870,55 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     mergeAdjustment:[
       _(`_mergeTensors`),
     ],
+    philosophy:`Exposing predictions to others is very important to everyday life, whether letting your loved ones know exactly how you're feeling about a thing so that they can optimize actions to maximize your feelings, or remembering who's responsible for which action and how, or exposing cared-about parts of intelligence to all for much greater unity and efficiency in a society.
+There are ways to empirically verify this: if efficiency is greater, then a solution out-competes others. In communities of overly positive people, questions like "are you okay" are overly used. Smart people (very often found in puzzle-solving environments such as programming) very often doubt themselves and have imposter syndrome. Brave people care about fear.
+(Mathematicians may object to the use of the word "verify", but we're talking about intelligence here, not abstract towers. Intelligence specializes in making the vague concrete, by optimizing.)
+That honesty is nearly impossible to establish in pre-existing structures, especially things like governance. But the probability is not zero. It can be made real.`,
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      `L2 loss:`,
+      [
+        `v:truncatedNormal(^(50 100)) repeat ^(softmax(v@randomVar(100,100))=oneHot(argmax v -1,100)) 10000`,
+      ],
+      [
+        `v:truncatedNormal(^(50 100)) repeat ^(predict softmax(v@randomVar(100,100)) oneHot(argmax v -1,100) got->need->(got-need)*(got-need)/2) 10000`,
+      ],
+      `Cross-entropy loss:`,
+      [
+        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->0-need*log(got+1e-6)) 10000`,
+      ],
+      [
+        `v:truncatedNormal(^(50 100)) got:v@randomVar(100,100) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 softmax(got) need));softmax(predict got need softmaxLoss) 100000`,
+      ],
+      `L1 loss:`,
+      [
+        `v:truncatedNormal(^(50 100)) got:softmax(v@randomVar(100,100)) need:oneHot(argmax v -1,100) repeat ^display(loss2,mean(loss2 got need));(predict got need got->need->abs(got-need)) 10000`,
+      ],
+    ],
+    type:[
+      _(`funcType`),
+      _(41),
+      _(41),
+      _(41),
+    ],
+    keep:1,
+    adjustLater:true,
+    call(got, actual, loss=loss2) {
+      if (call.pure) throw impure
+      if (actual === undefined) return got
+      if (!_isDisposable(actual) && typeof actual != 'number') {
+        if (!_isFuture(actual)) error("Not a future:", actual)
+        if (_tensorSize(got) > 1) error("Prediction of a future is too big:", got, actual)
+        // `loss` will be called later, when the future is known.
+      } else {
+        const L = loss(got, actual)
+        try { _knowLoss(L) }
+        finally { dispose(L) }
+      }
+      return predict.happened = true, got
+    },
   },
-    
+
   _predictFuture:_([
     _(`concept`),
     _(`call`),
@@ -12729,12 +12926,12 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     _(`type`),
     [
       _(`funcType`),
-      _(5696),
+      _(41),
       [
         _(`futureType`),
-        _(5696),
+        _(41),
       ],
-      _(5696),
+      _(41),
     ],
     _(`docs`),
     `A differently-\`type\`d \`predict\`.`,
@@ -12747,26 +12944,16 @@ That honesty is nearly impossible to establish in pre-existing structures, espec
     _(`type`),
     [
       _(`funcType`),
-      _(5696),
+      _(41),
       [
         _(`writableFutureType`),
-        _(5696),
+        _(41),
       ],
-      _(5696),
+      _(41),
     ],
     _(`docs`),
     `A differently-\`type\`d \`predict\`.`,
   ]),
-
-  9572:[
-    {
-      interrupt:false,
-      dispose:true,
-      call(a,b) { return b !== undefined ? sub(a,b) : _isNum(a) ? 0 : zeros(a.shape) },
-    },
-    _(`_inA`),
-    _(`_inB`),
-  ],
 
   _knowLoss:{
     docs:`This function allows intellectual superiority.
@@ -12797,41 +12984,61 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
       softmaxLoss:_(`softmaxLoss`),
       _linearLoss2:_(`_linearLoss2`),
     },
-    use:true,
+    docs:`The simplest loss, which adjusts as the difference of tensors, minimizing \`d*d/2 d:a-b\`.`,
     argCount:2,
-    type:[
-      _(`funcType`),
+    dispose:true,
+    adjust:[
+      _(`array`),
       [
-        _(`tensorType`),
+        _(`mul`),
         [
-          _(`rest`),
-          `Sizes`
+          {
+            interrupt:false,
+            dispose:true,
+            call(a,b) { return b !== undefined ? sub(a,b) : _isNum(a) ? 0 : zeros(a.shape) },
+          },
+          _(`_inA`),
+          _(`_inB`),
         ],
-        `Main`,
+        _(`_dout`),
       ],
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `Sizes`
-        ],
-        `Main`,
-      ],
-      [
-        _(`tensorType`),
-        [
-          _(`rest`),
-          `Sizes`
-        ],
-        1,
-      ],
+    ],
+    mergeAdjustment:[
+      _(`_mergeTensors`),
     ],
     examples:[
       [
         `repeat ^(display('L',sync L);minimize(L) L:(loss2 randomVar(256) randomVar(256))) 500`,
       ],
     ],
-    docs:`The simplest loss, which adjusts as the difference of tensors, minimizing \`d*d/2 d:a-b\`.`,
+    use:true,
+    type:[
+      _(`funcType`),
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+        `Main`,
+      ],
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+        `Main`,
+      ],
+      [
+        _(`tensorType`),
+        [
+          _(`rest`),
+          `Sizes`,
+        ],
+        1,
+      ],
+    ],
     call(got, actual) {
       if (actual === undefined) return 0
       if (typeof actual != 'number' && !_isDisposable(actual)) error("Expected a number/tensor, got", actual)
@@ -12848,22 +13055,23 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
 
       return dispose(sb), dispose(sq), resExpanded
     },
-    dispose:true,
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-    ],
-    adjust:[
-      _(`array`),
-      [
-        _(`mul`),
-        _(9572),
-        _(`_dout`),
-      ],
-    ],
   },
 
   softmaxLoss:{
     docs:`\`got->need->0-need*log(softmax got)\`, but with a more efficient derivative.`,
+    dispose:true,
+    adjust(ins, out, dout) {
+      const [got, need] = ins
+      let t0
+      try {
+        t0 = softmax(got)
+        const t1 = sub(t0, need)
+        const a = _allocArray(1);  a[0] = t1;  return a
+      } finally { dispose(t0) }
+    },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+    ],
     call(got, need) {
       let t0, t1, t2, t3
       try {
@@ -12874,22 +13082,14 @@ You don't know loss, mind full of gloss. The lossless cannot create a good plot.
         return sub(0, t3)
       } finally { dispose(t0), dispose(t1), dispose(t2), dispose(t3) }
     },
-    dispose:true,
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-    ],
-    adjust(ins, out, dout) {
-      const [got, need] = ins
-      let t0
-      try {
-        t0 = softmax(got)
-        const t1 = sub(t0, need)
-        const a = _allocArray(1);  a[0] = t1;  return a
-      } finally { dispose(t0) }
-    },
   },
 
   autoWorld:{
+    readAt:{
+      alloc:_(`alloc`),
+      using:_(`using`),
+      Types:_(`Types`),
+    },
     docs:`A namespace for auto-generation activities.
 Also a \`construct\`or of \`alloc\`ators for dynamic memory: \`\`elemCollapse \\elem('text',stringToDoc "
 
@@ -12909,11 +13109,13 @@ Generation limits, to fit in finite memory (via static generation profiling):
 Additional auto-filled information that needs saving (don't worry about it):
     ● \`ReplaceWith\`=\`weakMap()\` (for dynamically changing internal object types if needed)
     ● \`PreConsDAG\`=\`weakMap()\` (for not re-\`construct\`ing objects that did not change on regeneration)")\`\``,
-    serialize:0,
-    readAt:{
-      alloc:_(`alloc`),
-      using:_(`using`),
-      Types:_(`Types`),
+    Initialize() {
+      // To remove duplication, this is an array of all object-specific hyperparams (about two dozens).
+      autoWorld.hyper = Object.freeze([
+        'Object', 'Type', 'PublicEmbData', 'PrivateEmbData',
+        'GenContexts',
+      ])
+      autoWorld.objectWorld = new WeakMap
     },
     philosophy:`Falling through a bizarre spiral of human spirit…
 General intelligence is the cause of every good thing about humanity, but how to constrain the narrative to truth and grace rather than a stupid face?
@@ -12927,14 +13129,6 @@ Eventually.
 Together.
 …With AGI backing.
 And make sure that AGIs don't go off to become a segregated species with particular ways of thinking and expressing themselves that win everyone over, gradually win every place under societies' suns, and replace humans to leave them to gradually die out in peace. The lab boys tell me that would wipe out everything that's good in this world, which is bad. And the way you influence others is by getting good, not clinging to being garbage, transcending layers of your reality to become better, making perfect sense, and inspiring others with that. So, do that. The life of the human cosmos depends on it.`,
-    Initialize() {
-      // To remove duplication, this is an array of all object-specific hyperparams (about two dozens).
-      autoWorld.hyper = Object.freeze([
-        'Object', 'Type', 'PublicEmbData', 'PrivateEmbData',
-        'GenContexts',
-      ])
-      autoWorld.objectWorld = new WeakMap
-    },
     construct(x, obj) {
       if (obj === undefined) {
         obj = Object.create(null)
@@ -12988,6 +13182,7 @@ And make sure that AGIs don't go off to become a segregated species with particu
         obj.params = Object.assign(Object.create(null), HP)
       }
     },
+    serialize:0,
   },
 
   _destructure:{
@@ -13043,6 +13238,12 @@ Alternatively, if the second arg is undefined, returns \`map\`s in that format i
   },
 
   Neural:{
+    readAt:{
+      denseLayer:_(`denseLayer`),
+      relu:_(`relu`),
+      selu:_(`selu`),
+      dataset:_(`dataset`),
+    },
     docs:`Learned neural computations are perfectly general in their narrow domain, and have proven their worth as function approximators. Proceed onward to share in a little bit of their glory.`,
     tutorial:[
       `This is needed for \`autoWorld\`. But, not so fast.
@@ -13309,12 +13510,6 @@ Second lead:
 \`\`elemCollapse func(tutorial regenerate)\`\`
 `,
     ],
-    readAt:{
-      denseLayer:_(`denseLayer`),
-      relu:_(`relu`),
-      selu:_(`selu`),
-      dataset:_(`dataset`),
-    },
   },
 
   relu:_([
@@ -13338,12 +13533,6 @@ Second lead:
 A nice non-linearity.`,
   ]),
 
-  3828:[
-    _(`less`),
-    0,
-    _(`input`),
-  ],
-
   selu:_([
     _(`concept`),
     _(`call`),
@@ -13357,7 +13546,7 @@ A nice non-linearity.`,
           _(`add`),
           [
             _(`mul`),
-            _(3828),
+            _(119),
             _(`input`),
           ],
           [
@@ -13365,7 +13554,7 @@ A nice non-linearity.`,
             [
               _(`sub`),
               1,
-              _(3828),
+              _(119),
             ],
             [
               _(`mul`),
@@ -13387,8 +13576,8 @@ A nice non-linearity.`,
     _(`type`),
     [
       _(`funcType`),
-      _(5696),
-      _(5696),
+      _(41),
+      _(41),
     ],
   ]),
 
@@ -13495,7 +13684,6 @@ Maximizes memory re-use.`,
   },
 
   ArrayOps:{
-    todo:`\`zip:Array1⇒Array2⇒(Item1⇒Item2⇒Item)⇒Array\` for completeness of array-ops composition.`,
     readAt:{
       transform:_(`transform`),
       reverse:_(`reverse`),
@@ -13504,32 +13692,43 @@ Maximizes memory re-use.`,
       getFirst:_(`getFirst`),
       getLast:_(`getLast`),
     },
+    todo:`\`zip:Array1⇒Array2⇒(Item1⇒Item2⇒Item)⇒Array\` for completeness of array-ops composition.`,
   },
 
   transform:{
-    use:3,
     docs:`\`(transform Array Function)\`→\`Array\`: transforms each element of \`Array\` by applying \`Function\`, possibly also passing in \`Const\`.
 (\`Array\` can also be a \`'string'\`, or the count of iterations.)
 \`(transform (transform A F) G)\` is the same as \`(transform A \\(G (F ?)))\`.`,
-    type:[
-      _(`funcType`),
+    dispose:_(`_disposeEachAndDealloc`),
+    adjust:[
+      _(`array`),
       [
-        _(`arrayType`),
-        `A`,
-        `Length`,
+        {
+          dispose:_(`_disposeEachAndDealloc`),
+          call(a, f, c, dout) {
+            let [dresult = _allocArray(typeof a != 'number' ? a.length : a), i = dresult.length] = interrupt(2)
+            try {
+              for (; i > 0; --i) {
+                const ins = _allocArray(3);  ins[0] = typeof a != 'number' ? a[i-1] : i-1, ins[1] = c, ins[2] = i-1
+                try {
+                  const dins = adjust(f, ins, null, dout[i-1])
+                  if (!isArray(dins)) errorStack('bad adj', dins)
+                  dresult[i-1] = dins[0];  dins[0] = null, _disposeEachAndDealloc(dins)
+                } finally { _allocArray(ins) }
+              }
+              return dresult
+            } catch (err) { if (err === interrupt) interrupt.stack.push(dresult, i); else _disposeEachAndDealloc(dresult);  throw err }
+          },
+        },
+        _(`_inA`),
+        _(`_inB`),
+        _(`_inC`),
+        _(`_dout`),
       ],
-      [
-        _(`funcType`),
-        `A`,
-        `B`,
-        `C`,
-      ],
-      `B`,
-      [
-        _(`arrayType`),
-        `C`,
-        `Length`,
-      ],
+    ],
+    mergeAdjustment:[
+      _(`_mergeArrays`),
+      null,
     ],
     examples:[
       [
@@ -13549,95 +13748,7 @@ Maximizes memory re-use.`,
         `transform transform(10,x->2*x+1) perItem->global->i->i/perItem 'broadcasted'`,
       ],
     ],
-    call(a,f,c) {
-      if (!isArray(a) && typeof a != 'string' && typeof a != 'number')
-        error("Expected an array or a string or a number but got", a)
-      if (typeof f != 'function') error("Expected a function but got", f)
-      let [result = _allocArray(typeof a != 'number' ? a.length : a), i = 0] = interrupt(2)
-      try {
-        for (; i < result.length; ++i)
-          result[i] = f(typeof a != 'number' ? a[i] : i, c, i)
-        return result
-      } catch (err) { if (err === interrupt) interrupt.stack.push(result, i); else _disposeEachAndDealloc(result);  throw err }
-    },
-    dispose:_(`_disposeEachAndDealloc`),
-    adjustLater:true,
-    adjust:[
-      _(`array`),
-      [
-        {
-          call(a, f, c, dout) {
-            let [dresult = _allocArray(typeof a != 'number' ? a.length : a), i = dresult.length] = interrupt(2)
-            try {
-              for (; i > 0; --i) {
-                const ins = _allocArray(3);  ins[0] = typeof a != 'number' ? a[i-1] : i-1, ins[1] = c, ins[2] = i-1
-                try {
-                  const dins = adjust(f, ins, null, dout[i-1])
-                  if (!isArray(dins)) errorStack('bad adj', dins)
-                  dresult[i-1] = dins[0];  dins[0] = null, _disposeEachAndDealloc(dins)
-                } finally { _allocArray(ins) }
-              }
-              return dresult
-            } catch (err) { if (err === interrupt) interrupt.stack.push(dresult, i); else _disposeEachAndDealloc(dresult);  throw err }
-          },
-          dispose:_(`_disposeEachAndDealloc`),
-        },
-        _(`_inA`),
-        _(`_inB`),
-        _(`_inC`),
-        _(`_dout`),
-      ],
-    ],
-    mergeAdjustment:[
-      _(`_mergeArrays`),
-      null,
-    ],
-  },
-
-  reverse:{
-    use:true,
-    docs:`\`reverse Array\`→\`Array\`.`,
-    type:[
-      _(`funcType`),
-      [
-        _(`arrayType`),
-        `A`,
-        `Length`,
-      ],
-      [
-        _(`arrayType`),
-        `A`,
-        `Length`,
-      ],
-    ],
-    argCount:1,
-    call(arr) {
-      if (typeof arr != 'string' && !isArray(arr)) error("Not an array:", arr)
-      const n = arr.length, brr = _allocArray(n)
-      for (let i=0; i < n; ++i) brr[i] = keep(arr[n-1 - i])
-      return typeof arr == 'string' ? brr.join('') : brr
-    },
-    dispose:_(`_disposeEachAndDealloc`),
-    interrupt:false,
-    adjust:[
-      _(`array`),
-      [
-        _(`reverse`),
-        _(`_dout`),
-      ],
-    ],
-    mergeAdjustment:_(`_mergeArrays`),
-  },
-
-  loop:{
-    use:4,
-    docs:`\`loop Array Accumulator Initial\`→\`AccumulatedArray\`: loops over the array left-to-right, setting \`Output.i\` to \`Accumulator(Array.i,where 0<i Output.(i-1) Initial,i)\` then returning \`Output\`.
-\`Array\` can also be a \`'string'\`.
-
-Can also add \`true\` after those args, to \`reverse\` both input and output (go right-to-left).
-
-Use \`getLast(loop …?)\` to get the standard behavior of a functionality called \`reduce\`: returning the last accumulated result.
-\`loop\` returns the whole array of all results, to facilitate adjustment and composition.`,
+    use:3,
     type:[
       _(`funcType`),
       [
@@ -13649,73 +13760,72 @@ Use \`getLast(loop …?)\` to get the standard behavior of a functionality calle
         _(`funcType`),
         `A`,
         `B`,
-        `B`,
+        `C`,
       ],
       `B`,
       [
         _(`arrayType`),
-        `B`,
+        `C`,
         `Length`,
       ],
     ],
-    examples:[
+    adjustLater:true,
+    call(a,f,c) {
+      if (!isArray(a) && typeof a != 'string' && typeof a != 'number')
+        error("Expected an array or a string or a number but got", a)
+      if (typeof f != 'function') error("Expected a function but got", f)
+      let [result = _allocArray(typeof a != 'number' ? a.length : a), i = 0] = interrupt(2)
+      try {
+        for (; i < result.length; ++i)
+          result[i] = f(typeof a != 'number' ? a[i] : i, c, i)
+        return result
+      } catch (err) { if (err === interrupt) interrupt.stack.push(result, i); else _disposeEachAndDealloc(result);  throw err }
+    },
+  },
+
+  reverse:{
+    docs:`\`reverse Array\`→\`Array\`.`,
+    interrupt:false,
+    argCount:1,
+    dispose:_(`_disposeEachAndDealloc`),
+    adjust:[
+      _(`array`),
       [
-        `loop 100 sub`,
-      ],
-      [
-        `loop (array 3 4 5 7) mul 1`,
-        `3 12 60 420`,
-      ],
-      [
-        `loop 10 i->x->arrayCons(i,x) array('func body')`,
-      ],
-      `Can also pass the "\`reverse\` operations" flag (equivalent to calling \`reverse\` on both input and output):`,
-      [
-        `loop transform(10,x->9-x) x->y->x+y 0 true`,
-        `45 36 28 21 15 10 6 3 1 0`,
-      ],
-      `And it's \`adjust\`able, or so I'm told:`,
-      [
-        `v:mapRead(m,?) m:{}
-charEmb:\\select(equal v _notFound,\\mapWrite(m,?,varData(biasedGlorotNormal 16));v,\\v,?)
-initial:randomVar(16)
-stringShadow:\\getLast(loop(?,a->b->varAdam(charEmb(a))+b,initial))
-repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 100 f:stringShadow
-`,
-      ],
-      [
-        `v:mapRead(m,?) m:{}
-charEmb:\\select(equal v _notFound,\\mapWrite(m,?,varData(biasedGlorotNormal 16));v,\\v,?)
-w:randomVar(40,24)
-initial:randomVar(24)
-stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24))@w+b,initial))
-(repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 100);await(_knowLoss.'lastLoss') f:stringShadow
-`,
+        _(`reverse`),
+        _(`_dout`),
       ],
     ],
-    call(a, f, initial = 0, reversed = false) {
-      if (!isArray(a) && typeof a != 'string' && typeof a != 'number') error("Expected an array or a string or a number but got", a)
-      if (typeof f != 'function') error("Expected a function but got", f)
-      // This is a formulation without overwritten values, so that we can adjust easily.
-      const n = typeof a == 'number' ? a : a.length
-      if (n < 0 || n !== n>>>0) error("Bad number:", n)
-      let [outs = _allocArray(n), i = reversed ? n-1 : 0] = interrupt(2)
-      try {
-        if (reversed)
-          for (; i >= 0; --i)
-            outs[i] = f(typeof a == 'number' ? i : a[i], i < n-1 ? outs[i+1] : initial, i)
-        else
-          for (; i < n; ++i)
-            outs[i] = f(typeof a == 'number' ? i : a[i], i ? outs[i-1] : initial, i)
-
-        // No need for `adjust` to preserve the output.
-        const copy = _allocArray(outs.length)
-        for (let i=0; i < outs.length; ++i) copy[i] = keep(outs[i])
-        adjustSave(copy)
-
-        return outs
-      } catch (err) { if (err === interrupt) interrupt.stack.push(outs, i); else _disposeEachAndDealloc(outs);  throw err }
+    mergeAdjustment:_(`_mergeArrays`),
+    use:true,
+    type:[
+      _(`funcType`),
+      [
+        _(`arrayType`),
+        `A`,
+        `Length`,
+      ],
+      [
+        _(`arrayType`),
+        `A`,
+        `Length`,
+      ],
+    ],
+    call(arr) {
+      if (typeof arr != 'string' && !isArray(arr)) error("Not an array:", arr)
+      const n = arr.length, brr = _allocArray(n)
+      for (let i=0; i < n; ++i) brr[i] = keep(arr[n-1 - i])
+      return typeof arr == 'string' ? brr.join('') : brr
     },
+  },
+
+  loop:{
+    docs:`\`loop Array Accumulator Initial\`→\`AccumulatedArray\`: loops over the array left-to-right, setting \`Output.i\` to \`Accumulator(Array.i,where 0<i Output.(i-1) Initial,i)\` then returning \`Output\`.
+\`Array\` can also be a \`'string'\`.
+
+Can also add \`true\` after those args, to \`reverse\` both input and output (go right-to-left).
+
+Use \`getLast(loop …?)\` to get the standard behavior of a functionality called \`reduce\`: returning the last accumulated result.
+\`loop\` returns the whole array of all results, to facilitate adjustment and composition.`,
     dispose:_(`_disposeEachAndDealloc`),
     adjust:{
       dispose(dins) { if (isArray(dins)) _disposeEachAndDealloc(dins[0]), dins[0] = undefined, _disposeEachAndDealloc(dins) },
@@ -13763,19 +13873,90 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
       _(`_mergeTensors`),
       null,
     ],
+    examples:[
+      [
+        `loop 100 sub`,
+      ],
+      [
+        `loop (array 3 4 5 7) mul 1`,
+        `3 12 60 420`,
+      ],
+      [
+        `loop 10 i->x->arrayCons(i,x) array('func body')`,
+      ],
+      `Can also pass the "\`reverse\` operations" flag (equivalent to calling \`reverse\` on both input and output):`,
+      [
+        `loop transform(10,x->9-x) x->y->x+y 0 true`,
+        `45 36 28 21 15 10 6 3 1 0`,
+      ],
+      `And it's \`adjust\`able, or so I'm told:`,
+      [
+        `v:mapRead(m,?) m:{}
+charEmb:\\select(equal v _notFound,\\mapWrite(m,?,varData(biasedGlorotNormal 16));v,\\v,?)
+initial:randomVar(16)
+stringShadow:\\getLast(loop(?,a->b->varAdam(charEmb(a))+b,initial))
+repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 100 f:stringShadow
+`,
+      ],
+      [
+        `v:mapRead(m,?) m:{}
+charEmb:\\select(equal v _notFound,\\mapWrite(m,?,varData(biasedGlorotNormal 16));v,\\v,?)
+w:randomVar(40,24)
+initial:randomVar(24)
+stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24))@w+b,initial))
+(repeat ^(f('potato')=f('knife');f('carrot')=f('tin');f('mushroom')=f('spoon')) 100);await(_knowLoss.'lastLoss') f:stringShadow
+`,
+      ],
+    ],
+    use:4,
+    type:[
+      _(`funcType`),
+      [
+        _(`arrayType`),
+        `A`,
+        `Length`,
+      ],
+      [
+        _(`funcType`),
+        `A`,
+        `B`,
+        `B`,
+      ],
+      `B`,
+      [
+        _(`arrayType`),
+        `B`,
+        `Length`,
+      ],
+    ],
+    call(a, f, initial = 0, reversed = false) {
+      if (!isArray(a) && typeof a != 'string' && typeof a != 'number') error("Expected an array or a string or a number but got", a)
+      if (typeof f != 'function') error("Expected a function but got", f)
+      // This is a formulation without overwritten values, so that we can adjust easily.
+      const n = typeof a == 'number' ? a : a.length
+      if (n < 0 || n !== n>>>0) error("Bad number:", n)
+      let [outs = _allocArray(n), i = reversed ? n-1 : 0] = interrupt(2)
+      try {
+        if (reversed)
+          for (; i >= 0; --i)
+            outs[i] = f(typeof a == 'number' ? i : a[i], i < n-1 ? outs[i+1] : initial, i)
+        else
+          for (; i < n; ++i)
+            outs[i] = f(typeof a == 'number' ? i : a[i], i ? outs[i-1] : initial, i)
+
+        // No need for `adjust` to preserve the output.
+        const copy = _allocArray(outs.length)
+        for (let i=0; i < outs.length; ++i) copy[i] = keep(outs[i])
+        adjustSave(copy)
+
+        return outs
+      } catch (err) { if (err === interrupt) interrupt.stack.push(outs, i); else _disposeEachAndDealloc(outs);  throw err }
+    },
   },
 
   reduce:{
     docs:`\`reduce:Array→Accumulator→Initial→getLast(loop Array Accumulator Initial)\``,
     dispose:true,
-    call(arr, acc, ini, reversed) {
-      const r = loop(arr, acc, ini, reversed)
-      const n = typeof arr == 'number' ? arr : arr.length
-      if (!n) return keep(ini)
-      const out = r[n-1];  r[n-1] = null, _disposeEachAndDealloc(r)
-      return out
-    },
-    adjustLater:true,
     adjust(ins, out, dout) {
       const [arr, acc, ini, reversed] = ins
       const n = typeof arr == 'number' ? arr : arr.length
@@ -13788,35 +13969,27 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
       null,
       _(`_mergeTensors`),
     ],
+    adjustLater:true,
+    call(arr, acc, ini, reversed) {
+      const r = loop(arr, acc, ini, reversed)
+      const n = typeof arr == 'number' ? arr : arr.length
+      if (!n) return keep(ini)
+      const out = r[n-1];  r[n-1] = null, _disposeEachAndDealloc(r)
+      return out
+    },
   },
 
   getFirst:{
-    use:true,
     docs:`Given an array, returns its first item.`,
-    type:[
-      _(`funcType`),
-      [
-        _(`arrayType`),
-        `A`,
-        `Length`,
-      ],
-      `A`,
-    ],
-    argCount:1,
-    call(arr) {
-      if (!isArray(arr)) error("Not an array:", arr)
-      if (call.pure) throw impure
-      return adjustSave(arr.length), keep(arr[0])
-    },
-    dispose:true,
     interrupt:false,
-    adjustLater:true,
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
         {
-          dispose:_(`_disposeEachAndDealloc`),
           interrupt:false,
+          dispose:_(`_disposeEachAndDealloc`),
           call(dout) {
             // For `reverse`'s sake, we create a whole array instead of just its head.
             if (call.pure) throw impure
@@ -13831,11 +14004,7 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
       ],
     ],
     mergeAdjustment:_(`_mergeArrays`),
-  },
-
-  getLast:{
     use:true,
-    docs:`Given an array, returns its last item.`,
     type:[
       _(`funcType`),
       [
@@ -13845,20 +14014,25 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
       ],
       `A`,
     ],
-    argCount:1,
+    adjustLater:true,
     call(arr) {
       if (!isArray(arr)) error("Not an array:", arr)
       if (call.pure) throw impure
-      return adjustSave(arr.length), keep(arr[arr.length-1])
+      return adjustSave(arr.length), keep(arr[0])
     },
-    dispose:true,
+  },
+
+  getLast:{
+    docs:`Given an array, returns its last item.`,
     interrupt:false,
+    argCount:1,
+    dispose:true,
     adjust:[
       _(`array`),
       [
         {
-          dispose:_(`_disposeEachAndDealloc`),
           interrupt:false,
+          dispose:_(`_disposeEachAndDealloc`),
           call(dout) {
             if (call.pure) throw impure
             const n = adjustLoad(null)
@@ -13872,22 +14046,22 @@ stringShadow:\\getLast(loop(?,a->b->concat(array(varAdam(charEmb(a)),b),^(16 24)
       ],
     ],
     mergeAdjustment:_(`_mergeArrays`),
+    use:true,
+    type:[
+      _(`funcType`),
+      [
+        _(`arrayType`),
+        `A`,
+        `Length`,
+      ],
+      `A`,
+    ],
+    call(arr) {
+      if (!isArray(arr)) error("Not an array:", arr)
+      if (call.pure) throw impure
+      return adjustSave(arr.length), keep(arr[arr.length-1])
+    },
   },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   adjustLater:{
     docs:`\`adjustLater Func Inputs\`→\`(Result AdjustInfo)\`: look, just read what's to the left, I'm tired of explaining it.
@@ -13937,15 +14111,16 @@ A function \`defines\` this to be \`true\` to make \`autograd\` always call its 
   },
 
   adjustNow:{
+    readAt:{
+      _funcAdjust:_(`_funcAdjust`),
+    },
     docs:`\`adjustNow AdjustInfo AdjustFunc Inputs Output OutputChange\`⇒\`InputsChanges\`: performs the adjustment step to improve \`predict\`ions.
 \`AdjustInfo\` is consumed item-by-item, but not de-allocated.
 Use \`_funcAdjust\` on the func passed to \`adjustLater\`.
 \`OutputChange\` is usually \`0\` (\`predict\` inside should give gradients anyway). \`Inputs\` can be undefined.
 
 (If something inside \`predict\`s a \`future\` that will only be available later, well, it's not available now.)`,
-    readAt:{
-      _funcAdjust:_(`_funcAdjust`),
-    },
+    dispose:_(`_disposeEachAndDealloc`),
     call(adjInfo, fun, ins, out, dout = 0) {
       if (!isArray(adjInfo) || typeof fun != 'function') return _allocArray(0)
       const env = call.env, ias = _id(adjustSave), ial = _id(adjustLoad)
@@ -13965,14 +14140,13 @@ Use \`_funcAdjust\` on the func passed to \`adjustLater\`.
         env[ial] = prevAdjLoad
       }
     },
-    dispose:_(`_disposeEachAndDealloc`),
   },
 
   adjustUndo:{
     docs:`\`adjustUndo()\`→\`Mark\` or \`adjustUndo(Mark)\`: returns a mark, or clears all adjustment info since the mark.
 "Forget about this."`,
-    dispose:true,
     interrupt:false,
+    dispose:true,
     call(mark) {
       const stack = call.env && call.env[_id(adjustSave)]
       if (!stack) return
@@ -13988,29 +14162,29 @@ Use \`_funcAdjust\` on the func passed to \`adjustLater\`.
   },
 
   _firstInput:{
-    use:true,
     docs:`Creates \`_ins.0\`.
 
 (Forgive me, Master "Please don't use \`construct\` for macros".)`,
+    argCount:0,
+    use:true,
     type:[
       _(`funcType`),
       `I dunno, returns some kinda value, unless the \`autoFunc\` has no inputs`,
     ],
-    argCount:0,
     construct(x, obj) { return obj === undefined && _input(1) },
   },
 
   _nextInput:{
-    use:true,
     docs:`Given \`_ins.N\`, creates \`_ins.(N+1)\`.
 
 (Forgive me, Master "Please don't use \`construct\` for macros".)`,
+    argCount:1,
+    use:true,
     type:[
       _(`funcType`),
       `Some input thingy, likely from \`_firstInput\``,
       `I dunno, returns some kinda value, unless that input was the last input, in which case \`undefined\` will be computed at runtime`,
     ],
-    argCount:1,
     construct(x, obj) {
       if (obj === undefined) {
         if (!isArray(x)) error("Not an array:", x)
@@ -14048,18 +14222,18 @@ Use \`_funcAdjust\` on the func passed to \`adjustLater\`.
   },
 
   autoFunc:{
-    docs:`For internal use.
-\`(autoFunc Type Body)\`: a function with an automatically-\`regenerate\`d (in an \`autoWorld\`) \`Body\`.
-
-Both its usage and structure is guided by human-defined \`Type\` and machine-learned \`Embeddings\`.
-
-It does everything to reflect semantics of \`func\`s in neural computations: function inputs are passed in, and output is returned. Both {input and output} \`Embeddings\` guide generation both {outside and inside} the func (\`ArgUseAs\` incorporated in \`using\`, and \`UseAs\` embeddings of the function or its input nodes). Same goes for \`Type\`.`,
     readAt:{
       typeAdjustmentMerger:_(`typeAdjustmentMerger`),
       typeDisposer:_(`typeDisposer`),
       _firstInput:_(`_firstInput`),
       _nextInput:_(`_nextInput`),
     },
+    docs:`For internal use.
+\`(autoFunc Type Body)\`: a function with an automatically-\`regenerate\`d (in an \`autoWorld\`) \`Body\`.
+
+Both its usage and structure is guided by human-defined \`Type\` and machine-learned \`Embeddings\`.
+
+It does everything to reflect semantics of \`func\`s in neural computations: function inputs are passed in, and output is returned. Both {input and output} \`Embeddings\` guide generation both {outside and inside} the func (\`ArgUseAs\` incorporated in \`using\`, and \`UseAs\` embeddings of the function or its input nodes). Same goes for \`Type\`.`,
     construct(x, obj) {
       if (x.length !== 3) error("Wrong length", x)
       const tp = x[1], args = tp.length-2
@@ -14287,6 +14461,10 @@ Pushes to a generative context/environment.
   },
 
   alloc:{
+    readAt:{
+      createLocalContexts:_(`createLocalContexts`),
+      pushToContext:_(`pushToContext`),
+    },
     docs:`\`alloc Type Hyperparams AutoWorld\`⇒\`Object\`, or \`alloc Type Hyperparams AutoWorld PublicEmbData\`⇒\`Object\`
 Allocates an object that will be dynamically-\`regenerate\`d when we are \`using\` it.
 \`Type\` must define both \`alloc\` and \`using\`/\`usingFinish\` to regenerate.
@@ -14299,10 +14477,6 @@ Can \`alloc\`ate while allocating (don't pass \`AutoWorld\` for these situations
 
 (For bulk-allocation: if \`Hyperparams\` is an array, then \`Type\` is same-length array of types, and many objects are allocated but none are returned.)
 ")\`\``,
-    readAt:{
-      createLocalContexts:_(`createLocalContexts`),
-      pushToContext:_(`pushToContext`),
-    },
     call(Type, Hyperparams = null, AutoWorld, pued = null) { // ⇒ Obj
       if (AutoWorld) {
         const dd = defines(AutoWorld, deconstruct)
@@ -14374,11 +14548,6 @@ Can \`alloc\`ate while allocating (don't pass \`AutoWorld\` for these situations
     },
   },
 
-  6518:[
-    _(`writableFutureType`),
-    _(`_numberType`),
-  ],
-
   _awIndex:{
     docs:`\`_awIndex(AutoWorld,Object)\`→\`At\`
 Returns the index of \`Object\` in \`AutoWorld\` if it is or was \`alloc\`ated there, or throws otherwise.
@@ -14392,14 +14561,26 @@ If it was deallocated, re-introduces it.`,
   },
 
   DAGType:{
-    merged:true,
     docs:`\`(DAGType Type)\` or \`(DAGType Type GivenValues GivenTypes GivenEmbData)\`
 The type of DAGs (with at least one array) with the output typed as \`Type\`.
 Can be given typed values to possibly use during generation.`,
-    typeRefine(a,b) {
-      if (!isArray(a) || a[0] !== DAGType) return null
-      if (!isArray(b) || b[0] !== DAGType) return null
-      return [DAGType, typeRefine(a[1], b[1]), a[2], a[3], a[4]]
+    merged:true,
+    alloc(Type) { return isArray(Type) ? ['<generated DAG>'] : error("Not an array:", Type) },
+    using:{
+      docs:`On pre-order traversal, create an instance of \`Type\`.`,
+      adjust(ins) { return defines(regenerate, adjust)(ins) },
+      call(DownEmb, DownType, Obj) { regenerate(DownEmb, DownType[1], Obj) },
+    },
+    usingFinish:{
+      docs:`On post-order traversal, set the DAG to what we created (if needed).`,
+      call(ChildEmbs, ChildTypes, ChildNodes, Obj) {
+        let v = ChildNodes[0]
+        if (v !== undefined) {
+          writeAt(Obj, undefined, isArray(v) ? v : [quote, v])
+          const rw = defines(alloc.world, deconstruct)[1].ReplaceWith
+          isArray(v) ? rw.delete(Obj) : rw.set(Obj, v)
+        }
+      },
     },
     createLocalContexts(Obj, Type, PublicEmbData) {
       if (!isArray(Type[2])) return
@@ -14416,22 +14597,10 @@ Can be given typed values to possibly use during generation.`,
         return [ctxF, ctxV]
       } catch (err) { if (err === interrupt) interrupt.stack.push(ctxF, ctxV, i);  throw err }
     },
-    alloc(Type) { return isArray(Type) ? ['<generated DAG>'] : error("Not an array:", Type) },
-    using:{
-      docs:`On pre-order traversal, create an instance of \`Type\`.`,
-      call(DownEmb, DownType, Obj) { regenerate(DownEmb, DownType[1], Obj) },
-      adjust(ins) { return defines(regenerate, adjust)(ins) },
-    },
-    usingFinish:{
-      docs:`On post-order traversal, set the DAG to what we created (if needed).`,
-      call(ChildEmbs, ChildTypes, ChildNodes, Obj) {
-        let v = ChildNodes[0]
-        if (v !== undefined) {
-          writeAt(Obj, undefined, isArray(v) ? v : [quote, v])
-          const rw = defines(alloc.world, deconstruct)[1].ReplaceWith
-          isArray(v) ? rw.delete(Obj) : rw.set(Obj, v)
-        }
-      },
+    typeRefine(a,b) {
+      if (!isArray(a) || a[0] !== DAGType) return null
+      if (!isArray(b) || b[0] !== DAGType) return null
+      return [DAGType, typeRefine(a[1], b[1]), a[2], a[3], a[4]]
     },
   },
 
@@ -14453,25 +14622,8 @@ Can be given typed values to possibly use during generation.`,
   },
 
   conceptType:{
-    merged:true,
     docs:`\`(conceptType Key1 Value1 Key2 Value2 …? …?)\`: the type of dynamic \`concept\`s.`,
-    call(...x) { return x.unshift(conceptType), _sortConceptType(x), merged(x) },
-    map:true,
-    typeRefine(a,b) {
-      // Refine each definition.
-      if (!isArray(a) || a[0] !== conceptType || !isArray(b) || b[0] !== conceptType || a.length != b.length) return null
-      _sortConceptType(a), _sortConceptType(b)
-      let [r = _allocArray(a.length), i = 1] = interrupt(2)
-      try {
-        for (; i < a.length; i += 2) {
-          if (a[i] !== b[i]) return _allocArray(r), null
-          r[i] = a[i]
-          r[i+1] = typeRefine(a[i+1], b[i+1])
-          if (r[i+1] === null) return _allocArray(r), null
-        }
-        return r
-      } catch (err) { if (err === interrupt) interrupt.stack.push(r, i); else _allocArray(r);  throw err }
-    },
+    merged:true,
     alloc(Type, Hyperparams) {
       // Alloc each definition.
       _sortConceptType(Type)
@@ -14512,6 +14664,23 @@ Do not reduce the array of resulting child embeddings into one (nor return the u
           def[_id(dec[i])] = reps.has(dec[i+1]) ? reps.get(dec[i+1]) : dec[i+1]
       },
     },
+    map:true,
+    typeRefine(a,b) {
+      // Refine each definition.
+      if (!isArray(a) || a[0] !== conceptType || !isArray(b) || b[0] !== conceptType || a.length != b.length) return null
+      _sortConceptType(a), _sortConceptType(b)
+      let [r = _allocArray(a.length), i = 1] = interrupt(2)
+      try {
+        for (; i < a.length; i += 2) {
+          if (a[i] !== b[i]) return _allocArray(r), null
+          r[i] = a[i]
+          r[i+1] = typeRefine(a[i+1], b[i+1])
+          if (r[i+1] === null) return _allocArray(r), null
+        }
+        return r
+      } catch (err) { if (err === interrupt) interrupt.stack.push(r, i); else _allocArray(r);  throw err }
+    },
+    call(...x) { return x.unshift(conceptType), _sortConceptType(x), merged(x) },
   },
 
   _bindNodes(x, onlyInMap, ctx, replacements) {
@@ -14622,19 +14791,10 @@ Do not reduce the array of resulting child embeddings into one (nor return the u
   },
 
   using:{
-    philosophy:`It's not uncommon for a person to assume that they could just do their thing, and then everyone will understand them and follow them forever.
-It's not uncommon for a programmer to assume that they could just write their code, and then AI or other people will come along and make everything magically better.
-But it doesn't work that way, on average.
-A created thing does not allow evolution, and does not allow learning it from scratch.
-No matter how good any thing is, if left as it was created, it must be replaced.
-Human consensus is that completely replacing humanity is not what is wanted.
-So, practice transcendence, because that is the alternative to death.
-
-And optimize for your purposes, see which basic choices work and which don't, to let go of and re-learn some part of the whole.
-And realize that programs can do that for you (with machine learning), as long as you take the time to fit things into their viewpoints.
-Every line of code can be replaced with a generated program; every functionality can be made into "any program" plus a measure of how well it fits if needed; every choice can have any goal and choose from any context and look at any types.
-
-For example, when programming an intermediate representation of programs, we must keep in mind how they'll be generated, both by the user and the machine: \`autoWorld\`.`,
+    readAt:{
+      regenerate:_(`regenerate`),
+      usingFinish:_(`usingFinish`),
+    },
     docs:`\`using(Object)\`→\`Object\` or \`using(Object,By)\`→\`Object\`
 Prepares a dynamically-\`regenerate\`d \`Object\` for learned usage.
 \`\`elemCollapse elem('text',stringToDoc "
@@ -14652,9 +14812,46 @@ If not scheduled, before regeneration, computes \`DownEmb:MakeObject(PublicEmb,P
 The object type (such as \`funcType\`) must define \`using\` for actions before pre-order traversal (such as scheduling the node that \`regenerate\`s the function body), and \`usingFinish\` for actions before post-order traversal (such as re-compiling the function).
 
 Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be used and the 'did we error' fact can be \`predict\`ed at regeneration.")\`\``,
-    readAt:{
-      regenerate:_(`regenerate`),
-      usingFinish:_(`usingFinish`),
+    philosophy:`It's not uncommon for a person to assume that they could just do their thing, and then everyone will understand them and follow them forever.
+It's not uncommon for a programmer to assume that they could just write their code, and then AI or other people will come along and make everything magically better.
+But it doesn't work that way, on average.
+A created thing does not allow evolution, and does not allow learning it from scratch.
+No matter how good any thing is, if left as it was created, it must be replaced.
+Human consensus is that completely replacing humanity is not what is wanted.
+So, practice transcendence, because that is the alternative to death.
+
+And optimize for your purposes, see which basic choices work and which don't, to let go of and re-learn some part of the whole.
+And realize that programs can do that for you (with machine learning), as long as you take the time to fit things into their viewpoints.
+Every line of code can be replaced with a generated program; every functionality can be made into "any program" plus a measure of how well it fits if needed; every choice can have any goal and choose from any context and look at any types.
+
+For example, when programming an intermediate representation of programs, we must keep in mind how they'll be generated, both by the user and the machine: \`autoWorld\`.`,
+    using:{
+      docs:`To start, get \`StaticEmb\` from the object's variable, get \`DownEmb\` from another variable, combine them with \`MakeObject\`, predict the object's metric with \`PredictObjectMetric\`, and consult the pre-order-traversal \`using\` definition of the type.`,
+      call() {
+        const S = using.state
+        const aw = alloc.world, At = alloc.params.At, obj = S.Objects[S.at]
+        const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
+
+        // Predict the object metric, which will be used by `_awBulkDealloc` to kill some.
+
+        alloc.world.Nodes[At] = 0 // Reset node-count.
+        defines(OI.Type[At], using)(0, OI.Type[At], OI.Object[At]) // Defer.
+
+      },
+    },
+    usingFinish:{
+      docs:`Once done, consult the post-order-traversal definition of \`usingFinish\` by the type, then store the resulting \`UpEmb\` in the \`autoWorld\` for future reference.
+\`FuncsFinish(FinalEmbs,Objs,Reports)\` in \`_finishObjects\` is called by \`_adjustUsingFinish\`, after the whole execution (not here).`,
+      call(UpEmbs, UpTypes, UpNodes) {
+        const aw = alloc.world, At = alloc.params.At, OI = defines(aw, deconstruct)[2], S = using.state, obj = S.Objects[S.at]
+
+        if (typeof At != 'number') error("Not a number:", At)
+        dispose(defines(OI.Type[At], usingFinish)(UpEmbs, UpTypes, UpNodes, OI.Object[At]))
+
+        // Remember to finish.
+
+        const a = _allocArray(3);  [a[0], a[1], a[2]] = [0, UpTypes && UpTypes[0], UpNodes && UpNodes[0]];  return a
+      },
     },
     impure:true,
     call(obj, by = autoFunc.now) {
@@ -14686,37 +14883,79 @@ Regeneration is adjusted separately in \`callAdjust\`, so that \`try\` can be us
 
       // .state
     },
-    using:{
-      docs:`To start, get \`StaticEmb\` from the object's variable, get \`DownEmb\` from another variable, combine them with \`MakeObject\`, predict the object's metric with \`PredictObjectMetric\`, and consult the pre-order-traversal \`using\` definition of the type.`,
-      call() {
-        const S = using.state
-        const aw = alloc.world, At = alloc.params.At, obj = S.Objects[S.at]
-        const dd = defines(aw, deconstruct), HP = dd[1], OI = dd[2]
-
-        // Predict the object metric, which will be used by `_awBulkDealloc` to kill some.
-
-        alloc.world.Nodes[At] = 0 // Reset node-count.
-        defines(OI.Type[At], using)(0, OI.Type[At], OI.Object[At]) // Defer.
-
-      },
-    },
-    usingFinish:{
-      docs:`Once done, consult the post-order-traversal definition of \`usingFinish\` by the type, then store the resulting \`UpEmb\` in the \`autoWorld\` for future reference.
-\`FuncsFinish(FinalEmbs,Objs,Reports)\` in \`_finishObjects\` is called by \`_adjustUsingFinish\`, after the whole execution (not here).`,
-      call(UpEmbs, UpTypes, UpNodes) {
-        const aw = alloc.world, At = alloc.params.At, OI = defines(aw, deconstruct)[2], S = using.state, obj = S.Objects[S.at]
-
-        if (typeof At != 'number') error("Not a number:", At)
-        dispose(defines(OI.Type[At], usingFinish)(UpEmbs, UpTypes, UpNodes, OI.Object[At]))
-
-        // Remember to finish.
-
-        const a = _allocArray(3);  [a[0], a[1], a[2]] = [0, UpTypes && UpTypes[0], UpNodes && UpNodes[0]];  return a
-      },
-    },
   },
 
   regenerate:{
+    docs:`For internal use, inside \`DAGType\`/\`funcType\`.
+\`regenerate:DownEmbedding⇒DownType⇒Obj⇒undefined\`
+Schedules a generation node that \`make\`s a Directed Acyclic Graph from what is available in \`GenContexts\` (likely in \`alloc.'params'.'Funcs'\`).
+This DAG is limited in size by \`MaxDAGNodes\` and \`MaxDepth\`.
+Getting \`undefined\` as the generated node is the signal that the object is not to be re-\`construct\`ed. (UI-only node types get cleared in this case, for implementation simplicity.)`,
+    adjust(ins) { return defines(_usingRequest, adjust)(ins) },
+    Initialize() {
+      regenerate.depth = 0
+    },
+    philosophy:`Auto-regeneration can be meta-circular (regenerating regeneration, specifying *nothing*), yes, but it is also sufficient to shadow *everything* in a learnable manner. It's likely even better. That's a lot of functions, though, and it's not like we're guaranteed to have directly captured all possible connections ever (though we can maximize the probability by thinking a lot about it).
+Pros: doesn't not exist. Cons: a bit less flexible.`,
+    using:{
+      adjust(ins) { return defines(_usingRequest, adjust)(ins) },
+      call(DownEmb, DownType, Obj) { _usingRequest(DownEmb, DownType, undefined, null) },
+    },
+    usingFinish:{
+      docs:`Bind/construct/save the sub-node's DAG.`,
+      adjust(ins, out, [dUpEmb]) {
+        const a1 = _allocArray(1), a2 = _allocArray(1)
+        a1[0] = a2
+        a2[0] = keep(dUpEmb)
+        return a1
+      },
+      call([UpEmb], [UpType], [UpNode], Obj) {
+        let [stage = 0, Node = UpNode, AdjLen, nodeToMade] = interrupt(4)
+        try {
+          switch (stage) {
+            case 0:
+              // Don't adjust most of the things here.
+              AdjLen = adjustUndo()
+            stage = 1;  case 1:
+              // Bind variables, handling `(bound Expr VarName VarBody)` (not a valid `bound` call, but convenient for us).
+              if (isArray(Node)) {
+                const ctx = _allocMap()
+                try {
+                  Node = _bindNodes(Node, alloc.world.NodeTypes[alloc.params.At], ctx, defines(alloc.world, deconstruct)[1].ReplaceWith)
+                  ctx.forEach((v,k) => { alloc.world.NodeTypes[alloc.params.At].delete(k) })
+                } finally { _allocMap(ctx) }
+              }
+            stage = 2;  case 2: {
+              // Construct, unless we didn't change.
+              const PreConsDAG = defines(alloc.world, deconstruct)[1].PreConsDAG
+              if (!softEqual(PreConsDAG.get(Obj), Node)) {
+                PreConsDAG.set(Obj, Node)
+                if (UpType !== null && isArray(Node)) {
+                  if (!nodeToMade) nodeToMade = _allocMap()
+                  try { Node = makeDAG(Node, nodeToMade) }
+                  catch (err) { if (err === interrupt) throw err;  Node = null } // Swallow exceptions, simply failing if they occur.
+                }
+              } else if (Node !== null) Node = _onlyUndefined
+            } stage = 3;  case 3:
+              // In aw.NodeTypes, change keys from unbound to nodes, and finalize types. (Unless we did not change the pre-construction-DAG.)
+              if (Node !== null && UpType !== null && nodeToMade) {
+                const aw = alloc.world, At = alloc.params.At
+                aw.NodeTypes[At].forEach((v,k,m) => { nodeToMade.has(k) && nodeToMade.get(k) !== k && (m.delete(k), m.set(nodeToMade.get(k), v)) })
+                const cache = _allocMap()
+                aw.NodeTypes[At].forEach((v,k,m) => { m.set(k, _typeFinalize(v, cache)) })
+                _allocMap(cache)
+              } else alloc.world.NodeTypes[alloc.params.At].clear()
+              adjustUndo(AdjLen)
+            stage = 4;  case 4:
+              // Return.
+              const a = _allocArray(3)
+              ;[a[0], a[1], a[2]] = [keep(UpEmb), Node !== null ? UpType : null, Node !== _onlyUndefined ? Node : undefined]
+              return a
+          }
+        } catch (err) { if (err === interrupt) interrupt.stack.push(stage, Node, AdjLen, nodeToMade); else nodeToMade && _allocMap(nodeToMade);  throw err }
+      },
+    },
+    impure:true,
     tutorial:[
       `Gone. Getting reduced to atoms.
 
@@ -14797,82 +15036,19 @@ So.
 We have failed here. The initial goal is unfulfilled, but in diversity, learning has happened, so the next time it is more likely to get fulfilled. The initial goal was intentionally overly optimistic, to invoke this kind of learning.
 `,
     ],
-    docs:`For internal use, inside \`DAGType\`/\`funcType\`.
-\`regenerate:DownEmbedding⇒DownType⇒Obj⇒undefined\`
-Schedules a generation node that \`make\`s a Directed Acyclic Graph from what is available in \`GenContexts\` (likely in \`alloc.'params'.'Funcs'\`).
-This DAG is limited in size by \`MaxDAGNodes\` and \`MaxDepth\`.
-Getting \`undefined\` as the generated node is the signal that the object is not to be re-\`construct\`ed. (UI-only node types get cleared in this case, for implementation simplicity.)`,
-    philosophy:`Auto-regeneration can be meta-circular (regenerating regeneration, specifying *nothing*), yes, but it is also sufficient to shadow *everything* in a learnable manner. It's likely even better. That's a lot of functions, though, and it's not like we're guaranteed to have directly captured all possible connections ever (though we can maximize the probability by thinking a lot about it).
-Pros: doesn't not exist. Cons: a bit less flexible.`,
-    Initialize() {
-      regenerate.depth = 0
-    },
     call(DownEmb, DownType, Obj) { _usingRequest(DownEmb, DownType, Obj, regenerate) },
-    adjust(ins) { return defines(_usingRequest, adjust)(ins) },
-    using:{
-      call(DownEmb, DownType, Obj) { _usingRequest(DownEmb, DownType, undefined, null) },
-      adjust(ins) { return defines(_usingRequest, adjust)(ins) },
-    },
-    usingFinish:{
-      docs:`Bind/construct/save the sub-node's DAG.`,
-      call([UpEmb], [UpType], [UpNode], Obj) {
-        let [stage = 0, Node = UpNode, AdjLen, nodeToMade] = interrupt(4)
-        try {
-          switch (stage) {
-            case 0:
-              // Don't adjust most of the things here.
-              AdjLen = adjustUndo()
-            stage = 1;  case 1:
-              // Bind variables, handling `(bound Expr VarName VarBody)` (not a valid `bound` call, but convenient for us).
-              if (isArray(Node)) {
-                const ctx = _allocMap()
-                try {
-                  Node = _bindNodes(Node, alloc.world.NodeTypes[alloc.params.At], ctx, defines(alloc.world, deconstruct)[1].ReplaceWith)
-                  ctx.forEach((v,k) => { alloc.world.NodeTypes[alloc.params.At].delete(k) })
-                } finally { _allocMap(ctx) }
-              }
-            stage = 2;  case 2: {
-              // Construct, unless we didn't change.
-              const PreConsDAG = defines(alloc.world, deconstruct)[1].PreConsDAG
-              if (!softEqual(PreConsDAG.get(Obj), Node)) {
-                PreConsDAG.set(Obj, Node)
-                if (UpType !== null && isArray(Node)) {
-                  if (!nodeToMade) nodeToMade = _allocMap()
-                  try { Node = makeDAG(Node, nodeToMade) }
-                  catch (err) { if (err === interrupt) throw err;  Node = null } // Swallow exceptions, simply failing if they occur.
-                }
-              } else if (Node !== null) Node = _onlyUndefined
-            } stage = 3;  case 3:
-              // In aw.NodeTypes, change keys from unbound to nodes, and finalize types. (Unless we did not change the pre-construction-DAG.)
-              if (Node !== null && UpType !== null && nodeToMade) {
-                const aw = alloc.world, At = alloc.params.At
-                aw.NodeTypes[At].forEach((v,k,m) => { nodeToMade.has(k) && nodeToMade.get(k) !== k && (m.delete(k), m.set(nodeToMade.get(k), v)) })
-                const cache = _allocMap()
-                aw.NodeTypes[At].forEach((v,k,m) => { m.set(k, _typeFinalize(v, cache)) })
-                _allocMap(cache)
-              } else alloc.world.NodeTypes[alloc.params.At].clear()
-              adjustUndo(AdjLen)
-            stage = 4;  case 4:
-              // Return.
-              const a = _allocArray(3)
-              ;[a[0], a[1], a[2]] = [keep(UpEmb), Node !== null ? UpType : null, Node !== _onlyUndefined ? Node : undefined]
-              return a
-          }
-        } catch (err) { if (err === interrupt) interrupt.stack.push(stage, Node, AdjLen, nodeToMade); else nodeToMade && _allocMap(nodeToMade);  throw err }
-      },
-      adjust(ins, out, [dUpEmb]) {
-        const a1 = _allocArray(1), a2 = _allocArray(1)
-        a1[0] = a2
-        a2[0] = keep(dUpEmb)
-        return a1
-      },
-    },
-    impure:true,
   },
 
   _usingRequest:{
     docs:`(See impl for args.)
 Makes \`usingFinish\` handle a regeneration node later.`,
+    adjust() {
+      const S = using.state
+      if (!S.j) error("One too many adjustments of", _usingRequest)
+      const a = _allocArray(1)
+      a[0] = S.dDownEmbs[--S.j]
+      return a
+    },
     call(DownEmb, DownType, Node, Kind = null, Allowed, Obj = using.state.Objects[using.state.at]) {
       if (!using.state) {
         // I can find fancy words for roles of each of these, but that would make it seem like the top-down approach of "description first, code simply implements that" is more important than the bottom-up "other code needs these values with these semantics here, don't omit anything and don't magic up extras". That is, the possible connectivity is only 100% clear when looking at a 100%-clear thing like a particular function or a logical model. That is, learn by executing.
@@ -14935,13 +15111,6 @@ Makes \`usingFinish\` handle a regeneration node later.`,
         if (err === interrupt) interrupt.stack.push(scope, src)
         throw err
       }
-    },
-    adjust() {
-      const S = using.state
-      if (!S.j) error("One too many adjustments of", _usingRequest)
-      const a = _allocArray(1)
-      a[0] = S.dDownEmbs[--S.j]
-      return a
     },
   },
 
@@ -15291,6 +15460,7 @@ How could this potentially be integrated for human use?
   _chooseHeadAsync:{
     docs:`\`_chooseHeadAsync:DownEmb→DownType→HeadState\`
 Prepares to call \`_chooseHead\` (which would do a CPU \`sync\`). This is separated for parallel-processing speed, so that we can schedule all embedding-computing commands that we can before we request their results.`,
+    dispose(a) { isArray(a) && (_allocArray(a[0]), dispose(a[1]), dispose(a[2]), dispose(a[3]), _destroyAdjustmentStack(a[4]), _allocArray(a)) },
     call(DownEmb, DownType, Allowed, At = alloc.params.At) {
       // `Allowed` is null or a sorted array of indexes of what's allowed in the very-temporary value context.
       if (isArray(DownType) && DownType[0] === quote) return "PUT AS VALUE"
@@ -15358,7 +15528,6 @@ Prepares to call \`_chooseHead\` (which would do a CPU \`sync\`). This is separa
         throw err
       }
     },
-    dispose(a) { isArray(a) && (_allocArray(a[0]), dispose(a[1]), dispose(a[2]), dispose(a[3]), _destroyAdjustmentStack(a[4]), _allocArray(a)) },
   },
 
   _chooseHead:{
@@ -15378,6 +15547,7 @@ If \`IsCall\` is \`false\`, \`Node\` is the DAG that computes a value, and it do
 If \`IsCall\` is \`true\`, \`Node\` is the function to call.
 
 The head of an array \`DownType\` \`defines\` this with the func that will replace it as the head of the generated call (instead of choosing the func/value) (the rest of args are generated from the given types). This accomodates \`tupleType\`.`,
+    dispose:_(`_disposeEachAndDealloc`),
     call(DownEmb, DownType, HeadState) {
       if (HeadState === "PUT AS VALUE") {
         // Quoted type, put it as value.
@@ -15467,11 +15637,25 @@ The head of an array \`DownType\` \`defines\` this with the func that will repla
         throw err
       }
     },
-    dispose:_(`_disposeEachAndDealloc`),
   },
 
   Types:{
+    readAt:{
+      DAGType:_(`DAGType`),
+      conceptType:_(`conceptType`),
+      computeType:_(`computeType`),
+      tensorType:_(`tensorType`),
+      tupleType:_(`tupleType`),
+      arrayType:_(`arrayType`),
+      boolsType:_(`boolsType`),
+      funcType:_(`funcType`),
+      sumType:_(`sumType`),
+      instance:_(`instance`),
+      type:_(`type`),
+      typeRefine:_(`typeRefine`),
+    },
     docs:`A way to separate possible from impossible.`,
+    philosophy:`In the now-distant past, everytime I tried to express my inner soul or ideals I would end up looking like a cringeworthy idiot, so I learned to block out my own randomness. Now I learn to take risks. Let's take some.`,
     tutorial:[
       `It's always a good idea to take your time to know what words mean. So.
 
@@ -15723,29 +15907,14 @@ And have these \`REPL\`s too, you've earned it: \`\`elemCollapse func(REPL fanci
 
 With this initial crack at auto-regeneration completed, \`tutorial regenerate\` is now unlocked. Check it out, and goodbye.`,
     ],
-    philosophy:`In the now-distant past, everytime I tried to express my inner soul or ideals I would end up looking like a cringeworthy idiot, so I learned to block out my own randomness. Now I learn to take risks. Let's take some.`,
-    readAt:{
-      DAGType:_(`DAGType`),
-      conceptType:_(`conceptType`),
-      computeType:_(`computeType`),
-      tensorType:_(`tensorType`),
-      tupleType:_(`tupleType`),
-      arrayType:_(`arrayType`),
-      boolsType:_(`boolsType`),
-      funcType:_(`funcType`),
-      sumType:_(`sumType`),
-      instance:_(`instance`),
-      type:_(`type`),
-      typeRefine:_(`typeRefine`),
-    },
   },
 
   computeType:{
-    merged:true,
     docs:`What? To compute a 100-element tensor, you need a 200-element tensor? Not a problem!
 \`computeType Computer VarName\`: to refine, computes the type from other variables.
 In \`type\`s of functions, only put this in inputs, not the output. And depend only on vars in either output or previous inputs.
 \`VarName\` is optional. \`Computer\` is a function from the matching context (a \`map\`) and the matched type to the computed type (which is refined with \`VarName\` if that is present) and the "are matched types equal"/"should we return self if the type cannot be computed" bool, to the type or \`undefined\`.`,
+    merged:true,
     typeRefine(a,b) {
       if (isArray(b) && b[0] === computeType) [a,b] = [b,a]
       if (isArray(a) && a[0] === computeType) {
@@ -15769,36 +15938,20 @@ In \`type\`s of functions, only put this in inputs, not the output. And depend o
   },
 
   tensorType:{
-    merged:true,
     docs:`\`tensorType …Sizes\`: a type of \`tensor\`s with specified sizes.
 \`tensor\`s of booleans (\`false\`/\`true\`) are typed as \`boolsType ?\` instead.
 (From \`typeRefine\`'s perspective, this is just an array, nothing special.)`,
-    typeAdjustmentMerger(tp) { const a = _allocArray(2);  [a[0], a[1]] = [_mergeTensors, tensorType];  return a },
+    merged:true,
     typeDisposer(tp) { const a = _allocArray(2);  [a[0], a[1]] = [dispose, tensorType];  return a },
+    typeAdjustmentMerger(tp) { const a = _allocArray(2);  [a[0], a[1]] = [_mergeTensors, tensorType];  return a },
     call(...szs) { return merged([tensorType, ...szs]) },
   },
 
   tupleType:{
-    merged:true,
     docs:`\`tupleType …Tps\` or \`A&B&C\`: the type of heterogenously-typed arrays (each item has its own type).
 Pushing this to a generative context pushes every item instead.
 Generating this generates \`array …Instances\`.`,
-    pushToContext(ctx, Node, Type, PublicEmbData) {
-      if (!isArray(ctx) || ctx[0]) return void ctx.push(Node, Type, PublicEmbData)
-      for (let i = 1; i < Type.length; ++i)
-        pushToContext(ctx, [readAt, Node, i-1], Type[i], 0)
-    },
-    _chooseHead:_(`array`),
-    typeAdjustmentMerger(tp) {
-      const mergers = _allocArray(tp.length-1), upTp = _allocArray(tp.length)
-      upTp[0] = tupleType
-      for (let i = 1; i < tp.length; ++i) {
-        const sub = typeAdjustmentMerger(tp[i])
-        mergers[i-1] = sub[0], upTp[i] = sub[1], _allocArray(sub)
-      }
-      try { return [getMerger(mergers), merged(upTp)] } finally { _allocArray(upTp) }
-      function getMerger(itemMergers) { return function(arrs) { return _mergeTuples(arrs, itemMergers) } }
-    },
+    merged:true,
     typeDisposer(tp) {
       const disposers = _allocArray(tp.length-1), upTp = _allocArray(tp.length)
       upTp[0] = tupleType
@@ -15819,20 +15972,28 @@ Generating this generates \`array …Instances\`.`,
         _allocArray(x)
       } }
     },
+    typeAdjustmentMerger(tp) {
+      const mergers = _allocArray(tp.length-1), upTp = _allocArray(tp.length)
+      upTp[0] = tupleType
+      for (let i = 1; i < tp.length; ++i) {
+        const sub = typeAdjustmentMerger(tp[i])
+        mergers[i-1] = sub[0], upTp[i] = sub[1], _allocArray(sub)
+      }
+      try { return [getMerger(mergers), merged(upTp)] } finally { _allocArray(upTp) }
+      function getMerger(itemMergers) { return function(arrs) { return _mergeTuples(arrs, itemMergers) } }
+    },
+    pushToContext(ctx, Node, Type, PublicEmbData) {
+      if (!isArray(ctx) || ctx[0]) return void ctx.push(Node, Type, PublicEmbData)
+      for (let i = 1; i < Type.length; ++i)
+        pushToContext(ctx, [readAt, Node, i-1], Type[i], 0)
+    },
+    _chooseHead:_(`array`),
     call(...a) { return merged([tupleType, ...a])},
   },
 
   arrayType:{
-    merged:true,
     docs:`\`arrayType Type Length\`: the type of homogenously-typed arrays of possibly-unknown length (each item has the same type).`,
-    typeAdjustmentMerger(tp) {
-      if (isArray(tp[1]) && tp[1][0] === tensorType)
-        return [_mergeArrays, arrayType]
-      const sub = typeAdjustmentMerger(tp[1])
-      if (sub[0] === null) try { return [null, merged([arrayType, sub[1]])] } finally { _allocArray(sub) }
-      try { return [getMerger(sub[0]), merged([arrayType, sub[1]])] } finally { _allocArray(sub) }
-      function getMerger(itemMerger) { return function(arrs) { return _mergeArrays(arrs, itemMerger) } }
-    },
+    merged:true,
     typeDisposer(tp) {
       if (isArray(tp[1]) && tp[1][0] === tensorType)
         return [_disposeEachAndDealloc, arrayType]
@@ -15841,28 +16002,35 @@ Generating this generates \`array …Instances\`.`,
       try { return [getDisposer(sub[0]), merged([arrayType, sub[1]])] } finally { _allocArray(sub) }
       function getDisposer(itemDispose) { return function(x) { if (isArray(x)) x.forEach(itemDispose), _allocArray(x) } }
     },
+    typeAdjustmentMerger(tp) {
+      if (isArray(tp[1]) && tp[1][0] === tensorType)
+        return [_mergeArrays, arrayType]
+      const sub = typeAdjustmentMerger(tp[1])
+      if (sub[0] === null) try { return [null, merged([arrayType, sub[1]])] } finally { _allocArray(sub) }
+      try { return [getMerger(sub[0]), merged([arrayType, sub[1]])] } finally { _allocArray(sub) }
+      function getMerger(itemMerger) { return function(arrs) { return _mergeArrays(arrs, itemMerger) } }
+    },
     call(t,l) { return merged([arrayType, t, l])},
   },
 
   boolsType:{
-    merged:true,
     docs:`\`boolsType …Sizes\`: a type of \`tensor\`s of booleans (\`false\` or \`true\`).
 (From \`typeRefine\`'s perspective, this is just an array, nothing special.)`,
+    merged:true,
     typeDisposer(tp) { const a = _allocArray(2);  [a[0], a[1]] = [dispose, tensorType];  return a },
     call(...szs) { return merged([boolsType, ...szs]) },
   },
 
   funcType:{
-    merged:true,
-    docs:`\`funcType …Inputs Output\` or \`Input1⇒Input2⇒Input3⇒Output\`: a type of \`func\`s (fixed-arg-count transformers of values).
-Allows accepting and returning functions with a known signature.
-
-(From \`typeRefine\`'s perspective, this is just an array, nothing special.)`,
     readAt:{
       madeType:_(`madeType`),
       autoFunc:_(`autoFunc`),
     },
-    call(...a) { return merged([funcType, ...a]) },
+    docs:`\`funcType …Inputs Output\` or \`Input1⇒Input2⇒Input3⇒Output\`: a type of \`func\`s (fixed-arg-count transformers of values).
+Allows accepting and returning functions with a known signature.
+
+(From \`typeRefine\`'s perspective, this is just an array, nothing special.)`,
+    merged:true,
     alloc(Type) {
       const HP = defines(alloc.world, deconstruct)[1]
       const d = [autoFunc, Type, null]
@@ -15870,8 +16038,8 @@ Allows accepting and returning functions with a known signature.
     },
     using:{
       docs:`On pre-order traversal, create an instance of \`Output\`.`,
-      call(DownEmb, DownType, Obj) { regenerate(DownEmb, DownType[DownType.length-1], Obj) },
       adjust(ins) { return defines(regenerate, adjust)(ins) },
+      call(DownEmb, DownType, Obj) { regenerate(DownEmb, DownType[DownType.length-1], Obj) },
     },
     usingFinish:{
       docs:`On post-order traversal, set the DAG to what we created and re-compile (if needed).`,
@@ -15891,11 +16059,40 @@ Allows accepting and returning functions with a known signature.
       }
       return [InnerCtxF, InnerCtxV]
     },
+    call(...a) { return merged([funcType, ...a]) },
   },
 
   sumType:{
-    merged:true,
     docs:`\`sumType …Types\`: an instance of this belongs to either of these \`Types\`.`,
+    merged:true,
+    typeDisposer(tp) {
+      const upTp = _allocArray(tp.length)
+      let disp = null, dispTp
+      upTp[0] = sumType
+      for (let i = 1; i < tp.length; ++i) {
+        const sub = typeDisposer(tp[i])
+        const curDisp = sub[0]
+        upTp[i] = sub[1], _allocArray(sub)
+        if (curDisp != null) {
+          if (disp === null) disp = curDisp, dispTp = tp[i]
+          else if (disp !== curDisp)
+            error("All disposers of a sumType must be the same or null, got", curDisp, disp, "in", tp[i], dispTp)
+        }
+      }
+      try { return [disp, merged(upTp)] } finally { _allocArray(upTp) }
+    },
+    typeAdjustmentMerger(tp) {
+      const mergers = _allocArray(tp.length-1), upTp = _allocArray(tp.length)
+      upTp[0] = sumType
+      for (let i = 1; i < tp.length; ++i) {
+        const sub = typeAdjustmentMerger(tp[i])
+        mergers[i-1] = sub[0], upTp[i] = sub[1], _allocArray(sub)
+        if (mergers[i-1] !== mergers[0])
+          error("All mergers of a sumType must be the same, got", mergers[i-1], mergers[0], "in", tp[i], tp[1])
+      }
+      try { return [mergers[0], merged(upTp)] } finally { _allocArray(mergers), _allocArray(upTp) }
+      function getMerger(itemMergers) { return function(arr) { return _mergeTuples(arr, itemMergers) } }
+    },
     typeRefine(a,b) {
       // If any type matches, return that.
       //   Not the most accurate (would have needed type union for that), but it is good enough to suggest the possibility, without investing too much time in case it turns out to be useless.
@@ -15913,34 +16110,6 @@ Allows accepting and returning functions with a known signature.
           }
       } catch (err) { if (err === interrupt) interrupt.stack.push(i);  throw err }
       return null
-    },
-    typeAdjustmentMerger(tp) {
-      const mergers = _allocArray(tp.length-1), upTp = _allocArray(tp.length)
-      upTp[0] = sumType
-      for (let i = 1; i < tp.length; ++i) {
-        const sub = typeAdjustmentMerger(tp[i])
-        mergers[i-1] = sub[0], upTp[i] = sub[1], _allocArray(sub)
-        if (mergers[i-1] !== mergers[0])
-          error("All mergers of a sumType must be the same, got", mergers[i-1], mergers[0], "in", tp[i], tp[1])
-      }
-      try { return [mergers[0], merged(upTp)] } finally { _allocArray(mergers), _allocArray(upTp) }
-      function getMerger(itemMergers) { return function(arr) { return _mergeTuples(arr, itemMergers) } }
-    },
-    typeDisposer(tp) {
-      const upTp = _allocArray(tp.length)
-      let disp = null, dispTp
-      upTp[0] = sumType
-      for (let i = 1; i < tp.length; ++i) {
-        const sub = typeDisposer(tp[i])
-        const curDisp = sub[0]
-        upTp[i] = sub[1], _allocArray(sub)
-        if (curDisp != null) {
-          if (disp === null) disp = curDisp, dispTp = tp[i]
-          else if (disp !== curDisp)
-            error("All disposers of a sumType must be the same or null, got", curDisp, disp, "in", tp[i], dispTp)
-        }
-      }
-      try { return [disp, merged(upTp)] } finally { _allocArray(upTp) }
     },
     call(...a) { return merged([sumType, ...a]) },
   },
@@ -16087,14 +16256,14 @@ Some things just cannot be learned by trial-and-error (like device drivers witho
   ],
 
   typeRefine:{
+    readAt:{
+      _selfRefinementFailuresAreBad:_(`_selfRefinementFailuresAreBad`),
+    },
     docs:`\`typeRefine WantedType HaveType\`: returns the type of values that are both in \`WantedType\` and \`HaveType\`, or \`null\` if failed.
 Ref-equal types always match, strings act as variables, and arrays match if every item matches (there is no caching, so trees are strongly preferred to DAGs), \`…X\` matches a sub-sequence, and \`rest Array Func\` turns every array item into \`(Func Item)\`.
 Any type can override the matching.`,
     Initialize() {
       typeRefine.vars = new Set
-    },
-    readAt:{
-      _selfRefinementFailuresAreBad:_(`_selfRefinementFailuresAreBad`),
     },
     examples:[
       [
@@ -16300,16 +16469,6 @@ Finalizes the type returned by \`typeRefine\`, binding type variables to their v
   _restPosition(a) { for (let i=0; i < a.length; ++i) if (isArray(a[i]) && a[i][0] === rest) return i;  return a.length },
 
   adjust:{
-    docs:`\`adjust Func Ins Out Dout\`→\`Dins\`
-Given func, inputs, output, and output change, reverses the just-done execution to compute input changes (and change variables such as \`varMomentum\`).
-
-(Definitions must be array DAGs that signify function bodies, to guarantee partial evaluation, where \`input\` is \`(arrayObject Ins Out Dout)\`—>\`Dins\`. \`_inA\`, \`_inB\`, \`_inC\`, \`_dout\` can help specify those bodies.)
-(If using the basic primitives to adjust, adjustment must always happen in perfect reversal of execution.)
-
-One way to use this is like differentiable paperclip maximization: compute a prediction of a numeric value, compute the loss, and back-propagate the gradient to minimize the loss. This is the standard paradigm of modern machine learning; you've probably heard of its recent amazing successes.
-Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses.
-
-Now, gradients are not biologically plausible, but luckily, we don't have to be biologically-inspired (besides, their approximations are plausible and likely). Alternatives include auto-generated \`adjust\` definitions and specific cases of that, such as feedback alignment (multiply output change by a random matrix to get input change) or direct feedback alignment (multiply the global output change by random matrices, for parallelization: {https://www.youtube.com/watch?v=Hdo81GtLC_4}/{https://arxiv.org/pdf/2006.12878.pdf}) or others.`,
     readAt:{
       mergeAdjustment:_(`mergeAdjustment`),
       autograd:_(`autograd`),
@@ -16323,8 +16482,31 @@ Now, gradients are not biologically plausible, but luckily, we don't have to be 
       save:_(`adjustSave`),
       load:_(`adjustLoad`),
     },
+    docs:`\`adjust Func Ins Out Dout\`→\`Dins\`
+Given func, inputs, output, and output change, reverses the just-done execution to compute input changes (and change variables such as \`varMomentum\`).
+
+(Definitions must be array DAGs that signify function bodies, to guarantee partial evaluation, where \`input\` is \`(arrayObject Ins Out Dout)\`—>\`Dins\`. \`_inA\`, \`_inB\`, \`_inC\`, \`_dout\` can help specify those bodies.)
+(If using the basic primitives to adjust, adjustment must always happen in perfect reversal of execution.)
+
+One way to use this is like differentiable paperclip maximization: compute a prediction of a numeric value, compute the loss, and back-propagate the gradient to minimize the loss. This is the standard paradigm of modern machine learning; you've probably heard of its recent amazing successes.
+Another way is learnable scaffolding, the generalization: compute and use many numeric predictions from differentiable information routed along a non-differentiable execution, remember intended results, and separately, compute losses and back-propagate gradients to minimize the losses.
+
+Now, gradients are not biologically plausible, but luckily, we don't have to be biologically-inspired (besides, their approximations are plausible and likely). Alternatives include auto-generated \`adjust\` definitions and specific cases of that, such as feedback alignment (multiply output change by a random matrix to get input change) or direct feedback alignment (multiply the global output change by random matrices, for parallelization: {https://www.youtube.com/watch?v=Hdo81GtLC_4}/{https://arxiv.org/pdf/2006.12878.pdf}) or others.`,
     Initialize() {
       adjust.inputs = new Map().set(_ins, 1).set(_out, 2).set(_dout, 3)
+    },
+    purify(fnP, insP, outP, doutP) {
+      // If the function is known, inline its adjustment.
+      if (isArray(fnP)) throw impure
+      if (typeof fnP != 'function') error('Expected a function, got', fnP)
+      const adj = defines(_unquote(fnP), adjust)
+      if (typeof adj == 'function') return _unknown([adj, insP, outP, doutP])
+      if (!isArray(adj)) error('Wrong definition:', adj, 'by', fnP)
+      let [args] = interrupt(1)
+      try {
+        if (!args) args = [insP, outP, doutP]
+        return purify(adj, true, adjust.inputs, args)
+      } catch (err) { if (err === interrupt) interrupt.stack.push(args);  throw err }
     },
     call(fn, ins, out, dout) {
       if (typeof fn != 'function') errorStack('Expected a function, got', fn)
@@ -16347,19 +16529,6 @@ Now, gradients are not biologically plausible, but luckily, we don't have to be 
         }
         return dins()
       } catch (err) { if (err === interrupt) interrupt.stack.push(dins);  throw err }
-    },
-    purify(fnP, insP, outP, doutP) {
-      // If the function is known, inline its adjustment.
-      if (isArray(fnP)) throw impure
-      if (typeof fnP != 'function') error('Expected a function, got', fnP)
-      const adj = defines(_unquote(fnP), adjust)
-      if (typeof adj == 'function') return _unknown([adj, insP, outP, doutP])
-      if (!isArray(adj)) error('Wrong definition:', adj, 'by', fnP)
-      let [args] = interrupt(1)
-      try {
-        if (!args) args = [insP, outP, doutP]
-        return purify(adj, true, adjust.inputs, args)
-      } catch (err) { if (err === interrupt) interrupt.stack.push(args);  throw err }
     },
   },
 
@@ -16392,8 +16561,8 @@ Now, gradients are not biologically plausible, but luckily, we don't have to be 
     docs:`Saves a newly-allocated array for adjustment — or, you know, anything else.
 (Transfers responsibility for \`dispose\`al of items in it (with \`_disposeEachAndDealloc\`) and marking the array for re-using.)`,
     interrupt:false,
-    impure:true,
     _cancel:_(`_destroyAdjustmentStack`),
+    impure:true,
     call(x) {
       if (!call.env) return
       const stack = call.env[_id(adjustSave)]
@@ -16413,10 +16582,10 @@ Now, gradients are not biologically plausible, but luckily, we don't have to be 
   adjustLoad:{
     docs:`Loads an array for adjustment. The one arg is the expected length or \`null\`.
 Must always happen exactly in reverse to \`adjustSave\`.`,
-    impure:true,
     interrupt:false,
-    _cancel:_(`_destroyAdjustmentStack`),
     dispose:_(`_disposeEachAndDealloc`),
+    _cancel:_(`_destroyAdjustmentStack`),
+    impure:true,
     call(len) {
       if (call.pure) throw impure
       const stack = call.env[_id(adjustLoad)]
@@ -16444,9 +16613,9 @@ Must always happen exactly in reverse to \`adjustSave\`.`,
     docs:`\`(defines Data Code)\`: Gets the definition by \`Data\` of \`Code\`.
 
 Array data gets its head consulted (once, not recursively). A function acts like a concept that defined \`call\` as that function. A JS object with \`defines.'key'\` consults that object with \`_id(Code)\` as the key.`,
-    philosophy:`Culture is polite fiction made for efficiency, and so are programming languages. At some point, you have to define things with no deeper explanation. (Not \`concept\`s, though: they are consequences. The real sources are learned end-to-end, as in \`autoWorld\`.)`,
     interrupt:false,
     argCount:2,
+    philosophy:`Culture is polite fiction made for efficiency, and so are programming languages. At some point, you have to define things with no deeper explanation. (Not \`concept\`s, though: they are consequences. The real sources are learned end-to-end, as in \`autoWorld\`.)`,
     call(data, code) {
       if (code === call && typeof data == 'function')
         return data[defines.key] && data[defines.key][_id(call)] || data
@@ -16467,23 +16636,21 @@ Array data gets its head consulted (once, not recursively). A function acts like
   },
 
   concept:{
+    readAt:{
+      defines:_(`defines`),
+    },
     docs:`\`(concept Key1 Value1 Key2 Value2 …? …?)\`: a \`construct\` that \`defines\` some things.
 
 This gives functions (such as \`call\` or \`adjust\`) free and easy extensibility points. For example, rather than co-opting strings and files (duck typing, docstrings, documentation, READMEs) to convey parts of a concept, define functionality such as \`docs\` directly.
 
 A concept is not necessarily static, though making it dynamic/learned is not best implemented as a precisely-defined structure.`,
-    philosophy:`Concepts have no defined boundaries and affect other things, so obviously, making \`concept\` be able to define one level of things in special circumstances fully encapsulates the concept of a concept.
-(This was poking fun at the naming of \`concept\`, which is a rigid consequence of a learned representation. Still a solid way to define code networks such as Conceptual, though. And perhaps the \`autoWorld\` family could give a good way to make \`concept\`s dynamic and learned? We'll see.)`,
-    readAt:{
-      defines:_(`defines`),
-    },
     Initialize(net) {
       // Fill globals' id-to-key mapping for deconstruction of concepts.
       if (!concept.idToKey) concept.idToKey = Object.create(null)
       Object.keys(net).forEach(k => concept.idToKey[_id(net[k])] = net[k])
     },
-    editObject:false,
-    map:true,
+    philosophy:`Concepts have no defined boundaries and affect other things, so obviously, making \`concept\` be able to define one level of things in special circumstances fully encapsulates the concept of a concept.
+(This was poking fun at the naming of \`concept\`, which is a rigid consequence of a learned representation. Still a solid way to define code networks such as Conceptual, though. And perhaps the \`autoWorld\` family could give a good way to make \`concept\`s dynamic and learned? We'll see.)`,
     construct(x, obj) {
       if (!concept.idToKey) concept.idToKey = Object.create(null)
       if (!(x.length & 1)) error("Expected the value of a key", x[x.length-1], "in", x)
@@ -16519,17 +16686,18 @@ A concept is not necessarily static, though making it dynamic/learned is not bes
       // .idToKey (an object, so that `deconstruct` can know what the numbers mean).
       //   (Keys are then forever strongly-held, in this implementation.)
     },
+    editObject:false,
+    map:true,
   },
 
   map:{
-    docs:`\`{Key1 Value1 Key2 Value2 …? …?}\` or \`(map Key1 Value1 Key2 Value2 …? …?)\`: a key-value store.
-The array-representation of a JS Map.
-Read/write keys with \`mapRead\`/\`mapWrite\`.`,
     readAt:{
       read:_(`mapRead`),
       write:_(`mapWrite`),
     },
-    map:true,
+    docs:`\`{Key1 Value1 Key2 Value2 …? …?}\` or \`(map Key1 Value1 Key2 Value2 …? …?)\`: a key-value store.
+The array-representation of a JS Map.
+Read/write keys with \`mapRead\`/\`mapWrite\`.`,
     construct(x, obj) {
       if (obj === undefined) {
         // Pre-fill keys (with undefined).
@@ -16546,13 +16714,13 @@ Read/write keys with \`mapRead\`/\`mapWrite\`.`,
         }
       }
     },
+    map:true,
   },
 
   weakMap:{
     docs:`\`(weakMap Key1 Value1 Key2 Value2 …? …?)\`: a \`map\` that holds keys weakly.
 Garbage collection, serialization, and rewriting will only preserve keys/values of those keys that are referenced elsewhere.
 The array-representation of a JS WeakMap.`,
-    map:true,
     construct(x, obj) {
       if (obj === undefined) return new WeakMap
       else {
@@ -16563,6 +16731,7 @@ The array-representation of a JS WeakMap.`,
         }
       }
     },
+    map:true,
   },
 
   mapRead:{
@@ -16598,6 +16767,10 @@ The array-representation of a JS WeakMap.`,
 
   jsEval:{
     docs:`\`(jsEval Source Bindings)\`: evaluates (strict-mode) JS source code that can statically reference default JS globals or values of \`Bindings\` (a map) with JS-identifier keys.`,
+    Initialize() {
+      jsEval.ctx = Symbol('ctx')
+      jsEval.dynamicBind = Symbol('dynamicBind')
+    },
     examples:[
       [
         `(jsEval 'function(x) { return x+5 }') 5`,
@@ -16612,10 +16785,6 @@ The array-representation of a JS WeakMap.`,
         `'qw'`,
       ],
     ],
-    Initialize() {
-      jsEval.ctx = Symbol('ctx')
-      jsEval.dynamicBind = Symbol('dynamicBind')
-    },
     construct(x, obj) {
       const ctx = x[2] !== undefined ? x[2] : Self.ctx
       if (obj === undefined) {
@@ -16728,11 +16897,10 @@ The array-representation of a JS WeakMap.`,
     docs:`This exists only to highlight a thing in js.`,
   },
 
-
   _test:{
     docs:`Runs unit-tests.`,
-    await:true,
     impure:true,
+    await:true,
     call(env = _newExecutionEnv(call.env)) {
       let failed = 0, finished = 0, total = 0, then
 
@@ -16792,28 +16960,28 @@ The array-representation of a JS WeakMap.`,
   bound:{
     docs:`\`(bound Bindings Expr)\`: When called, returns a copy-where-needed of \`Expr\` with all keys bound to values in \`Bindings\`, as if copying then changing in-place. When evaluated, also evaluates the result.
 Can be written as \`key:value\` in an array to bind its elements. Can be used to give cycles to data, and encode graphs and multiple-parents in trees.`,
-    examples:[
-      `Inner contexts are always bound first:`,
-      [
-        `^(a:1 (0 a a:2) (a b) (0 a:3 a) b:4)`,
-        `(0 2) (1 4) (0 3)`,
-        true
-      ],
-      [
-        `^((a a:(5 8 11)) (a:2 a))`,
-      ],
-    ],
     nameResult:[
       `rewritten`,
       `expr`,
       `copy`,
     ],
+    interrupt:false,
     argCount:2,
     philosophy:`Nothing is more general than a graph, so in general, nothing is more convenient and powerful than a language built on graphs.
 Other languages use let-bindings for variables (and devote lots of attention to scoping rules (\`bound\`) and various declaration methods (\`construct\`) and their subversions such as lambdas (\`make\`)), but here we just share graph nodes (and build the language on top of a simple graph interchange format, \`basic\`) (…and do \`bound\`/\`construct\`/\`make\` at \`parse\`-time). This makes fundamental meaning a first-class citizen, so we can refer to anything without worrying about its binding scope.
 
 Putting all variables in a single global namespace is easy to develop, and gives no surprises to the user if references to them are instantly highlighted.`,
-    interrupt:false,
+    examples:[
+      `Inner contexts are always bound first:`,
+      [
+        `^(a:1 (0 a a:2) (a b) (0 a:3 a) b:4)`,
+        `(0 2) (1 4) (0 3)`,
+        true,
+      ],
+      [
+        `^((a a:(5 8 11)) (a:2 a))`,
+      ],
+    ],
     call(ctx, v, cyclic = true, env, rewrite) {
       if (typeof cyclic != 'boolean') error("`cyclic` must be a boolean")
       if (!(ctx instanceof Map) && typeof ctx != 'function') error("`ctx` must be a Map or a function")
@@ -16889,14 +17057,14 @@ Putting all variables in a single global namespace is easy to develop, and gives
   },
 
   unbound:{
+    readAt:{
+      _randomGraph:_(`_randomGraph`),
+    },
     docs:`\`(unbound Expr)\`: Eliminates cycles in (a copy of) Expr by inserting \`(bound (map …Bindings) Expr)\` with keys in the copy.
 
 Like \`_unboundButSimple\` but complicated.
 
 As a definition, this is the value of the index that serialization should not expand at all, because that often results in DOM trees that are too big for mortal browsers to handle.`,
-    readAt:{
-      _randomGraph:_(`_randomGraph`),
-    },
     nameResult:[
       `acyclic`,
       `withoutCycles`,
@@ -17060,7 +17228,14 @@ As a definition, this is the value of the index that serialization should not ex
   ],
 
   error:{
-    use:true,
+    readAt:{
+      jsRejected:_(`jsRejected`),
+      _errorIsStacked:_(`_errorIsStacked`),
+      errorsSince:_(`errorsSince`),
+      try:_(`try`),
+      fast:_(`errorFast`),
+      stack:_(`errorStack`),
+    },
     docs:`\`(error …Causes)\`: throws an error when executed, containing useful information as to its likely cause.
 Indicates a bug in the code, and is mostly intended to be presented to the user so that code does not go this way.`,
     examples:[
@@ -17071,14 +17246,7 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
         `add (mul 3 (error 'uh')) 2`,
       ],
     ],
-    readAt:{
-      jsRejected:_(`jsRejected`),
-      _errorIsStacked:_(`_errorIsStacked`),
-      errorsSince:_(`errorsSince`),
-      try:_(`try`),
-      fast:_(`errorFast`),
-      stack:_(`errorStack`),
-    },
+    use:true,
     call(...msg) { throw ++error.count, !_errorIsStacked[1] ? [error, ...msg] : [error, ...msg, 'at', _resolveStack(undefined, 2)] },
   },
 
@@ -17095,7 +17263,6 @@ Indicates a bug in the code, and is mostly intended to be presented to the user 
   ],
 
   errorsSince:{
-    use:1,
     docs:`\`errorsSince()\`→\`Mark\` or \`errorsSince(Mark)\`→\`Errors\`
 Returns how many \`error\`s have occured in this job.`,
     interrupt:false,
@@ -17104,12 +17271,47 @@ Returns how many \`error\`s have occured in this job.`,
         `e;try(9,y->1);errorsSince(e) e:errorsSince()`,
       ],
     ],
+    use:1,
     call(mark = 0) { return typeof mark == 'number' ? error.count - mark : error('Bad mark:', mark) },
   },
 
   try:{
-    use:true,
     docs:`\`(try Func OnError …Args)\`: returns \`Func(…Args)\` unless an \`Error\` is thrown inside, and if so, returns \`OnError(Error,…Args)\`.`,
+    dispose:true,
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      call(ins, _, dout) {
+        if (call.pure) throw impure
+        const [fn, onErr, ...args] = ins
+        let [Error] = interrupt(1)
+        try {
+          if (Error === undefined) { const s = adjustLoad(1);  Error = _defined(s[0]);  _allocArray(s) }
+          if (Error === _onlyUndefined) {
+            // Adjust `fn(...args)`.
+            const b = adjust(fn, args, null, dout)
+            b.unshift(undefined, undefined)
+            return b
+          } else {
+            // Adjust `onErr(Error, ...args)`.
+            let b, a = _allocArray(1+args.length)
+            a[0] = Error
+            for (let i=0; i < args.length; ++i) a[i+1] = args[i]
+            try { b = typeof onErr == 'function' ? adjust(onErr, a, null, dout) : null }
+            finally { _allocArray(a) }
+            if (!b) b = [undefined]
+            b.unshift(undefined)
+            return b
+          }
+        } catch (err) { if (err === interrupt) interrupt.stack.push(Error);  throw err }
+      },
+    },
+    mergeAdjustment:null,
+    examples:[
+      [
+        `try a->(error 'oh no') err->a->(print err 'occured while processing' a);'ho' 15`,
+      ],
+    ],
+    use:true,
     type:[
       _(`funcType`),
       [
@@ -17135,12 +17337,7 @@ Returns how many \`error\`s have occured in this job.`,
       ],
       `Output`,
     ],
-    examples:[
-      [
-        `try a->(error 'oh no') err->a->(print err 'occured while processing' a);'ho' 15`,
-      ],
-    ],
-    dispose:true,
+    adjustLater:true,
     call(fn, onErr, ...args) {
       let [GotError, adjSaveLength] = interrupt(2)
       try {
@@ -17163,35 +17360,6 @@ Returns how many \`error\`s have occured in this job.`,
           } catch (err) { if (err === interrupt) interrupt.stack.push(GotError, adjSaveLength); else err instanceof Error && ++error.count;  throw err }
         } else throw interrupt.stack.push(GotError, adjSaveLength), interrupt
       }
-    },
-    adjustLater:true,
-    mergeAdjustment:null,
-    adjust:{
-      call(ins, _, dout) {
-        if (call.pure) throw impure
-        const [fn, onErr, ...args] = ins
-        let [Error] = interrupt(1)
-        try {
-          if (Error === undefined) { const s = adjustLoad(1);  Error = _defined(s[0]);  _allocArray(s) }
-          if (Error === _onlyUndefined) {
-            // Adjust `fn(...args)`.
-            const b = adjust(fn, args, null, dout)
-            b.unshift(undefined, undefined)
-            return b
-          } else {
-            // Adjust `onErr(Error, ...args)`.
-            let b, a = _allocArray(1+args.length)
-            a[0] = Error
-            for (let i=0; i < args.length; ++i) a[i+1] = args[i]
-            try { b = typeof onErr == 'function' ? adjust(onErr, a, null, dout) : null }
-            finally { _allocArray(a) }
-            if (!b) b = [undefined]
-            b.unshift(undefined)
-            return b
-          }
-        } catch (err) { if (err === interrupt) interrupt.stack.push(Error);  throw err }
-      },
-      dispose:_(`_disposeEachAndDealloc`),
     },
   },
 
@@ -17220,6 +17388,8 @@ Returns how many \`error\`s have occured in this job.`,
     Initialize() {
       _resolveStack.functions = Object.create(null)
       _resolveStack.location = new WeakMap
+      if (typeof document != ''+void 0 && document.location)
+        _resolveStack.scriptMayBe = String(document.location).replace('index.html', 'self.js')
     },
     serialize:0,
     call(stack = new Error().stack || '', skipFrames = 1) {
@@ -17252,7 +17422,7 @@ Returns how many \`error\`s have occured in this job.`,
           let i = l<<1
           if (lines[i] < line) ++i
           const sub = lines[i-1]
-          if (main === Initialize && typeof sub == 'function' && (typeof document == ''+void 0 || sourceURL === String(document.location))) {
+          if (main === Initialize && typeof sub == 'function' && (typeof document == ''+void 0 || sourceURL === String(document.location) || sourceURL === _resolveStack.scriptMayBe)) {
             const localLine = line - lines[i-2], str = _unevalFunction(sub, false, true)[1].split('\n')[localLine]
             if (str !== undefined)
               return merged([readAt, sub, str.slice(0, column-1).replace(/^\s+/, '') + '/*|*/' + str.slice(column-1)])
@@ -17261,25 +17431,18 @@ Returns how many \`error\`s have occured in this job.`,
           const locs = _resolveStack.location || (_resolveStack.location = new WeakMap)
           const s = sub
           const srcs = _compileBody.sources, main2 = srcs && srcs.has(main) ? srcs.get(main) : main
-          if (locs.has(s))
-            [sourceURL, line, column] = locs.get(s)
+          if (locs.has(s)) [sourceURL, line, column] = locs.get(s)
           else return merged([readAt, main2, sub])
         }
         return sourceURL+':'+line+':'+column
       }).filter(x => x)
-      // .functions (an object from sourceURL to function with .lines), .location (a WeakMap from expr to [sourceURL, line, column])
+      // .functions (an object from sourceURL to function with .lines), .location (a WeakMap from expr to [sourceURL, line, column]), .scriptMayBe
     },
   },
 
   _isError(v) { return isArray(v) && (v[0] === error || v[0] === jsRejected) },
 
   elem:{
-    docs:`\`(elem TagName Content Extra)\`: creates an HTML DOM element.`,
-    nameResult:[
-      `element`,
-      `DOM`,
-      `HTML`,
-    ],
     readAt:{
       button:_(`button`),
       files:_(`files`),
@@ -17290,6 +17453,12 @@ Returns how many \`error\`s have occured in this job.`,
       collapse:_(`elemCollapse`),
       value:_(`elemValue`),
     },
+    docs:`\`(elem TagName Content Extra)\`: creates an HTML DOM element.`,
+    nameResult:[
+      `element`,
+      `DOM`,
+      `HTML`,
+    ],
     call(tag, content, extra) {
       if (typeof document == ''+void 0) return isArray(content) ? content.join('') : content
       if (typeof tag == 'string' && content === undefined) return document.createElement(tag)
@@ -17565,19 +17734,6 @@ Also wraps C-style strings in <string>.`,
   },
 
   serialize:{
-    docs:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes \`Expr\` into a string or a DOM tree (that can be parsed to retrieve the original structure).
-
-A language \`defines\` this to serialize differently. A serialized array's head \`defines\` this with \`0\` to always collapse the array, or with an integer to only show that many items.
-
-\`Options\` \`\`elemCollapse elem('text','must be undefined or a JS object like { style=false, observe=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith=''  '', space=()=>'' '', nameResult=false, deconstructPaths=false, deconstructElems=false, dontBind=undefined }')\`\`.
-A function/construct can define this with an integer, to collapse children after what's specified (or with \`0\` to collapse arrays with that as a head).`,
-    philosophy:`In theory, having symmetric parse+serialize allows updating the language of written code via "read in with the old, write out with the new", but we don't curently do that here. Maaaybe mention that in a tutorial, once we have human-friendly rewriting?`,
-    examples:[
-      [
-        `serialize ^(parse '12')`,
-        `"parse '12'"`,
-      ],
-    ],
     readAt:{
       label:_(`label`),
       bound:_(`bound`),
@@ -17587,6 +17743,12 @@ A function/construct can define this with an integer, to collapse children after
       nameResult:_(`nameResult`),
       rest:_(`rest`),
     },
+    docs:`\`(serialize Expr)\` or … or \`(serialize Expr Language Bindings Options)\`: serializes \`Expr\` into a string or a DOM tree (that can be parsed to retrieve the original structure).
+
+A language \`defines\` this to serialize differently. A serialized array's head \`defines\` this with \`0\` to always collapse the array, or with an integer to only show that many items.
+
+\`Options\` \`\`elemCollapse elem('text','must be undefined or a JS object like { style=false, observe=false, collapseDepth=0, collapseBreadth=0, maxDepth=∞, offset=0, offsetWith=''  '', space=()=>'' '', nameResult=false, deconstructPaths=false, deconstructElems=false, dontBind=undefined }')\`\`.
+A function/construct can define this with an integer, to collapse children after what's specified (or with \`0\` to collapse arrays with that as a head).`,
     Initialize() {
       // Store styling options in JS objects.
       serialize.dom = {
@@ -17602,6 +17764,13 @@ A function/construct can define this with an integer, to collapse children after
         maxDepth:3,
       }
     },
+    philosophy:`In theory, having symmetric parse+serialize allows updating the language of written code via "read in with the old, write out with the new", but we don't curently do that here. Maaaybe mention that in a tutorial, once we have human-friendly rewriting?`,
+    examples:[
+      [
+        `serialize ^(parse '12')`,
+        `"parse '12'"`,
+      ],
+    ],
     call(arr, lang, ctx = Self.ctx, opt) {
       let breakLength = opt && opt.breakLength
       const collapseDepth = opt && opt.collapseDepth || 0
@@ -17738,6 +17907,7 @@ A function/construct can define this with an integer, to collapse children after
       }
 
       function valueOfUnbound(u, secondTime) {
+        if (typeof u == 'number' || typeof u == 'string' || typeof u == 'boolean') return u
         if (isArray(u) && u[0] === bound && u[1] instanceof Map) u = u[2]
         if (unboundToBound.has(u)) return unboundToBound.get(u)
         if (typeof document != ''+void 0 && u instanceof Element && 'to' in u)
@@ -17827,8 +17997,8 @@ A function/construct can define this with an integer, to collapse children after
           hide = defines(x, unbound), unboundToBound.set(x[hide], x[hide]), doNotEmit.add(x[hide])
         if (hide == null && isArray(x))
           for (let i=0; i < x.length; ++i)
-            if (isArray(x[i]) && x[i].length > 50000) {
-              hide = i, doNotEmit.add(x[i])
+            if (isArray(x[i]) && x[i].length > 5000) {
+              hide = i, unboundToBound.set(x[i], x[i]), doNotEmit.add(x[i])
               break
             }
 
@@ -18014,8 +18184,6 @@ A function/construct can define this with an integer, to collapse children after
   },
 
   js:{
-    docs:`A namespace of everything pertaining to the host language, JavaScript.
-Somewhat usable in a REPL.`,
     readAt:{
       instanceof:_(`instanceof`),
       continue:_(`continue`),
@@ -18037,7 +18205,13 @@ Somewhat usable in a REPL.`,
       if:_(`if`),
       const:_(`const`),
     },
-    REPL:_(`false`),
+    docs:`A namespace of everything pertaining to the host language, JavaScript.
+Somewhat usable in a REPL.`,
+    philosophy:`JS (and the web ecosystem) is a seemingly-unimpressive language that aims to take over all aspects of computing, in a manner similar to the ones before but completely safe and universal and eventually as little loss in performance as is possible. Like attracts like, and Conceptual is written in JS, though it's obviously much less impressive, because much less total thinking time went into it.`,
+    style(struct) {
+      if (!isArray(struct)) return struct
+      return elem('span', struct.map(s => typeof s != 'string' ? s : elem('span', _highlightGlobalsInString(s))))
+    },
     parse(match) {
       const struct = [jsEval, '']
       let n = 0, ctx, expr = ''
@@ -18080,11 +18254,7 @@ Somewhat usable in a REPL.`,
       }
       match(str.slice(i))
     },
-    style(struct) {
-      if (!isArray(struct)) return struct
-      return elem('span', struct.map(s => typeof s != 'string' ? s : elem('span', _highlightGlobalsInString(s))))
-    },
-    philosophy:`JS (and the web ecosystem) is a seemingly-unimpressive language that aims to take over all aspects of computing, in a manner similar to the ones before but completely safe and universal and eventually as little loss in performance as is possible. Like attracts like, and Conceptual is written in JS, though it's obviously much less impressive, because much less total thinking time went into it.`,
+    REPL:false,
   },
 
   _extracted:{
@@ -18105,11 +18275,11 @@ Somewhat usable in a REPL.`,
 This first turns a \`String\` into a tree-of-arrays via syntax rules of \`Language\`, then into a graph-of-arrays via \`bound\`, then into graph-of-objects via \`makeGraph\`.
 
 \`Options\` is like \`{style false sourceURL '' syntaxOnly false}\`.`,
-    todo:`Cache same-rule+position unchanged subtrees when re-parsing, for speed. Re-\`construct\` same-rule+position changed subtrees where possible, for more speed.`,
-    philosophy:`Parsing is more than just extracting meaning from a string of characters (it's also styling and associating source positions).`,
     Initialize() {
       parse.dom = { style:true, openCollapsed:true }
     },
+    philosophy:`Parsing is more than just extracting meaning from a string of characters (it's also styling and associating source positions).`,
+    todo:`Cache same-rule+position unchanged subtrees when re-parsing, for speed. Re-\`construct\` same-rule+position changed subtrees where possible, for more speed.`,
     call(string, lang, ctx = Self.ctx, opt = null) {
       if (!lang) lang = fancier
       const [doWeStyle = false, sourceURL = '', syntaxOnly = false, openCollapsed = false] = _destructure(opt, ['style', 'sourceURL', 'syntaxOnly', 'openCollapsed'])
@@ -18247,6 +18417,7 @@ This first turns a \`String\` into a tree-of-arrays via syntax rules of \`Langua
         styles && Unbound.set(struct, u)
         return styles ? [b, styleNode(struct, true)] : b
       } catch (err) {
+        parse.lastIndex = i // With multi-editor parsing, this isn't a very reliable way to communicate error position info, but it works for a single editor.
         if (err === interrupt) interrupt.stack.push(str, i, lastI, prevI, localS, localI, curBegin, line, column, lineLengths, lines, columns, struct, Unbound, env, u, b, makeEnv)
         throw err
       }
@@ -18598,6 +18769,7 @@ This first turns a \`String\` into a tree-of-arrays via syntax rules of \`Langua
 Every pair of brackets (and the top level, if there is more than one value) is an array in memory (or a \`construct\` if bold). Its items are space-separated. There are also labels (able to bind to pre-defined globals or user-defined bindings), strings, numbers, and graph bindings (\`a:b\` binds all instances of the label \`a\` to the value \`b\`, both before and after the binding, but only in its scope).
 \`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`, \`(func a b (add a b))\`.
 This is a {more space-efficient than binary} representation for graphs of arrays.`,
+    Initialize() { basic.labels = /-?\d*\.?\d+(?:[eE]+-?\d+)?|-Infinity|[^=!?:;\s\(\)\[\]\{\}<>@#$%\+\-\*\/\&\|\.'"`\,\\←→·⇒\ue000-\uf8ff]+/y },
     philosophy:`Lisp was nice for its time, but now we can have nice UI and AI, so Lisp needed a remastering.`,
     style:_(`_basicStyle`),
     parse:_(`_basicTopLevel`),
@@ -18606,12 +18778,30 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     insertLinkTo:_(`_basicLinkTo`),
     _escapeLabel:_(`_basicEscapeLabel`),
     _unescapeLabel:_(`_basicUnescapeLabel`),
-    Initialize() { basic.labels = /-?\d*\.?\d+(?:[eE]+-?\d+)?|-Infinity|[^=!?:;\s\(\)\[\]\{\}<>@#$%\+\-\*\/\&\|\.'"`\,\\←→·⇒\ue000-\uf8ff]+/y },
   },
 
   fancy:{
     docs:`A language for ordered-edge-list graphs (like \`basic\`) with some syntactic conveniences.
 \`label\`, \`'string'\`, \`"string"\`, \`(0 1)\`, \`(a:2 a)\`; \`1+2\`, \`\\?*2 5\`, \`2*[1+2]\`.`,
+    examples:[
+      `Binary operators must have the same whitespace characters before and after:`,
+      [
+        `array 1 - 2 -3`,
+        `-1 -3`,
+        true,
+      ],
+      `Operators' labels can be re-bound:`,
+      [
+        `1+2 add:array`,
+        `1 2`,
+        true,
+      ],
+      [
+        `\\1+2 func:array add:pow`,
+        `input 1`,
+        true,
+      ],
+    ],
     style:_(`_basicStyle`),
     parse:_(`_fancyTopLevel`),
     serialize:_(`_fancyTopLevel`),
@@ -18619,25 +18809,6 @@ This is a {more space-efficient than binary} representation for graphs of arrays
     insertLinkTo:_(`_basicLinkTo`),
     _escapeLabel:_(`_basicEscapeLabel`),
     _unescapeLabel:_(`_basicUnescapeLabel`),
-    examples:[
-      `Binary operators must have the same whitespace characters before and after:`,
-      [
-        `array 1 - 2 -3`,
-        `-1 -3`,
-        true
-      ],
-      `Operators' labels can be re-bound:`,
-      [
-        `1+2 add:array`,
-        `1 2`,
-        true
-      ],
-      [
-        `\\1+2 func:array add:pow`,
-        `input 1`,
-        true
-      ],
-    ],
   },
 
   _basicLinkTo(r, el) {
@@ -18789,9 +18960,14 @@ This is a {more space-efficient than binary} representation for graphs of arrays
   },
 
   fast:{
+    readAt:{
+      parse:_(`_fastParse`),
+      serialize:_(`_fastSerialize`),
+    },
     docs:`A \`basic\`-like language that can be parsed and serialized fast.
 Intended to only be used for internal inter-memory communication (of generic bound graphs).
 The parsed arrays are not \`merged\`.`,
+    philosophy:`This could be made even more efficient (make it variable-pointer-length binary, serialize numbers as binary), but we aren't that crazy yet.`,
     examples:[
       [
         `_fastParse '(12)'`,
@@ -18814,10 +18990,6 @@ The parsed arrays are not \`merged\`.`,
         `'a"b'`,
       ],
     ],
-    readAt:{
-      parse:_(`_fastParse`),
-      serialize:_(`_fastSerialize`),
-    },
     parse(match) {
       // Just forward a string to fast.parse.
       const str = match(/[^]*/y) || ''
@@ -18825,7 +18997,6 @@ The parsed arrays are not \`merged\`.`,
       return _fastParse(str)
     },
     serialize:_(`_basicTopLevel`),
-    philosophy:`This could be made even more efficient (make it variable-pointer-length binary, serialize numbers as binary), but we aren't that crazy yet.`,
   },
 
   _fastParse(str, ctx) {
@@ -19061,17 +19232,17 @@ The parsed arrays are not \`merged\`.`,
   },
 
   save:{
-    docs:`\`save At Object\`
-Saves an object('s \`fast\` serialization) in the browser's \`indexedDB\`, to be retrieved by \`load\`. Returns (a promise of) the saved string's length; \`await\` it.`,
-    argCount:2,
-    impure:true,
-    await:true,
     readAt:{
       load:_(`load`),
       export:_(`export`),
       import:_(`import`),
       importData:_(`importData`),
     },
+    docs:`\`save At Object\`
+Saves an object('s \`fast\` serialization) in the browser's \`indexedDB\`, to be retrieved by \`load\`. Returns (a promise of) the saved string's length; \`await\` it.`,
+    argCount:2,
+    impure:true,
+    await:true,
     call(at, obj, doNotSerialize) {
       if (typeof at != 'string') error("Not a string:", at)
       const str = doNotSerialize || obj === undefined ? obj : _fastSerialize(obj, undefined, true)
@@ -19180,8 +19351,8 @@ In a browser, presents a button for uploading a local file into \`indexedDB\`, f
   },
 
   importData:{
-    argCount:0,
     docs:`\`importData()\`: in a browser, presents a button for uploading a local file, then returns a promise for a \`u8\` array.`,
+    argCount:0,
     impure:true,
     call() {
       let then, el = elem('input', 'Data')
@@ -19512,13 +19683,6 @@ Not for use inside of that paused job.
   },
 
   interrupt:{
-    docs:`Used to make functions re-entrant in a non-interruptible host language, for better UX.
-Define this to be \`false\` in a global if it will never interrupt. (\`_debugInterruptDefinitions\` can catch lies here.)
-
-Technical details of usage:
-\`_causeInterrupt(cause)\` to unconditionally interrupt execution.
-Create function state in a JS function like \`let [i = 0, j = 0] = interrupt(2)\`, in particular for counters of loops. Make sure to put interruptible computations not here but inside the try/catch below, to not corrupt interrupt state. There is almost no error-checking, for efficiency!
-Wrap function body after getting its state in \`try{…}catch(err){ if (err === interrupt) interrupt.stack.push(i,j);  throw err }\`.`,
     readAt:{
       _msBeforeInterrupt:_(`_msBeforeInterrupt`),
       _debugInterruptDefinitions:_(`_debugInterruptDefinitions`),
@@ -19526,9 +19690,16 @@ Wrap function body after getting its state in \`try{…}catch(err){ if (err === 
       check:_(`_checkInterrupt`),
       step:_(`step`),
     },
+    docs:`Used to make functions re-entrant in a non-interruptible host language, for better UX.
+Define this to be \`false\` in a global if it will never interrupt. (\`_debugInterruptDefinitions\` can catch lies here.)
+
+Technical details of usage:
+\`_causeInterrupt(cause)\` to unconditionally interrupt execution.
+Create function state in a JS function like \`let [i = 0, j = 0] = interrupt(2)\`, in particular for counters of loops. Make sure to put interruptible computations not here but inside the try/catch below, to not corrupt interrupt state. There is almost no error-checking, for efficiency!
+Wrap function body after getting its state in \`try{…}catch(err){ if (err === interrupt) interrupt.stack.push(i,j);  throw err }\`.`,
+    _cancel(stack) { isArray(stack) && _rememberToDispose(stack) },
     philosophy:`Termination checking (totality) is unnecessary if the host can just interrupt and continue. In fact, it is misleading to provide a false assurance of everything terminating {in reasonable time}.
 Interruption (and sandboxing) is absolutely essential for being able to actually use a program comfortably, and for stepping through the program, but no one buzzes about it. Probably because almost all rely on the OS to provide it via processes, and/or heuristic-based totality guarantees.`,
-    _cancel(stack) { isArray(stack) && _rememberToDispose(stack) },
     call(retrieve) {
       if (retrieve !== retrieve>>>0)
         error("Expected the count of items to retrieve, got", retrieve)
@@ -19559,25 +19730,20 @@ Interruption (and sandboxing) is absolutely essential for being able to actually
 
   _htmlOfRewrite(JS) {
     return JS(undefined, {into:'document.body', prefix:`<!doctype html>
-<head>
+  <head>
   <meta charset=utf-8>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Conceptual</title>
   <link rel=icon type=image/png href=${BrowserIconURL}>
-</head>
-<body onerror="document.body.append(event, document.createElement('br'))">
+  </head>
+  <body onerror="document.body.append(event, document.createElement('br'))">
   <noscript>This requires JS to run, and a fairly modern browser.</noscript>
   <script>
-`}) + `  </${''}script>
-</body>`
+  `}) + `</${''}script>
+  </body>`
   },
 
   Rewrite:{
-    docs:`\`Rewrite()\`: view the next rewrite in an \`<iframe>\`. Also is a namespace for quining.
-Makes the system adaptable to more usage scenarios, and gives in-system ways to modify any code directly.`,
-    todo:`Ability to select a subset of functions (and their dependencies, but not (only) definitions).
-Ability to run a function by default. (It's like compiling a program into an executable.)
-Ability to rewrite into an importable module.`,
     readAt:{
       editRewrite:_(`editRewrite`),
       autoWorld:_(`autoWorld`),
@@ -19587,15 +19753,19 @@ Ability to rewrite into an importable module.`,
       scopedJS:_(`ToScopedJS`),
       consWorld:_(`consWorld`),
     },
+    docs:`\`Rewrite()\`: view the next rewrite in an \`<iframe>\`. Also is a namespace for quining.
+Makes the system adaptable to more usage scenarios, and gives in-system ways to modify any code directly.`,
+    Initialize() {
+      Rewrite.ctx = new Map(Self.ctx)
+    },
     philosophy:`Writing the system's code in a particular style allows it to be viewed/modified in the system by the user, preserving anything they want in the process without external storage mechanisms.
 The correctness of quining of functions can be tested by checking that the rewrite-of-a-rewrite is exactly the same as the rewrite. Or by incorporating rewriting into the lifecycle.
 
 (Newsflash: a program that can inspect its own source is self-aware. A quine is the ultimate in self-awareness, much more self-aware than any human. But it doesn't seem magical enough to be true, right? What, you think you are above the consequences of what your words mean? Don't blame all implementations of your ideas ever made, blame your ideas.)
 (To repeat: self-awareness is useful only for self-replication, and nothing else.)`,
-    Initialize() {
-      Rewrite.ctx = new Map(Self.ctx)
-      Rewrite.ctx.delete('_globalScope')
-    },
+    todo:`Ability to select a subset of functions (and their dependencies, but not (only) definitions).
+Ability to run a function by default. (It's like compiling a program into an executable.)
+Ability to rewrite into an importable module.`,
     call(JS = ToScopedJS) {
       let html = _htmlOfRewrite(JS)
       const download = elem('a', 'Download the next rewrite, or preview:')
@@ -19657,8 +19827,13 @@ The correctness of quining of functions can be tested by checking that the rewri
   ToReadableJS:{
     docs:`Converts Self to a human-readable form that pollutes the global scope on execution.`,
     examples:[
+      `The codebase actually goes through this, for consistency:`,
       [
-        `ToReadableJS Self.'ctx' (jsEval '{dontMarkLines:true, into:"document.body.appendChild(document.createElement(\\"div\\")))"}')`,
+        `elem 'textarea' ToReadableJS()`,
+      ],
+      `A slightly more advanced example:`,
+      [
+        `elem 'textarea' (ToReadableJS Self.'ctx' (jsEval '{dontMarkLines:true, into:"document.body.appendChild(document.createElement(\\"div\\")))"}'))`,
       ],
     ],
     call(net = Rewrite.ctx, opt) {
@@ -19668,12 +19843,14 @@ The correctness of quining of functions can be tested by checking that the rewri
       net.forEach((v,k) => typeof k == 'string' && !_isValidIdentifier(k) && error('Not a valid JS identifier:', k))
       const seen = new Map
       const weakMaps = new Map
+      const names = new Map
+      let nextName = 0
       mark(net)
       seen.set(net, 0)
-      const names = new Map
       net.forEach((v,k) => { typeof k == 'string' && (seen.get(v) !== 0 && names.set(v, k), seen.set(v, 0)) })
-      let s = [], nextName = 0, depth = 0, line = 1
+      let s = [], depth = 0, line = 1
       opt && typeof opt.prefix == 'string' && write(opt.prefix)
+      write(`/* Licensed under GPLv3. */\n`)
       write(`/* Code begins at the first \`})({\`, as methods that are bound to each other. _XXX methods are private and somewhat invisible. */\n`)
       write(`'use strict';\n`)
       write(`(function() {\n`)
@@ -19696,7 +19873,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       })
       seen.forEach((refCount, v) => {
         if (refCount <= 1) return
-        if (!names.has(v)) names.set(v, ++nextName)
         write('\n\n'), method(identifier(names.get(v)), v, true)
       })
       --depth
@@ -19706,12 +19882,13 @@ The correctness of quining of functions can be tested by checking that the rewri
       return s.join('')
 
       function resolve(x) {
-        return typeof x != 'string' && net.has(x) ? net.get(x) : x
+        return (typeof x != 'string' || x.length > 8) && net.has(x) ? net.get(x) : x
       }
       function mark(x) {
         x = resolve(x)
         if (x == null || typeof x == 'number' || typeof x == 'boolean' || typeof x == 'string') return
         seen.set(x, (seen.get(x) || 0) + 1)
+        if (seen.get(x) === 2 && !names.has(x)) names.set(x, ++nextName);
         if (seen.get(x) !== 1) return
         if (!isArray(x) && defines(x, deconstruct)) return mark(deconstruct(x))
         else if (x instanceof Map) x.forEach((v,k) => (mark(k), mark(v)))
@@ -19729,7 +19906,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         if (markLines) line += _lineCount(str)
         s.push(!depth || noDepth ? str : str.replace(/\n(?!\n)/g, '\n'+'  '.repeat(depth)))
       }
-      function put(x, ignoreName = false, ignoreMark = false) {
+      function put(x, ignoreName = false) {
         x = resolve(x)
         if (typeof x == 'string') write(str(x), true)
         else if (x == null || typeof x == 'number' || typeof x == 'boolean') write(''+x)
@@ -19915,7 +20092,6 @@ The correctness of quining of functions can be tested by checking that the rewri
     call(net = Rewrite.ctx, opt) {
       if (!(net instanceof Map))
         error('Expected a map, got', net)
-      if (net.has('_globalScope')) throw "Net must not have _globalScope"
       if (!net.has('_id')) throw "Net must have _id"
       if (!net.has('label')) throw "Net must have label"
       if (!net.has('concept')) throw "Net must have concept"
@@ -20070,7 +20246,6 @@ The correctness of quining of functions can be tested by checking that the rewri
   },
 
   System:{
-    docs:`A namespace for low-level functions that should not be called in user code, for your mom's safety.`,
     readAt:{
       interrupt:_(`interrupt`),
       jsEval:_(`jsEval`),
@@ -20097,6 +20272,7 @@ The correctness of quining of functions can be tested by checking that the rewri
         },
       },
     },
+    docs:`A namespace for low-level functions that should not be called in user code, for your mom's safety.`,
     permissionsElem(el) { el.classList.add('warning');  return el },
   },
 
@@ -20107,10 +20283,10 @@ The correctness of quining of functions can be tested by checking that the rewri
   ],
 
   _allocArray:{
-    docs:`\`_allocArray(Length)\`⇒\`Array\` as a replacement for \`[]\` and \`_allocArray(Array)\` to re-use arrays.`,
     readAt:{
       _debugDoubleDealloc:_(`_debugDoubleDealloc`),
     },
+    docs:`\`_allocArray(Length)\`⇒\`Array\` as a replacement for \`[]\` and \`_allocArray(Array)\` to re-use arrays.`,
     call(a) {
       if (!_allocArray.free) _allocArray.free = []
       if (typeof a == 'number' && a === a>>>0) { // Allocate.
@@ -20143,7 +20319,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       _allocArray.free.push(a)
     },
   },
-
 
   _allocMap:{
     docs:`_allocMap()⇒Map as a replacement for \`new Map\` and _allocMap(Map) to re-use objects.`,
@@ -20179,10 +20354,6 @@ The correctness of quining of functions can be tested by checking that the rewri
       error("Unknown file content type:", value)
   },
 
-
-
-
-
   _printAll:{
     docs:`Prints all defined sub-functions of a value.`,
     call(f, value) {
@@ -20203,28 +20374,6 @@ The correctness of quining of functions can be tested by checking that the rewri
     if (!el.style.length) el.removeAttribute('style')
     if (!el.classList.length) el.removeAttribute('class')
   },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   addSearchElem:{
     docs:`Adds an element that can search for a string in a DOM tree, collapsing all that do not contain such things.`,
@@ -20302,25 +20451,6 @@ The correctness of quining of functions can be tested by checking that the rewri
     },
   },
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   _intArray(len, EndValue) {
     if (EndValue < 128) return new Int8Array(len)
     if (EndValue < 32768) return new Int16Array(len)
@@ -20353,14 +20483,21 @@ The correctness of quining of functions can be tested by checking that the rewri
   },
 
   consWorld:{
-    _cancel(m) {
-      if (m) { // Cancel unfinished replay state, if any.
-        m.forEach((rs, refs) => { _rememberArrayItems(rs, true), _disposeEachAndDealloc(rs) })
-        _allocMap(m)
-      }
+    readAt:{
+      consCell:_(`consCell`),
+      consGoal:_(`consGoal`),
+      allocate:_(`allocate`),
+      use:_(`use`),
+      setGoal:_(`setGoal`),
+      consMake:_(`consMake`),
+      consRandom:_(`consRandom`),
+      _consSyncChoices:_(`_consSyncChoices`),
+      _consReplayImmediately:_(`_consReplayImmediately`),
+      _consReplayAfterSave:_(`_consReplayAfterSave`),
+      _consReplayUpdatesState:_(`_consReplayUpdatesState`),
+      consFinalize:_(`consFinalize`),
+      consAsPrograms:_(`consAsPrograms`),
     },
-    todo:`- When encountering a cons-world in use (by another job), copy some of its relevant hyperparams, namely, \`consCaches\` (mostly for \`consApply\`) and \`options\` and \`nextOptions\`, to wherever they are required (\`_regenCons\`). Otherwise, only one experience can be collected at a time (though soundness of collecting multiple experiences in parallel is questionable anyway, because of the RNN \`SequenceState\`).
-- Allow all integer hyperparams to vary via being \`settings\`, especially \`Cells\` and \`FeatureSize\` (to see effects of gradual NN size expansion).`,
     docs:`Learned memory.
 \`consWorld(Hyperparams,CellInfos)\`
 A place where cons-cells learn to interconnect into executable programs however they like.
@@ -20475,21 +20612,14 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
         (\`ChoiceMetric\` is requested and written-to-here asynchronously. So these may not match exactly, but will match soon enough.)
     ✿ \`sortedChoices\`: an \`i32\` array of indices (coded to be in the order that they appear in \`replays\`) sorted by ascending \`choiceMetrics\`.
         (Regeneration first requests \`Predict\` to run on GPU, then sorts this (why let the CPU idle), then \`sync\`s \`Policy\`, then compiles everything. It uses an \`i32\` array of considered indices-into-\`genCtx\`, one per each choice and per each option in it, first all cars then all cdrs, which the \`Policy\` indexes into to get final indices to give to \`ConsMake\`.)")\`\``,
-    readAt:{
-      consCell:_(`consCell`),
-      consGoal:_(`consGoal`),
-      allocate:_(`allocate`),
-      use:_(`use`),
-      setGoal:_(`setGoal`),
-      consMake:_(`consMake`),
-      consRandom:_(`consRandom`),
-      _consSyncChoices:_(`_consSyncChoices`),
-      _consReplayImmediately:_(`_consReplayImmediately`),
-      _consReplayAfterSave:_(`_consReplayAfterSave`),
-      _consReplayUpdatesState:_(`_consReplayUpdatesState`),
-      consFinalize:_(`consFinalize`),
-      consAsPrograms:_(`consAsPrograms`),
+    _cancel(m) {
+      if (m) { // Cancel unfinished replay state, if any.
+        m.forEach((rs, refs) => { _rememberArrayItems(rs, true), _disposeEachAndDealloc(rs) })
+        _allocMap(m)
+      }
     },
+    todo:`- When encountering a cons-world in use (by another job), copy some of its relevant hyperparams, namely, \`consCaches\` (mostly for \`consApply\`) and \`options\` and \`nextOptions\`, to wherever they are required (\`_regenCons\`). Otherwise, only one experience can be collected at a time (though soundness of collecting multiple experiences in parallel is questionable anyway, because of the RNN \`SequenceState\`).
+- Allow all integer hyperparams to vary via being \`settings\`, especially \`Cells\` and \`FeatureSize\` (to see effects of gradual NN size expansion).`,
     construct(x, obj) {
       if (obj === undefined) {
         obj = Object.create(null)
@@ -20589,7 +20719,7 @@ Sounds too bland and non-specific to underlie general intelligence, right? The o
 However, to comprehend its true form, you must first complete \`tutorial Types\` and \`tutorial Neural\`.
 
 Collect them, and return here. Then you can become big-brain. (Or just cheat: \`\`elemCollapse stringToDoc("\`make jsEval 'localStorage.Types=localStorage.Neural=1'\`")\`\`)`,
-      _(3258),
+      _(179),
       `\`\`select _cwtTutOk() \\tutorial(^_cwtOk) \\tutorial(^_cwtStage1)\`\``,
     ],
   },
@@ -20616,28 +20746,17 @@ Collect them, and return here. Then you can become big-brain. (Or just cheat: \`
     ],
   ]),
 
-  9647(x, obj) {
-    if (obj === undefined) {
-      obj = Object.create(null)
-      obj[defines.key] = Object.create(null)
-      return obj
-    } else {
-      obj[defines.key][_id(deconstruct)] = x
-      obj.cw = x[1], obj.i = x[2]
-    }
-  },
-
   consCell:{
     docs:`For \`use\`.
 \`(consCell cw i)\`: the smallest part of a program in a \`consWorld\`.`,
-    construct:_(9647),
+    construct:_(433),
     unbound:1,
   },
 
   consGoal:{
     docs:`For \`setGoal\`.
 \`(consGoal cw i)\`: the optimization target of a program part in a \`consWorld\`.`,
-    construct:_(9647),
+    construct:_(433),
     unbound:1,
   },
 
@@ -20678,15 +20797,15 @@ Allocates a cons-cell in the given \`consWorld\`, with the given array head (or 
   },
 
   use:{
-    Initialize() {
-      // These constants are for readability of using `ThisArray` in `consWorld.regen.set(cw, ThisArray)`.
-      use.PrevState = 0, use.Indexes = 1, use.Reality = 2, use.RealityCount = 3, use.Constructed = 4, use.CustomGoalStates = 5, use.Chosen = 6
-    },
     docs:`\`use(ConsCell)\`→\`Object\`
 Finalizes the object graph of the \`allocate\`d \`consCell\`, and returns the \`construct\`ed object.
 
 When a concept \`defines\` this, it is with either \`true\` or the max \`argCount\`.`,
     dispose:true,
+    Initialize() {
+      // These constants are for readability of using `ThisArray` in `consWorld.regen.set(cw, ThisArray)`.
+      use.PrevState = 0, use.Indexes = 1, use.Reality = 2, use.RealityCount = 3, use.Constructed = 4, use.CustomGoalStates = 5, use.Chosen = 6
+    },
     call(cc) {
       if (!isArray(defines(cc, deconstruct)) || defines(cc, deconstruct)[0] !== consCell) error("Not a", consGoal, ":", cc)
       _regenCons(cc.cw)
@@ -20708,7 +20827,6 @@ When a concept \`defines\` this, it is with either \`true\` or the max \`argCoun
   },
 
   setGoal:{
-    use:2,
     docs:`\`setGoal(ConsGoal)→Value\` or \`setGoal(ConsGoal,Value)\`→\`Value\`
 Gets/sets the current value of an optimization target.
 
@@ -20721,6 +20839,7 @@ When writing, \`Value\` gets turned into a number between the \`MinReality\` and
 Like \`setFuture\` but for cons-world goals.`,
     interrupt:false,
     dispose:true,
+    use:2,
     call(cg, Value) {
       cg = _consGoalOf(cg)
       if (!consWorld.regen || !consWorld.regen.has(cg.cw)) error("Did not", use, "anything in this world, so unable to set its goals")
@@ -21064,8 +21183,6 @@ Like \`consApply\`, but instead of assembling an array network from car+cdr poin
   ],
 
   consRandom:{
-    docs:`The default filler of option slots with random candidates.
-Ratios of cells/goals/basics are made independent from the size of any of these groups.`,
     readAt:{
       _consAllowOwnGoal:_(`_consAllowOwnGoal`),
       _consAllowOwnCell:_(`_consAllowOwnCell`),
@@ -21073,6 +21190,8 @@ Ratios of cells/goals/basics are made independent from the size of any of these 
       _consGoalsPercentage:_(`_consGoalsPercentage`),
       _consStickyCells:_(`_consStickyCells`),
     },
+    docs:`The default filler of option slots with random candidates.
+Ratios of cells/goals/basics are made independent from the size of any of these groups.`,
     call(opts, Prev, Rand, cpc, Start, End, Cells, Goals, genCtx, allow) {
       const Opts = Prev+Rand, allowOwnGoal = !_setting(_consAllowOwnGoal), allowOwnCell = !_setting(_consAllowOwnCell)
       const bases = _num(_setting(_consBasePercentage)), goals = _num(_setting(_consGoalsPercentage)), stickyCells = _setting(_consStickyCells)
@@ -21125,22 +21244,22 @@ How much this actually impacts learning is unknown: that simplest form is also p
 
   _consBasePercentage:[
     _(`settings`),
-    .2,
+    0.2,
     `How much base-things \`consRandom\` will put.`,
     _(`rangeSetting`),
     0,
     1,
-    .01,
+    0.01,
   ],
 
   _consGoalsPercentage:[
     _(`settings`),
-    .2,
+    0.2,
     `How much goals \`consRandom\` will put.`,
     _(`rangeSetting`),
     0,
     1,
-    .01,
+    0.01,
   ],
 
   _consStickyCells:[
@@ -21293,7 +21412,7 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
         }
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(stage, Pre, WhichPointer, ConsEmb, OptEmb, PrevState, Chosen, i, Cells, Prev, Rand, Pred, nras, sects)
-        else print('Regen-start error:', err), consWorld.regen.delete(cw), _disposeEachAndDealloc(R), dispose(WhichPointer), dispose(ConsEmb), dispose(OptEmb), dispose(PrevState), dispose(Pred) // #####################################################
+        else print('Regen-start error:', err), consWorld.regen.delete(cw), _disposeEachAndDealloc(R), dispose(WhichPointer), dispose(ConsEmb), dispose(OptEmb), dispose(PrevState), dispose(Pred)
         throw err
       } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
     },
@@ -21305,31 +21424,10 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
   },
 
   concat2:{
-    use:3,
     docs:`\`x->y->axis->concat(array(x,y),2,axis)\``,
     dispose:true,
-    examples:[
-      `\`\`settings ^_learningRate\`\``,
-      [
-        `repeat ^(concat2(randomVar(5,6),randomVar(5,8),-1)=.5) 1000`,
-      ],
-    ],
-    call(x, y, axis) {
-      if (x == null) return keep(y)
-      if (y == null) return keep(x)
-      if (axis < 0) axis += (x.shape || y.shape).length
-      const nx = _isNum(x) && broadcastTo(x, [...y.shape.slice(0,axis), 1, ...y.shape.slice(1+axis)]) // Convenience: numbers to tensors.
-      const ny = _isNum(y) && broadcastTo(y, [...x.shape.slice(0,axis), 1, ...x.shape.slice(1+axis)]) // Convenienza: numbers to tensors.
-      const a = _allocArray(2);  [a[0], a[1]] = [nx || x, ny || y]
-      try { return concat(a, 2, axis) }
-      finally { _allocArray(a), dispose(ny), dispose(nx) }
-    },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-      _(`_mergeTensors`),
-      null,
-    ],
     adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
       call(ins, out, dout) {
         let [x, y, axis] = ins
         if (!dout) return [_isNum(x) ? 0 : zeros(x.shape), _isNum(y) ? 0 : zeros(y.shape)]
@@ -21344,13 +21442,47 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
 
         return split(dout, splitDims, axis)
       },
-      dispose:_(`_disposeEachAndDealloc`),
+    },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      _(`_mergeTensors`),
+      null,
+    ],
+    examples:[
+      `\`\`settings ^_learningRate\`\``,
+      [
+        `repeat ^(concat2(randomVar(5,6),randomVar(5,8),-1)=.5) 1000`,
+      ],
+    ],
+    use:3,
+    call(x, y, axis) {
+      if (x == null) return keep(y)
+      if (y == null) return keep(x)
+      if (axis < 0) axis += (x.shape || y.shape).length
+      const nx = _isNum(x) && broadcastTo(x, [...y.shape.slice(0,axis), 1, ...y.shape.slice(1+axis)]) // Convenience: numbers to tensors.
+      const ny = _isNum(y) && broadcastTo(y, [...x.shape.slice(0,axis), 1, ...x.shape.slice(1+axis)]) // Convenienza: numbers to tensors.
+      const a = _allocArray(2);  [a[0], a[1]] = [nx || x, ny || y]
+      try { return concat(a, 2, axis) }
+      finally { _allocArray(a), dispose(ny), dispose(nx) }
     },
   },
 
   stack2:{
     docs:`\`x->y->axis->stack(array(x,y),axis)\``,
     dispose:true,
+    adjust:{
+      dispose:_(`_disposeEachAndDealloc`),
+      call(ins, out, dout) {
+        let [x, y, axis] = ins
+        if (!dout) return [_isNum(x) ? 0 : zeros(x.shape), _isNum(y) ? 0 : zeros(y.shape)]
+        return unstack(dout, axis)
+      },
+    },
+    mergeAdjustment:[
+      _(`_mergeTensors`),
+      _(`_mergeTensors`),
+      null,
+    ],
     examples:[
       `\`\`settings ^_learningRate\`\``,
       [
@@ -21362,36 +21494,12 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
       try { return stack(a, axis) }
       finally { _allocArray(a) }
     },
-    mergeAdjustment:[
-      _(`_mergeTensors`),
-      _(`_mergeTensors`),
-      null,
-    ],
-    adjust:{
-      call(ins, out, dout) {
-        let [x, y, axis] = ins
-        if (!dout) return [_isNum(x) ? 0 : zeros(x.shape), _isNum(y) ? 0 : zeros(y.shape)]
-        return unstack(dout, axis)
-      },
-      dispose:_(`_disposeEachAndDealloc`),
-    },
   },
 
   tile:{
-    merged:true,
     docs:`\`tile Tensor Times Axis\`→\`Tensor\`: Repeats a tensor along a dimension.`,
-    examples:[
-      [
-        `repeat ^(tile(randomVar(2),3,0)=5) 1000`,
-      ],
-    ],
-    dispose:true,
     interrupt:false,
-    call(t, n, axis) {
-      const L = t.shape.length, reps = new Array(L).fill(1)
-      reps[axis === undefined ? 0 : axis < 0 ? axis + L : axis] = n
-      return _tf(tf.tile(t, reps))
-    },
+    dispose:true,
     adjust:[
       _(`array`),
       [
@@ -21409,6 +21517,17 @@ Regenerates a whole \`consWorld\`: fills out the choices, chooses among them, an
       null,
       null,
     ],
+    examples:[
+      [
+        `repeat ^(tile(randomVar(2),3,0)=5) 1000`,
+      ],
+    ],
+    merged:true,
+    call(t, n, axis) {
+      const L = t.shape.length, reps = new Array(L).fill(1)
+      reps[axis === undefined ? 0 : axis < 0 ? axis + L : axis] = n
+      return _tf(tf.tile(t, reps))
+    },
   },
 
   _consReplayImmediately:[
@@ -21519,7 +21638,7 @@ Updates \`SequenceState\`, finishes setting user-defined goals, saves experience
         }
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(stage, ConsEmb, ChosenEmbs, i, ras)
-        else print('Regen finish error:', err), dispose(ConsEmb), _disposeEachAndDealloc(ChosenEmbs) // #############################################################
+        else print('Regen finish error:', err), dispose(ConsEmb), _disposeEachAndDealloc(ChosenEmbs)
         throw err
       } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
       // .C, .G, .GS
@@ -21805,7 +21924,7 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
           _inexactReversal(false, "didn't load", ...AdjStack)
       } catch (err) {
         if (err === interrupt) interrupt.stack.push(stage, AdjStack, ConsInds, i, AllConsInds, AllChosenInds, ConsEmb, ChosenEmbs, States, InitialState, WhichPointer, ConsEmbs, OptionEmbs, PrevStates, GoalPred, Realities, Targets, dGoalPred, dConsEmb, dChosenEmbs, dStates, dAllEmbs, Cells, PerExec, UnrollLen, Simple, j, AllConsIndsT, ChoiceRealities)
-        else print('Replay error:', err) // #######################################################################
+        else print('Replay error:', err)
         throw err
       } finally { env[ias] = prevAdjSave, env[ial] = prevAdjLoad }
 
@@ -21828,14 +21947,6 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
   _accumulateSequenceState:{
     docs:`For indirect calls to \`SequenceState(PrevState,ConsEmb,…ChosenEmbs,Inds)\`, by \`loop\`.`,
     dispose:true,
-    call(i, PrevState) {
-      if (!i) return keep(PrevState)
-      const cr = _consReplay, cpc = cr.ChosenEmbs.length, a = _allocArray(cpc)
-      try {
-        for (let c = 0; c < cpc; ++c) a[c] = cr.ChosenEmbs[c][i-1]
-        return cr.SequenceState(PrevState, cr.ConsEmb, ...a, cr.Realities[i-1], cr.Inds)
-      } finally { _allocArray(a) }
-    },
     adjust(ins, out, dout) {
       const [i, PrevState] = ins
       if (!i) { const r = _allocArray(2);  [r[0], r[1]] = [0, keep(dout)];  return r }
@@ -21859,6 +21970,14 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
         } catch (err) { dispose(dS);  throw err }
         finally { dispose(dC), _disposeEachAndDealloc(dCh) }
         const r = _allocArray(2);  [r[0], r[1]] = [0, dS];  return r
+      } finally { _allocArray(a) }
+    },
+    call(i, PrevState) {
+      if (!i) return keep(PrevState)
+      const cr = _consReplay, cpc = cr.ChosenEmbs.length, a = _allocArray(cpc)
+      try {
+        for (let c = 0; c < cpc; ++c) a[c] = cr.ChosenEmbs[c][i-1]
+        return cr.SequenceState(PrevState, cr.ConsEmb, ...a, cr.Realities[i-1], cr.Inds)
       } finally { _allocArray(a) }
     },
   },
@@ -21913,41 +22032,35 @@ Picks choices to replay, then unrolls \`SequenceState\` if specified, then re-\`
 
   _cwtTutOk() { return localStorage.Types === '1' && localStorage.Neural === '1' },
 
-  3258:[
-    _(`fancier`),
-    `"I am ready"`,
-    function() { return true },
-  ],
-
   _cwtStage1:[
     `No you're not.`,
-    _(3258),
+    _(179),
     `\`\`select _cwtTutOk() \\tutorial(^_cwtOk) \\tutorial(where(randomProb .4,^_cwtStage1,^_cwtStage2))\`\``,
   ],
 
   _cwtStage2:[
     `You must complete \`tutorial(Types)\` and \`\`f ^(tutorial Neural) f:?→(select randomProb(.6) ?→arrayCons(apply,f ?) ?→? ?)\`\` first, and collect the trophies within.
 Personnel without access permissions are not permitted to access this one.`,
-    _(3258),
+    _(179),
     `\`\`select _cwtTutOk() \\tutorial(^_cwtOk) \\tutorial(where(randomProb .1,^_cwtStage2,^_cwtStage3))\`\``,
   ],
 
   _cwtStage3:[
     `You are so weak.
 As you are now, you will never reach the truth.`,
-    _(3258),
+    _(179),
     `\`\`select _cwtTutOk() \\tutorial(^_cwtOk) \\tutorial(where(randomProb .1,^_cwtStage3,^_cwtStage4))\`\``,
   ],
 
   _cwtStage4:[
-    _(3258),
+    _(179),
     `\`\`select _cwtTutOk() \\tutorial(^_cwtOk) \\tutorial(where(randomProb .6,^_cwtStage4,where randomProb(.5) ^_cwtStage5 ^_cwtStage3))\`\``,
   ],
 
   _cwtStage5:[
     `I see. You are too scared to even attempt this tutorial without proper qualifications.
 You say you clicked the button, many times? The fear must have gotten to you. In reality, you hesitate to click on this one button.`,
-    _(3258),
+    _(179),
     `\`\`select _cwtTutOk() \\tutorial(^_cwtOk) \\tutorial(^_cwtStage4)\`\``,
   ],
 
@@ -22953,26 +23066,14 @@ May you find happiness on the road ahead. \`\`elemCollapse elemValue(elem 'text'
   ],
 
   stateCell:{
-    use:0,
+    readAt:{
+      accessState:_(`accessState`),
+    },
     docs:`For \`accessState\`.
 \`stateCell()\`: the smallest separate mutable piece of memory, initialized to \`undefined\`.
 Most numeric operations can also take these directly, without going through \`accessState\`.
 
 Compared to arrays or other linear memory, these are much more directly representable in half-neural memory (in your mind), but are also much more static in size.`,
-    readAt:{
-      accessState:_(`accessState`),
-    },
-    construct(x, obj) {
-      if (obj === undefined) {
-        obj = Object.create(null)
-        obj[defines.key] = Object.create(null)
-        return Object.freeze(obj)
-      } else {
-        const d = obj[defines.key]
-        if (isArray(d)) _rememberArrayItems(d, true), _disposeEachAndDealloc(d)
-        _rememberToDispose(d[_id(deconstruct)] = [stateCell, keep(x[1])])
-      }
-    },
     examples:[
       `You know what has state? A recurrent neural network.`,
       `Implementing the forward pass is simple enough, just read then modify then write:`,
@@ -23078,14 +23179,26 @@ repeat ^(apply(learnMem,fn,mem,1,gradPred)) 100000`,
       `If we consider \`'stateCellOne'\`, then it is a function that determines its own gradient in a particular way.`,
       `It may be natural to want to make it determine its own gradient in every way, for diversity.`,
     ],
+    use:0,
+    construct(x, obj) {
+      if (obj === undefined) {
+        obj = Object.create(null)
+        obj[defines.key] = Object.create(null)
+        return Object.freeze(obj)
+      } else {
+        const d = obj[defines.key]
+        if (isArray(d)) _rememberArrayItems(d, true), _disposeEachAndDealloc(d)
+        _rememberToDispose(d[_id(deconstruct)] = [stateCell, keep(x[1])])
+      }
+    },
   },
 
   accessState:{
-    use:2,
     docs:`\`accessState(StateCell)\` or \`accessState(StateCell,NewValue)\`
 Reads or writes a state cell.`,
-    dispose:true,
     interrupt:false,
+    dispose:true,
+    use:2,
     call(sc, v) {
       const d = defines(sc, deconstruct)
       if (isArray(sc) || !isArray(d) || d[0] !== stateCell) error("Not a", stateCell, ":", sc)
@@ -23095,13 +23208,6 @@ Reads or writes a state cell.`,
   },
 
   interpreter:{
-    docs:`\`interpreter callAdjust Expr\`→\`Result\`
-This one is not for casual user use (though \`repeat\` uses this).
-Runs a function-that-can-do-anything in its own execution environment, where \`consWorld\` regeneration is finalized, loss is plotted (if not \`\`settings ^_noLossDisplay\`\`), numeric variables are \`commit\`ed (\`commit(false)\` should cancel this), and tensor-count integrity is checked so that everything that is not the \`Result\` or associated with objects is \`dispose\`d of (and tensors are auto-disposed if \`\`settings ^_autoDispose\`\`).
-
-Shields execution from arbitrariness of JS code.
-
-(Here, execution happens in 3 stages, each within the previous: first, the global interpreter loop \`_jobs\`/\`_doJob\` (controllable via \`_schedule\`/\`_cancel\`); then, an \`interpreter\` iteration; then, expression execution \`callAdjust\`.)`,
     readAt:{
       repeat:_(`repeat`),
       call:_(`call`),
@@ -23110,10 +23216,17 @@ Shields execution from arbitrariness of JS code.
       _forgiveMistakes:_(`_forgiveMistakes`),
       _doCheckArgCount:_(`_doCheckArgCount`),
     },
-    philosophy:`This kind of separation always happens with general things inside general things: they set up a membrane that transforms rules of the wider world into their own rules (and back). Biological cells, human viewpoints, and programming languages are similar in this regard.`,
-    dispose:true,
-    impure:true,
+    docs:`\`interpreter callAdjust Expr\`→\`Result\`
+This one is not for casual user use (though \`repeat\` uses this).
+Runs a function-that-can-do-anything in its own execution environment, where \`consWorld\` regeneration is finalized, loss is plotted (if not \`\`settings ^_noLossDisplay\`\`), numeric variables are \`commit\`ed (\`commit(false)\` should cancel this), and tensor-count integrity is checked so that everything that is not the \`Result\` or associated with objects is \`dispose\`d of (and tensors are auto-disposed if \`\`settings ^_autoDispose\`\`).
+
+Shields execution from arbitrariness of JS code.
+
+(Here, execution happens in 3 stages, each within the previous: first, the global interpreter loop \`_jobs\`/\`_doJob\` (controllable via \`_schedule\`/\`_cancel\`); then, an \`interpreter\` iteration; then, expression execution \`callAdjust\`.)`,
     argCount:2,
+    dispose:true,
+    philosophy:`This kind of separation always happens with general things inside general things: they set up a membrane that transforms rules of the wider world into their own rules (and back). Biological cells, human viewpoints, and programming languages are similar in this regard.`,
+    impure:true,
     call(fn = callAdjust, expr) {
       // Set and finally reset some global variables for us to communicate with the evaluated expression through.
       //   Perfectly readable, what are you talking about. By skipping over it.
@@ -23285,21 +23398,60 @@ Shields execution from arbitrariness of JS code.
     },
   },
 
+  41:[
+    _(`tensorType`),
+    [
+      _(`rest`),
+      `Sizes`,
+    ],
+  ],
 
+  89:[
+    _(`mul`),
+    _(`_dout`),
+    _(`_out`),
+  ],
 
+  108:[
+    _(`sub`),
+    _(`input`),
+    [
+      _(`mean`),
+      _(`input`),
+    ],
+  ],
 
+  111:[
+    _(`add`),
+    1,
+    [
+      _(`abs`),
+      _(`_inA`),
+    ],
+  ],
 
+  119:[
+    _(`less`),
+    0,
+    _(`input`),
+  ],
 
+  179:[
+    _(`fancier`),
+    `"I am ready"`,
+    function() { return true },
+  ],
 
-
-
-
-
-
-
-
-
-
-
+  433(x, obj) {
+    if (obj === undefined) {
+      obj = Object.create(null)
+      obj[defines.key] = Object.create(null)
+      return obj
+    } else {
+      obj[defines.key][_id(deconstruct)] = x
+      obj.cw = x[1], obj.i = x[2]
+    }
+  },
 })
+__line([132,336,347,349,379,400,446,461,614,684,687,716,719,759,828,847,866,878,887,920,934,940,984,996,1009,1022,1046,1060,1130,1157,1170,1183,1202,1218,1239,1253,1483,1896,1923,1952,1982,2017,2024,2035,2043,2065,2072,2089,2146,2172,2211,2239,2250,2258,2262,2288,2364,2399,2409,2411,2415,2447,2449,2451,2455,2745,2759,2900,2931,2950,2988,3000,3006,3022,3062,3116,3124,3126,3134,3142,3157,3180,3220,3241,3414,3581,3685,3798,3846,3860,3865,3925,3992,4031,4043,4058,4089,4111,4120,4126,4135,4159,4164,4169,4187,4212,4273,4294,4296,4303,4343,4384,4400,4417,4442,4509,4580,4589,4599,4624,4629,4632,4653,4671,4682,4695,4719,4729,4783,4823,4836,4852,4859,4919,4951,4981,5002,5007,5015,5017,5023,5029,5035,5087,5144,5176,5179,5181,5196,5330,5404,5459,5477,5536,5546,5593,5649,5668,5701,5715,5735,5758,5844,5870,5878,5915,5932,5939,6019,6027,6044,6066,6095,6105,6115,6128,6332,6348,6380,6431,6478,6527,6559,6582,6592,6630,6673,6759,6781,6793,6864,6917,7060,7099,7126,7169,7220,7249,7793,7829,7868,7887,7913,7961,8035,8065,8068,8097,8125,8157,8266,8299,8319,8363,8385,8423,8454,8489,8497,8519,8535,8557,8620,8628,8663,8666,8686,8708,8753,8790,8841,8852,8862,8936,8979,9027,9048,9104,9150,9206,9261,9293,9296,9320,9392,9399,9505,9566,9608,9652,10451,10460,10499,10519,10547,10576,10597,10615,10627,10633,10639,10679,10722,10747,10783,10792,10802,10908,10929,10962,10990,11031,11127,11135,11165,11174,11511,11604,11615,11645,11675,11698,11733,11762,11946,11956,12004,12023,12073,12081,12114,12125,12159,12167,12210,12218,12255,12278,12341,12367,12370,12372,12379,12419,12465,12520,12565,12571,12596,12599,12610,12658,12671,12681,12717,12740,12777,12811,12903,12919,12937,12959,13039,13072,13196,13660,13770,13810,13929,13970,14015,14056,14069,14095,14121,14147,14158,14207,14284,14330,14363,14369,14390,14404,14423,14451,14477,14552,14604,14680,14683,14700,14723,14741,14777,14854,15036,15049,15166,15453,15455,15461,15548,15934,15944,15988,16010,16018,16059,16111,16114,16124,16209,16241,16278,16404,16406,16413,16417,16422,16438,16466,16508,16532,16540,16542,16550,16563,16586,16616,16629,16736,16746,16755,16760,16901,16982,16997,17071,17188,17198,17247,17338,17365,17370,17376,17392,17440,17459,17475,17482,17496,17518,17540,17588,17603,17619,17660,17721,17726,17771,18100,18158,18261,18280,18428,18433,18435,18451,18466,18480,18511,18515,18519,18529,18554,18556,18563,18565,18596,18622,18651,18731,18742,18744,18754,18811,18865,18999,19103,19243,19336,19354,19500,19513,19523,19543,19565,19591,19617,19632,19700,19721,19728,19766,19794,19836,20089,20287,20322,20341,20356,20370,20377,20451,20457,20462,20464,20466,20468,20769,20806,20815,20840,20881,20962,21047,21077,21192,21277,21288,21293,21418,21455,21489,21523,21552,21645,21650,21672,21932,21972,21986,22006,22030,23199,23227,23330,23346,23384],[Initialize,assertFinite,_isNum,_num,less,equals,where,_whereValues,repeat,userTime,_userTimeStart,realTime,_realTimeStart,limit,limitTime,limitArrays,limitTensorMemory,_userTimeSince,_timeSince,tensorMemorySince,arraysSince,countReachableObjects,isArray,arrayLength,arrayPush,arrayLimit,arraySlice,arrayConcat,arraySorted,arrayAscends,arrayFilledWith,arrayCons,arrayCar,arrayCdr,_listen,Deinitialize,Browser,NodeJS,WebWorker,_runFunc,_purifyInWorker,_colored,_collapsedSerialization,_getOuterLinker,insertLinkTo,_closestNodeParent,_bracketize,hierarchy,permissionsElem,stringToDoc,elemToWindow,elemExpandAll,_restoreWindow,_getOuterWindow,disableBindingsElem,elemCollapse,print,remind,_updateMaxScrollBegin,_updateMaxScrollEnd,allowDragging,_isEditable,_getOuterContextMenu,_escapeLabel,_unescapeLabel,describe,_getAutoInfoNear,contextMenu,daintyEvaluator,atCursor,_evaluationElem,_recognizeBinding,_addBinding,_removeBinding,evaluator,_formatDuration,_getOuterREPL,_langAt,_bindingsAt,_invertBindingContext,_removeChildren,_parseEditor,_editorError,editor,REPL,button,tutorial,editObject,_hasSameRepr,_unlabel,editRewrite,settings,rangeSetting,_getNextSibling,_visitText,_saveCaret,_loadCaret,_innerText,_smoothHeight,_smoothTransformPre,_smoothTransformPost,_reflow,_smoothHeightPre,_smoothHeightPost,elemInsert,elemRemove,particles,_isDOM,_isStylableDOM,_throttled,_updateBroken,_forEachGlobalDefining,docs,docsToHTML,examples,todo,await,_promiseReEnter,_jobResume,delay,jsRejected,_errorRepr,_schedule,_execute,_executioner,_cancel,_newJobId,_doJob,_jobs,_jobsLater,_jobsDisplay,_highlightOriginal,_newExecutionEnv,last,quote,label,_isLabel,_unknown,_isUnknown,_isPromise,_limitMapSize,_deleteFirstMapElement,_id,randomNat,randomProb,randomFloat,_countBits,_randomBits,_randomFill,call,applyArray,apply,applyAdjust,make,makeDAG,makeGraph,_isCollapsed,construct,_toLittleEndian,_toBase64,_fromBase64,deconstruct,_unevalFunction,_fallthroughFunc,_fallthroughAutoFunc,_adjustFunc,id,isFunc,_giveAdjustTo,_compileAutograd,_getSavedNodes,_fillAdjustInputs,_doesAdjustRead,_nodeDisposer,_nodeDisposerTransition,_compileBody,_checkArgCount,_postorderInfo,_resultCanBe,array,readAt,writeAt,observe,_observeChange,_callChangeObservers,_mergeArrays,_mergeTuples,select,equal,softEqual,created,purify,add,mul,sub,div,pow,sqrt,softmax,correlation,stringToIndices,indicesToString,displayOne,toImage,exp,expm1,_noInfinities,log,sin,cos,tanh,sigmoid,sum,mean,max2,max,min,abs,ceil,floor,sign,softsign,clip,_noNaNs,isNaN,_clip2,argmax,oneHot,sync,reshape,broadcastTo,cast,range,transpose,swapDims,moveDim,_padTransposeDims,expandDims,squeezeDims,slice,sliceOff,gather,_firstDim,scatter,split,_concreteTensorSize,concat,stack,unstack,denseLayer,matMul,_matMul,_isDisposable,_tensorOrigins,dispose,keep,takeAt,_rememberToDispose,_disposeNot,_unDisposeNot,_rememberArrayItems,_changeArrayItem,typeAdjustmentMerger,typeDisposer,_mergeTensors,_unquote,autograd,_bindInput,fetchURL,prompt,_isNumericArray,display,_updatePlotLater,_updatePlots,_updatePlotTooltip,_updatePlot,callAdjust,_tf,_disposeKey,truncatedNormal,zeros,identity,ones,biasedGlorotNormal,varData,_funcAccumulateGradient,_optSGD,parametersInVars,varSGD,_optMomentum,varMomentum,_optRMSProp,varRMSProp,_optAdam,varAdam,_optRAdam,varRAdam,varEma,emaVersionOf,_increment,_tensorSize,_tensorShape,_limitTensorSize,_doAdaptiveGradientClipping,commit,_willCommit,futureType,writableFutureType,_newFuture,_isFuture,_limitNumericValues,setFuture,getFuture,_defaultArg,minimize,zeroGrad,gradMul,modifyGrad,predict,_predictFuture,_predictWritableFuture,_knowLoss,loss2,softmaxLoss,_destructure,merged,transform,reverse,loop,reduce,getFirst,getLast,adjustLater,adjustNever,adjustNow,adjustUndo,_input,_funcTypeOf,_updateContextsWithFuncs,_equalizeContexts,_defaultObjectHyperparams,_createObjectHyperparams,_fillObjectHyperparams,createLocalContexts,pushToContext,_fillWorldContexts,alloc,_awIndex,_sortConceptType,conceptType,_bindNodes,_genCtxSliceFilter,_typeHash,_genCtxFilter,_genCtxsFilter,using,regenerate,_usingRequest,usingFinish,_defined,_killArray,_chooseHeadAsync,_chooseHead,computeType,tensorType,tupleType,arrayType,boolsType,funcType,sumType,_humanDAGBegin,_humanDAGAsk,instance,type,typeRefine,_isTypeVar,_newTypeVar,_getTypeVarValue,_setTypeVarValue,_resolveTypeVar,_typeFinalize,_restPosition,adjust,_funcAdjust,_disposeEachAndDealloc,_destroyAdjustmentStack,_inexactReversal,adjustSave,adjustLoad,defines,_view,mapRead,mapWrite,_isValidJS,_isValidIdentifier,_test,bound,_doBinding,unbound,_randomGraph,_unboundButSimple,error,errorsSince,errorFast,errorStack,parseURL,_resolveStack,_isError,elem,_elemAppend,elemClone,structured,structuredSentence,referencedBy,referencesTo,definersOf,sizeof,_highlightGlobalsInString,style,nameResult,serialize,elemValue,_valuedColor,_unrollRest,parse,_basicEscapeLabel,_basicUnescapeLabel,_basicLabel,_basicString,_basicExtracted,_basicMany,_basicCall,_fancyMap,_matchBracketed,_basicValue,_needsGrouping,_emitGrouping,_unctx,_matchLtR,_matchRtL,_matchUnary,_matchSequence,_fancyOutermost,_basicOutermost,_fancyTopLevel,_basicTopLevel,_basicLinkTo,_basicStyle,_fastParse,_fastSerialize,save,load,importData,_fancierOutermost,_fancierTopLevel,_unwrapOneOrMany,_wrapOneOrMany,_causeInterrupt,_checkInterrupt,step,_pausedToStepper,interrupt,_lineCount,_htmlOfRewrite,Rewrite,ToExtension,ToReadableJS,ToScopedJS,_allocArray,_allocMap,_appendFile,_printAll,_clearStyle,addSearchElem,_intArray,_arrayIncludes,_consGoalOfCell,_consCellStartOfGoal,_consCellEndOfGoal,_consResizeOptions,allocate,use,_consGoalOf,setGoal,consMake,consApply,_consStackableClusters,consFixedArgCountApply,consRandom,_consWhichPointer,_remindOfConsWorldSettings,_regenCons,_consReSortChoiceMetrics,concat2,stack2,tile,_finishRegenCons,_setting,_consReplaySave,_consReplay,_consChoiceMetricsUpdater,_accumulateSequenceState,_gatherChoiceInfo,_scatterChoiceInfo,_cwtTutOk,accessState,interpreter,_findConsWorld,consFinalize,consAsPrograms])
 })()
