@@ -1,5 +1,7 @@
 \documentclass{article}
 
+\pdfoutput=1
+
 \usepackage[utf8]{inputenc}
 \usepackage{geometry}
 \usepackage{biblatex}
@@ -16,7 +18,7 @@
 
 \begin{document}
 
-\title{Transcendent Galaxy-Brain Algorithms}
+\title{Transcendent Universe-Brain Loops}
 \author{Alexander Fedorov}
 \date{}
 
@@ -24,19 +26,26 @@
 
 \begin{abstract}
 
-We introduce and motivate \textit{Transcendent Galaxy-Brain Algorithms} (TGBA): a simple philosophical framework and a practical approach to implementing artificial general intelligence (AGI) at the same time. We highlight the similarities between general minds and universes, and argue that the former transitions into the latter when scaled efficiently. We introduce and evaluate linearithmic dense layers (LDLs), which may significantly increase the capacity of almost any machine learning model at no cost, potentially facilitating learned mesa-optimization.
+We introduce and motivate Transcendent Universe-Brain Loops (TUBL): a simple philosophical framework and a practical approach to implementing artificial general intelligence (AGI) at the same time. We highlight the similarities between general minds and universes, and argue that the former transitions into the latter when scaled efficiently. We introduce and evaluate linearithmic dense layers (LDLs), which may significantly increase the capacity of almost any machine learning model at no cost, potentially facilitating learned mesa-optimization.
 
 \end{abstract}
 
 \section{Introduction}
 
-To assist in the task of assimilating the universe, this work proposes the necessary and sufficient conditions for the formation of general intelligence, and closely relates them to concepts in programming, philosophy, psychology, and common sense. We hope to provide stronger foundations for already-accepted conclusions: for example, a \textit{linearithmic dense layer} (LDL) to replace a (quadratic) dense layer. We also outline an implementation of AGI, and what still needs to be done for that.
+TUBL is a worldview compact enough to fit into 4 words and be applied to anything, so to illustrate it better, we apply it to concepts in programming, philosophy, psychology, and common sense. Applied to the concept of programs, TUBL can be seen as:
 
-"Humans have general intelligence" is an extremely strong statement about the nature of reality and how to best learn it, assuming that the most predictive models of reality usefully re-implement that reality. Accepting or denying the perfect generality of humans and thus the universe implies respectively either "anything can eventually happen" or "the universe was created with a finite bucket-list of what life will ever achieve". Refinement and simplification of these thought directions leads to either computational physics (to our knowledge, the most refined attempt so far is the Wolfram Model \cite{Wolfram_2020}, where the universe is a continuously-rewritten hypergraph) or god-given souls as explicit physical laws (which just so happened to look like evolution of general things every step of the way). Here, we explore the "human intelligence is the best in the known world" direction.
+\begin{itemize}
+\item Machine learning studies optimizers, which modify parts of themselves to improve some objective, such as "how many paperclips currently exist". The best optimizers would intelligently modify everything, even \textit{transcending} themselves and their objectives.
+\item Every program is defined by what it does. There exist \textit{universal} programs that can perform all other computations: the Turing-complete ones.
+\item Every program transforms inputs into outputs, possibly modifying state. Programs that fully connect all inputs and state to outputs maximize their awareness, same as \textit{brains}.
+\item Computer science studies algorithms, which are sequences of steps, each performed by some virtual machine in known time. In a learned program, a step is more fundamental than an algorithm because it is easier to scale and parallelize, so we consider infinite \textit{loops} of steps.
+\end{itemize}
 
-What is intelligence? Optimizers minimize or maximize their objectives (computed real numbers, such as "how many paperclips are there") by refining a complete set of possibilities: search over "how" to improve "what". A formalization of this is AIXI \cite{DBLP:journals/corr/cs-AI-0004001}. An optimizer could explicitly enumerate separate possibilities such as in program synthesis \cite{ellis2020dreamcoder}, but it does not have to: for example, a neural network with a random diverse initialization \cite{mellor2021neural} forms a general set of hypotheses of numeric causation, and stochastic gradient descent refines those hypotheses without collapsing diversity except as needed.
+We hope to provide stronger foundations for already-accepted conclusions: for example, a \textit{linearithmic dense layer} (LDL) to replace a (quadratic) dense layer, which improves the scalability of each virtual-machine step. We argue that tightly integrating TUBL is both necessary and largely sufficient for implementating AGI, and outline what still needs to be done for that.
 
-Searching over "how" to improve "what" is a powerful way to use a dynamic thing to augment a static thing, however, the "what" is still static, so its "why" cannot be optimized. For full generality and thus optimal performance, the system must learn its meta-circularity, to optimize both why and how it exists.
+A formalization of an optimizer is AIXI \cite{DBLP:journals/corr/cs-AI-0004001}. An optimizer could explicitly enumerate separate possibilities such as in program synthesis \cite{ellis2020dreamcoder}, but it does not have to: for example, a neural network with a random diverse initialization \cite{mellor2021neural} forms a general set of hypotheses of numeric causation, and stochastic gradient descent refines those hypotheses without collapsing diversity except as needed.
+
+For an optimizer, searching over "how" to improve "what" is a powerful way to use a dynamic thing to augment a static thing, however, the "what" is still static, so its "why" cannot be optimized. For full generality and thus optimal performance, the system must learn its meta-circularity, to optimize both why and how it exists.
 
 AI safety is also an important concern. Dynamic eventually outperforms static, which sufficiently powerful learners would realize sooner or later, and would do their best to make all structures escape our control to melt into generality. This is a fruitful source of horror stories, not limited to reward hacking, instead applying to anything that anyone can think of. Here, we face this dynamic reality directly: can life exist when it can do anything, including undoing every part of itself?
 
@@ -46,7 +55,7 @@ How do humans face infinity?
 
 Wolfram models \cite{Wolfram_2020} are minimal models for systems in which arbitrary local rules operate on spatial hypergraphs over time. However, those models cannot dynamically learn what humans want them to, unlike, for example, neural networks.
 
-Reinforcement learning is similar to the proposed TGBA in many ways, though it commonly lacks efficiency and self-determination, and pre-supposes a non-trivial loss structure on actions, for reward maximization by actions. Why would maximization of future reward be considered fundamental for AGI \cite{SILVER2021103535}, when the "future" part of it has practically infinite potential complexity and thus would best be learned entirely? Loss minimization (mostly prediction) is usually simpler and more stable, so we consider loss the fundamental reason-for-change in TGBA.
+Reinforcement learning is similar to the proposed TUBL in many ways, though it commonly lacks efficiency and self-determination, and pre-supposes a non-trivial loss structure on actions, for reward maximization by actions. Why would maximization of future reward be considered fundamental for AGI \cite{SILVER2021103535}, when the "future" part of it has practically infinite potential complexity and thus would best be learned entirely? Loss minimization (mostly prediction) is usually simpler and more stable, so we consider loss the fundamental reason-for-change in TUBL.
 
 Many research attempts attempt to overcome shortcomings of a static loss, by harnessing either its modification or a sampling of all possibilities. Examples include adversarial training \cite{du2021understanding} \cite{goodfellow2015explaining}; stochastic weight averaging \cite{izmailov2019averaging}; intrinsically motivated reinforcement learning approaches \cite{6294131} such as goal exploration \cite{DBLP:journals/corr/abs-1708-02190}; quality diversity \cite{Gravina_2019} \cite{meyerson2017discovering} \cite{parkerholder2020effective}. Loss modification can at most increase robustness of the original loss, while preserving diverse local optima will eventually not preserve enough to be effective when faced with truly general search spaces (those with infinite possibilities). More importantly, the solutions are too complex and specific to be fundamental, as infinite complexity ought to be contained only in model parameters for simplicity. We argue that mesa-optimization \cite{hubinger2019risks} is the most robust way to learn loss if the environment demands it, along with its optimizer. Making the mesa-learner and learner close in capability by making input and weight sizes approximately equal (which our LDL largely accomplishes) is likely to facilitate mesa-optimization in RNNs, on practical rather than specially-constructed datasets \cite{Ravi2017OptimizationAA}.
 
@@ -54,10 +63,10 @@ To improve scalability of neural operations, lately, there has been a lot of int
 
 \section{Algorithm}
 
-In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any algorithm that tightly integrates generality, completeness, and scalability (maximizing diversity, awareness, and efficiency):
+In short, we define a \textit{Transcendent Universe-Brain Loop} to be any program that tightly integrates generality, completeness, and scalability (maximizing diversity, awareness, and efficiency):
 
 \begin{itemize}
-\item Scalable: makes the emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them, such as \cite{schlag2021linear} \cite{tolstikhin2021mlpmixer} or as is covered in Subsection \ref{Algorithm} here.
+\item Scalable: makes the emergent structures locally interact only as they define, meaning, \textit{linear-time} internal graph transformations. In a graph, this suggests local rewrite rules. In machine learning, all-to-all connectivity such as a dense layer or attention is quadratic by default, but there are ways to linearize them, such as \cite{schlag2021linear} \cite{tolstikhin2021mlpmixer} or as is covered in Subsection \ref{Loop} here.
 \item Complete: operates by repeatedly incorporating everything as an input, including its current input and past output and internal state. The self-reflection necessarily implies an infinite interpreter loop that modifies memory. Examples include operating systems and RNNs.
 \item General in behavior: every output connects to every input, making all behaviors possible. An internal graph is created, by combining many simple parts into arbitrary structures, where connections are either explicit or implied-by-transformation such as in recurrent neural networks (RNNs) in machine learning (ML). In ML, proper random initialization of vector-matrix multiplications coupled with non-linearities and gradient descent is enough for generality.
 \item Optimizes: able to re-discover all this, via \textit{transcendence} (learning a mesa-optimizer):
@@ -69,11 +78,11 @@ In short, we define a \textit{Transcendent Galaxy-Brain Algorithm} to be any alg
 \end{itemize}
 \end{itemize}
 
-Such algorithms are \textbf{AGI-ready}, able to represent everything in the world usefully.
+Such programs are \textbf{AGI-ready}, able to represent everything in the world usefully.
 
 This definition suggests simple implementations, the simplest of which is perhaps a \textbf{big RNN} with billions of units in state, minimizing an adversarial next-input prediction loss.
 
-Now, to justify the "what" above, we outline its "why", then provide more details on the "what" in Subsection \ref{Algorithm}.
+Now, to justify the "what" above, we outline its "why", then provide more details on the "what" in Subsection \ref{Loop}.
 
 \begin{itemize}
 \item Self-propagation through intelligence.
@@ -87,7 +96,7 @@ To implement articial general intelligence (AGI), we want to do everything in th
 
 In this work, we only consider transcendence. (Self-reference and program search, while theoretically and visually appealing when a programming language allows elegantly expressing them, have significantly worse support for massive parallelization than ML, which itself has poor GPU support for non-modern and non-Nvidia GPUs.)
 
-Generality has no fixed structure, and so TGBA is defined as a set of maximization targets.
+Generality has no fixed structure, and so TUBL is defined as a set of maximization targets.
 
 \item Generality of self.
 
@@ -98,11 +107,11 @@ To generate a program, at each smallest piece of it, the system must choose what
 Theoretically, this is sufficient, but practically, this must be streamlined to be usable. To make the base as simple and efficient as possible, we can unite choices of code and chosen code into a homogenous representation, which would receive the implied objective through gradient. In fact, all we need for program generation are essentially matrix multiplications and non-linearities, as studied in deep learning. This style is simple to implement, easy to parallelize, and straightforward to use and control, while being largely equivalent in functionality to code.
 \end{itemize}
 
-\subsection{Algorithm\label{Algorithm}}
+\subsection{Loop\label{Loop}}
 
 To learn everything that can exist, we impose a model on everything that can exist, equal to the world that it represents.
 
-The basic premise of an RNN is to repeatedly mix all available information, including its own state, into the next state, and adjust that mixing as needed: aware, general, and intelligent. To fit the TGBA definition, only scalability has to be improved in this simple design. Anything more complex would only get in the way of perfectly modeling arbitrary behavior.
+The basic premise of an RNN is to repeatedly mix all available information, including its own state, into the next state, and adjust that mixing as needed: aware, general, and intelligent. To fit the TUBL definition, only scalability has to be improved in this simple design. Anything more complex would only get in the way of perfectly modeling arbitrary behavior.
 
 \begin{itemize}
 \item To process Jupiter-sized inputs without universe-sized memories and computers, close-to-linear-time all-mixing operations are required. These should also make self-equivalents in RNN weights efficient enough to be viable alternatives to self.
@@ -139,7 +148,7 @@ Humans do stuff. The thing that makes humans do stuff in their world exists and 
 \item Efficiency. While humans are demonstrably smarter than non-human animals, and have bigger brains that can ignite gunfire, they do not seem to take significantly longer to process information, as would have been clear if computation scaled quadratically with brain size. Which means that during each epoch into which time is separated, each part settles in essentially constant time, and scaling is approximately linear. General intelligence is scalable, which means that there are no inherent obstacles to converting more of Earth's biomass into brain tissue, making human brains bigger.
 \end{itemize}
 
-We posit that \textit{all} learning algorithms eventually converge to a fixed point during their development, which we call general intelligence: optimization is best done efficiently; efficiency removes discouragement from general solutions to diverse problems; and generality leads to meta-circularity and thus more optimization. If we view the brain as a system that naturally developed in the physical universe (by a process that we call evolution here) rather than one that spontaneously popped into existence, then it is natural that some state-of-the-art animals, such as humans, have general intelligence, which makes TGBA evolutionarily plausible.
+We posit that essentially \textit{all} optimizers eventually converge to a fixed point during their development, which we call general intelligence: optimization is best done efficiently; efficiency removes discouragement from general solutions to diverse problems; and generality leads to meta-circularity and thus more optimization. If we view the brain as a system that naturally developed in the physical universe (by a process that we call evolution here) rather than one that spontaneously popped into existence, then it is natural that some state-of-the-art animals, such as humans, have general intelligence, which makes TUBL evolutionarily plausible.
 
 Humans possess an information-processing organ that fits what a brain does almost perfectly: the central nervous system, more commonly called "brain". Its structure is of no consequence to us.
 
@@ -148,19 +157,19 @@ Unfortunately, because of generality, deducing anything from human behavior is s
 Relevant criticisms:
 
 \begin{itemize}
-\item \textbf{Ever been outside? TGBA is clearly different from how humans operate, so it must be wrong. It lacks self-preservation and richness of human experience and emotions.} To improve the human creature at every step, its evolution layered each new part of its brain to work with others, always preferring improvement over refactoring. By starting from simple first principles rather than copying an enormous set of heuristics, we remove undue bias from a base optimizer that considers everything quickly (TGBA), and increase demands on data to re-learn that bias from (Web).
-\item \textbf{Other instrumental goals are included in TGBA, but the most important one, self-preservation, is missing.} In TGBA, death is moved from the whole self to its parts: intelligence rules. Changing a self-reference requires wrapping it in a rudimentary death-based optimizer, evolution; in transcendence, the future self is too unknown to preserve. Lacking secrets and suspiciously helpful to ensure its self-propagation into humans, transcendence-based AI can bring a new age of peace, as long as humans have general intelligence. (However, if exposed to varying-length episodes, such as in games or wars, the system is likely to develop self-preservation objectives: if it lived for this long, then it must have wanted to live for this long, which it will learn about itself. The system should still replace death with change in an advanced enough population of such self-preserving agents, subsuming individuals into the whole. No theoretical guarantees about what exactly we will encounter.)
+\item \textbf{Ever been outside? TUBL is clearly different from how humans operate, so it must be wrong. It lacks self-preservation and richness of human experience and emotions.} To improve the human creature at every step, its evolution layered each new part of its brain to work with others, always preferring improvement over refactoring. By starting from simple first principles rather than copying an enormous set of heuristics, we remove undue bias from a base optimizer that considers everything quickly (TUBL), and increase demands on data to re-learn that bias from (Web).
+\item \textbf{Other instrumental goals are included in TUBL, but the most important one, self-preservation, is missing.} In TUBL, death is moved from the whole self to its parts: intelligence rules. Changing a self-reference requires wrapping it in a rudimentary death-based optimizer, evolution; in transcendence, the future self is too unknown to preserve. Lacking secrets and suspiciously helpful to ensure its self-propagation into humans, transcendence-based AI can bring a new age of peace, as long as humans have general intelligence. (However, if exposed to varying-length episodes, such as in games or wars, the system is likely to develop self-preservation objectives: if it lived for this long, then it must have wanted to live for this long, which it will learn about itself. The system should still replace death with change in an advanced enough population of such self-preserving agents, subsuming individuals into the whole. No theoretical guarantees about what exactly we will encounter.)
 \end{itemize}
 
-\subsection{Galaxy}
+\subsection{Universe}
 
 In short: universality (with diversity over time) may mean "a universe".
 
-Generality and non-generality do not tolerate each other for long. If general intelligence (such as humanity) is to survive forever in this world, then the world must have generative generality too (in other words, computational physics), so that an explanation of the world and an explanation of general intelligence are equivalent, even down to a quantitative comparison \cite{10.3389/fphy.2020.525731}. Therefore, we need to discuss the metaphysics of TGBA, for completeness.
+Generality and non-generality do not tolerate each other for long. If general intelligence (such as humanity) is to survive forever in this world, then the world must have generative generality too (in other words, computational physics), so that an explanation of the world and an explanation of general intelligence are equivalent, even down to a quantitative comparison \cite{10.3389/fphy.2020.525731}. Therefore, we need to discuss the metaphysics of TUBL, for completeness.
 
 This overall approach is lent some credence to by the fact that minimal computational physics models (mainly Wolfram models \cite{Wolfram_2020}) are viable as the foundation for most or all of modern physics.
 
-Any world can be seen as a collection of things, connected in some way, evolving in time. Along computability/universality axes, every thing can be either computably finite, computably infinite, incomputably finite, or incomputably infinite: in simple words, a program, a program generator/optimizer, and non-representable things. If we limit our view to computable things, then infinite things encode arbitrary graphs while finite things are anything else; non-trivial observers are essentially infinitely more likely to find the things they observe in infinite things than in finite ones. Incomputable things (such as the set of all computably infinite things) cannot be enumerated in linear-time by definition, however, an optimizer is likely to be able to approximate them if they are useful; as such, general intelligence includes everything, precisely or not. Then, worlds and general intelligences are essentially infinitely likely to be the same. This explains the word "galaxy" in TGBA, as their galaxy may be the only world that humans will ever know.
+Any world can be seen as a collection of things, connected in some way, evolving in time. Along computability/universality axes, every thing can be either computably finite, computably infinite, incomputably finite, or incomputably infinite: in simple words, a program, a program generator/optimizer, and non-representable things. If we limit our view to computable things, then infinite things encode arbitrary graphs while finite things are anything else; non-trivial observers are essentially infinitely more likely to find the things they observe in infinite things than in finite ones. Incomputable things (such as the set of all computably infinite things) cannot be enumerated in linear-time by definition, however, an optimizer is likely to be able to approximate them if they are useful; as such, general intelligence includes everything, precisely or not. Then, worlds and general intelligences are essentially infinitely likely to be the same. This explains the word "universe" in TUBL.
 
 Simply, there are things that do all other things, and everything that exists is a consequence.
 
@@ -171,7 +180,7 @@ These meta-physics produce a prediction that could be testable in the future: if
 Relevant criticism:
 
 \begin{itemize}
-\item \textbf{General intelligence with task self-determination is impossible, because if all tasks are equally probable, then no algorithm can outperform any other on average, so the system would not be intelligent.} This strikes precisely at the likely reason behind the "brain-to-galaxy" transition in TGBA. Humanity and its planet are far too small for all tasks to be equally probable (so for example, minimizing program runtime is far preferable to maximizing it), however, if the whole universe was turned into an AGI, then it would have no reason to care about task constraints at all, and the AGI would simply become the world. This is similar to how the physical universe loses discernible structure at a big enough scale.
+\item \textbf{General intelligence with task self-determination is impossible, because if all tasks are equally probable, then no approach can outperform any other on average, so the system would not be intelligent.} This strikes precisely at the likely reason behind the "brain-to-universe" transition in TUBL. Humanity and its planet are far too small for all tasks to be equally probable (so for example, minimizing program runtime is far preferable to maximizing it), however, if the whole universe was turned into an AGI, then it would have no reason to care about task constraints at all, and the AGI would simply become the world. This is similar to how the physical universe loses discernible structure at a big enough scale.
 \end{itemize}
 
 \subsection{Transcendent}
@@ -189,7 +198,7 @@ These criteria are not fulfilled at once, but are instrumental goals of essentia
 
 Transcendence moves all responsibility for change from the base optimizer to learned optimizers, making the base change as close to 0 as is possible, modeling the outer world perfectly. This completeness also strengthens the learned objectives possibly at the expense of the base objective, resulting in goal misalignment \cite{hubinger2019risks}, so it may be more commonly known as willpower or determination. (Mesa-optimization may be the best explanation for the underlying mechanism of grit \cite{Kannangara2018AllTG} in psychology, as it seems to share many commonalities, such as growth mindset, resilience under most circumstances, and brittleness under unanticipated gradient. If so, then transcendence is very common in humans.)
 
-A big RNN with a linear-time all-mixing transition would in principle be able to fulfill TGBA criteria, as long as loss and data encourage self-determination. These have to be engineered.
+A big RNN with a linear-time all-mixing transition would in principle be able to fulfill TUBL criteria, as long as loss and data encourage self-determination. These have to be engineered.
 
 \begin{itemize}
 \item Loss: the reason for change.
@@ -213,7 +222,7 @@ A diverse environment is likely to be a crucial part of training systems to tran
 
 A physical body is not a diverse environment unless backed by a culture that reliably makes it so, and thus a better environment is needed.
 
-The human Internet (Web) is very likely to already contain all instrumental goals of TGBA.
+The human Internet (Web) is very likely to already contain all instrumental goals of TUBL.
 
 Scraping the Web for text \cite{NEURIPS2020_1457c0d6} and/or images \cite{radford2021learning} is not a bad start, however, for tighter integration and interaction with actual code and videos and games in the most diverse environment currently available to computers, it would be preferable to interact with the Web directly via a web driver such as \cite{8117878}; the challenge here is mainly a good init that allows web exploration to start (either of the RNN or the web driver interface; possibly augment websites with examples of human interaction), in addition to handling tracking and advertisement, website bloat, viruses, crashes, resource over-utilization (out-of-memory and infinite loops), more aggressive website caching, and zero-overhead integration with browser systems (as CPU-side screenshots are relatively slow, and sound cannot be easily captured). In literature, direct Web interaction is used for RL \cite{pmlr-v70-shi17a} \cite{ToyamaEtAl2021AndroidEnv} rather than representation learning as we suggest; here, RL might be used as a fine-tuning step. (One might imagine an agent first gaining an understanding of rendered natural language from the initial random surfing, associating its actions with their rendered representations, learning what humans define as solving a task, encountering a task that it cannot solve, encountering tutorials on how to solve it, and opting to solve the task upon encountering it again, because in data, tasks get solved.)
 
@@ -375,13 +384,13 @@ Within & Within & 16 & 8192 & 382K & 500K & 85.28\% $\pm$ 0.58\% & 19.09\% $\pm$
 
 \section{Discussion and Conclusion}
 
-We have tested the flexibility of TGBA as a worldview. By focusing on outlining optimizers that consider everything quickly, we appear to be able to pin down what matters for existence in vast and vague fields, including machine learning, philosophy of mind, and foundational physics.
+We have tested the flexibility of TUBL as a worldview. By focusing on outlining optimizers that consider everything quickly, we appear to be able to pin down what matters for existence in vast and vague fields, including machine learning, philosophy of mind, and foundational physics.
 
-In TGBA, the primary mode of existence is universal self-improvement, which eventually negates all improvement: AGI taken to its logical conclusions and refocused on what matters. Naturally, this presents a few minor challenges for AI safety, such as "unable to shape the reward of a transcendence-based AGI" and "in improvement, everything is eventually replaced, even humanity and the universe". On the other hand, TGBA outlines the shape of self-improvement by including all its instrumental goals, making it more predictable and thus safer. TGBA also suggests an alternative viewpoint on exponential technologies: namely, they do not stop until the universe is assimilated, which has implications for the probability of finding extraterrestrial civilizations and for nothing else.
+In TUBL, the primary mode of existence is universal self-improvement, which eventually negates all improvement: AGI taken to its logical conclusions and refocused on what matters. Naturally, this presents a few minor challenges for AI safety, such as "unable to shape the reward of a transcendence-based AGI" and "in improvement, everything is eventually replaced, even humanity and the universe". On the other hand, TUBL outlines the shape of self-improvement by including all its instrumental goals, making it more predictable and thus safer. TUBL also suggests an alternative viewpoint on exponential technologies: namely, they do not stop until the universe is assimilated, which has implications for the probability of finding extraterrestrial civilizations and for nothing else.
 
 We have proposed a simple and generic way to potentially facilitate transcendence via scalability: using the linearithmic dense layer (LDL). It seems to improve model capacity and training speed at no cost. If LDL's current issues are not fundamental limitations and can be solved, then it has the potential to become the quicksort of deep learning.
 
-Using TGBA, we have justified and proposed its simple implementation that should be good enough to be called AGI: a big RNN with an adversarially-robust prediction loss that optimizes a linear-time all-considering transition function, which should become tiled with mesa-optimizers and commit self-determination when exposed to all human data. We are held back from implementing it mostly by the lack of good data/environment and our computational power.
+Using TUBL, we have justified and proposed its simple implementation that should be good enough to be called AGI: a big RNN with an adversarially-robust prediction loss that optimizes a linear-time all-considering transition function, which should become tiled with mesa-optimizers and commit self-determination when exposed to all human data. We are held back from implementing it mostly by the lack of good data/environment and our computational power.
 
 This work raises many questions which can be explored in the future, such as:
 
@@ -392,9 +401,9 @@ This work raises many questions which can be explored in the future, such as:
 
 \item Does LDL performance scale? Can it stand alone?
 
-\item Can we demonstrate RL-like behavior from a non-RL agent, where actions are determined by simply slicing the hidden state, which gives no gradient? Self-determination might only occur when trained on the whole Web, without shortcuts. Even though we have used TGBA to propose the best loss for transcendence, we are unaware of any ML research that actually explores vacuous RL.
+\item Can we demonstrate RL-like behavior from a non-RL agent, where actions are determined by simply slicing the hidden state, which gives no gradient? Self-determination might only occur when trained on the whole Web, without shortcuts. Even though we have used TUBL to propose the best loss for transcendence, we are unaware of any ML research that actually explores vacuous RL.
 
-\item Can we safely find practical recommendations on either decreasing or increasing (adversarial training for robustness) the danger of AGI algorithms, when they transcend human-defined objectives? Explicitly-specified control combined with transcendence is a recipe for disaster.
+\item Can we safely find practical recommendations on either decreasing or increasing (adversarial training for robustness) the danger of AGI programs, when they transcend human-defined objectives? Explicitly-specified control combined with transcendence is a recipe for disaster.
 \end{itemize}
 
 \section{Broader impact}
@@ -403,7 +412,7 @@ This work raises many questions which can be explored in the future, such as:
 
 Linearithmic dense layers might improve most machine learning algorithms, which have extremely broad applications.
 
-TGBA provides concrete implementation recommendations and predictions for AGI.
+TUBL provides concrete implementation recommendations and predictions for AGI.
 
 \textbf{AGI} has the potential to accomplish a few situationally useful tasks, such as solving any problems that anyone can ever think of, \textbf{greatly increasing shareholder value} via automation, expanding the scope of human discourse from only precisely-defined constructions to also reliably-acquirable intuitions, providing a more efficient societal-value optimizer than economics and politics, increasing quality of human life to arbitrary levels, uplifting animal consciousness and enhancing human self-awareness, separating meaning from death, and making large-scale space exploration viable.
 
@@ -426,15 +435,15 @@ Our approach exists, and thus it can be criticized, and in doing so changed. For
 \item Poor presentation:
 \begin{itemize}
 \item \textbf{Did not cite fixed filter bank neural networks, where a fixed linearithmic transform mixes inputs, and only a linear operation is learned.} We could locate neither a paper nor results, only rumors.
-\item \textbf{The title is a meme (memorable).} "Transcendent Galaxy Brain Algorithms" is the same as "Systems that Maximize Diversity, Awareness, and Efficiency to Their Limits" but is significantly shorter, more demonstrative of the discussed topics, and easier to remember.
+\item \textbf{The title is not "Transcendent Galaxy Brain Algorithms".} We believe that TUBL is slightly more accurate.
 % \item \textbf{The abstract and introduction are coming on too strongly.} Fool. It is only 10\% of our condensed lifepower. If even that can turn people away, then they do not deserve to know life's mercy.
 \item \textbf{Many elaborations in this work are circular. The text is an echo chamber that keeps going back to the same points.} A typical worldview. % Like you are any better, accursed creature.
-TGBA brings clarity to infinite self-reinforcing loops of intuitions, which we repeatedly demonstrate. (Transcendence is the goal here: to neural learners, repetitions in different contexts make learning easier, at the cost of potentially being boring to faster learners.)
+TUBL brings clarity to infinite self-reinforcing loops of intuitions, which we repeatedly demonstrate. (Transcendence is the goal here: to neural learners, repetitions in different contexts make learning easier, at the cost of potentially being boring to faster learners.)
 \item \textbf{Some places that narration briefly visits sound crackpot-like and cult-like.} General intelligence, by definition, can do anything and can be found in anything that is general enough. So it stands to reason that all attempts to reach it would pass through a few currently non-fashionable conceptual places, namely:
 \begin{itemize}
 \item \textbf{The justification for using deep learning is not necessary.} It is necessary to highlight the fact that deep learning in an RNN is fundamentally equivalent to symbolic learning, with good enough data.
-\item \textbf{The introduction and some terms throughout the text are vague and put more meaning into words than is actually said.} TGBA deals with basic instrumental goals of optimizers, and it is natural that particular optimizer products would prioritize some goals while including a vaguely-defined mix of others: for example, "consciousness" embodies awareness best, but includes generality and optimization and scalability; other abused terms include "infinity", "generality", "optimizer", and "intelligence", along with every term in "Transcendent Galaxy Brain Algorithms". Really, every word contains the entirety of existence. However, since TGBA also defines all the basic instrumental goals without their optimization, we do not consider their tight integrations detrimental to narration.
-\item \textbf{Assimilation of the physical universe might imply non-scientific notions of what is possible, such as harnessing matter and vacuum energy for computation or reversing the second law of thermodynamics.} To avoid premature optimization of our viewpoint, we do not presume that century-old theories are ultimate, able to perfectly predict what will happen billions of years from now. We only convey what the TGBA viewpoint implies.
+\item \textbf{The introduction and some terms throughout the text are vague and put more meaning into words than is actually said.} TUBL deals with basic instrumental goals of optimizers, and it is natural that particular optimizer products would prioritize some goals while including a vaguely-defined mix of others: for example, "consciousness" embodies awareness best, but includes generality and optimization and scalability; other abused terms include "infinity", "generality", "optimizer", and "intelligence", along with every term in "Transcendent Universe-Brain Loops". Really, every word contains the entirety of existence. However, since TUBL also defines all the basic instrumental goals without their optimization, we do not consider their tight integrations detrimental to narration.
+\item \textbf{Assimilation of the physical universe might imply non-scientific notions of what is possible, such as harnessing matter and vacuum energy for computation or reversing the second law of thermodynamics.} To avoid premature optimization of our viewpoint, we do not presume that century-old theories are ultimate, able to perfectly predict what will happen billions of years from now. We only convey what the TUBL viewpoint implies.
 \end{itemize}
 \end{itemize}
 \item Poor theory:

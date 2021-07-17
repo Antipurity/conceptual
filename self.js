@@ -1275,7 +1275,7 @@ Yes.`,
 
   _disableSmoothTransitions:[
     _(`settings`),
-    true,
+    false,
     `Whether to disable smooth transitions.
 Animatedness, liveliness of the image… there shall be none. Only one image, static and efficient to render, burnt into your disgusting mind.`,
   ],
